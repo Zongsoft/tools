@@ -1,3 +1,3 @@
-﻿# Zongsoft.Utilities.Regular
+﻿# Zongsoft.Tools.Regular
 
-这是一个关于正则表达式的测试器。
+这是一个正则表达式的 GUI 测试器。
