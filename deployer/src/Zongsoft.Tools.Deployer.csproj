@@ -16,15 +16,15 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
-		<PackageProjectUrl>https://github.com/Zongsoft/Zongsoft.Tools.Deployer</PackageProjectUrl>
-		<RepositoryUrl>https://github.com/Zongsoft/Zongsoft.Tools.Deployer</RepositoryUrl>
+		<PackageProjectUrl>https://github.com/Zongsoft/tools/tree/main/deployer</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/Zongsoft/tools/tree/main/deployer</RepositoryUrl>
 		<PackageIconUrl>https://github.com/Zongsoft/Guidelines/raw/master/zongsoft-logo(48x48).png</PackageIconUrl>
 		<PackageIcon>zongsoft-logo.png</PackageIcon>
-		<ApplicationIcon>..\zongsoft-logo.ico</ApplicationIcon>
+		<ApplicationIcon>..\..\zongsoft-logo.ico</ApplicationIcon>
 	</PropertyGroup>
 
 	<ItemGroup>
-		<None Include="..\zongsoft-logo.png" Pack="true" PackagePath="\" Visible="true" />
+		<None Include="..\..\zongsoft-logo.png" Pack="true" PackagePath="\" Visible="true" />
 		<None Include="..\README.md" Pack="true" PackagePath="\" />
 		<None Include="..\README-zh_CN.md" Pack="true" PackagePath="\" />
 	</ItemGroup>
