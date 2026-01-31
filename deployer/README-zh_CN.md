@@ -70,7 +70,7 @@ delete:Zongsoft.Messaging.Mqtt.option
 	- 部署该包的 `lib/{framework}` 库文件目录下的所有文件。
 		> `{framework}` 表示最接近 `$(Framework)` 变量声明的 *目标框架* 版本。
 
-> 💡 提示：_**Z**ongsoft_ 的 NuGet 包内根目录通常有一个名为 `.deploy` 的部署文件，包内的 `artifacts` 目录则存放着它的插件文件(`*.plugin`)_(至少一个)_、配置文件(`*.option`)、[数据映射文件](https://github.com/Zongsoft/Framework/tree/master/Zongsoft.Data)(`*.mapping`)等附属文件。
+> 💡 提示：_**Z**ongsoft_ 的 NuGet 包内根目录通常有一个名为 `.deploy` 的部署文件，包内的 `artifacts` 目录则存放着它的插件文件(`*.plugin`)_(至少一个)_、配置文件(`*.option`)、[数据映射文件](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Data)(`*.mapping`)等附属文件。
 
 > 💡 注意：名为 `NuGet_Server` 变量定义了该解析器的 NuGet 包源，如果未定义则采用 `https://api.nuget.org/v3/index.json` 作为其默认值。
 
@@ -220,17 +220,17 @@ dotnet deploy -edition:Debug -framework:net8.0 MyProject1.deploy MyProject2.depl
 ### 参考范例
 
 - NuGet 包
-	- [`Zongsoft.Data.deploy`](https://github.com/Zongsoft/Framework/blob/master/Zongsoft.Data/src/Zongsoft.Data.deploy)
+	- [`Zongsoft.Data.deploy`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Data/src/Zongsoft.Data.deploy)
 	⇢ [NuGet](https://www.nuget.org/packages/Zongsoft.Data)
-	- [`Zongsoft.Data.MySql.deploy`](https://github.com/Zongsoft/Framework/blob/master/Zongsoft.Data/drivers/mysql/Zongsoft.Data.MySql.deploy)
+	- [`Zongsoft.Data.MySql.deploy`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Data/drivers/mysql/Zongsoft.Data.MySql.deploy)
 	⇢ [NuGet](https://www.nuget.org/packages/Zongsoft.Data.MySql)
-	- [`Zongsoft.Security.deploy`](https://github.com/Zongsoft/Framework/blob/master/Zongsoft.Security/src/Zongsoft.Security.deploy)
+	- [`Zongsoft.Security.deploy`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Security/src/Zongsoft.Security.deploy)
 	⇢ [NuGet](https://www.nuget.org/packages/Zongsoft.Security)
-	- [`Zongsoft.Security.Web.deploy`](https://github.com/Zongsoft/Framework/blob/master/Zongsoft.Security/api/Zongsoft.Security.Web.deploy)
+	- [`Zongsoft.Security.Web.deploy`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Security/api/Zongsoft.Security.Web.deploy)
 	⇢ [NuGet](https://www.nuget.org/packages/Zongsoft.Security.Web)
-	- [`Zongsoft.Administratives.deploy`](https://github.com/Zongsoft/Administratives/blob/master/src/Zongsoft.Administratives.deploy)
+	- [`Zongsoft.Administratives.deploy`](https://github.com/Zongsoft/administratives/blob/main/src/Zongsoft.Administratives.deploy)
 	⇢ [NuGet](https://www.nuget.org/packages/Zongsoft.Administratives)
-	- [`Zongsoft.Administratives.Web.deploy`](https://github.com/Zongsoft/Administratives/blob/master/src/api/Zongsoft.Administratives.Web.deploy)
+	- [`Zongsoft.Administratives.Web.deploy`](https://github.com/Zongsoft/administratives/blob/main/src/api/Zongsoft.Administratives.Web.deploy)
 	⇢ [NuGet](https://www.nuget.org/packages/Zongsoft.Administratives.Web)
 
 - 宿主项目

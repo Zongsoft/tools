@@ -70,7 +70,7 @@ The format of _Parser-Argument_: `package@version/path`, where `@version` and `/
 	- Deploy all files in the `lib/{framework}` library files directory of the package.
 		> The `{framework}` indicates the version of the *target framework* nearest to the one declared by the `$(Framework)` variable.
 
-> 💡 **Tip:** _**Z**ongsoft_'s NuGet package usually has a deployment file named `.deploy` in it's root directory, and the `artifacts` directory in the package includes its plugin files(`*.plugin`)_(required, one or more)_, configuration files(`*.option`), the mapping files(`*.mapping`) for [_**Z**ongsoft.**D**ata_ ORM](https://github.com/Zongsoft/Framework/tree/master/Zongsoft.Data), and other ancillary files.
+> 💡 **Tip:** _**Z**ongsoft_'s NuGet package usually has a deployment file named `.deploy` in it's root directory, and the `artifacts` directory in the package includes its plugin files(`*.plugin`)_(required, one or more)_, configuration files(`*.option`), the mapping files(`*.mapping`) for [_**Z**ongsoft.**D**ata_ ORM](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Data), and other ancillary files.
 
 > 💡 **Note:** The variable named `NuGet_Server` defines the NuGet package source for this parser.
 > If undefined then `https://api.nuget.org/v3/index.json` is used as its default value.
@@ -224,17 +224,17 @@ However, the above package library directory does not contains the `net9.0` fram
 ### Reference examples
 
 - The NuGet Packages
-	- [`Zongsoft.Data.deploy`](https://github.com/Zongsoft/Framework/blob/master/Zongsoft.Data/src/Zongsoft.Data.deploy)
+	- [`Zongsoft.Data.deploy`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Data/src/Zongsoft.Data.deploy)
 	⇢ [NuGet](https://www.nuget.org/packages/Zongsoft.Data)
-	- [`Zongsoft.Data.MySql.deploy`](https://github.com/Zongsoft/Framework/blob/master/Zongsoft.Data/drivers/mysql/Zongsoft.Data.MySql.deploy)
+	- [`Zongsoft.Data.MySql.deploy`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Data/drivers/mysql/Zongsoft.Data.MySql.deploy)
 	⇢ [NuGet](https://www.nuget.org/packages/Zongsoft.Data.MySql)
-	- [`Zongsoft.Security.deploy`](https://github.com/Zongsoft/Framework/blob/master/Zongsoft.Security/src/Zongsoft.Security.deploy)
+	- [`Zongsoft.Security.deploy`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Security/src/Zongsoft.Security.deploy)
 	⇢ [NuGet](https://www.nuget.org/packages/Zongsoft.Security)
-	- [`Zongsoft.Security.Web.deploy`](https://github.com/Zongsoft/Framework/blob/master/Zongsoft.Security/api/Zongsoft.Security.Web.deploy)
+	- [`Zongsoft.Security.Web.deploy`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Security/api/Zongsoft.Security.Web.deploy)
 	⇢ [NuGet](https://www.nuget.org/packages/Zongsoft.Security.Web)
-	- [`Zongsoft.Administratives.deploy`](https://github.com/Zongsoft/Administratives/blob/master/src/Zongsoft.Administratives.deploy)
+	- [`Zongsoft.Administratives.deploy`](https://github.com/Zongsoft/administratives/blob/main/src/Zongsoft.Administratives.deploy)
 	⇢ [NuGet](https://www.nuget.org/packages/Zongsoft.Administratives)
-	- [`Zongsoft.Administratives.Web.deploy`](https://github.com/Zongsoft/Administratives/blob/master/src/api/Zongsoft.Administratives.Web.deploy)
+	- [`Zongsoft.Administratives.Web.deploy`](https://github.com/Zongsoft/administratives/blob/main/src/api/Zongsoft.Administratives.Web.deploy)
 	⇢ [NuGet](https://www.nuget.org/packages/Zongsoft.Administratives.Web)
 
 - The hosting projects
