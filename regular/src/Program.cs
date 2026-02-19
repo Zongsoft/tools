@@ -27,15 +27,14 @@
 using System;
 using System.Windows.Forms;
 
-namespace Zongsoft.Regular
+namespace Zongsoft.Regular;
+
+internal static class Program
 {
-	internal static class Program
+	[STAThread]
+	public static void Main()
 	{
-		[STAThread]
-		public static void Main()
-		{
-			ApplicationConfiguration.Initialize();
-			Application.Run(new MainForm());
-		}
+		ApplicationConfiguration.Initialize();
+		Application.Run(new MainForm());
 	}
 }
