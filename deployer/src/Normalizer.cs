@@ -11,7 +11,7 @@
  *
  * The MIT License (MIT)
  * 
- * Copyright (C) 2015-2024 Zongsoft Corporation <http://www.zongsoft.com>
+ * Copyright (C) 2015-2025 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -36,36 +36,35 @@ using System.IO;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
-namespace Zongsoft.Tools.Deployer
+namespace Zongsoft.Tools.Deployer;
+
+public static class Normalizer
 {
-	public static class Normalizer
+	#region 常量定义
+	//变量解析的正则组名称
+	private const string REGEX_VARIABLE_NAME = "name";
+	//变量解析的正则表达式（变量包括两种语法：$(variable) 或 %variable%）
+	private static readonly Regex _variableRegex = new(@"(?<opt>\$\((?<name>\w+)\))|(?<env>\%(?<name>\w+)\%)", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.IgnorePatternWhitespace);
+	#endregion
+
+	#region 公共方法
+	public static string Normalize(string text, IDictionary<string, string> variables, Action<string> failure = null)
 	{
-		#region 常量定义
-		//变量解析的正则组名称
-		private const string REGEX_VARIABLE_NAME = "name";
-		//变量解析的正则表达式（变量包括两种语法：$(variable) 或 %variable%）
-		private static readonly Regex _variableRegex = new(@"(?<opt>\$\((?<name>\w+)\))|(?<env>\%(?<name>\w+)\%)", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.IgnorePatternWhitespace);
-		#endregion
+		if(string.IsNullOrWhiteSpace(text))
+			return string.Empty;
 
-		#region 公共方法
-		public static string Normalize(string text, IDictionary<string, string> variables, Action<string> failure = null)
+		return _variableRegex.Replace(text.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar), match =>
 		{
-			if(string.IsNullOrWhiteSpace(text))
-				return string.Empty;
-
-			return _variableRegex.Replace(text.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar), match =>
+			if(match.Success && match.Groups.TryGetValue(REGEX_VARIABLE_NAME, out var group))
 			{
-				if(match.Success && match.Groups.TryGetValue(REGEX_VARIABLE_NAME, out var group))
-				{
-					if(variables.TryGetValue(group.Value, out var value))
-						return value;
+				if(variables.TryGetValue(group.Value, out var value))
+					return value;
 
-					failure?.Invoke(group.Value);
-				}
+				failure?.Invoke(group.Value);
+			}
 
-				return null;
-			});
-		}
-		#endregion
+			return null;
+		});
 	}
+	#endregion
 }

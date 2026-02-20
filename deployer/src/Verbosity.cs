@@ -11,7 +11,7 @@
  *
  * The MIT License (MIT)
  * 
- * Copyright (C) 2015-2024 Zongsoft Corporation <http://www.zongsoft.com>
+ * Copyright (C) 2015-2025 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -33,18 +33,17 @@
 
 using System;
 
-namespace Zongsoft.Tools.Deployer
+namespace Zongsoft.Tools.Deployer;
+
+/// <summary>
+/// 表示输出信息的模式。
+/// </summary>
+public enum Verbosity
 {
-	/// <summary>
-	/// 表示输出信息的模式。
-	/// </summary>
-	public enum Verbosity
-	{
-		/// <summary>安静模式</summary>
-		Quiet,
-		/// <summary>普通模式</summary>
-		Normal,
-		/// <summary>详细模式</summary>
-		Detail,
-	}
+	/// <summary>安静模式</summary>
+	Quiet,
+	/// <summary>普通模式</summary>
+	Normal,
+	/// <summary>详细模式</summary>
+	Detail,
 }

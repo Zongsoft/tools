@@ -11,7 +11,7 @@
  *
  * The MIT License (MIT)
  * 
- * Copyright (C) 2015-2024 Zongsoft Corporation <http://www.zongsoft.com>
+ * Copyright (C) 2015-2025 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -35,11 +35,10 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Zongsoft.Tools.Deployer
+namespace Zongsoft.Tools.Deployer;
+
+public interface IDeploymentResolver
 {
-	public interface IDeploymentResolver
-	{
-		string Name { get; }
-		Task ResolveAsync(DeploymentContext context, DeploymentEntry deployment, CancellationToken cancellation = default);
-	}
+	string Name { get; }
+	Task ResolveAsync(DeploymentContext context, DeploymentEntry deployment, CancellationToken cancellation = default);
 }

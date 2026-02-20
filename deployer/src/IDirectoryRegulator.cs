@@ -11,7 +11,7 @@
  *
  * The MIT License (MIT)
  * 
- * Copyright (C) 2015-2023 Zongsoft Corporation <http://www.zongsoft.com>
+ * Copyright (C) 2015-2025 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -34,18 +34,17 @@
 using System;
 using System.Collections.Generic;
 
-namespace Zongsoft.Tools.Deployer
+namespace Zongsoft.Tools.Deployer;
+
+/// <summary>
+/// 提供路径修正和调节功能的接口。
+/// </summary>
+public interface IDirectoryRegulator
 {
-	/// <summary>
-	/// 提供路径修正和调节功能的接口。
-	/// </summary>
-	public interface IDirectoryRegulator
-	{
-		/// <summary>修正指定的目录路径。</summary>
-		/// <param name="directory">指定的待修正的目录路径。</param>
-		/// <param name="variables">指定的参数和环境变量集。</param>
-		/// <param name="result">输出参数，表示修正成功后的路径。</param>
-		/// <returns>如果为真则表示修正成功，否则表示未修正。</returns>
-		bool Regulate(string directory, IDictionary<string, string> variables, out string result);
-	}
+	/// <summary>修正指定的目录路径。</summary>
+	/// <param name="directory">指定的待修正的目录路径。</param>
+	/// <param name="variables">指定的参数和环境变量集。</param>
+	/// <param name="result">输出参数，表示修正成功后的路径。</param>
+	/// <returns>如果为真则表示修正成功，否则表示未修正。</returns>
+	bool Regulate(string directory, IDictionary<string, string> variables, out string result);
 }

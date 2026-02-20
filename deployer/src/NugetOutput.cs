@@ -11,7 +11,7 @@
  *
  * The MIT License (MIT)
  * 
- * Copyright (C) 2015-2024 Zongsoft Corporation <http://www.zongsoft.com>
+ * Copyright (C) 2015-2025 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -36,41 +36,40 @@ using System;
 using Zongsoft.Services;
 using Zongsoft.Terminals;
 
-namespace Zongsoft.Tools.Deployer
+namespace Zongsoft.Tools.Deployer;
+
+internal static class NugetOutput
 {
-	internal static class NugetOutput
+	public static void IllegalArgument(this ITerminal terminal, string argument, string filePath, int lineNumber = -1)
 	{
-		public static void IllegalArgument(this ITerminal terminal, string argument, string filePath, int lineNumber = -1)
-		{
-			if(lineNumber >= 0)
-				filePath = $"{filePath} (#{lineNumber})";
+		if(lineNumber >= 0)
+			filePath = $"{filePath} (#{lineNumber})";
 
-			terminal.Write(CommandOutletColor.Red, Properties.Resources.Error_Prompt);
-			terminal.WriteLine(CommandOutletColor.DarkRed, string.Format(Properties.Resources.NuGet_IllegalArgument_Message, argument, filePath));
-		}
+		terminal.Write(CommandOutletColor.Red, Properties.Resources.Error_Prompt);
+		terminal.WriteLine(CommandOutletColor.DarkRed, string.Format(Properties.Resources.NuGet_IllegalArgument_Message, argument, filePath));
+	}
 
-		public static void NotFound(this ITerminal terminal, string package, string version)
-		{
-			if(string.IsNullOrEmpty(version))
-				version = Properties.Resources.Latest;
+	public static void NotFound(this ITerminal terminal, string package, string version)
+	{
+		if(string.IsNullOrEmpty(version))
+			version = Properties.Resources.Latest;
 
-			terminal.Write(CommandOutletColor.Red, Properties.Resources.Error_Prompt);
-			terminal.WriteLine(CommandOutletColor.DarkRed, string.Format(Properties.Resources.NuGet_NotFound_Message, package, version));
-		}
+		terminal.Write(CommandOutletColor.Red, Properties.Resources.Error_Prompt);
+		terminal.WriteLine(CommandOutletColor.DarkRed, string.Format(Properties.Resources.NuGet_NotFound_Message, package, version));
+	}
 
-		public static void UnmatchPackage(this ITerminal terminal, string package, string framework)
-		{
-			terminal.Write(CommandOutletColor.Red, Properties.Resources.Error_Prompt);
-			terminal.WriteLine(CommandOutletColor.DarkRed, string.Format(Properties.Resources.NoPackageForFramework, package, framework));
-		}
+	public static void UnmatchPackage(this ITerminal terminal, string package, string framework)
+	{
+		terminal.Write(CommandOutletColor.Red, Properties.Resources.Error_Prompt);
+		terminal.WriteLine(CommandOutletColor.DarkRed, string.Format(Properties.Resources.NoPackageForFramework, package, framework));
+	}
 
-		public static void DownloadFailed(this ITerminal terminal, string package, string version)
-		{
-			if(string.IsNullOrEmpty(version))
-				version = Properties.Resources.Latest;
+	public static void DownloadFailed(this ITerminal terminal, string package, string version)
+	{
+		if(string.IsNullOrEmpty(version))
+			version = Properties.Resources.Latest;
 
-			terminal.Write(CommandOutletColor.Red, Properties.Resources.Error_Prompt);
-			terminal.WriteLine(CommandOutletColor.DarkRed, string.Format(Properties.Resources.NuGet_DownloadFailed_Message, package, version));
-		}
+		terminal.Write(CommandOutletColor.Red, Properties.Resources.Error_Prompt);
+		terminal.WriteLine(CommandOutletColor.DarkRed, string.Format(Properties.Resources.NuGet_DownloadFailed_Message, package, version));
 	}
 }

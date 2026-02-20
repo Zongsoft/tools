@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
-		<TargetFrameworks>net6.0;net7.0;net8.0;net9.0;</TargetFrameworks>
+		<TargetFrameworks>net6.0;net7.0;net8.0;net9.0;net10.0;</TargetFrameworks>
 		<Version>7.8.0</Version>
 		<Authors>Popeye Zhong(zongsoft@qq.com)</Authors>
 		<PackAsTool>true</PackAsTool>
@@ -10,7 +10,7 @@
 		<Company>Zongsoft Studio</Company>
 		<Product>Zongsoft Deployment Tool</Product>
 		<Description>Zongsoft Application Deployment Tool.</Description>
-		<Copyright>Copyright(C) Zongsoft Corporation 2015-2024. All rights reserved.</Copyright>
+		<Copyright>Copyright(C) Zongsoft Studio 2020-2026. All rights reserved.</Copyright>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
 		<PackageReadmeFile>README.md</PackageReadmeFile>

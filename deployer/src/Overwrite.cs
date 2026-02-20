@@ -11,7 +11,7 @@
  *
  * The MIT License (MIT)
  * 
- * Copyright (C) 2015-2024 Zongsoft Corporation <http://www.zongsoft.com>
+ * Copyright (C) 2015-2025 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -33,18 +33,17 @@
 
 using System;
 
-namespace Zongsoft.Tools.Deployer
+namespace Zongsoft.Tools.Deployer;
+
+/// <summary>
+/// 表示覆盖模式的枚举。
+/// </summary>
+public enum Overwrite
 {
-	/// <summary>
-	/// 表示覆盖模式的枚举。
-	/// </summary>
-	public enum Overwrite
-	{
-		/// <summary>始终覆盖</summary>
-		Alway = 0,
-		/// <summary>不覆盖</summary>
-		Never = 1,
-		/// <summary>如果较新，则覆盖</summary>
-		Newest = 2,
-	}
+	/// <summary>始终覆盖</summary>
+	Alway = 0,
+	/// <summary>不覆盖</summary>
+	Never = 1,
+	/// <summary>如果较新，则覆盖</summary>
+	Newest = 2,
 }

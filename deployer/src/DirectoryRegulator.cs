@@ -11,7 +11,7 @@
  *
  * The MIT License (MIT)
  * 
- * Copyright (C) 2015-2023 Zongsoft Corporation <http://www.zongsoft.com>
+ * Copyright (C) 2015-2025 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -34,19 +34,18 @@
 using System;
 using System.Collections.Generic;
 
-namespace Zongsoft.Tools.Deployer
-{
-	public static class DirectoryRegulator
-	{
-		#region 公共字段
-		public static readonly IDirectoryRegulator Nuget = NugetRegulator.Instance;
-		#endregion
+namespace Zongsoft.Tools.Deployer;
 
-		#region 公共方法
-		public static bool Regulate(string directory, IDictionary<string, string> variables, out string result)
-		{
-			return Nuget.Regulate(directory, variables, out result);
-		}
-		#endregion
+public static class DirectoryRegulator
+{
+	#region 公共字段
+	public static readonly IDirectoryRegulator Nuget = NugetRegulator.Instance;
+	#endregion
+
+	#region 公共方法
+	public static bool Regulate(string directory, IDictionary<string, string> variables, out string result)
+	{
+		return Nuget.Regulate(directory, variables, out result);
 	}
+	#endregion
 }
