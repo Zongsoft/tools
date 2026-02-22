@@ -1,5 +1,5 @@
 var target = Argument("target", "default");
-var solutionFile  = "Zongsoft.Tools.Regular.slnx";
+var solutionFile  = "Zongsoft.Tools.Deployer.slnx";
 
 Task("clean")
 	.Description("清理解决方案")
