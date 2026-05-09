@@ -42,8 +42,8 @@ internal static class Utility
 {
 	internal const string FRAMEWORK_VARIABLE = "Framework";
 
-	public static readonly char[] TARGET_SEPARATORS = new[] { ',', ';' };
-	public static readonly char[] PATH_SEPARATORS = new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
+	public static readonly char[] TARGET_SEPARATORS = [',', ';'];
+	public static readonly char[] PATH_SEPARATORS = [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
 
 	public static bool IsDirectory(string path) => !string.IsNullOrEmpty(path) && IsDirectorySeparator(path[^1]);
 	public static bool IsDirectorySeparator(char chr) => chr == Path.DirectorySeparatorChar || chr == Path.AltDirectorySeparatorChar;

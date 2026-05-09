@@ -54,14 +54,14 @@ internal static class NugetOutput
 		if(string.IsNullOrEmpty(version))
 			version = Properties.Resources.Latest;
 
-		terminal.Write(CommandOutletColor.Red, Properties.Resources.Error_Prompt);
-		terminal.WriteLine(CommandOutletColor.DarkRed, string.Format(Properties.Resources.NuGet_NotFound_Message, package, version));
+		terminal.Write(CommandOutletColor.Magenta, Properties.Resources.Warn_Prompt);
+		terminal.WriteLine(CommandOutletColor.DarkYellow, string.Format(Properties.Resources.NuGet_NotFound_Message, package, version));
 	}
 
 	public static void UnmatchPackage(this ITerminal terminal, string package, string framework)
 	{
-		terminal.Write(CommandOutletColor.Red, Properties.Resources.Error_Prompt);
-		terminal.WriteLine(CommandOutletColor.DarkRed, string.Format(Properties.Resources.NoPackageForFramework, package, framework));
+		terminal.Write(CommandOutletColor.Magenta, Properties.Resources.Warn_Prompt);
+		terminal.WriteLine(CommandOutletColor.DarkYellow, string.Format(Properties.Resources.NoPackageForFramework, package, framework));
 	}
 
 	public static void DownloadFailed(this ITerminal terminal, string package, string version)

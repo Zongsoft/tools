@@ -62,21 +62,21 @@ public class NugetResolver : DeploymentResolverBase
 		if(argument.IsEmpty)
 		{
 			context.Deployer.Terminal.IllegalArgument(deployment.Source.Name, deployment.Profile.FilePath);
-			return Array.Empty<DeploymentUtility.PathToken>();
+			return [];
 		}
 
 		var metadata = await NugetUtility.GetPackageMetadataAsync(context.Variables, argument.Name, argument.Version, cancellation);
 		if(metadata == null)
 		{
 			context.Deployer.Terminal.NotFound(argument.Name, argument.Version);
-			return Array.Empty<DeploymentUtility.PathToken>();
+			return [];
 		}
 
 		var path = await NugetUtility.DownloadPackageAsync(context.Variables, argument.Name, metadata.Identity.Version, cancellation);
 		if(string.IsNullOrEmpty(path))
 		{
 			context.Deployer.Terminal.DownloadFailed(argument.Name, argument.Version);
-			return Array.Empty<DeploymentUtility.PathToken>();
+			return [];
 		}
 
 		//下载依赖的包
@@ -94,7 +94,7 @@ public class NugetResolver : DeploymentResolverBase
 			if(string.IsNullOrEmpty(nearestLibrary))
 			{
 				context.Deployer.Terminal.UnmatchPackage(metadata.Identity.ToString(), framework);
-				return Array.Empty<DeploymentUtility.PathToken>();
+				return [];
 			}
 
 			var directories = new HashSet<string>();
