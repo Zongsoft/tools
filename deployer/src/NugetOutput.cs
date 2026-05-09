@@ -11,7 +11,7 @@
  *
  * The MIT License (MIT)
  * 
- * Copyright (C) 2015-2025 Zongsoft Corporation <http://www.zongsoft.com>
+ * Copyright (C) 2015-2026 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -33,8 +33,8 @@
 
 using System;
 
-using Zongsoft.Services;
 using Zongsoft.Terminals;
+using Zongsoft.Components;
 
 namespace Zongsoft.Tools.Deployer;
 

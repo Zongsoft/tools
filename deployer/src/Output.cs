@@ -11,7 +11,7 @@
  *
  * The MIT License (MIT)
  * 
- * Copyright (C) 2015-2025 Zongsoft Corporation <http://www.zongsoft.com>
+ * Copyright (C) 2015-2026 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -34,8 +34,8 @@
 using System;
 using System.Collections.Generic;
 
-using Zongsoft.Services;
 using Zongsoft.Terminals;
+using Zongsoft.Components;
 
 namespace Zongsoft.Tools.Deployer;
 
@@ -125,7 +125,7 @@ internal static class Output
 			terminal.WriteLine(CommandOutletColor.DarkRed, string.Format(Properties.Resources.ResolverUndefinedInFile_Message, resolver, expression, filePath));
 	}
 
-	public static void StartDeployment(this Deployer deployer, CommandExpression expression, string[] filePaths)
+	public static void StartDeployment(this Deployer deployer, CommandLine.CmdletOptionCollection options, string[] filePaths)
 	{
 		const string splash = @"
      _____                                ___ __
@@ -136,7 +136,7 @@ internal static class Output
                      /____/
 ";
 
-		deployer.Terminal.WriteLine(splash);
+		Terminal.WriteLine(splash);
 
 		var content = CommandOutletContent
 			.Create(CommandOutletColor.DarkMagenta, Properties.Resources.Deployment_List_Label)
@@ -152,43 +152,43 @@ internal static class Output
 
 		content.AppendLine(CommandOutletColor.DarkMagenta, Properties.Resources.Deployment_Options_Label);
 
-		foreach(var option in expression.Options)
+		foreach(var option in options)
 		{
 			content.Append(CommandOutletColor.DarkCyan, $"\t{option.Key}");
 			content.Append(CommandOutletColor.DarkGray, ":");
-			content.AppendLine(CommandOutletColor.DarkGreen, Normalizer.Normalize(option.Value, deployer.Variables));
+			content.AppendLine(CommandOutletColor.DarkGreen, Normalizer.Normalize(option.Value?.ToString(), deployer.Variables));
 		}
 
-		IDictionary<string, string> variables;
+		IDictionary<string, string> display;
 
 		if(deployer.IsVerbosity(Verbosity.Detail))
 		{
-			variables = deployer.Variables;
+			display = deployer.Variables;
 		}
 		else
 		{
-			variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+			display = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
 			if(deployer.Variables.TryGetValue("application", out var value))
-				variables["application"] = value;
+				display["application"] = value;
 			if(deployer.Variables.TryGetValue("environment", out value))
-				variables["environment"] = value;
+				display["environment"] = value;
 			if(deployer.Variables.TryGetValue(NugetUtility.NUGET_SERVER_ENVIRONMENT, out value))
-				variables[NugetUtility.NUGET_SERVER_ENVIRONMENT] = value;
+				display[NugetUtility.NUGET_SERVER_ENVIRONMENT] = value;
 			if(deployer.Variables.TryGetValue(NugetUtility.NUGET_PACKAGES_ENVIRONMENT, out value))
-				variables[NugetUtility.NUGET_PACKAGES_ENVIRONMENT] = value;
+				display[NugetUtility.NUGET_PACKAGES_ENVIRONMENT] = value;
 		}
 
 		content.AppendLine(CommandOutletColor.DarkMagenta, Properties.Resources.Environment_Variables_Label);
 
-		foreach(var variable in variables)
+		foreach(var variable in display)
 		{
 			content.Append(CommandOutletColor.DarkCyan, $"\t{variable.Key}");
 			content.Append(CommandOutletColor.DarkGray, ":");
 			content.AppendLine(CommandOutletColor.DarkGreen, variable.Value);
 		}
 
-		deployer.Terminal.WriteLine(content);
+		Terminal.WriteLine(content);
 	}
 
 	public static void CompleteDeployment(this ITerminal terminal, string filePath, DeploymentCounter counter, bool final)

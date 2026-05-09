@@ -11,7 +11,7 @@
  *
  * The MIT License (MIT)
  * 
- * Copyright (C) 2015-2025 Zongsoft Corporation <http://www.zongsoft.com>
+ * Copyright (C) 2015-2026 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -42,7 +42,7 @@ using Zongsoft.Configuration.Profiles;
 
 namespace Zongsoft.Tools.Deployer;
 
-public class Deployer
+public partial class Deployer
 {
 	#region 常量定义
 	internal const string EXPANSION_OPTION = "expansion";
@@ -54,37 +54,13 @@ public class Deployer
 	internal const string DEFAULT_DEPLOYMENT_FILENAME = ".deploy";
 	#endregion
 
-	#region 成员字段
-	private readonly ITerminal _terminal;
-	private readonly IDictionary<string, string> _variables;
-	#endregion
-
 	#region 构造函数
-	public Deployer(ITerminal terminal, IEnumerable<KeyValuePair<string, string>> options)
-	{
-		_terminal = terminal ?? throw new ArgumentNullException(nameof(terminal));
-		_variables = Collections.DictionaryExtension.ToDictionary<string, string>(Environment.GetEnvironmentVariables(), StringComparer.OrdinalIgnoreCase);
-
-		//设置选项的默认值
-		_variables.TryAdd(OVERWRITE_OPTION, Overwrite.Newest.ToString());
-		_variables.TryAdd(VERBOSITY_OPTION, Verbosity.Normal.ToString());
-
-		//将部署目录中的 appsettings.json 文件内容解析后加载到变量集
-		AppSettingsUtility.Load(_variables);
-		//初始化 Nuget 相关的变量
-		NugetUtility.Initialize(_variables);
-
-		if(options != null)
-		{
-			foreach(var option in options)
-				_variables[option.Key] = this.Normalize(option.Value, variable => throw new TerminalCommandExecutor.ExitException(-1, string.Format(Properties.Resources.VariableUndefinedInOption_Message, variable, option.Value)));
-		}
-	}
+	public Deployer(IDictionary<string, string> variables) => this.Variables = variables;
 	#endregion
 
 	#region 公共属性
-	public ITerminal Terminal => _terminal;
-	public IDictionary<string, string> Variables => _variables;
+	public ITerminal Terminal => Terminals.Terminal.Console;
+	public IDictionary<string, string> Variables { get; }
 	#endregion
 
 	#region 公共方法
@@ -98,7 +74,7 @@ public class Deployer
 			deploymentFilePath = Path.Combine(Environment.CurrentDirectory, deploymentFilePath);
 
 		//对部署文件路径进行参数规整
-		deploymentFilePath = this.Normalize(deploymentFilePath, variable => _terminal.UndefinedVariable(variable, deploymentFilePath));
+		deploymentFilePath = this.Normalize(Path.GetFullPath(deploymentFilePath), variable => this.Terminal.UndefinedVariable(variable, deploymentFilePath));
 
 		if(!File.Exists(deploymentFilePath))
 		{
@@ -108,7 +84,7 @@ public class Deployer
 			else
 			{
 				//打印部署文件不存在的消息
-				_terminal.FileNotExists(deploymentFilePath);
+				this.Terminal.FileNotExists(deploymentFilePath);
 				//返回部署计数器
 				return new DeploymentCounter(deploymentFilePath, 1, 0);
 			}
@@ -116,7 +92,7 @@ public class Deployer
 
 		if(string.IsNullOrWhiteSpace(destinationDirectory))
 		{
-			if(_variables.TryGetValue(DESTINATION_OPTION, out destinationDirectory))
+			if(this.Variables.TryGetValue(DESTINATION_OPTION, out destinationDirectory))
 			{
 				if(!Path.IsPathRooted(destinationDirectory))
 					destinationDirectory = Path.Combine(Environment.CurrentDirectory, destinationDirectory);
@@ -128,7 +104,7 @@ public class Deployer
 		}
 
 		//对目标目录路径进行参数规整
-		destinationDirectory = this.Normalize(destinationDirectory, variable => _terminal.UndefinedVariable(variable, destinationDirectory));
+		destinationDirectory = this.Normalize(destinationDirectory, variable => this.Terminal.UndefinedVariable(variable, destinationDirectory));
 
 		if(!Directory.Exists(destinationDirectory))
 			Directory.CreateDirectory(destinationDirectory);
@@ -167,7 +143,7 @@ public class Deployer
 				Utility.EnsureDirectory(context.DestinationDirectory,
 					this.Normalize(
 						section.FullName.Replace(' ', '/'),
-						variable => _terminal.UndefinedVariable(variable, $"[{section.FullName}]", section.Profile.FilePath, section.LineNumber)
+						variable => this.Terminal.UndefinedVariable(variable, $"[{section.FullName}]", section.Profile.FilePath, section.LineNumber)
 					)
 				);
 
@@ -187,7 +163,7 @@ public class Deployer
 		var deployment = DeploymentEntry.Get(context, entry);
 
 		//如果当前部署项不满足条件则忽略它
-		if(deployment.Ignored(_variables))
+		if(deployment.Ignored(this.Variables))
 			return;
 
 		//获取部署项的解析器
@@ -196,10 +172,10 @@ public class Deployer
 		if(resolver != null)
 			await resolver.ResolveAsync(context, deployment, cancellation);
 		else
-			_terminal.UndefinedResolver(deployment.Name, entry.Name, entry.Profile.FilePath, entry.LineNumber);
+			this.Terminal.UndefinedResolver(deployment.Name, entry.Name, entry.Profile.FilePath, entry.LineNumber);
 	}
 
-	private string Normalize(string text, Action<string> failure) => Normalizer.Normalize(text, _variables, failure);
+	private string Normalize(string text, Action<string> failure) => Normalizer.Normalize(text, this.Variables, failure);
 	#endregion
 
 	#region 嵌套子类
