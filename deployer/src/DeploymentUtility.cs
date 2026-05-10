@@ -80,7 +80,7 @@ public static class DeploymentUtility
 		const int Asterisk2 = 2;
 
 		if(string.IsNullOrEmpty(directory))
-			return Array.Empty<PathToken>();
+			return [];
 
 		directory = Path.GetFullPath(directory);
 		var parts = Common.StringExtension.Slice(directory, Utility.PATH_SEPARATORS).ToArray();
@@ -91,11 +91,9 @@ public static class DeploymentUtility
 		{
 			if(parts[i] == "**")
 			{
-				if(directories == null)
-					directories = new List<PathToken>();
-
+				directories ??= [];
 				flags |= Asterisk2;
-				var origin = Path.Combine(parts.Take(i).ToArray());
+				var origin = Path.Combine([.. parts.Take(i)]);
 
 				//如果指定目录不存在则跳过，否则后面的代码会引发系统IO异常
 				if(!Directory.Exists(origin))
@@ -105,11 +103,9 @@ public static class DeploymentUtility
 			}
 			else if(parts[i].Contains('*') || parts.Contains("?"))
 			{
-				if(directories == null)
-					directories = new List<PathToken>();
-
+				directories ??= [];
 				flags |= Asterisk1;
-				var origin = Path.Combine(parts.Take(i).ToArray());
+				var origin = Path.Combine([.. parts.Take(i)]);
 
 				//如果指定目录不存在则跳过，否则后面的代码会引发系统IO异常
 				if(!Directory.Exists(origin))
@@ -141,7 +137,7 @@ public static class DeploymentUtility
 		}
 
 		if(directories == null || directories.Count == 0)
-			return new[] { new PathToken(directory) };
+			return [new PathToken(directory)];
 
 		return directories.Where(token => !string.IsNullOrEmpty(token.Path));
 	}

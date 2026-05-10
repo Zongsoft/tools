@@ -11,7 +11,7 @@
  *
  * The MIT License (MIT)
  * 
- * Copyright (C) 2015-2025 Zongsoft Corporation <http://www.zongsoft.com>
+ * Copyright (C) 2015-2026 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -33,6 +33,7 @@
 
 using System;
 using System.IO;
+using System.Linq;
 using System.Collections.Generic;
 
 namespace Zongsoft.Tools.Deployer;
@@ -72,7 +73,7 @@ public class NugetRegulator : IDirectoryRegulator
 	#endregion
 
 	#region 私有方法
-	private static readonly char[] PATH_SEPARATORS = new char[]{ '/', '\\' };
+	private static readonly char[] PATH_SEPARATORS = ['/', '\\'];
 
 	/// <summary>从指定的库路径中查找最适用的框架版本，并将库路径中的框架替换为适用框架。</summary>
 	/// <param name="path">待修整的库路径。</param>
@@ -118,7 +119,7 @@ public class NugetRegulator : IDirectoryRegulator
 			if(parts[i] == "lib")
 			{
 				var segment = new ArraySegment<string>(parts, 0, i);
-				var libraryPath = Path.Combine(segment.ToArray());
+				var libraryPath = Path.Combine([.. segment]);
 
 				if(i < parts.Length - 1 && !string.IsNullOrEmpty(parts[i + 1]))
 					framework = parts[i + 1];
@@ -130,7 +131,7 @@ public class NugetRegulator : IDirectoryRegulator
 				if(parts.Length <= i + 2)
 					return result;
 
-				return Path.Combine(result, string.Join(Path.PathSeparator, parts, i + 2, parts.Length - i - 2));
+				return Path.Combine([result, .. parts.Skip(i + 2)]);
 			}
 		}
 

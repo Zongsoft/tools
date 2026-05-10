@@ -11,7 +11,7 @@
  *
  * The MIT License (MIT)
  * 
- * Copyright (C) 2015-2025 Zongsoft Corporation <http://www.zongsoft.com>
+ * Copyright (C) 2015-2026 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -55,7 +55,7 @@ public class NugetResolver : DeploymentResolverBase
 		if(!Utility.TryGetTargetFramework(context.Variables, out var framework) || string.IsNullOrEmpty(framework))
 		{
 			context.Deployer.Terminal.UnspecifiedVariable(Utility.FRAMEWORK_VARIABLE);
-			return Array.Empty<DeploymentUtility.PathToken>();
+			return [];
 		}
 
 		var argument = Argument.Parse(deployment.Source.Name);
@@ -89,26 +89,23 @@ public class NugetResolver : DeploymentResolverBase
 			if(File.Exists(Path.Combine(path, Deployer.DEFAULT_DEPLOYMENT_FILENAME)))
 				return DeploymentUtility.GetFiles(Path.Combine(path, Deployer.DEFAULT_DEPLOYMENT_FILENAME), context.Variables);
 
-			//从当前包的库目录中查找最适用的框架版本，如果没有找到则返回
-			var nearestLibrary = NugetUtility.GetNearestLibraryPath(path, framework);
-			if(string.IsNullOrEmpty(nearestLibrary))
+			var directories = new HashSet<string>();
+
+			//将当前包的最合适的资产目录加入到源路径中
+			foreach(var asset in NugetUtility.GetAssetPaths(path, framework))
+				directories.Add(asset);
+
+			//将依赖包的资产目录加入到部署源中
+			foreach(var dependent in dependents)
+			{
+				foreach(var asset in NugetUtility.GetAssetPaths(dependent, framework))
+					directories.Add(asset);
+			}
+
+			if(directories.Count == 0)
 			{
 				context.Deployer.Terminal.UnmatchPackage(metadata.Identity.ToString(), framework);
 				return [];
-			}
-
-			var directories = new HashSet<string>();
-
-			//将当前包的最合适的库目录加入到源路径中
-			directories.Add(nearestLibrary);
-
-			//将依赖包的库目录加入到部署源中
-			foreach(var dependent in dependents)
-			{
-				var direcotry = NugetUtility.GetNearestLibraryPath(dependent, framework);
-
-				if(!string.IsNullOrEmpty(direcotry))
-					directories.Add(direcotry);
 			}
 
 			var result = new List<DeploymentUtility.PathToken>();

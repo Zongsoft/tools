@@ -66,7 +66,7 @@ internal static class Utility
 			return true;
 
 		return TryGetTargetFramework(variables, out var framework) &&
-			IsTargetFramework(framework, string.IsNullOrEmpty(targets) ? Array.Empty<string>() : targets.Split(TARGET_SEPARATORS, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
+			IsTargetFramework(framework, string.IsNullOrEmpty(targets) ? [] : targets.Split(TARGET_SEPARATORS, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
 	}
 
 	public static bool IsTargetFramework(string value, params string[] targets)
