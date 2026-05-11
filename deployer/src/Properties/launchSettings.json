@@ -2,7 +2,7 @@
   "profiles": {
     "Zongsoft.Tools.Deployer": {
       "commandName": "Project",
-      "commandLineArgs": "-verbosity:normal\r\n-overwrite:newest\r\n-host:terminal\r\n-site:daemon\r\n-debug:%debug%\r\n-scheme:%scheme%\r\n-edition:Debug\r\n-framework:net8.0\r\n-destination:bin/%edition%/%framework%\r\n.deploy\r\n../.deploy/%scheme%/%host%.deploy\r\n../.deploy/%scheme%/%site%.deploy",
+      "commandLineArgs": "--verbosity:normal\r\n--overwrite:newest\r\n--host:terminal\r\n--site:daemon\r\n--debug:%debug%\r\n--scheme:%scheme%\r\n--edition:Debug\r\n--framework:net10.0\r\n--platform:win\r\n--architecture:x64\r\n--destination:bin/%edition%/%framework%\r\n.deploy\r\n../.deploy/%scheme%/%host%.deploy\r\n../.deploy/%scheme%/%site%.deploy",
       "workingDirectory": "D:\\Zongsoft\\hosting\\terminal",
       "environmentVariables": {
         "scheme": "default",

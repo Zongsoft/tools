@@ -223,4 +223,7 @@
   <data name="NoPackageForFramework" xml:space="preserve">
     <value>The specified '{0}' package does not have a '{1}' framework version.</value>
   </data>
+  <data name="Elapsed.Label" xml:space="preserve">
+    <value>Elapsed: </value>
+  </data>
 </root>

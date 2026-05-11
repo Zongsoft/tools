@@ -83,6 +83,14 @@ public abstract class DeploymentResolverBase : IDeploymentResolver
 				}
 			}
 
+			//如果文件是Nuget包中的空文件则直接忽略
+			if(Path.GetFileName(sourceFile.Path) == "_._")
+			{
+				var info = new FileInfo(sourceFile.Path);
+				if(info.Length == 0)
+					continue;
+			}
+
 			//获取覆盖选项
 			var overwrite = context.Variables.TryGetValue(Deployer.OVERWRITE_OPTION, out var variable) && Enum.TryParse<Overwrite>(variable, true, out var value) ? value : Overwrite.Alway;
 

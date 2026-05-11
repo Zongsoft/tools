@@ -182,19 +182,19 @@ dotnet tool uninstall -g zongsoft.tools.deployer
 
 - Execute the default deployment in the host(target) directory:
 ```bash
-dotnet deploy -edition:Debug -framework:net8.0
+dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:x64
 ```
 
 - If the host(target) directory does not have a default deployment file (`.deploy`), you must manually specify the deployment file name (multiple deployment files are supported):
 ```bash
-dotnet deploy -edition:Debug -framework:net8.0 MyProject1.deploy MyProject2.deploy MyProject3.deploy
+dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:x64 MyProject1.deploy MyProject2.deploy MyProject3.deploy
 ```
 
 - For the convenience of deployment, you can create a corresponding edition of the deployment script files in the host(target) project, for example:
 	- deploy-debug.cmd
-		> `dotnet deploy -edition:Debug -framework:net8.0`
+		> `dotnet deploy --edition:Debug --framework:net10.0 --platform:linux --architecture:x64`
 	- deploy-release.cmd
-		> `dotnet deploy -edition:Release -framework:net8.0`
+		> `dotnet deploy --edition:Release --framework:net10.0 --platform:linux --architecture:x64`
 
 ### Command options
 

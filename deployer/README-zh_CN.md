@@ -178,19 +178,19 @@ dotnet tool uninstall -g zongsoft.tools.deployer
 
 - 在目标(宿主)目录执行默认部署：
 ```bash
-dotnet deploy -edition:Debug -framework:net8.0
+dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:x64
 ```
 
 - 如果目标(宿主)目录没有默认部署文件(`.deploy`)，则必须手动指定部署文件名(支持多个部署文件)：
 ```bash
-dotnet deploy -edition:Debug -framework:net8.0 MyProject1.deploy MyProject2.deploy MyProject3.deploy
+dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:x64 MyProject1.deploy MyProject2.deploy MyProject3.deploy
 ```
 
 - 为了部署方便可以在目标(宿主)项目创建相应版本的部署脚本文件，譬如：
 	- deploy-debug.cmd
-		> `dotnet deploy -edition:Debug -framework:net8.0`
+		> `dotnet deploy --edition:Debug --framework:net10.0 --platform:linux --architecture:x64`
 	- deploy-release.cmd
-		> `dotnet deploy -edition:Release -framework:net8.0`
+		> `dotnet deploy --edition:Release --framework:net10.0 --platform:linux --architecture:x64`
 
 ### 命令选项
 

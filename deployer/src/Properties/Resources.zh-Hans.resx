@@ -223,4 +223,7 @@
   <data name="NoPackageForFramework" xml:space="preserve">
     <value>指定的“{0}”包没有匹配的 {1} 框架版本。</value>
   </data>
+  <data name="Elapsed.Label" xml:space="preserve">
+    <value>耗时：</value>
+  </data>
 </root>

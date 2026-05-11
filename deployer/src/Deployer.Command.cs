@@ -67,6 +67,9 @@ partial class Deployer
 			//打印开始部署信息
 			deployer.StartDeployment(context.Options, paths);
 
+			//创建一个计时器
+			var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
 			//依次部署指定的部署文件
 			for(int i = 0; i < paths.Length; i++)
 			{
@@ -74,8 +77,14 @@ partial class Deployer
 				var counter = await deployer.DeployAsync(paths[i], cancellation);
 
 				//打印部署的结果信息
-				deployer.Terminal.CompleteDeployment(counter.FilePath, counter, i >= paths.Length - 1);
+				deployer.Terminal.CompleteDeployment(counter.FilePath, counter, stopwatch.Elapsed, i >= paths.Length - 1);
+
+				//重新计时
+				stopwatch.Restart();
 			}
+
+			//停止计时器
+			stopwatch.Stop();
 
 			return paths;
 		}
@@ -94,7 +103,7 @@ partial class Deployer
 			foreach(var option in context.Options)
 			{
 				if(option.Value != null)
-					variables[option.Key] = option.Value.ToString();
+					variables[option.Key] = Normalizer.Normalize(option.Value.ToString(), variables);
 			}
 
 			return variables;

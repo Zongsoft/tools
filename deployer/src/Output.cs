@@ -62,8 +62,8 @@ internal static class Output
 			_ => string.Format(Properties.Resources.FileDeployFailed_Message, source, destination),
 		};
 
-		terminal.Write(CommandOutletColor.Magenta, Properties.Resources.Warn_Prompt);
-		terminal.WriteLine(CommandOutletColor.DarkYellow, message);
+		terminal.Write(CommandOutletColor.Cyan, Properties.Resources.Tips_Prompt);
+		terminal.WriteLine(CommandOutletColor.Blue, message);
 	}
 
 	public static void FileDeletedSucceed(this ITerminal terminal, string filePath)
@@ -144,19 +144,21 @@ internal static class Output
 
 		for(int i = 0; i < filePaths.Length; i++)
 		{
-			content.Append(CommandOutletColor.DarkGray, $"\t[");
-			content.Append(CommandOutletColor.DarkYellow, $"{i + 1}");
-			content.Append(CommandOutletColor.DarkGray, $"] ");
-			content.AppendLine(CommandOutletColor.DarkGreen, filePaths[i]);
+			content.Last
+				.Append(CommandOutletColor.DarkGray, $"\t[")
+				.Append(CommandOutletColor.DarkYellow, $"{i + 1}")
+				.Append(CommandOutletColor.DarkGray, $"] ")
+				.AppendLine(CommandOutletColor.DarkGreen, filePaths[i]);
 		}
 
-		content.AppendLine(CommandOutletColor.DarkMagenta, Properties.Resources.Deployment_Options_Label);
+		content.Last.AppendLine(CommandOutletColor.DarkMagenta, Properties.Resources.Deployment_Options_Label);
 
 		foreach(var option in options)
 		{
-			content.Append(CommandOutletColor.DarkCyan, $"\t{option.Key}");
-			content.Append(CommandOutletColor.DarkGray, ":");
-			content.AppendLine(CommandOutletColor.DarkGreen, Normalizer.Normalize(option.Value?.ToString(), deployer.Variables));
+			content.Last
+				.Append(CommandOutletColor.DarkCyan, $"\t{option.Key}")
+				.Append(CommandOutletColor.DarkGray, ":")
+				.AppendLine(CommandOutletColor.DarkGreen, Normalizer.Normalize(option.Value?.ToString(), deployer.Variables));
 		}
 
 		IDictionary<string, string> display;
@@ -179,19 +181,20 @@ internal static class Output
 				display[NugetUtility.NUGET_PACKAGES_ENVIRONMENT] = value;
 		}
 
-		content.AppendLine(CommandOutletColor.DarkMagenta, Properties.Resources.Environment_Variables_Label);
+		content.Last.AppendLine(CommandOutletColor.DarkMagenta, Properties.Resources.Environment_Variables_Label);
 
 		foreach(var variable in display)
 		{
-			content.Append(CommandOutletColor.DarkCyan, $"\t{variable.Key}");
-			content.Append(CommandOutletColor.DarkGray, ":");
-			content.AppendLine(CommandOutletColor.DarkGreen, variable.Value);
+			content.Last
+				.Append(CommandOutletColor.DarkCyan, $"\t{variable.Key}")
+				.Append(CommandOutletColor.DarkGray, ":")
+				.AppendLine(CommandOutletColor.DarkGreen, variable.Value);
 		}
 
 		Terminal.WriteLine(content);
 	}
 
-	public static void CompleteDeployment(this ITerminal terminal, string filePath, DeploymentCounter counter, bool final)
+	public static void CompleteDeployment(this ITerminal terminal, string filePath, DeploymentCounter counter, TimeSpan elapsed, bool final)
 	{
 		var content = CommandOutletContent
 			.Create(counter.Successes > 0 ? CommandOutletColor.DarkGreen : CommandOutletColor.DarkYellow, string.Format(Properties.Resources.DeploymentComplete_Message, filePath, counter.Total))
@@ -199,7 +202,9 @@ internal static class Output
 			.Append(CommandOutletColor.Green, string.Format(Properties.Resources.DeploymentComplete_SucceedCount, counter.Successes))
 			.Append(Properties.Resources.DeploymentComplete_CountSparator)
 			.Append(CommandOutletColor.DarkRed, string.Format(Properties.Resources.DeploymentComplete_FailedCount, counter.Failures))
-			.Append(Properties.Resources.DeploymentComplete_CountEnd);
+			.Append(Properties.Resources.DeploymentComplete_CountEnd)
+			.Append(CommandOutletColor.Cyan, Properties.Resources.Elapsed_Label)
+			.Append(CommandOutletColor.Green, $@"{elapsed:hh\:mm\:ss\.fff}");
 
 		var count = 0;
 		var message = CommandOutletContent.GetFullText(content);
