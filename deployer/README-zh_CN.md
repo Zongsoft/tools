@@ -74,6 +74,11 @@ delete:Zongsoft.Messaging.Mqtt.option
 
 > 💡 注意：名为 `NuGet_Server` 变量定义了该解析器的 NuGet 包源，如果未定义则采用 `https://api.nuget.org/v3/index.json` 作为其默认值。
 
+##### 依赖包
+
+_**N**uget_ 包下载器默认会忽略以 `System.`、`Microsoft.Extensions.`、`Zongsoft.` 打头的依赖包；
+还可以通过 `--ignoreDependentPrefix` 命令选项指定需要忽略的依赖包前缀，多个前缀使用 `,` 或 `;` 或 `|` 符进行分隔。
+
 ##### 示例
 
 - 获取 `Zongsoft.Plugins` 包的最新版本，并将包中的 `/plugins` 目录中的 `Main.plugin` 插件文件部署到目标的 `~/plugins` 目录中。

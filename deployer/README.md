@@ -75,6 +75,11 @@ The format of _Parser-Argument_: `package@version/path`, where `@version` and `/
 > 💡 **Note:** The variable named `NuGet_Server` defines the NuGet package source for this parser.
 > If undefined then `https://api.nuget.org/v3/index.json` is used as its default value.
 
+##### Dependency Packages
+
+_**N**uget_ by default ignores dependency packages whose names begin with `System.`, `Microsoft.Extensions.`, or `Zongsoft.`;
+You can also specify the prefixes of dependency packages to ignore using the `--ignoreDependentPrefix` command-line option, multiple prefixes are separated by a comma(`,`), a semicolon(`;`), or a pipe(`|`).
+
 ##### Examples
 
 - Get the latest version of the `Zongsoft.Plugins` NuGet package and deploy the `Main.plugin` plugin file in it's `/plugins` directory to the destination `~/plugins` directory.

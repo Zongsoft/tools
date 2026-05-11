@@ -92,13 +92,13 @@ public class NugetResolver : DeploymentResolverBase
 			var directories = new HashSet<string>();
 
 			//将当前包的最合适的资产目录加入到源路径中
-			foreach(var asset in NugetUtility.GetAssetPaths(path, framework))
+			foreach(var asset in NugetUtility.GetAssetPaths(path, framework, context.Variables))
 				directories.Add(asset);
 
 			//将依赖包的资产目录加入到部署源中
 			foreach(var dependent in dependents)
 			{
-				foreach(var asset in NugetUtility.GetAssetPaths(dependent, framework))
+				foreach(var asset in NugetUtility.GetAssetPaths(dependent, framework, context.Variables))
 					directories.Add(asset);
 			}
 

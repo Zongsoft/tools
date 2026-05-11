@@ -1,13 +1,14 @@
 var target = Argument("target", "default");
-var solutionFile  = "Zongsoft.Tools.Deployer.slnx";
+var edition = Argument("edition", "Debug");
+
+var solutionFile = "Zongsoft.Tools.Deployer.slnx";
 
 Task("clean")
 	.Description("清理解决方案")
 	.Does(() =>
 {
-	DeleteFiles("*.nupkg");
-	CleanDirectories("**/bin");
-	CleanDirectories("**/obj");
+	CleanDirectories($"**/bin/{edition}");
+	CleanDirectories($"**/obj/{edition}");
 });
 
 Task("restore")
@@ -25,14 +26,52 @@ Task("build")
 {
 	var settings = new DotNetBuildSettings
 	{
-		NoRestore = true
+		Configuration = edition,
 	};
 
 	DotNetBuild(solutionFile, settings);
 });
 
+Task("test")
+	.Description("单元测试")
+	.IsDependentOn("build")
+	.Does(() =>
+{
+	var settings = new DotNetTestSettings
+	{
+		NoBuild = true,
+		NoRestore = true,
+		Configuration = edition,
+	};
+
+	var projects = GetFiles("**/test/*.csproj");
+
+	foreach(var project in projects)
+	{
+		DotNetTest(project.FullPath, settings);
+	}
+});
+
+Task("pack")
+	.Description("发包(NuGet)")
+	.IsDependentOn("build")
+	.Does(() =>
+{
+	var packages = GetFiles($"**/{edition}/*.nupkg");
+
+	foreach(var package in packages)
+	{
+		DotNetNuGetPush(package.FullPath, new DotNetNuGetPushSettings
+		{
+			Source = "nuget.org",
+			ApiKey = EnvironmentVariable("NUGET_API_KEY"),
+			SkipDuplicate = true,
+		});
+	}
+});
+
 Task("default")
 	.Description("默认")
-	.IsDependentOn("build");
+	.IsDependentOn("test");
 
 RunTarget(target);

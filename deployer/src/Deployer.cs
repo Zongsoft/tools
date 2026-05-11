@@ -49,6 +49,7 @@ public partial class Deployer
 	internal const string OVERWRITE_OPTION = "overwrite";
 	internal const string VERBOSITY_OPTION = "verbosity";
 	internal const string DESTINATION_OPTION = "destination";
+	internal const string IGNOREDEPENDENTPREFIX_OPTION = "ignoreDependentPrefix";
 	internal const string IGNOREDEPLOYMENTFILE_OPTION = "ignoreDeploymentFile";
 
 	internal const string DEFAULT_DEPLOYMENT_FILENAME = ".deploy";

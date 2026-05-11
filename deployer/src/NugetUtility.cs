@@ -37,15 +37,14 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 
 using NuGet.Common;
 using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
 using NuGet.Packaging;
 using NuGet.Packaging.Core;
-using NuGet.Versioning;
 using NuGet.Frameworks;
+using NuGet.Versioning;
 
 namespace Zongsoft.Tools.Deployer;
 
@@ -67,7 +66,7 @@ public static class NugetUtility
 	#endregion
 
 	#region 静态属性
-	private static string DEFAULT_PACKAGES_DIRECTORY => Path.Combine(NuGetEnvironment.GetFolderPath(NuGet.Common.NuGetFolderPath.NuGetHome), "packages");
+	private static string DEFAULT_PACKAGES_DIRECTORY => Path.Combine(NuGetEnvironment.GetFolderPath(NuGetFolderPath.NuGetHome), "packages");
 	#endregion
 
 	#region 初始方法
@@ -106,13 +105,13 @@ public static class NugetUtility
 		return GetNearestFrameworkPath(Path.Combine(path, "lib"), framework);
 	}
 
-	public static IEnumerable<string> GetAssetPaths(string path, string framework)
+	public static IEnumerable<string> GetAssetPaths(string path, string framework, IDictionary<string, string> variables)
 	{
 		var library = GetNearestLibraryPath(path, framework);
 		if(!string.IsNullOrEmpty(library))
 			yield return library;
 
-		var runtime = GetRuntimeNativePath(path);
+		var runtime = GetRuntimeNativePath(path, variables);
 		if(!string.IsNullOrEmpty(runtime))
 			yield return runtime;
 
@@ -217,12 +216,23 @@ public static class NugetUtility
 			return _dependents[key] = Array.Empty<string>();
 
 		var result = new List<string>(nearest.Packages.Count());
+		var ignores = variables.TryGetValue(Deployer.IGNOREDEPENDENTPREFIX_OPTION, out var prefix) && !string.IsNullOrEmpty(prefix) ?
+			prefix.Split([',', ';', '|'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) : [];
 
 		foreach(var package in nearest.Packages)
 		{
 			//忽略依赖中的系统包、框架内置包以及 Zongsoft 包
-			if(package.Id.StartsWith("System.") || package.Id.StartsWith("Microsoft.Extensions.") || package.Id.StartsWith("Zongsoft."))
+			if(package.Id.StartsWith("System.") ||
+			   package.Id.StartsWith("Microsoft.Extensions.") ||
+			   package.Id.StartsWith("Zongsoft."))
 				continue;
+
+			//忽略指定前缀的依赖包
+			for(int i = 0; i < ignores.Length; i++)
+			{
+				if(package.Id.StartsWith(ignores[i]))
+					continue;
+			}
 
 			var path = await DownloadPackageAsync(variables, package.Id, package.VersionRange.MinVersion, cancellation);
 
@@ -269,38 +279,47 @@ public static class NugetUtility
 			yield return Path.Combine(content, "**");
 	}
 
-	private static string GetRuntimeNativePath(string path)
+	private static string GetRuntimeNativePath(string path, IDictionary<string, string> variables)
 	{
-		var directory = Path.Combine(path, "runtimes", RuntimeInformation.RuntimeIdentifier, "native");
-		if(Directory.Exists(directory))
-			return directory;
-
-		var rid = GetFallbackRuntimeIdentifier(RuntimeInformation.RuntimeIdentifier);
-		if(string.IsNullOrEmpty(rid))
+		if(variables == null || variables.Count == 0)
 			return null;
 
-		directory = Path.Combine(path, "runtimes", rid, "native");
-		return Directory.Exists(directory) ? directory : null;
+		if(!variables.TryGetValue("platform", out var platform) || string.IsNullOrWhiteSpace(platform))
+			return null;
+
+		if(!variables.TryGetValue("architecture", out var architecture) || string.IsNullOrWhiteSpace(architecture))
+			return null;
+
+		foreach(var runtimeIdentifier in GetRuntimeIdentifiers(platform.Trim(), architecture.Trim()))
+		{
+			var directory = Path.Combine(path, "runtimes", runtimeIdentifier, "native");
+			if(Directory.Exists(directory))
+				return directory;
+		}
+
+		return null;
 	}
 
-	private static string GetFallbackRuntimeIdentifier(string runtimeIdentifier)
+	private static IEnumerable<string> GetRuntimeIdentifiers(string platform, string architecture)
 	{
-		if(string.IsNullOrEmpty(runtimeIdentifier))
-			return null;
+		yield return $"{platform}-{architecture}";
 
-		var index = runtimeIdentifier.IndexOf('-');
-		if(index <= 0 || index >= runtimeIdentifier.Length - 1)
-			return null;
+		var fallback = GetFallbackPlatform(platform);
+		if(!string.IsNullOrEmpty(fallback) && !string.Equals(fallback, platform, StringComparison.OrdinalIgnoreCase))
+			yield return $"{fallback}-{architecture}";
+	}
 
-		var platform = runtimeIdentifier[..index];
-		var architecture = runtimeIdentifier[(index + 1)..];
+	private static string GetFallbackPlatform(string platform)
+	{
+		if(string.IsNullOrWhiteSpace(platform))
+			return null;
 
 		return platform switch
 		{
-			"win" or "linux" or "osx" => runtimeIdentifier,
-			_ when OperatingSystem.IsWindows() => $"win-{architecture}",
-			_ when OperatingSystem.IsLinux() => $"linux-{architecture}",
-			_ when OperatingSystem.IsMacOS() => $"osx-{architecture}",
+			"win" or "linux" or "osx" => platform,
+			_ when platform.StartsWith("win", StringComparison.OrdinalIgnoreCase) => "win",
+			_ when platform.StartsWith("linux-", StringComparison.OrdinalIgnoreCase) => "linux",
+			_ when platform.StartsWith("osx.", StringComparison.OrdinalIgnoreCase) => "osx",
 			_ => null,
 		};
 	}
