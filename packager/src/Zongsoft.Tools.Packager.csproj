@@ -1,0 +1,51 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<LangVersion>latest</LangVersion>
+		<TargetFrameworks>net8.0;net9.0;net10.0;</TargetFrameworks>
+		<Version>0.0.1</Version>
+		<Authors>Popeye Zhong(zongsoft@qq.com)</Authors>
+		<PackAsTool>true</PackAsTool>
+		<ToolCommandName>dotnet-pack</ToolCommandName>
+		<PackageDescription>The Zongsoft Packaging .NET Tool.</PackageDescription>
+		<Company>Zongsoft Studio</Company>
+		<Product>Zongsoft Packaging Tool</Product>
+		<Description>Zongsoft Application Packaging Tool.</Description>
+		<Copyright>Copyright(C) Zongsoft Studio 2020-2026. All rights reserved.</Copyright>
+		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+		<PackageProjectUrl>https://github.com/Zongsoft/tools/tree/main/packager</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/Zongsoft/tools/tree/main/packager</RepositoryUrl>
+		<PackageIconUrl>https://github.com/Zongsoft/guidelines/raw/main/zongsoft-logo(48x48).png</PackageIconUrl>
+		<PackageIcon>zongsoft-logo.png</PackageIcon>
+		<ApplicationIcon>..\..\zongsoft-logo.ico</ApplicationIcon>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="..\..\zongsoft-logo.png" Pack="true" PackagePath="\" Visible="true" />
+		<None Include="..\README.md" Pack="true" PackagePath="\" />
+		<None Include="..\README-zh_CN.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Zongsoft.Core" Version="7.46.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Compile Update="Properties\Resources.Designer.cs">
+			<AutoGen>True</AutoGen>
+			<DesignTime>True</DesignTime>
+			<DependentUpon>Resources.resx</DependentUpon>
+		</Compile>
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Update="Properties\Resources.resx">
+			<Generator>ResXFileCodeGenerator</Generator>
+			<LastGenOutput>Resources.Designer.cs</LastGenOutput>
+		</EmbeddedResource>
+	</ItemGroup>
+</Project>
