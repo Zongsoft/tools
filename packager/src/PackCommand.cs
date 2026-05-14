@@ -33,7 +33,6 @@
 
 using System;
 using System.IO;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
@@ -55,13 +54,13 @@ namespace Zongsoft.Tools.Packager;
 [CommandOption(OUTPUT_OPTION, typeof(string))]
 [CommandOption(DAEMON_OPTION, typeof(string))]
 [CommandOption(OVERWRITE_OPTION, typeof(bool), false)]
+[CommandOption(URL_OPTION, typeof(string))]
 [CommandOption(TITLE_OPTION, typeof(string))]
+[CommandOption(LICENSE_OPTION, typeof(string))]
+[CommandOption(CATEGORY_OPTION, typeof(string))]
+[CommandOption(MAINTAINER_OPTION, typeof(string))]
 [CommandOption(SUMMARY_OPTION, typeof(string))]
 [CommandOption(DESCRIPTION_OPTION, typeof(string))]
-[CommandOption(MAINTAINER_OPTION, typeof(string))]
-[CommandOption(LICENSE_OPTION, typeof(string))]
-[CommandOption(URL_OPTION, typeof(string))]
-[CommandOption(CATEGORY_OPTION, typeof(string))]
 [CommandOption(DEPENDENCIES_OPTION, typeof(string))]
 [CommandOption(PROVIDES_OPTION, typeof(string))]
 [CommandOption(CONFLICTS_OPTION, typeof(string))]
@@ -85,12 +84,12 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 	private const string OVERWRITE_OPTION = "overwrite";
 	private const string ARCHITECTURE_OPTION = "architecture";
 	private const string DAEMON_OPTION = "daemon";
+	private const string URL_OPTION = "url";
+	private const string LICENSE_OPTION = "license";
+	private const string CATEGORY_OPTION = "category";
+	private const string MAINTAINER_OPTION = "maintainer";
 	private const string SUMMARY_OPTION = "summary";
 	private const string DESCRIPTION_OPTION = "description";
-	private const string MAINTAINER_OPTION = "maintainer";
-	private const string LICENSE_OPTION = "license";
-	private const string URL_OPTION = "url";
-	private const string CATEGORY_OPTION = "category";
 	private const string PROVIDES_OPTION = "provides";
 	private const string CONFLICTS_OPTION = "conflicts";
 	private const string DEPENDENCIES_OPTION = "dependencies";
@@ -101,9 +100,9 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 	private const string SCRIPT_UNINSTALLED_OPTION = "script-uninstalled";
 
 	private const string DEFAULT_INSTALL_PATH = "/usr/local";
-	private const string DEFAULT_MAINTAINER = "Zongsoft Studio <zongsoft@qq.com>";
+	private const string DEFAULT_MAINTAINER = "Zongsoft Studio <zongsoft@gmail.com>";
 	private const string DEFAULT_LICENSE = "MIT";
-	private const string DEFAULT_URL = "https://github.com/Zongsoft/framework";
+	private const string DEFAULT_URL = "https://github.com/Zongsoft";
 	#endregion
 
 	#region 执行方法
@@ -129,7 +128,7 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 			Terminal.WriteLine(CommandOutletColor.DarkYellow, $"[Warn] The '{format}' install format is normally used for Linux packages.");
 
 		var runtime = Utility.GetRuntimeIdentifier(platform, architecture);
-		var packageName = GetPackageName(name, edition);
+		var packageName = Package.GetPackageName(name, edition);
 		var installPath = $"{context.Options.GetValue(INSTALL_PATH_OPTION, DEFAULT_INSTALL_PATH)}/{packageName}";
 		var variables = GetVariables(context,
 		[
@@ -162,40 +161,37 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 		variables[SOURCE_OPTION] = source;
 		variables[OUTPUT_OPTION] = output;
 
-		var metadata = new PackageMetadata(
-			name,
-			packageName,
-			edition,
-			version,
-			runtime,
-			platform,
-			architecture,
-			context.Options.GetValue<string>(FRAMEWORK_OPTION),
-			NormalizeText(context.Options.GetValue<string>(TITLE_OPTION), variables),
-			NormalizeText(context.Options.GetValue<string>(SUMMARY_OPTION), variables),
-			NormalizeText(context.Options.GetValue<string>(DESCRIPTION_OPTION), variables),
-			NormalizeValue(context.Options.GetValue<string>(MAINTAINER_OPTION), variables, DEFAULT_MAINTAINER),
-			NormalizeValue(context.Options.GetValue<string>(LICENSE_OPTION), variables, DEFAULT_LICENSE),
-			NormalizeValue(context.Options.GetValue<string>(URL_OPTION), variables, DEFAULT_URL),
-			NormalizeValue(context.Options.GetValue<string>(CATEGORY_OPTION), variables),
-			installPath,
-			NormalizeList(context.Options.GetValue<string>(DEPENDENCIES_OPTION), variables),
-			NormalizeList(context.Options.GetValue<string>(PROVIDES_OPTION), variables),
-			NormalizeList(context.Options.GetValue<string>(CONFLICTS_OPTION), variables));
+		var package = new Package(name, edition, version, platform, architecture)
+		{
+			InstallPath = installPath,
+			Framework = context.Options.GetValue<string>(FRAMEWORK_OPTION),
+			Title = NormalizeText(context.Options.GetValue<string>(TITLE_OPTION), variables),
+			Summary = NormalizeText(context.Options.GetValue<string>(SUMMARY_OPTION), variables),
+			Description = NormalizeText(context.Options.GetValue<string>(DESCRIPTION_OPTION), variables),
+			Maintainer = NormalizeValue(context.Options.GetValue<string>(MAINTAINER_OPTION), variables, DEFAULT_MAINTAINER),
+			License = NormalizeValue(context.Options.GetValue<string>(LICENSE_OPTION), variables, DEFAULT_LICENSE),
+			Url = NormalizeValue(context.Options.GetValue<string>(URL_OPTION), variables, DEFAULT_URL),
+			Category = NormalizeValue(context.Options.GetValue<string>(CATEGORY_OPTION), variables),
+			Dependencies = NormalizeList(context.Options.GetValue<string>(DEPENDENCIES_OPTION), variables),
+			Provides = NormalizeList(context.Options.GetValue<string>(PROVIDES_OPTION), variables),
+			Conflicts = NormalizeList(context.Options.GetValue<string>(CONFLICTS_OPTION), variables),
+		};
 
 		var daemonPath = GetDaemonPath(context, source, variables);
 		var daemonEntryName = daemonPath == null ? null : GetDaemonEntryName(source, daemonPath);
-		var scripts = GetScripts(context, source, variables, metadata, daemonPath, daemonEntryName);
-		var entries = GetEntries(source, context.Arguments, variables, GetPackagePrefix(format, metadata));
+		package.Scripts = GetScripts(context, source, variables, package, daemonPath, daemonEntryName);
+		var entries = GetEntries(source, context.Arguments, variables, GetPackagePrefix(format, package));
 
 		if(daemonPath != null)
-			AddFile(entries, new HashSet<string>(entries.ConvertAll(entry => entry.EntryName), StringComparer.Ordinal), daemonPath, daemonEntryName, GetPackagePrefix(format, metadata));
+			AddFile(entries, new HashSet<string>(entries.ConvertAll(entry => entry.EntryName), StringComparer.Ordinal), daemonPath, daemonEntryName, GetPackagePrefix(format, package));
 
 		if(entries.Count == 0)
 		{
 			Terminal.WriteLine(CommandOutletColor.Red, $"The source directory '{source}' does not contain any package entries.");
 			return ValueTask.FromResult<object>(null);
 		}
+
+		package.Entries = [..entries];
 
 		var directory = Path.GetDirectoryName(output);
 		if(!string.IsNullOrEmpty(directory))
@@ -215,13 +211,13 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 		switch(format)
 		{
 			case PackageFormat.Tar:
-				GenerateTar(output, metadata, entries, scripts);
+				package.Tar(output);
 				break;
 			case PackageFormat.Deb:
-				GenerateDeb(output, metadata, entries, scripts);
+				package.Deb(output);
 				break;
 			case PackageFormat.Rpm:
-				GenerateRpm(output, metadata, entries, scripts);
+				package.Rpm(output);
 				break;
 			default:
 				throw new CommandOptionValueException(FORMAT_OPTION, format.ToString());
@@ -233,9 +229,9 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 	#endregion
 
 	#region 条目方法
-	static List<PackageEntry> GetEntries(string source, IReadOnlyCollection<string> arguments, IDictionary<string, string> variables, string prefix)
+	static List<Package.Entry> GetEntries(string source, IReadOnlyCollection<string> arguments, IDictionary<string, string> variables, string prefix)
 	{
-		var entries = new List<PackageEntry>();
+		var entries = new List<Package.Entry>();
 		var names = new HashSet<string>(StringComparer.Ordinal);
 
 		if(arguments == null || arguments.Count == 0)
@@ -265,7 +261,7 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 		return entries;
 	}
 
-	static void AddEntry(List<PackageEntry> entries, ISet<string> names, string source, string path, string alias, string prefix)
+	static void AddEntry(List<Package.Entry> entries, ISet<string> names, string source, string path, string alias, string prefix)
 	{
 		if(alias != null)
 			alias = alias
@@ -316,7 +312,7 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 		}
 	}
 
-	static void AddDirectory(List<PackageEntry> entries, ISet<string> names, string source, string path, string alias, string prefix)
+	static void AddDirectory(List<Package.Entry> entries, ISet<string> names, string source, string path, string alias, string prefix)
 	{
 		foreach(var file in Directory.GetFiles(path))
 			AddFile(entries, names, file, Path.Combine(alias, Path.GetFileName(file)), prefix);
@@ -325,7 +321,7 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 			AddDirectory(entries, names, source, directory, Path.Combine(alias, Path.GetFileName(directory)), prefix);
 	}
 
-	static void AddFile(List<PackageEntry> entries, ISet<string> names, string source, string entryName, string prefix)
+	static void AddFile(List<Package.Entry> entries, ISet<string> names, string source, string entryName, string prefix)
 	{
 		if(string.IsNullOrEmpty(entryName))
 			entryName = Path.GetFileName(source);
@@ -337,7 +333,7 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 				entryName = Path.Combine(Path.GetDirectoryName(entryName), Path.GetFileName(source));
 		}
 
-		entryName = NormalizeEntryName(Path.Combine(prefix ?? string.Empty, entryName));
+		entryName = Utility.NormalizePath(Path.Combine(prefix ?? string.Empty, entryName));
 
 		if(!names.Add(entryName))
 		{
@@ -346,7 +342,7 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 		}
 
 		var file = new FileInfo(source);
-		entries.Add(new PackageEntry(source, entryName, file.Length, GetUnixTime(file.LastWriteTimeUtc), GetFileMode(source)));
+		entries.Add(new Package.Entry(source, entryName, file.Length, GetUnixTime(file.LastWriteTimeUtc), GetFileMode(source)));
 	}
 
 	static bool IsExternal(string source, string path)
@@ -378,12 +374,12 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 
 	static string GetDaemonEntryName(string source, string daemon)
 	{
-		return IsExternal(source, daemon) ? Path.GetFileName(daemon) : NormalizeEntryName(Path.GetRelativePath(source, daemon));
+		return IsExternal(source, daemon) ? Path.GetFileName(daemon) : Utility.NormalizePath(Path.GetRelativePath(source, daemon));
 	}
 
-	static InstallScripts GetScripts(CommandContext context, string source, IDictionary<string, string> variables, PackageMetadata metadata, string daemon, string daemonEntryName)
+	static Package.InstallScripts GetScripts(CommandContext context, string source, IDictionary<string, string> variables, Package metadata, string daemon, string daemonEntryName)
 	{
-		var scripts = new InstallScripts(
+		var scripts = new Package.InstallScripts(
 			ReadScript(context, SCRIPT_INSTALLING_OPTION, source, variables),
 			ReadScript(context, SCRIPT_INSTALLED_OPTION, source, variables),
 			ReadScript(context, SCRIPT_UNINSTALLING_OPTION, source, variables),
@@ -428,7 +424,7 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 			rm -rf '{{metadata.InstallPath}}'
 			""";
 
-		return new InstallScripts(
+		return new(
 			CombineScript(installing, scripts.Installing),
 			CombineScript(installed, scripts.Installed),
 			CombineScript(uninstalling, scripts.Uninstalling),
@@ -472,10 +468,16 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 			variables[variable.Key.ToString()] = variable.Value?.ToString();
 
 		foreach(var option in context.Options)
-			variables[option.Key] = option.Value?.ToString();
+		{
+			if(Normalizer.Normalize(option.Value?.ToString(), variables, out var value))
+				variables[option.Key] = value;
+		}
 
 		foreach(var option in options)
-			variables[option.Key] = option.Value;
+		{
+			if(Normalizer.Normalize(option.Value, variables, out var value))
+				variables[option.Key] = value;
+		}
 
 		return variables;
 	}
@@ -522,32 +524,9 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 		return path.EndsWith(Path.DirectorySeparatorChar) || path.EndsWith(Path.AltDirectorySeparatorChar);
 	}
 
-	static string GetPackagePrefix(PackageFormat format, PackageMetadata metadata)
+	static string GetPackagePrefix(PackageFormat format, Package package)
 	{
-		return format == PackageFormat.Tar ? null : metadata.InstallPath.TrimStart('/');
-	}
-
-	static string GetPackageName(string name, string edition)
-	{
-		var value = string.IsNullOrWhiteSpace(edition) ? name : $"{name}-{edition}";
-		var builder = new StringBuilder(value.Length);
-		var dash = false;
-
-		foreach(var ch in value.ToLowerInvariant())
-		{
-			if(char.IsLetterOrDigit(ch) || ch == '+' || ch == '-' || ch == '.')
-			{
-				builder.Append(ch);
-				dash = false;
-			}
-			else if(!dash)
-			{
-				builder.Append('-');
-				dash = true;
-			}
-		}
-
-		return builder.ToString().Trim('-', '.');
+		return format == PackageFormat.Tar ? null : package.InstallPath.TrimStart('/');
 	}
 
 	static string NormalizeText(string text, IDictionary<string, string> variables)
@@ -587,27 +566,6 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 			.Split([',', ';', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 	}
 
-	static string NormalizeEntryName(string value)
-	{
-		if(string.IsNullOrWhiteSpace(value))
-			return string.Empty;
-
-		return value
-			.Replace(Path.DirectorySeparatorChar, '/')
-			.Replace(Path.AltDirectorySeparatorChar, '/')
-			.TrimStart('/');
-	}
-
-	static long GetPackageSize(IEnumerable<PackageEntry> entries)
-	{
-		long result = 0;
-
-		foreach(var entry in entries)
-			result += entry.Size;
-
-		return result;
-	}
-
 	static int GetFileMode(string path)
 	{
 		if(!OperatingSystem.IsWindows())
@@ -631,30 +589,5 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 	}
 
 	static long GetUnixTime(DateTime value) => new DateTimeOffset(value).ToUnixTimeSeconds();
-	#endregion
-
-	#region 嵌套结构
-	readonly record struct PackageEntry(string Source, string EntryName, long Size, long ModifiedTime, int Mode);
-	readonly record struct PackageMetadata(
-		string Name,
-		string PackageName,
-		string Edition,
-		Version Version,
-		string Runtime,
-		Platform Platform,
-		Architecture Architecture,
-		string Framework,
-		string Title,
-		string Summary,
-		string Description,
-		string Maintainer,
-		string License,
-		string Url,
-		string Category,
-		string InstallPath,
-		IReadOnlyList<string> Dependencies,
-		IReadOnlyList<string> Provides,
-		IReadOnlyList<string> Conflicts);
-	readonly record struct InstallScripts(string Installing, string Installed, string Uninstalling, string Uninstalled);
 	#endregion
 }

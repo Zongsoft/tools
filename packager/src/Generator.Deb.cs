@@ -34,44 +34,43 @@
 using System;
 using System.IO;
 using System.Text;
-using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
 namespace Zongsoft.Tools.Packager;
 
-partial class PackCommand
+partial class Generator
 {
-	static void GenerateDeb(string output, PackageMetadata metadata, IReadOnlyCollection<PackageEntry> entries, InstallScripts scripts)
+	public static void Deb(this Package package, string output)
 	{
-		var control = GetDebControl(metadata, entries);
+		var control = GetDebControl(package);
 		using var stream = File.Create(output);
 
 		WriteArHeader(stream);
 		WriteArEntry(stream, "debian-binary", Encoding.ASCII.GetBytes("2.0\n"));
-		WriteArEntry(stream, "control.tar.gz", CreateControlTarball(control, scripts));
-		WriteArEntry(stream, "data.tar.gz", CreateDataTarball(entries));
+		WriteArEntry(stream, "control.tar.gz", CreateControlTarball(control, package.Scripts));
+		WriteArEntry(stream, "data.tar.gz", CreateDataTarball(package.Entries));
 	}
 
-	static string GetDebControl(PackageMetadata metadata, IReadOnlyCollection<PackageEntry> entries)
+	static string GetDebControl(Package package)
 	{
 		var builder = new StringBuilder();
-		var summary = string.IsNullOrWhiteSpace(metadata.Summary) ? metadata.Title : metadata.Summary;
-		var description = string.IsNullOrWhiteSpace(metadata.Description) ? summary : metadata.Description;
+		var summary = string.IsNullOrWhiteSpace(package.Summary) ? package.Title : package.Summary;
+		var description = string.IsNullOrWhiteSpace(package.Description) ? summary : package.Description;
 
-		builder.AppendLine($"Package: {metadata.PackageName}");
-		builder.AppendLine($"Version: {metadata.Version}");
-		builder.AppendLine($"Section: {NormalizeDebText(metadata.Category ?? "utils")}");
+		builder.AppendLine($"Package: {package.PackageName}");
+		builder.AppendLine($"Version: {package.Version}");
+		builder.AppendLine($"Section: {NormalizeDebText(package.Category ?? "utils")}");
 		builder.AppendLine($"Priority: optional");
-		builder.AppendLine($"Architecture: {GetDebianArchitecture(metadata.Architecture)}");
-		builder.AppendLine($"Installed-Size: {Math.Max(1, (GetPackageSize(entries) + 1023) / 1024)}");
-		builder.AppendLine($"Maintainer: {NormalizeDebText(metadata.Maintainer)}");
-		builder.AppendLine($"Homepage: {NormalizeDebText(metadata.Url)}");
-		builder.AppendLine($"License: {NormalizeDebText(metadata.License)}");
+		builder.AppendLine($"Architecture: {GetDebianArchitecture(package.Architecture)}");
+		builder.AppendLine($"Installed-Size: {Math.Max(1, (package.GetPackageSize() + 1023) / 1024)}");
+		builder.AppendLine($"Maintainer: {NormalizeDebText(package.Maintainer)}");
+		builder.AppendLine($"Homepage: {NormalizeDebText(package.Url)}");
+		builder.AppendLine($"License: {NormalizeDebText(package.License)}");
 
-		if(metadata.Dependencies?.Count > 0)
-			builder.AppendLine($"Depends: {string.Join(", ", metadata.Dependencies)}");
+		if(package.Dependencies.Length > 0)
+			builder.AppendLine($"Depends: {string.Join(", ", package.Dependencies)}");
 
-		builder.AppendLine($"Description: {NormalizeDebText(summary ?? metadata.Name)}");
+		builder.AppendLine($"Description: {NormalizeDebText(summary ?? package.Name)}");
 
 		if(!string.IsNullOrWhiteSpace(description))
 		{

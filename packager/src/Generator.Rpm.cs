@@ -42,27 +42,27 @@ using System.Runtime.InteropServices;
 
 namespace Zongsoft.Tools.Packager;
 
-partial class PackCommand
+partial class Generator
 {
 	const int RPM_SENSE_LESS = 2;
 	const int RPM_SENSE_GREATER = 4;
 	const int RPM_SENSE_EQUAL = 8;
 	const int RPM_SENSE_RPMLIB = 1 << 24;
 
-	static void GenerateRpm(string output, PackageMetadata metadata, IReadOnlyCollection<PackageEntry> entries, InstallScripts scripts)
+	public static void Rpm(this Package package, string output)
 	{
-		var payload = CreateCpioPayload(entries, out var archiveSize);
-		var header = RpmHeader.Create(metadata, entries, scripts, archiveSize);
+		var payload = CreateCpioPayload(package.Entries, out var archiveSize);
+		var header = RpmHeader.Create(package, archiveSize);
 		var body = Combine(header, payload);
 		var signature = RpmSignature.Create(body);
 
 		using var stream = File.Create(output);
-		WriteRpmLead(stream, metadata);
+		WriteRpmLead(stream, package);
 		stream.Write(signature);
 		stream.Write(body);
 	}
 
-	static byte[] CreateCpioPayload(IReadOnlyCollection<PackageEntry> entries, out long archiveSize)
+	static byte[] CreateCpioPayload(IReadOnlyCollection<Package.Entry> entries, out long archiveSize)
 	{
 		using var raw = new MemoryStream();
 		var directories = GetRpmDirectories(entries);
@@ -106,7 +106,7 @@ partial class PackCommand
 		Pad(stream, 4);
 	}
 
-	static void WriteRpmLead(Stream stream, PackageMetadata metadata)
+	static void WriteRpmLead(Stream stream, Package package)
 	{
 		var lead = new byte[96];
 		lead[0] = 0xed;
@@ -116,9 +116,9 @@ partial class PackCommand
 		lead[4] = 3;
 		lead[5] = 0;
 		WriteInt16(lead.AsSpan(6), 0);
-		WriteInt16(lead.AsSpan(8), GetRpmArchitectureNumber(metadata.Architecture));
+		WriteInt16(lead.AsSpan(8), GetRpmArchitectureNumber(package.Architecture));
 
-		var name = Encoding.ASCII.GetBytes($"{metadata.PackageName}-{metadata.Version}");
+		var name = Encoding.ASCII.GetBytes($"{package.PackageName}-{package.Version}");
 		name.AsSpan(0, Math.Min(name.Length, 65)).CopyTo(lead.AsSpan(10));
 
 		WriteInt16(lead.AsSpan(76), 1);
@@ -134,7 +134,7 @@ partial class PackCommand
 		return result;
 	}
 
-	static List<string> GetRpmDirectories(IReadOnlyCollection<PackageEntry> entries)
+	static List<string> GetRpmDirectories(IReadOnlyCollection<Package.Entry> entries)
 	{
 		var result = new SortedSet<string>(StringComparer.Ordinal) { "/" };
 
@@ -152,7 +152,7 @@ partial class PackCommand
 		return [.. result];
 	}
 
-	static RpmEntryCollection GetRpmEntries(IReadOnlyCollection<PackageEntry> entries)
+	static RpmEntryCollection GetRpmEntries(IReadOnlyCollection<Package.Entry> entries)
 	{
 		var result = new RpmEntryCollection();
 		var directories = GetRpmDirectories(entries);
@@ -224,11 +224,10 @@ partial class PackCommand
 	static void WriteInt16(Span<byte> destination, int value) => BinaryPrimitives.WriteInt16BigEndian(destination, (short)value);
 	static void WriteInt32(Span<byte> destination, int value) => BinaryPrimitives.WriteInt32BigEndian(destination, value);
 
-	static string GetRpmPath(string entryName) => "/" + NormalizeEntryName(entryName);
+	static string GetRpmPath(string entryName) => "/" + Utility.NormalizePath(entryName);
+	static string GetRpmRelease(Package package) => string.IsNullOrWhiteSpace(package.Edition) ? "1" : package.Edition;
 
-	static string GetRpmRelease(PackageMetadata metadata) => string.IsNullOrWhiteSpace(metadata.Edition) ? "1" : metadata.Edition;
-
-	static List<RpmDependency> GetRpmRequires(PackageMetadata metadata)
+	static List<RpmDependency> GetRpmRequires(Package package)
 	{
 		var result = new List<RpmDependency>
 		{
@@ -237,25 +236,25 @@ partial class PackCommand
 			new("rpmlib(PayloadIsGzip)", RPM_SENSE_RPMLIB | RPM_SENSE_LESS | RPM_SENSE_EQUAL, "5.4.0-1"),
 		};
 
-		AddRpmDependencies(result, metadata.Dependencies);
+		AddRpmDependencies(result, package.Dependencies);
 		return result;
 	}
 
-	static List<RpmDependency> GetRpmProvides(PackageMetadata metadata)
+	static List<RpmDependency> GetRpmProvides(Package package)
 	{
 		var result = new List<RpmDependency>
 		{
-			new(metadata.PackageName, RPM_SENSE_EQUAL, $"{metadata.Version}-{GetRpmRelease(metadata)}"),
+			new(package.PackageName, RPM_SENSE_EQUAL, $"{package.Version}-{GetRpmRelease(package)}"),
 		};
 
-		AddRpmDependencies(result, metadata.Provides);
+		AddRpmDependencies(result, package.Provides);
 		return result;
 	}
 
-	static List<RpmDependency> GetRpmConflicts(PackageMetadata metadata)
+	static List<RpmDependency> GetRpmConflicts(Package package)
 	{
 		var result = new List<RpmDependency>();
-		AddRpmDependencies(result, metadata.Conflicts);
+		AddRpmDependencies(result, package.Conflicts);
 		return result;
 	}
 
@@ -319,8 +318,8 @@ partial class PackCommand
 			return !string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(version);
 		}
 
-		name = null;
 		flags = 0;
+		name = null;
 		version = null;
 		return false;
 	}
@@ -378,8 +377,7 @@ partial class PackCommand
 	{
 		public static byte[] Create(byte[] body)
 		{
-			using var md5 = MD5.Create();
-			var digest = md5.ComputeHash(body);
+			var digest = MD5.HashData(body);
 			var header = new RpmHeaderBuilder();
 
 			header.AddInt32(257, body.Length);
@@ -391,33 +389,33 @@ partial class PackCommand
 
 	sealed class RpmHeader
 	{
-		public static byte[] Create(PackageMetadata metadata, IReadOnlyCollection<PackageEntry> entries, InstallScripts scripts, long archiveSize)
+		public static byte[] Create(Package package, long archiveSize)
 		{
 			var builder = new RpmHeaderBuilder();
 			var buildTime = (int)DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-			var rpmEntries = GetRpmEntries(entries);
-			var requires = GetRpmRequires(metadata);
-			var provides = GetRpmProvides(metadata);
-			var conflicts = GetRpmConflicts(metadata);
+			var rpmEntries = GetRpmEntries(package.Entries);
+			var requires = GetRpmRequires(package);
+			var provides = GetRpmProvides(package);
+			var conflicts = GetRpmConflicts(package);
 
-			builder.AddString(1000, metadata.PackageName);
-			builder.AddString(1001, metadata.Version.ToString());
-			builder.AddString(1002, GetRpmRelease(metadata));
-			builder.AddInternationalString(1004, metadata.Summary ?? metadata.Title ?? metadata.Name);
-			builder.AddInternationalString(1005, metadata.Description ?? metadata.Summary ?? metadata.Name);
+			builder.AddString(1000, package.PackageName);
+			builder.AddString(1001, package.Version.ToString());
+			builder.AddString(1002, GetRpmRelease(package));
+			builder.AddInternationalString(1004, package.Summary ?? package.Title ?? package.Name);
+			builder.AddInternationalString(1005, package.Description ?? package.Summary ?? package.Name);
 			builder.AddInt32(1006, buildTime);
 			builder.AddString(1007, Environment.MachineName);
-			builder.AddInt32(1009, (int)Math.Min(int.MaxValue, GetPackageSize(entries)));
-			builder.AddString(1014, metadata.License);
-			builder.AddString(1015, metadata.Maintainer);
-			builder.AddString(1016, metadata.Category ?? "Applications/System");
-			builder.AddString(1020, metadata.Url);
+			builder.AddInt32(1009, (int)Math.Min(int.MaxValue, package.GetPackageSize()));
+			builder.AddString(1014, package.License);
+			builder.AddString(1015, package.Maintainer);
+			builder.AddString(1016, package.Category ?? "Applications/System");
+			builder.AddString(1020, package.Url);
 			builder.AddString(1021, "linux");
-			builder.AddString(1022, GetRpmArchitecture(metadata.Architecture));
-			builder.AddScript(1023, scripts.Installing);
-			builder.AddScript(1024, scripts.Installed);
-			builder.AddScript(1025, scripts.Uninstalling);
-			builder.AddScript(1026, scripts.Uninstalled);
+			builder.AddString(1022, GetRpmArchitecture(package.Architecture));
+			builder.AddScript(1023, package.Scripts.Installing);
+			builder.AddScript(1024, package.Scripts.Installed);
+			builder.AddScript(1025, package.Scripts.Uninstalling);
+			builder.AddScript(1026, package.Scripts.Uninstalled);
 			builder.AddInt32Array(1028, rpmEntries.ConvertAll(entry => (int)Math.Min(int.MaxValue, entry.Size)));
 			builder.AddInt16Array(1030, rpmEntries.ConvertAll(entry => (short)entry.Mode));
 			builder.AddInt16Array(1033, rpmEntries.ConvertAll(_ => (short)0));
@@ -441,7 +439,7 @@ partial class PackCommand
 				builder.AddStringArray(1055, conflicts.ConvertAll(item => item.Version));
 			}
 
-			builder.AddString(1056, metadata.InstallPath);
+			builder.AddString(1056, package.InstallPath);
 			builder.AddString(1124, "cpio");
 			builder.AddString(1125, "gzip");
 			builder.AddString(1126, "9");

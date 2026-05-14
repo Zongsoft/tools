@@ -40,25 +40,25 @@ using System.Collections.Generic;
 
 namespace Zongsoft.Tools.Packager;
 
-partial class PackCommand
+partial class Generator
 {
-	static void GenerateTar(string output, PackageMetadata metadata, IReadOnlyCollection<PackageEntry> entries, InstallScripts scripts)
+	public static void Tar(this Package package, string output)
 	{
 		using var stream = File.Create(output);
 		using var gzip = new GZipStream(stream, CompressionLevel.Optimal);
 		using var writer = new TarWriter(gzip, TarEntryFormat.Pax, false);
 
-		foreach(var entry in entries)
+		foreach(var entry in package.Entries)
 			WriteTarEntry(writer, entry);
 
-		WriteTarScript(writer, ".install/installing.sh", scripts.Installing);
-		WriteTarScript(writer, ".install/installed.sh", scripts.Installed);
-		WriteTarScript(writer, ".install/uninstalling.sh", scripts.Uninstalling);
-		WriteTarScript(writer, ".install/uninstalled.sh", scripts.Uninstalled);
-		WriteTarText(writer, "install.sh", CreateInstallScript(metadata), 0755);
+		WriteTarScript(writer, ".install/installing.sh", package.Scripts.Installing);
+		WriteTarScript(writer, ".install/installed.sh", package.Scripts.Installed);
+		WriteTarScript(writer, ".install/uninstalling.sh", package.Scripts.Uninstalling);
+		WriteTarScript(writer, ".install/uninstalled.sh", package.Scripts.Uninstalled);
+		WriteTarText(writer, "install.sh", CreateInstallScript(package), 0755);
 	}
 
-	static byte[] CreateDataTarball(IReadOnlyCollection<PackageEntry> entries)
+	static byte[] CreateDataTarball(IReadOnlyCollection<Package.Entry> entries)
 	{
 		using var memory = new MemoryStream();
 		using(var gzip = new GZipStream(memory, CompressionLevel.Optimal, true))
@@ -71,7 +71,7 @@ partial class PackCommand
 		return memory.ToArray();
 	}
 
-	static byte[] CreateControlTarball(string control, InstallScripts scripts)
+	static byte[] CreateControlTarball(string control, Package.InstallScripts scripts)
 	{
 		using var memory = new MemoryStream();
 		using(var gzip = new GZipStream(memory, CompressionLevel.Optimal, true))
@@ -87,7 +87,7 @@ partial class PackCommand
 		return memory.ToArray();
 	}
 
-	static void WriteTarEntry(TarWriter writer, PackageEntry item)
+	static void WriteTarEntry(TarWriter writer, Package.Entry item)
 	{
 		var entry = new PaxTarEntry(TarEntryType.RegularFile, item.EntryName)
 		{
@@ -122,10 +122,10 @@ partial class PackCommand
 		entry.DataStream.Dispose();
 	}
 
-	static string CreateInstallScript(PackageMetadata metadata)
+	static string CreateInstallScript(Package package)
 	{
-		var installPath = Quote(metadata.InstallPath);
-		var packageName = Quote(metadata.PackageName);
+		var installPath = Quote(package.InstallPath);
+		var packageName = Quote(package.PackageName);
 
 		return $$"""
 			#!/bin/sh
