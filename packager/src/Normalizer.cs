@@ -91,6 +91,43 @@ public static class Normalizer
 	}
 	#endregion
 
+	internal static string NormalizeText(string text, IDictionary<string, string> variables)
+	{
+		if(string.IsNullOrWhiteSpace(text))
+			return null;
+
+		if(!Normalizer.Normalize(text, variables, out var result))
+			return null;
+
+		return File.Exists(result) ? File.ReadAllText(result) : result;
+	}
+
+	internal static string NormalizeValue(string text, IDictionary<string, string> variables, string fallback = null)
+	{
+		if(string.IsNullOrWhiteSpace(text))
+			return fallback;
+
+		if(!Normalizer.Normalize(text, variables, out var result))
+			return fallback;
+
+		return string.IsNullOrWhiteSpace(result) ? fallback : result.Trim();
+	}
+
+	internal static string[] NormalizeList(string text, IDictionary<string, string> variables)
+	{
+		if(string.IsNullOrWhiteSpace(text))
+			return [];
+
+		if(!Normalizer.Normalize(text, variables, out var result))
+			return [];
+
+		if(File.Exists(result))
+			result = File.ReadAllText(result);
+
+		return result
+			.Split([',', ';', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+	}
+
 	#region 嵌套结构
 	public readonly struct Result
 	{

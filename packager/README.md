@@ -17,18 +17,10 @@
 ### Basic Usage
 
 ```shell
-dotnet-pack <options...> [arguments...]
+dotnet-pack tar <options...> [arguments...]
+dotnet-pack deb <options...> [arguments...]
+dotnet-pack rpm <options...> [arguments...]
 ```
-
-Common Linux package metadata options:
-
-- `--maintainer`: package maintainer, for example `Zongsoft Studio<example@zongsoft.com>`.
-- `--license`: package license, for example `MIT` or `Apache-2.0`.
-- `--url`: project or package homepage.
-- `--category`: Debian `Section` and RPM `Group`.
-- `--dependencies`: dependency list for Debian `Depends` and RPM `Requires`, separated by comma, semicolon, or newline.
-- `--provides`: RPM `Provides` entries.
-- `--conflicts`: RPM `Conflicts` entries.
 
 ## License
 

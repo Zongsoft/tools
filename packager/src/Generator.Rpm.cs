@@ -49,7 +49,7 @@ partial class Generator
 	const int RPM_SENSE_EQUAL = 8;
 	const int RPM_SENSE_RPMLIB = 1 << 24;
 
-	public static void Rpm(this Package package, string output)
+	public static void Rpm(this Package.Rpm package, string output)
 	{
 		var payload = CreateCpioPayload(package.Entries, out var archiveSize);
 		var header = RpmHeader.Create(package, archiveSize);
@@ -106,7 +106,7 @@ partial class Generator
 		Pad(stream, 4);
 	}
 
-	static void WriteRpmLead(Stream stream, Package package)
+	static void WriteRpmLead(Stream stream, Package.Rpm package)
 	{
 		var lead = new byte[96];
 		lead[0] = 0xed;
@@ -240,7 +240,7 @@ partial class Generator
 		return result;
 	}
 
-	static List<RpmDependency> GetRpmProvides(Package package)
+	static List<RpmDependency> GetRpmProvides(Package.Rpm package)
 	{
 		var result = new List<RpmDependency>
 		{
@@ -251,7 +251,7 @@ partial class Generator
 		return result;
 	}
 
-	static List<RpmDependency> GetRpmConflicts(Package package)
+	static List<RpmDependency> GetRpmConflicts(Package.Rpm package)
 	{
 		var result = new List<RpmDependency>();
 		AddRpmDependencies(result, package.Conflicts);
@@ -389,7 +389,7 @@ partial class Generator
 
 	sealed class RpmHeader
 	{
-		public static byte[] Create(Package package, long archiveSize)
+		public static byte[] Create(Package.Rpm package, long archiveSize)
 		{
 			var builder = new RpmHeaderBuilder();
 			var buildTime = (int)DateTimeOffset.UtcNow.ToUnixTimeSeconds();

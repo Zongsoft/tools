@@ -38,9 +38,14 @@ namespace Zongsoft.Tools.Packager;
 
 partial class Package
 {
-	private sealed class Rpm(string name, string edition, Version version, Platform platform, Architecture architecture) : Package(name, edition, version, platform, architecture)
+	public sealed class Rpm(string name, string edition, Version version, Platform platform, Architecture architecture) : Package(name, edition, version, platform, architecture)
 	{
-		public static new Package Create(Components.CommandContext context) => null;
+		public const string EXTENSION = ".rpm";
+		internal override string Extension => EXTENSION;
+
+		public string[] Provides { get; set; }
+		public string[] Conflicts { get; set; }
+
 		public override void Pack(string output) => this.Rpm(output);
 	}
 }

@@ -38,9 +38,11 @@ namespace Zongsoft.Tools.Packager;
 
 partial class Package
 {
-	private sealed class Deb(string name, string edition, Version version, Platform platform, Architecture architecture) : Package(name, edition, version,platform, architecture)
+	public sealed class Deb(string name, string edition, Version version, Platform platform, Architecture architecture) : Package(name, edition, version, platform, architecture)
 	{
-		public static new Package Create(Components.CommandContext context) => null;
+		public const string EXTENSION = ".deb";
+		internal override string Extension => EXTENSION;
+
 		public override void Pack(string output) => this.Deb(output);
 	}
 }

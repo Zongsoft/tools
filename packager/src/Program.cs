@@ -55,12 +55,14 @@ internal class Program
 
 		//初始化
 		Executor.Root.Children.Clear();
-		Executor.Root.Children.Add(new PackCommand());
+		Executor.Root.Children.Add(new TarCommand());
+		Executor.Root.Children.Add(new DebCommand());
+		Executor.Root.Children.Add(new RpmCommand());
 
 		try
 		{
 			//执行命令
-			await Executor.ExecuteAsync($"pack {CommandLine.Get(args)}");
+			await Executor.ExecuteAsync(CommandLine.Get(args));
 		}
 		catch(Exception ex)
 		{

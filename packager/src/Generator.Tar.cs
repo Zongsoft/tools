@@ -36,7 +36,6 @@ using System.IO;
 using System.Text;
 using System.Formats.Tar;
 using System.IO.Compression;
-using System.Collections.Generic;
 
 namespace Zongsoft.Tools.Packager;
 
@@ -56,35 +55,6 @@ partial class Generator
 		WriteTarScript(writer, ".install/uninstalling.sh", package.Scripts.Uninstalling);
 		WriteTarScript(writer, ".install/uninstalled.sh", package.Scripts.Uninstalled);
 		WriteTarText(writer, "install.sh", CreateInstallScript(package), 0755);
-	}
-
-	static byte[] CreateDataTarball(IReadOnlyCollection<Package.Entry> entries)
-	{
-		using var memory = new MemoryStream();
-		using(var gzip = new GZipStream(memory, CompressionLevel.Optimal, true))
-		using(var writer = new TarWriter(gzip, TarEntryFormat.Pax, true))
-		{
-			foreach(var entry in entries)
-				WriteTarEntry(writer, entry);
-		}
-
-		return memory.ToArray();
-	}
-
-	static byte[] CreateControlTarball(string control, Package.InstallScripts scripts)
-	{
-		using var memory = new MemoryStream();
-		using(var gzip = new GZipStream(memory, CompressionLevel.Optimal, true))
-		using(var writer = new TarWriter(gzip, TarEntryFormat.Pax, true))
-		{
-			WriteTarText(writer, "control", control, 0644);
-			WriteTarScript(writer, "preinst", scripts.Installing);
-			WriteTarScript(writer, "postinst", scripts.Installed);
-			WriteTarScript(writer, "prerm", scripts.Uninstalling);
-			WriteTarScript(writer, "postrm", scripts.Uninstalled);
-		}
-
-		return memory.ToArray();
 	}
 
 	static void WriteTarEntry(TarWriter writer, Package.Entry item)
