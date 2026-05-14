@@ -42,7 +42,7 @@ namespace Zongsoft.Tools.Packager;
 
 partial class PackCommand
 {
-	static void GenerateTar(string output, IReadOnlyCollection<PackageEntry> entries, InstallScripts scripts)
+	static void GenerateTar(string output, PackageMetadata metadata, IReadOnlyCollection<PackageEntry> entries, InstallScripts scripts)
 	{
 		using var stream = File.Create(output);
 		using var gzip = new GZipStream(stream, CompressionLevel.Optimal);
@@ -55,6 +55,7 @@ partial class PackCommand
 		WriteTarScript(writer, ".install/installed.sh", scripts.Installed);
 		WriteTarScript(writer, ".install/uninstalling.sh", scripts.Uninstalling);
 		WriteTarScript(writer, ".install/uninstalled.sh", scripts.Uninstalled);
+		WriteTarText(writer, "install.sh", CreateInstallScript(metadata), 0755);
 	}
 
 	static byte[] CreateDataTarball(IReadOnlyCollection<PackageEntry> entries)
@@ -119,5 +120,54 @@ partial class PackCommand
 
 		writer.WriteEntry(entry);
 		entry.DataStream.Dispose();
+	}
+
+	static string CreateInstallScript(PackageMetadata metadata)
+	{
+		var installPath = Quote(metadata.InstallPath);
+		var packageName = Quote(metadata.PackageName);
+
+		return $$"""
+			#!/bin/sh
+			set -e
+
+			SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+			INSTALL_PATH=${INSTALL_PATH:-{{installPath}}}
+			DESTDIR=${DESTDIR:-}
+			TARGET="${DESTDIR%/}$INSTALL_PATH"
+			export SOURCE_DIR INSTALL_PATH DESTDIR TARGET
+
+			run_hook() {
+				if [ -f "$SOURCE_DIR/.install/$1" ]; then
+					sh "$SOURCE_DIR/.install/$1"
+				fi
+			}
+
+			if [ "${1:-install}" = "uninstall" ]; then
+				run_hook uninstalling.sh
+				rm -rf "$TARGET"
+				run_hook uninstalled.sh
+				echo "Uninstalled {{packageName}} from $TARGET"
+				exit 0
+			fi
+
+			if [ "$(id -u)" -ne 0 ] && [ -z "$DESTDIR" ] && [ "${INSTALL_PATH#/}" != "$INSTALL_PATH" ]; then
+				echo "Installing to $INSTALL_PATH requires root privileges. Re-run with sudo or set DESTDIR." >&2
+				exit 1
+			fi
+
+			run_hook installing.sh
+			mkdir -p "$TARGET"
+			(
+				cd "$SOURCE_DIR"
+				find . -mindepth 1 \( -path './install.sh' -o -path './.install' -o -path './.install/*' \) -prune -o -print |
+					tar -cf - -T - |
+					tar -xpf - -C "$TARGET"
+			)
+			run_hook installed.sh
+			echo "Installed {{packageName}} to $TARGET"
+			""";
+
+		static string Quote(string value) => string.IsNullOrEmpty(value) ? "''" : $"'{value.Replace("'", "'\"'\"'")}'";
 	}
 }

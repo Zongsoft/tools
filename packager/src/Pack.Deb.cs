@@ -60,12 +60,17 @@ partial class PackCommand
 
 		builder.AppendLine($"Package: {metadata.PackageName}");
 		builder.AppendLine($"Version: {metadata.Version}");
-		builder.AppendLine($"Section: utils");
+		builder.AppendLine($"Section: {NormalizeDebText(metadata.Category ?? "utils")}");
 		builder.AppendLine($"Priority: optional");
 		builder.AppendLine($"Architecture: {GetDebianArchitecture(metadata.Architecture)}");
 		builder.AppendLine($"Installed-Size: {Math.Max(1, (GetPackageSize(entries) + 1023) / 1024)}");
-		builder.AppendLine($"Maintainer: Zongsoft Studio <zongsoft@qq.com>");
-		builder.AppendLine($"Homepage: https://github.com/Zongsoft/framework");
+		builder.AppendLine($"Maintainer: {NormalizeDebText(metadata.Maintainer)}");
+		builder.AppendLine($"Homepage: {NormalizeDebText(metadata.Url)}");
+		builder.AppendLine($"License: {NormalizeDebText(metadata.License)}");
+
+		if(metadata.Dependencies?.Count > 0)
+			builder.AppendLine($"Depends: {string.Join(", ", metadata.Dependencies)}");
+
 		builder.AppendLine($"Description: {NormalizeDebText(summary ?? metadata.Name)}");
 
 		if(!string.IsNullOrWhiteSpace(description))

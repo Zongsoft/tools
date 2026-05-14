@@ -63,7 +63,7 @@ internal class Program
 		try
 		{
 			//执行命令
-			await Executor.ExecuteAsync($"deploy {string.Join(' ', args)}");
+			await Executor.ExecuteAsync($"deploy {CommandLine.Get(args)}");
 		}
 		catch(Exception ex)
 		{

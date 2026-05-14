@@ -44,6 +44,11 @@ namespace Zongsoft.Tools.Packager;
 
 partial class PackCommand
 {
+	const int RPM_SENSE_LESS = 2;
+	const int RPM_SENSE_GREATER = 4;
+	const int RPM_SENSE_EQUAL = 8;
+	const int RPM_SENSE_RPMLIB = 1 << 24;
+
 	static void GenerateRpm(string output, PackageMetadata metadata, IReadOnlyCollection<PackageEntry> entries, InstallScripts scripts)
 	{
 		var payload = CreateCpioPayload(entries, out var archiveSize);
@@ -221,6 +226,132 @@ partial class PackCommand
 
 	static string GetRpmPath(string entryName) => "/" + NormalizeEntryName(entryName);
 
+	static string GetRpmRelease(PackageMetadata metadata) => string.IsNullOrWhiteSpace(metadata.Edition) ? "1" : metadata.Edition;
+
+	static List<RpmDependency> GetRpmRequires(PackageMetadata metadata)
+	{
+		var result = new List<RpmDependency>
+		{
+			new("rpmlib(CompressedFileNames)", RPM_SENSE_RPMLIB | RPM_SENSE_LESS | RPM_SENSE_EQUAL, "3.0.4-1"),
+			new("rpmlib(PayloadFilesHavePrefix)", RPM_SENSE_RPMLIB | RPM_SENSE_LESS | RPM_SENSE_EQUAL, "4.0-1"),
+			new("rpmlib(PayloadIsGzip)", RPM_SENSE_RPMLIB | RPM_SENSE_LESS | RPM_SENSE_EQUAL, "5.4.0-1"),
+		};
+
+		AddRpmDependencies(result, metadata.Dependencies);
+		return result;
+	}
+
+	static List<RpmDependency> GetRpmProvides(PackageMetadata metadata)
+	{
+		var result = new List<RpmDependency>
+		{
+			new(metadata.PackageName, RPM_SENSE_EQUAL, $"{metadata.Version}-{GetRpmRelease(metadata)}"),
+		};
+
+		AddRpmDependencies(result, metadata.Provides);
+		return result;
+	}
+
+	static List<RpmDependency> GetRpmConflicts(PackageMetadata metadata)
+	{
+		var result = new List<RpmDependency>();
+		AddRpmDependencies(result, metadata.Conflicts);
+		return result;
+	}
+
+	static void AddRpmDependencies(List<RpmDependency> result, IReadOnlyList<string> values)
+	{
+		if(values == null || values.Count == 0)
+			return;
+
+		foreach(var value in values)
+		{
+			var dependency = ParseRpmDependency(value);
+
+			if(!string.IsNullOrWhiteSpace(dependency.Name))
+				result.Add(dependency);
+		}
+	}
+
+	static RpmDependency ParseRpmDependency(string value)
+	{
+		if(string.IsNullOrWhiteSpace(value))
+			return default;
+
+		value = value.Trim();
+
+		var open = value.LastIndexOf('(');
+		if(open > 0 && value.EndsWith(')'))
+		{
+			var expression = value[(open + 1)..^1].Trim();
+
+			if(TryParseRpmVersionRelation(expression, out var flags, out var version))
+				return new(value[..open].Trim(), flags, version);
+		}
+
+		return TryParseRpmRelation(value, out var name, out var relationFlags, out var relationVersion) ?
+			new(name, relationFlags, relationVersion) :
+			new(value, 0, string.Empty);
+	}
+
+	static bool TryParseRpmRelation(string value, out string name, out int flags, out string version)
+	{
+		var operators = new[] { ">=", "<=", "=", ">", "<" };
+
+		foreach(var op in operators)
+		{
+			var index = value.IndexOf(op, StringComparison.Ordinal);
+
+			if(index <= 0)
+				continue;
+
+			name = value[..index].Trim();
+			version = value[(index + op.Length)..].Trim();
+			flags = op switch
+			{
+				">=" => RPM_SENSE_GREATER | RPM_SENSE_EQUAL,
+				"<=" => RPM_SENSE_LESS | RPM_SENSE_EQUAL,
+				">" => RPM_SENSE_GREATER,
+				"<" => RPM_SENSE_LESS,
+				_ => RPM_SENSE_EQUAL,
+			};
+
+			return !string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(version);
+		}
+
+		name = null;
+		flags = 0;
+		version = null;
+		return false;
+	}
+
+	static bool TryParseRpmVersionRelation(string value, out int flags, out string version)
+	{
+		var operators = new[] { ">=", "<=", "=", ">", "<" };
+
+		foreach(var op in operators)
+		{
+			if(!value.StartsWith(op, StringComparison.Ordinal))
+				continue;
+
+			version = value[op.Length..].Trim();
+			flags = op switch
+			{
+				">=" => RPM_SENSE_GREATER | RPM_SENSE_EQUAL,
+				"<=" => RPM_SENSE_LESS | RPM_SENSE_EQUAL,
+				">" => RPM_SENSE_GREATER,
+				"<" => RPM_SENSE_LESS,
+				_ => RPM_SENSE_EQUAL,
+			};
+
+			return !string.IsNullOrWhiteSpace(version);
+		}
+
+		flags = 0;
+		version = null;
+		return false;
+	}
+
 	static string GetRpmArchitecture(Architecture architecture) => architecture switch
 	{
 		Architecture.X64 => "x86_64",
@@ -241,6 +372,7 @@ partial class PackCommand
 
 	readonly record struct RpmHeaderIndex(int Tag, int Type, int Offset, int Count);
 	readonly record struct RpmEntry(int Inode, long Size, int Mode, long ModifiedTime, string Digest, int DirectoryIndex, string BaseName);
+	readonly record struct RpmDependency(string Name, int Flags, string Version);
 
 	sealed class RpmSignature
 	{
@@ -264,19 +396,22 @@ partial class PackCommand
 			var builder = new RpmHeaderBuilder();
 			var buildTime = (int)DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 			var rpmEntries = GetRpmEntries(entries);
+			var requires = GetRpmRequires(metadata);
+			var provides = GetRpmProvides(metadata);
+			var conflicts = GetRpmConflicts(metadata);
 
 			builder.AddString(1000, metadata.PackageName);
 			builder.AddString(1001, metadata.Version.ToString());
-			builder.AddString(1002, string.IsNullOrWhiteSpace(metadata.Edition) ? "1" : metadata.Edition);
+			builder.AddString(1002, GetRpmRelease(metadata));
 			builder.AddInternationalString(1004, metadata.Summary ?? metadata.Title ?? metadata.Name);
 			builder.AddInternationalString(1005, metadata.Description ?? metadata.Summary ?? metadata.Name);
 			builder.AddInt32(1006, buildTime);
 			builder.AddString(1007, Environment.MachineName);
 			builder.AddInt32(1009, (int)Math.Min(int.MaxValue, GetPackageSize(entries)));
-			builder.AddString(1014, "MIT");
-			builder.AddString(1015, "Zongsoft Studio <zongsoft@qq.com>");
-			builder.AddString(1016, "Applications/System");
-			builder.AddString(1020, "https://github.com/Zongsoft/framework");
+			builder.AddString(1014, metadata.License);
+			builder.AddString(1015, metadata.Maintainer);
+			builder.AddString(1016, metadata.Category ?? "Applications/System");
+			builder.AddString(1020, metadata.Url);
 			builder.AddString(1021, "linux");
 			builder.AddString(1022, GetRpmArchitecture(metadata.Architecture));
 			builder.AddScript(1023, scripts.Installing);
@@ -294,11 +429,19 @@ partial class PackCommand
 			builder.AddStringArray(1040, rpmEntries.ConvertAll(_ => "root"));
 			builder.AddInt32Array(1045, rpmEntries.ConvertAll(_ => -1));
 			builder.AddInt32(1046, (int)Math.Min(int.MaxValue, archiveSize));
-			builder.AddStringArray(1047, [metadata.PackageName]);
-			builder.AddInt32Array(1048, [0]);
-			builder.AddStringArray(1049, ["rpmlib(CompressedFileNames)", "rpmlib(PayloadFilesHavePrefix)"]);
-			builder.AddStringArray(1050, [""]);
-			builder.AddString(1056, metadata.InstallRoot);
+			builder.AddStringArray(1047, provides.ConvertAll(item => item.Name));
+			builder.AddInt32Array(1048, requires.ConvertAll(item => item.Flags));
+			builder.AddStringArray(1049, requires.ConvertAll(item => item.Name));
+			builder.AddStringArray(1050, requires.ConvertAll(item => item.Version));
+
+			if(conflicts.Count > 0)
+			{
+				builder.AddInt32Array(1053, conflicts.ConvertAll(item => item.Flags));
+				builder.AddStringArray(1054, conflicts.ConvertAll(item => item.Name));
+				builder.AddStringArray(1055, conflicts.ConvertAll(item => item.Version));
+			}
+
+			builder.AddString(1056, metadata.InstallPath);
 			builder.AddString(1124, "cpio");
 			builder.AddString(1125, "gzip");
 			builder.AddString(1126, "9");
@@ -308,6 +451,8 @@ partial class PackCommand
 			builder.AddInt32Array(1116, rpmEntries.ConvertAll(entry => entry.DirectoryIndex));
 			builder.AddStringArray(1117, rpmEntries.ConvertAll(entry => entry.BaseName));
 			builder.AddStringArray(1118, rpmEntries.Directories);
+			builder.AddInt32Array(1112, provides.ConvertAll(item => item.Flags));
+			builder.AddStringArray(1113, provides.ConvertAll(item => item.Version));
 			builder.AddInt32Array(1140, rpmEntries.ConvertAll(_ => 0));
 			builder.AddStringArray(1142, [""]);
 			builder.AddInt32Array(5011, [1]);

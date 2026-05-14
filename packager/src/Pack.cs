@@ -58,6 +58,13 @@ namespace Zongsoft.Tools.Packager;
 [CommandOption(TITLE_OPTION, typeof(string))]
 [CommandOption(SUMMARY_OPTION, typeof(string))]
 [CommandOption(DESCRIPTION_OPTION, typeof(string))]
+[CommandOption(MAINTAINER_OPTION, typeof(string))]
+[CommandOption(LICENSE_OPTION, typeof(string))]
+[CommandOption(URL_OPTION, typeof(string))]
+[CommandOption(CATEGORY_OPTION, typeof(string))]
+[CommandOption(DEPENDENCIES_OPTION, typeof(string))]
+[CommandOption(PROVIDES_OPTION, typeof(string))]
+[CommandOption(CONFLICTS_OPTION, typeof(string))]
 [CommandOption(INSTALL_PATH_OPTION, typeof(string))]
 [CommandOption(SCRIPT_INSTALLING_OPTION, typeof(string))]
 [CommandOption(SCRIPT_INSTALLED_OPTION, typeof(string))]
@@ -80,6 +87,13 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 	private const string DAEMON_OPTION = "daemon";
 	private const string SUMMARY_OPTION = "summary";
 	private const string DESCRIPTION_OPTION = "description";
+	private const string MAINTAINER_OPTION = "maintainer";
+	private const string LICENSE_OPTION = "license";
+	private const string URL_OPTION = "url";
+	private const string CATEGORY_OPTION = "category";
+	private const string PROVIDES_OPTION = "provides";
+	private const string CONFLICTS_OPTION = "conflicts";
+	private const string DEPENDENCIES_OPTION = "dependencies";
 	private const string INSTALL_PATH_OPTION = "install-path";
 	private const string SCRIPT_INSTALLING_OPTION = "script-installing";
 	private const string SCRIPT_INSTALLED_OPTION = "script-installed";
@@ -87,6 +101,9 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 	private const string SCRIPT_UNINSTALLED_OPTION = "script-uninstalled";
 
 	private const string DEFAULT_INSTALL_PATH = "/usr/local";
+	private const string DEFAULT_MAINTAINER = "Zongsoft Studio <zongsoft@qq.com>";
+	private const string DEFAULT_LICENSE = "MIT";
+	private const string DEFAULT_URL = "https://github.com/Zongsoft/framework";
 	#endregion
 
 	#region 执行方法
@@ -113,8 +130,14 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 
 		var runtime = Utility.GetRuntimeIdentifier(platform, architecture);
 		var packageName = GetPackageName(name, edition);
-		var installPath = $"{context.Options.GetValue<string>(INSTALL_PATH_OPTION, DEFAULT_INSTALL_PATH)}/{packageName}";
-		var variables = GetVariables(context, architecture, runtime, installPath);
+		var installPath = $"{context.Options.GetValue(INSTALL_PATH_OPTION, DEFAULT_INSTALL_PATH)}/{packageName}";
+		var variables = GetVariables(context,
+		[
+			new("Runtime", runtime),
+			new("RuntimeIdentifier", runtime),
+			new("Architecture", architecture.ToString().ToLowerInvariant()),
+			new("InstallPath", installPath),
+		]);
 
 		if(!Normalizer.Normalize(context.Options.GetValue<string>(SOURCE_OPTION), variables, out var source))
 			return ValueTask.FromResult<object>(null);
@@ -151,7 +174,14 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 			NormalizeText(context.Options.GetValue<string>(TITLE_OPTION), variables),
 			NormalizeText(context.Options.GetValue<string>(SUMMARY_OPTION), variables),
 			NormalizeText(context.Options.GetValue<string>(DESCRIPTION_OPTION), variables),
-			installPath);
+			NormalizeValue(context.Options.GetValue<string>(MAINTAINER_OPTION), variables, DEFAULT_MAINTAINER),
+			NormalizeValue(context.Options.GetValue<string>(LICENSE_OPTION), variables, DEFAULT_LICENSE),
+			NormalizeValue(context.Options.GetValue<string>(URL_OPTION), variables, DEFAULT_URL),
+			NormalizeValue(context.Options.GetValue<string>(CATEGORY_OPTION), variables),
+			installPath,
+			NormalizeList(context.Options.GetValue<string>(DEPENDENCIES_OPTION), variables),
+			NormalizeList(context.Options.GetValue<string>(PROVIDES_OPTION), variables),
+			NormalizeList(context.Options.GetValue<string>(CONFLICTS_OPTION), variables));
 
 		var daemonPath = GetDaemonPath(context, source, variables);
 		var daemonEntryName = daemonPath == null ? null : GetDaemonEntryName(source, daemonPath);
@@ -185,7 +215,7 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 		switch(format)
 		{
 			case PackageFormat.Tar:
-				GenerateTar(output, entries, scripts);
+				GenerateTar(output, metadata, entries, scripts);
 				break;
 			case PackageFormat.Deb:
 				GenerateDeb(output, metadata, entries, scripts);
@@ -366,7 +396,7 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 			Terminal.WriteLine(CommandOutletColor.DarkYellow, $"[Warn] The '{DAEMON_OPTION}' option is intended for Linux systemd services.");
 
 		var service = Path.GetFileName(daemon);
-		var servicePath = $"{metadata.InstallRoot}/{daemonEntryName}";
+		var servicePath = $"{metadata.InstallPath}/{daemonEntryName}";
 		var serviceLink = $"/etc/systemd/system/{service}";
 
 		var installing = $$"""
@@ -395,7 +425,7 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 			if command -v systemctl >/dev/null 2>&1; then
 				systemctl daemon-reload >/dev/null 2>&1 || true
 			fi
-			rm -rf '{{metadata.InstallRoot}}'
+			rm -rf '{{metadata.InstallPath}}'
 			""";
 
 		return new InstallScripts(
@@ -434,7 +464,7 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 	#endregion
 
 	#region 辅助方法
-	static Dictionary<string, string> GetVariables(CommandContext context, Architecture architecture, string runtime, string installRoot)
+	static Dictionary<string, string> GetVariables(CommandContext context, params KeyValuePair<string, string>[] options)
 	{
 		var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
@@ -442,15 +472,10 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 			variables[variable.Key.ToString()] = variable.Value?.ToString();
 
 		foreach(var option in context.Options)
-		{
-			if(option.Value != null)
-				variables[option.Key] = option.Value.ToString();
-		}
+			variables[option.Key] = option.Value?.ToString();
 
-		variables["Runtime"] = runtime;
-		variables["RuntimeIdentifier"] = runtime;
-		variables["Architecture"] = architecture.ToString().ToLowerInvariant();
-		variables["InstallRoot"] = installRoot;
+		foreach(var option in options)
+			variables[option.Key] = option.Value;
 
 		return variables;
 	}
@@ -499,7 +524,7 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 
 	static string GetPackagePrefix(PackageFormat format, PackageMetadata metadata)
 	{
-		return format == PackageFormat.Tar ? null : metadata.InstallRoot.TrimStart('/');
+		return format == PackageFormat.Tar ? null : metadata.InstallPath.TrimStart('/');
 	}
 
 	static string GetPackageName(string name, string edition)
@@ -534,6 +559,32 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 			return null;
 
 		return File.Exists(result) ? File.ReadAllText(result) : result;
+	}
+
+	static string NormalizeValue(string text, IDictionary<string, string> variables, string fallback = null)
+	{
+		if(string.IsNullOrWhiteSpace(text))
+			return fallback;
+
+		if(!Normalizer.Normalize(text, variables, out var result))
+			return fallback;
+
+		return string.IsNullOrWhiteSpace(result) ? fallback : result.Trim();
+	}
+
+	static string[] NormalizeList(string text, IDictionary<string, string> variables)
+	{
+		if(string.IsNullOrWhiteSpace(text))
+			return [];
+
+		if(!Normalizer.Normalize(text, variables, out var result))
+			return [];
+
+		if(File.Exists(result))
+			result = File.ReadAllText(result);
+
+		return result
+			.Split([',', ';', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 	}
 
 	static string NormalizeEntryName(string value)
@@ -596,7 +647,14 @@ public sealed partial class PackCommand : CommandBase<CommandContext>
 		string Title,
 		string Summary,
 		string Description,
-		string InstallRoot);
+		string Maintainer,
+		string License,
+		string Url,
+		string Category,
+		string InstallPath,
+		IReadOnlyList<string> Dependencies,
+		IReadOnlyList<string> Provides,
+		IReadOnlyList<string> Conflicts);
 	readonly record struct InstallScripts(string Installing, string Installed, string Uninstalling, string Uninstalled);
 	#endregion
 }

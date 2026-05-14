@@ -20,6 +20,16 @@
 dotnet-pack <options...> [arguments...]
 ```
 
+Common Linux package metadata options:
+
+- `--maintainer`: package maintainer, for example `Zongsoft Studio<example@zongsoft.com>`.
+- `--license`: package license, for example `MIT` or `Apache-2.0`.
+- `--url`: project or package homepage.
+- `--category`: Debian `Section` and RPM `Group`.
+- `--dependencies`: dependency list for Debian `Depends` and RPM `Requires`, separated by comma, semicolon, or newline.
+- `--provides`: RPM `Provides` entries.
+- `--conflicts`: RPM `Conflicts` entries.
+
 ## License
 
 This project is licensed under the [MIT](https://github.com/Zongsoft/tools/blob/main/LICENSE) license.
