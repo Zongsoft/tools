@@ -60,7 +60,7 @@ internal class Program
 		try
 		{
 			//执行命令
-			await Executor.ExecuteAsync($"pack {string.Join(' ', args)}");
+			await Executor.ExecuteAsync($"pack {CommandLine.Get(args)}");
 		}
 		catch(Exception ex)
 		{
