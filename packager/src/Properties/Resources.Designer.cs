@@ -77,5 +77,14 @@ namespace Zongsoft.Tools.Packager.Properties {
                 return ResourceManager.GetString("PackageGeneratedSuccessfully.Message", resourceCulture);
             }
         }
+        
+        /// <summary>
+        ///   查找类似 The &apos;{0}&apos; variable in the &apos;{1}&apos; expression is undefined. 的本地化字符串。
+        /// </summary>
+        internal static string VariableUndefined_Message {
+            get {
+                return ResourceManager.GetString("VariableUndefined.Message", resourceCulture);
+            }
+        }
     }
 }

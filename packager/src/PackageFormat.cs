@@ -32,40 +32,15 @@
  */
 
 using System;
-using System.Threading;
-using System.Threading.Tasks;
-
-using Zongsoft.Terminals;
-using Zongsoft.Components;
 
 namespace Zongsoft.Tools.Packager;
 
-internal class Program
+/// <summary>
+/// 表示安装包格式的枚举。
+/// </summary>
+public enum PackageFormat
 {
-	public static ITerminalExecutor Executor => Terminal.Console.Executor;
-
-	public static async Task Main(string[] args)
-	{
-		if(args == null || args.Length == 0)
-		{
-			Terminal.WriteLine(CommandOutletColor.DarkRed, Properties.Resources.CommandLineEmpty_Message);
-			Environment.ExitCode = -1;
-			return;
-		}
-
-		//初始化
-		Executor.Root.Children.Clear();
-		Executor.Root.Children.Add(new PackCommand());
-
-		try
-		{
-			//执行命令
-			await Executor.ExecuteAsync($"pack {string.Join(' ', args)}");
-		}
-		catch(Exception ex)
-		{
-			//打印异常消息
-			Terminal.WriteLine(CommandOutletColor.DarkRed, ex.Message + Environment.NewLine + ex.StackTrace);
-		}
-	}
+	Tar,
+	Deb,
+	Rpm,
 }

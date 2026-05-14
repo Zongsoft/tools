@@ -32,29 +32,24 @@
  */
 
 using System;
-using System.Collections;
-using System.Collections.Generic;
+using System.Runtime.InteropServices;
 
 namespace Zongsoft.Tools.Packager;
 
-public partial class Packager
+internal static class Utility
 {
-	#region 静态方法
-	public static Dictionary<string, string> GetVariables(params IEnumerable<KeyValuePair<string, string>> variables)
-	{
-		var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+	/// <summary>判断指定的版本号是否为零。</summary>
+	/// <param name="version">指定的版本。</param>
+	/// <returns>如果版本号为零则返回真(<c>True</c>)，否则返回假(<c>False</c>)。</returns>
+	public static bool IsZero(this Version version) => version == null ||
+	(
+		version.Major == 0 &&
+		version.Minor == 0 &&
+		version.Build == 0 &&
+		version.Revision == 0
+	);
 
-		//加载系统环境变量
-		foreach(DictionaryEntry variable in Environment.GetEnvironmentVariables())
-			result[variable.Key.ToString()] = variable.Value?.ToString();
-
-		if(variables != null)
-		{
-			foreach(var variable in variables)
-				result[variable.Key] = variable.Value;
-		}
-
-		return result;
-	}
-	#endregion
+	public static string GetRuntimeIdentifier(Platform platform, Architecture? architecture) => platform == Platform.Windows ?
+		(!architecture.HasValue ? "win" : $"win-{architecture.ToString().ToLowerInvariant()}") :
+		(!architecture.HasValue ? platform.ToString().ToLowerInvariant() : $"{platform.ToString().ToLowerInvariant()}-{architecture.ToString().ToLowerInvariant()}");
 }

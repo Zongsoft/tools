@@ -123,4 +123,7 @@
   <data name="PackageGeneratedSuccessfully.Message" xml:space="preserve">
     <value>位于 '{0}' 的包文件生成成功。</value>
   </data>
+  <data name="VariableUndefined.Message" xml:space="preserve">
+    <value>在 '{1}' 表达式中的 '{0}' 变量未定义。</value>
+  </data>
 </root>

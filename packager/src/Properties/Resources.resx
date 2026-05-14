@@ -103,4 +103,7 @@
   <data name="PackageGeneratedSuccessfully.Message" xml:space="preserve">
     <value>The '{0}' package file generated successfully.</value>
   </data>
+  <data name="VariableUndefined.Message" xml:space="preserve">
+    <value>The '{0}' variable in the '{1}' expression is undefined.</value>
+  </data>
 </root>
