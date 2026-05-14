@@ -49,21 +49,9 @@ public sealed class DebCommand : PackCommand<Package.Deb>
 			context.Options.GetValue<string>(EDITION_OPTION),
 			context.Options.GetValue<Version>(VERSION_OPTION),
 			context.Options.GetValue<Platform>(PLATFORM_OPTION),
-			context.Options.GetValue<Architecture>(ARCHITECTURE_OPTION))
-		{
-			Framework = context.Options.GetValue<string>(FRAMEWORK_OPTION),
-			Title = Normalizer.NormalizeText(context.Options.GetValue<string>(TITLE_OPTION), variables),
-			Summary = Normalizer.NormalizeText(context.Options.GetValue<string>(SUMMARY_OPTION), variables),
-			Description = Normalizer.NormalizeText(context.Options.GetValue<string>(DESCRIPTION_OPTION), variables),
-			Maintainer = Normalizer.NormalizeValue(context.Options.GetValue<string>(MAINTAINER_OPTION), variables, DEFAULT_MAINTAINER),
-			License = Normalizer.NormalizeValue(context.Options.GetValue<string>(LICENSE_OPTION), variables),
-			Url = Normalizer.NormalizeValue(context.Options.GetValue<string>(URL_OPTION), variables, DEFAULT_URL),
-			Category = Normalizer.NormalizeValue(context.Options.GetValue<string>(CATEGORY_OPTION), variables),
-			Dependencies = Normalizer.NormalizeList(context.Options.GetValue<string>(DEPENDENCIES_OPTION), variables),
-		};
+			context.Options.GetValue<Architecture>(ARCHITECTURE_OPTION));
 
-		package.InstallPath = $"{context.Options.GetValue(INSTALL_PATH_OPTION, DEFAULT_INSTALL_PATH)}/{package.PackageName}";
-
+		ConfigurePackage(package, context, variables);
 		return package;
 	}
 }

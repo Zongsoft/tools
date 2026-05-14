@@ -122,14 +122,19 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 
 		var runtime = Utility.GetRuntimeIdentifier(platform, architecture);
 		var packageName = Package.GetPackageName(name, edition);
-		var installPath = $"{context.Options.GetValue(INSTALL_PATH_OPTION, DEFAULT_INSTALL_PATH)}/{packageName}";
+		var installPath = GetInstallPath(context.Options.GetValue(INSTALL_PATH_OPTION, DEFAULT_INSTALL_PATH), packageName);
 		var variables = GetVariables(context,
 		[
 			new("Runtime", runtime),
 			new("RuntimeIdentifier", runtime),
 			new("Architecture", architecture.ToString().ToLowerInvariant()),
-			new("InstallPath", installPath),
+			new(nameof(Package.InstallPath), installPath),
 		]);
+
+		if(!Normalizer.Normalize(installPath, variables, out installPath))
+			return ValueTask.FromResult<object>(null);
+
+		variables[nameof(Package.InstallPath)] = NormalizeInstallPath(installPath);
 
 		if(!Normalizer.Normalize(context.Options.GetValue<string>(SOURCE_OPTION), variables, out var source))
 			return ValueTask.FromResult<object>(null);
@@ -198,6 +203,22 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 
 	#region 抽象方法
 	protected abstract TPackage CreatePackage(CommandContext context, IDictionary<string, string> variables);
+	#endregion
+
+	#region 配置方法
+	protected static void ConfigurePackage(Package package, CommandContext context, IDictionary<string, string> variables)
+	{
+		package.InstallPath = variables[nameof(Package.InstallPath)];
+		package.Framework = context.Options.GetValue<string>(FRAMEWORK_OPTION);
+		package.Title = Normalizer.NormalizeText(context.Options.GetValue<string>(TITLE_OPTION), variables);
+		package.Summary = Normalizer.NormalizeText(context.Options.GetValue<string>(SUMMARY_OPTION), variables);
+		package.Description = Normalizer.NormalizeText(context.Options.GetValue<string>(DESCRIPTION_OPTION), variables);
+		package.Maintainer = Normalizer.NormalizeValue(context.Options.GetValue<string>(MAINTAINER_OPTION), variables, DEFAULT_MAINTAINER);
+		package.License = Normalizer.NormalizeValue(context.Options.GetValue<string>(LICENSE_OPTION), variables);
+		package.Url = Normalizer.NormalizeValue(context.Options.GetValue<string>(URL_OPTION), variables, DEFAULT_URL);
+		package.Category = Normalizer.NormalizeValue(context.Options.GetValue<string>(CATEGORY_OPTION), variables);
+		package.Dependencies = Normalizer.NormalizeList(context.Options.GetValue<string>(DEPENDENCIES_OPTION), variables);
+	}
 	#endregion
 
 	#region 条目方法
@@ -484,6 +505,21 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	static bool EndsWithDirectorySeparator(string path)
 	{
 		return path.EndsWith(Path.DirectorySeparatorChar) || path.EndsWith(Path.AltDirectorySeparatorChar);
+	}
+
+	static string GetInstallPath(string path, string packageName)
+	{
+		var root = NormalizeInstallPath(path);
+		return root == "/" ? "/" + packageName : root + "/" + packageName;
+	}
+
+	static string NormalizeInstallPath(string path)
+	{
+		if(string.IsNullOrWhiteSpace(path))
+			path = DEFAULT_INSTALL_PATH;
+
+		path = path.Trim().Replace('\\', '/').TrimEnd('/');
+		return string.IsNullOrEmpty(path) ? "/" : path;
 	}
 
 	static int GetFileMode(string path)
