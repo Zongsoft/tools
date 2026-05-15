@@ -111,14 +111,14 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		}
 
 		var runtime = Utility.GetRuntimeIdentifier(platform, architecture);
-		var variables = GetVariables(context,
+		Normalizer.Initialize(GetVariables(context,
 		[
 			new("Runtime", runtime),
 			new("RuntimeIdentifier", runtime),
 			new("Architecture", architecture.ToString().ToLowerInvariant()),
-		]);
+		]));
 
-		if(!Normalizer.Normalize(context.Options.GetValue<string>(SOURCE_OPTION), variables, out var source))
+		if(!Normalizer.TryNormalize(context.Options.GetValue<string>(SOURCE_OPTION), out var source))
 			return ValueTask.FromResult<object>(null);
 
 		if(string.IsNullOrEmpty(source))
@@ -132,11 +132,11 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 			return ValueTask.FromResult<object>(null);
 		}
 
-		if(!Normalizer.Normalize(context.Options.GetValue<string>(OUTPUT_OPTION), variables, out var output))
+		if(!Normalizer.TryNormalize(context.Options.GetValue<string>(OUTPUT_OPTION), out var output))
 			return ValueTask.FromResult<object>(null);
 
-		variables[SOURCE_OPTION] = source = Path.GetFullPath(source);
-		variables[OUTPUT_OPTION] = output = Path.GetFullPath(Path.Combine(source, output));
+		Normalizer.Variables[SOURCE_OPTION] = source = Path.GetFullPath(source);
+		Normalizer.Variables[OUTPUT_OPTION] = output = Path.GetFullPath(Path.Combine(source, output));
 
 		//确保输出目录存在
 		if(!Directory.Exists(output))
@@ -145,21 +145,20 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		Terminal.WriteLine(CommandOutletColor.DarkCyan, $"Installing package generation in progress, please wait...");
 		Terminal.WriteLine();
 
-		var package = this.CreatePackage(context, variables);
+		var package = this.CreatePackage(context);
 		if(package == null)
 			return ValueTask.FromResult<object>(null);
 
 		package.Scriptor.Script(
 			new(source,
-				Normalizer.NormalizeValue(context.Options.GetValue<string>(DAEMON_OPTION, null), variables),
-				Normalizer.NormalizeFile(context.Options.GetValue<string>(SCRIPT_INSTALLING_OPTION, null), variables),
-				Normalizer.NormalizeFile(context.Options.GetValue<string>(SCRIPT_INSTALLED_OPTION, null), variables),
-				Normalizer.NormalizeFile(context.Options.GetValue<string>(SCRIPT_UNINSTALLING_OPTION, null), variables),
-				Normalizer.NormalizeFile(context.Options.GetValue<string>(SCRIPT_UNINSTALLED_OPTION, null), variables)
-			),
-			variables);
+				Normalizer.Normalize(context.Options.GetValue<string>(DAEMON_OPTION, null)),
+				Normalizer.NormalizeFile(context.Options.GetValue<string>(SCRIPT_INSTALLING_OPTION, null)),
+				Normalizer.NormalizeFile(context.Options.GetValue<string>(SCRIPT_INSTALLED_OPTION, null)),
+				Normalizer.NormalizeFile(context.Options.GetValue<string>(SCRIPT_UNINSTALLING_OPTION, null)),
+				Normalizer.NormalizeFile(context.Options.GetValue<string>(SCRIPT_UNINSTALLED_OPTION, null))
+			));
 
-		package.Entries.Load(source, context.Arguments, variables);
+		package.Entries.Load(source, context.Arguments);
 		if(package.Entries.Count == 0)
 		{
 			Terminal.WriteLine(CommandOutletColor.Red, $"The source directory '{source}' does not contain any package entries.");
@@ -174,26 +173,26 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	#endregion
 
 	#region 抽象方法
-	protected abstract TPackage CreatePackage(CommandContext context, IDictionary<string, string> variables);
+	protected abstract TPackage CreatePackage(CommandContext context);
 	#endregion
 
 	#region 配置方法
-	protected static void Configure(Package package, CommandContext context, IDictionary<string, string> variables)
+	protected static void Configure(Package package, CommandContext context)
 	{
 		package.Framework = context.Options.GetValue<string>(FRAMEWORK_OPTION);
-		package.InstallPath = Normalizer.NormalizeValue(context.Options.GetValue<string>(INSTALL_PATH_OPTION), variables);
-		package.Title = Normalizer.NormalizeValue(context.Options.GetValue<string>(TITLE_OPTION), variables);
-		package.Summary = Normalizer.NormalizeFile(context.Options.GetValue<string>(SUMMARY_OPTION), variables);
-		package.Description = Normalizer.NormalizeFile(context.Options.GetValue<string>(DESCRIPTION_OPTION), variables);
-		package.Url = Normalizer.NormalizeValue(context.Options.GetValue<string>(URL_OPTION), variables, DEFAULT_URL);
-		package.Category = Normalizer.NormalizeValue(context.Options.GetValue<string>(CATEGORY_OPTION), variables);
-		package.License = Normalizer.NormalizeValue(context.Options.GetValue<string>(LICENSE_OPTION), variables);
-		package.Maintainer = Normalizer.NormalizeValue(context.Options.GetValue<string>(MAINTAINER_OPTION), variables, DEFAULT_MAINTAINER);
-		package.Dependencies = Normalizer.NormalizeList(context.Options.GetValue<string>(DEPENDENCIES_OPTION), variables);
+		package.InstallPath = Normalizer.Normalize(context.Options.GetValue<string>(INSTALL_PATH_OPTION));
+		package.Title = Normalizer.Normalize(context.Options.GetValue<string>(TITLE_OPTION));
+		package.Summary = Normalizer.NormalizeFile(context.Options.GetValue<string>(SUMMARY_OPTION));
+		package.Description = Normalizer.NormalizeFile(context.Options.GetValue<string>(DESCRIPTION_OPTION));
+		package.Url = Normalizer.Normalize(context.Options.GetValue<string>(URL_OPTION), DEFAULT_URL);
+		package.Category = Normalizer.Normalize(context.Options.GetValue<string>(CATEGORY_OPTION));
+		package.License = Normalizer.Normalize(context.Options.GetValue<string>(LICENSE_OPTION));
+		package.Maintainer = Normalizer.Normalize(context.Options.GetValue<string>(MAINTAINER_OPTION), DEFAULT_MAINTAINER);
+		package.Dependencies = Normalizer.NormalizeList(context.Options.GetValue<string>(DEPENDENCIES_OPTION));
 	}
 	#endregion
 
-	#region 辅助方法
+	#region 私有方法
 	static Dictionary<string, string> GetVariables(CommandContext context, params KeyValuePair<string, string>[] options)
 	{
 		var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -203,13 +202,13 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 
 		foreach(var option in context.Options)
 		{
-			if(Normalizer.Normalize(option.Value?.ToString(), variables, out var value))
+			if(Normalizer.TryNormalize(option.Value?.ToString(), out var value))
 				variables[option.Key] = value;
 		}
 
 		foreach(var option in options)
 		{
-			if(Normalizer.Normalize(option.Value, variables, out var value))
+			if(Normalizer.TryNormalize(option.Value, out var value))
 				variables[option.Key] = value;
 		}
 

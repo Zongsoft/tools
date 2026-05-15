@@ -33,7 +33,6 @@
 
 using System;
 using System.IO;
-using System.Collections.Generic;
 
 namespace Zongsoft.Tools.Packager;
 
@@ -43,7 +42,7 @@ partial class Scriptor
 	{
 		private readonly Package _package = package ?? throw new ArgumentNullException(nameof(package));
 
-		public void Script(Argument argument, IDictionary<string, string> variables)
+		public void Script(Argument argument)
 		{
 			var installing = ReadFile(argument.Source, argument.Installing);
 			var installed = ReadFile(argument.Source, argument.Installed);

@@ -38,7 +38,7 @@ using System.Text.RegularExpressions;
 
 namespace Zongsoft.Tools.Packager;
 
-public static class Normalizer
+public class Normalizer
 {
 	#region 常量定义
 	//变量解析的正则组名称
@@ -47,10 +47,19 @@ public static class Normalizer
 	private static readonly Regex _variableRegex = new(@"(?<opt>\$\((?<name>\w+)\))|(?<env>\%(?<name>\w+)\%)", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.IgnorePatternWhitespace);
 	#endregion
 
+	#region 公共属性
+	private static IDictionary<string, string> _variables;
+	public static IDictionary<string, string> Variables => _variables;
+	#endregion
+
+	#region 初始方法
+	public static void Initialize(IDictionary<string, string> variables) => _variables = variables;
+	#endregion
+
 	#region 公共方法
-	public static bool Normalize(string text, IDictionary<string, string> variables, out string result)
+	public static bool TryNormalize(string text, out string result)
 	{
-		var normalized = Normalize(text, variables);
+		var normalized = Normalize(text);
 		if(normalized)
 		{
 			result = normalized.Value;
@@ -62,10 +71,24 @@ public static class Normalizer
 		return false;
 	}
 
-	public static Result Normalize(string text, IDictionary<string, string> variables)
+	public static string Normalize(string text, string fallback = null)
+	{
+		if(string.IsNullOrWhiteSpace(text))
+			return fallback;
+
+		if(!TryNormalize(text, out var result))
+			return fallback;
+
+		return string.IsNullOrWhiteSpace(result) ? fallback : result.Trim();
+	}
+
+	public static Result Normalize(string text)
 	{
 		if(string.IsNullOrWhiteSpace(text))
 			return Result.Success(string.Empty);
+
+		if(_variables == null)
+			throw new InvalidOperationException($"The Normalizer has not been initialized yet.");
 
 		try
 		{
@@ -73,7 +96,7 @@ public static class Normalizer
 			{
 				if(match.Success && match.Groups.TryGetValue(REGEX_VARIABLE_NAME, out var group))
 				{
-					if(variables.TryGetValue(group.Value, out var value))
+					if(_variables.TryGetValue(group.Value, out var value))
 						return value;
 
 					throw new NormalizerException(group.Value);
@@ -91,41 +114,24 @@ public static class Normalizer
 	}
 	#endregion
 
-	internal static string NormalizeFile(string text, IDictionary<string, string> variables)
+	internal static string NormalizeFile(string text)
 	{
 		if(string.IsNullOrWhiteSpace(text))
 			return null;
 
-		if(!Normalizer.Normalize(text, variables, out var result))
+		if(!TryNormalize(text, out var result))
 			return null;
 
 		return File.Exists(result) ? File.ReadAllText(result) : result;
 	}
 
-	internal static string NormalizeValue(string text, IDictionary<string, string> variables, string fallback = null)
-	{
-		if(string.IsNullOrWhiteSpace(text))
-			return fallback;
-
-		if(!Normalizer.Normalize(text, variables, out var result))
-			return fallback;
-
-		return string.IsNullOrWhiteSpace(result) ? fallback : result.Trim();
-	}
-
-	internal static string[] NormalizeList(string text, IDictionary<string, string> variables)
+	internal static string[] NormalizeList(string text)
 	{
 		if(string.IsNullOrWhiteSpace(text))
 			return [];
 
-		if(!Normalizer.Normalize(text, variables, out var result))
-			return [];
-
-		if(File.Exists(result))
-			result = File.ReadAllText(result);
-
-		return result
-			.Split([',', ';', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+		return TryNormalize(text, out var result) ?
+			result.Split([',', ';', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) : [];
 	}
 
 	#region 嵌套结构

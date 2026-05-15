@@ -153,7 +153,7 @@ public abstract partial class Package
 		public int Count => _entries.Count;
 
 		internal void Add(string source, string entryName, long size, DateTime modifiedTime) => _entries.Add(new(source, entryName, size, Utility.Unix.GetTimestamp(modifiedTime), Utility.Unix.GetFileMode(source)));
-		internal void Load(string source, IReadOnlyCollection<string> arguments, IDictionary<string, string> variables)
+		internal void Load(string source, IReadOnlyCollection<string> arguments)
 		{
 			var names = new HashSet<string>(StringComparer.Ordinal);
 
@@ -167,7 +167,7 @@ public abstract partial class Package
 
 			foreach(var argument in arguments)
 			{
-				if(!Normalizer.Normalize(argument, variables, out var text))
+				if(!Normalizer.TryNormalize(argument, out var text))
 					continue;
 
 				var index = text.LastIndexOf(':');

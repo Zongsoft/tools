@@ -38,7 +38,7 @@ namespace Zongsoft.Tools.Packager;
 
 public interface IScriptor
 {
-	void Script(Scriptor.Argument argument, IDictionary<string, string> variables);
+	void Script(Scriptor.Argument argument);
 }
 
 public partial class Scriptor

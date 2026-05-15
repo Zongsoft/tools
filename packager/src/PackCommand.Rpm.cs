@@ -46,7 +46,7 @@ public sealed class RpmCommand : PackCommand<Package.Rpm>
 	private const string PROVIDES_OPTION = "provides";
 	private const string CONFLICTS_OPTION = "conflicts";
 
-	protected override Package.Rpm CreatePackage(CommandContext context, IDictionary<string, string> variables)
+	protected override Package.Rpm CreatePackage(CommandContext context)
 	{
 		var package = new Package.Rpm(
 			context.Options.GetValue<string>(NAME_OPTION),
@@ -55,11 +55,11 @@ public sealed class RpmCommand : PackCommand<Package.Rpm>
 			context.Options.GetValue<Platform>(PLATFORM_OPTION),
 			context.Options.GetValue<Architecture>(ARCHITECTURE_OPTION))
 		{
-			Provides = Normalizer.NormalizeList(context.Options.GetValue<string>(PROVIDES_OPTION), variables),
-			Conflicts = Normalizer.NormalizeList(context.Options.GetValue<string>(CONFLICTS_OPTION), variables),
+			Provides = Normalizer.NormalizeList(context.Options.GetValue<string>(PROVIDES_OPTION)),
+			Conflicts = Normalizer.NormalizeList(context.Options.GetValue<string>(CONFLICTS_OPTION)),
 		};
 
-		Configure(package, context, variables);
+		Configure(package, context);
 		return package;
 	}
 }
