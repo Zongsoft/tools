@@ -178,19 +178,19 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		if(package == null)
 			return ValueTask.FromResult<object>(null);
 
-		var daemonPath = GetDaemonPath(context, source, variables);
-		var daemonEntryName = daemonPath == null ? null : GetDaemonEntryName(source, daemonPath);
-		package.Scripts = GetScripts(context, source, variables, package, daemonPath, daemonEntryName);
 		var entries = GetEntries(source, context.Arguments, variables, package.EntryPrefix);
-
-		if(daemonPath != null)
-			AddFile(entries, new HashSet<string>(entries.ConvertAll(entry => entry.EntryName), StringComparer.Ordinal), daemonPath, daemonEntryName, package.EntryPrefix);
-
 		if(entries.Count == 0)
 		{
 			Terminal.WriteLine(CommandOutletColor.Red, $"The source directory '{source}' does not contain any package entries.");
 			return ValueTask.FromResult<object>(null);
 		}
+
+		var daemonPath = GetDaemonPath(context, source, variables);
+		var daemonEntryName = daemonPath == null ? null : GetDaemonEntryName(source, daemonPath);
+		package.Scripts = GetScripts(context, source, variables, package, daemonPath, daemonEntryName);
+
+		if(daemonPath != null)
+			AddFile(entries, new HashSet<string>(entries.ConvertAll(entry => entry.EntryName), StringComparer.Ordinal), daemonPath, daemonEntryName, package.EntryPrefix);
 
 		package.Entries = [.. entries];
 		package.Pack(output);

@@ -32,20 +32,15 @@
  */
 
 using System;
-using System.Runtime.InteropServices;
+using System.Collections.Generic;
 
 namespace Zongsoft.Tools.Packager;
 
-partial class Package
+public interface IScriptor
 {
-	public sealed class Rpm(string name, string edition, Version version, Platform platform, Architecture architecture) : Package(name, edition, version, platform, architecture)
-	{
-		internal const string EXTENSION = ".rpm";
-		internal override string FileName => this.GetFileName(EXTENSION);
+	void Script(Package package, IDictionary<string, string> variables);
+}
 
-		public string[] Provides { get; set; }
-		public string[] Conflicts { get; set; }
-
-		public override void Pack(string output) => this.Rpm(output);
-	}
+public partial class Scriptor
+{
 }

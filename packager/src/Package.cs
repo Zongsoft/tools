@@ -81,7 +81,7 @@ public abstract partial class Package
 	#endregion
 
 	#region 内部属性
-	internal abstract string Extension { get; }
+	internal abstract string FileName { get; }
 	internal virtual string EntryPrefix => this.InstallPath.TrimStart('/');
 	#endregion
 
@@ -107,6 +107,17 @@ public abstract partial class Package
 	}
 
 	internal static string GetPackageName(string name, string edition) => string.IsNullOrEmpty(edition) ? name : $"{name}-{edition}";
+	protected string GetFileName(string extension)
+	{
+		var name = string.IsNullOrEmpty(this.Edition) ?
+			$"{this.Name}@{this.Version}_{this.Runtime}" :
+			$"{this.Name}-{this.Edition}@{this.Version}_{this.Runtime}";
+
+		if(string.IsNullOrEmpty(extension) || extension == ".")
+			return name;
+
+		return extension[0] == '.' ? $"{name}{extension}" : $"{name}.{extension}";
+	}
 	#endregion
 
 	#region 嵌套结构

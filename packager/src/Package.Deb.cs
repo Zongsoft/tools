@@ -40,8 +40,8 @@ partial class Package
 {
 	public sealed class Deb(string name, string edition, Version version, Platform platform, Architecture architecture) : Package(name, edition, version, platform, architecture)
 	{
-		public const string EXTENSION = ".deb";
-		internal override string Extension => EXTENSION;
+		internal const string EXTENSION = ".deb";
+		internal override string FileName => this.GetFileName(EXTENSION);
 
 		public override void Pack(string output) => this.Deb(output);
 	}
