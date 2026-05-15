@@ -98,10 +98,6 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	protected const string DEFAULT_URL = "https://github.com/Zongsoft";
 	#endregion
 
-	#region 抽象属性
-	protected abstract string Extension { get; }
-	#endregion
-
 	#region 执行方法
 	protected override ValueTask<object> OnExecuteAsync(CommandContext context, CancellationToken cancellation)
 	{
@@ -117,24 +113,13 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 			return ValueTask.FromResult<object>(null);
 		}
 
-		if(platform != Platform.Windows && platform != Platform.Linux)
-			throw new CommandOptionValueException(PLATFORM_OPTION, platform.ToString());
-
 		var runtime = Utility.GetRuntimeIdentifier(platform, architecture);
-		var packageName = Package.GetPackageName(name, edition);
-		var installPath = GetInstallPath(context.Options.GetValue(INSTALL_PATH_OPTION, DEFAULT_INSTALL_PATH), packageName);
 		var variables = GetVariables(context,
 		[
 			new("Runtime", runtime),
 			new("RuntimeIdentifier", runtime),
 			new("Architecture", architecture.ToString().ToLowerInvariant()),
-			new(nameof(Package.InstallPath), installPath),
 		]);
-
-		if(!Normalizer.Normalize(installPath, variables, out installPath))
-			return ValueTask.FromResult<object>(null);
-
-		variables[nameof(Package.InstallPath)] = NormalizeInstallPath(installPath);
 
 		if(!Normalizer.Normalize(context.Options.GetValue<string>(SOURCE_OPTION), variables, out var source))
 			return ValueTask.FromResult<object>(null);
@@ -153,23 +138,12 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		if(!Normalizer.Normalize(context.Options.GetValue<string>(OUTPUT_OPTION), variables, out var output))
 			return ValueTask.FromResult<object>(null);
 
-		source = Path.GetFullPath(source);
-		output = GetOutputPath(source, output, name, edition, version, runtime, this.Extension);
+		variables[SOURCE_OPTION] = source = Path.GetFullPath(source);
+		variables[OUTPUT_OPTION] = output = Path.GetFullPath(Path.Combine(source, output));
 
-		variables[SOURCE_OPTION] = source;
-		variables[OUTPUT_OPTION] = output;
-
-		var directory = Path.GetDirectoryName(output);
-		if(!string.IsNullOrEmpty(directory))
-			Directory.CreateDirectory(directory);
-
-		if(File.Exists(output))
-		{
-			if(context.Options.Switch(OVERWRITE_OPTION))
-				File.Delete(output);
-			else
-				throw new IOException($"The output file '{output}' already exists.");
-		}
+		//确保输出目录存在
+		if(!Directory.Exists(output))
+			Directory.CreateDirectory(output);
 
 		Terminal.WriteLine(CommandOutletColor.DarkCyan, $"Installing package generation in progress, please wait...");
 		Terminal.WriteLine();
@@ -178,8 +152,8 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		if(package == null)
 			return ValueTask.FromResult<object>(null);
 
-		var entries = GetEntries(source, context.Arguments, variables, package.EntryPrefix);
-		if(entries.Count == 0)
+		package.Entries.Load(source, context.Arguments, variables);
+		if(package.Entries.Count == 0)
 		{
 			Terminal.WriteLine(CommandOutletColor.Red, $"The source directory '{source}' does not contain any package entries.");
 			return ValueTask.FromResult<object>(null);
@@ -189,11 +163,15 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		var daemonEntryName = daemonPath == null ? null : GetDaemonEntryName(source, daemonPath);
 		package.Scripts = GetScripts(context, source, variables, package, daemonPath, daemonEntryName);
 
-		if(daemonPath != null)
-			AddFile(entries, new HashSet<string>(entries.ConvertAll(entry => entry.EntryName), StringComparer.Ordinal), daemonPath, daemonEntryName, package.EntryPrefix);
+		//if(daemonPath != null)
+		//	AddFile(
+		//		package.Entries,
+		//		new HashSet<string>(entries.ConvertAll(entry => entry.EntryName), StringComparer.Ordinal),
+		//		daemonPath,
+		//		daemonEntryName,
+		//		package.EntryPrefix);
 
-		package.Entries = [.. entries];
-		package.Pack(output);
+		package.Pack(output, context.Options.Switch(OVERWRITE_OPTION));
 
 		Terminal.WriteLine(CommandOutletColor.DarkGreen, string.Format(Properties.Resources.PackageGeneratedSuccessfully_Message, output));
 		return ValueTask.FromResult<object>(output);
@@ -205,11 +183,11 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	#endregion
 
 	#region 配置方法
-	protected static void ConfigurePackage(Package package, CommandContext context, IDictionary<string, string> variables)
+	protected static void Configure(Package package, CommandContext context, IDictionary<string, string> variables)
 	{
-		package.InstallPath = variables[nameof(Package.InstallPath)];
 		package.Framework = context.Options.GetValue<string>(FRAMEWORK_OPTION);
-		package.Title = Normalizer.NormalizeText(context.Options.GetValue<string>(TITLE_OPTION), variables);
+		package.InstallPath = Normalizer.NormalizeValue(context.Options.GetValue<string>(INSTALL_PATH_OPTION), variables);
+		package.Title = Normalizer.NormalizeValue(context.Options.GetValue<string>(TITLE_OPTION), variables);
 		package.Summary = Normalizer.NormalizeText(context.Options.GetValue<string>(SUMMARY_OPTION), variables);
 		package.Description = Normalizer.NormalizeText(context.Options.GetValue<string>(DESCRIPTION_OPTION), variables);
 		package.Maintainer = Normalizer.NormalizeValue(context.Options.GetValue<string>(MAINTAINER_OPTION), variables, DEFAULT_MAINTAINER);
@@ -217,132 +195,6 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		package.Url = Normalizer.NormalizeValue(context.Options.GetValue<string>(URL_OPTION), variables, DEFAULT_URL);
 		package.Category = Normalizer.NormalizeValue(context.Options.GetValue<string>(CATEGORY_OPTION), variables);
 		package.Dependencies = Normalizer.NormalizeList(context.Options.GetValue<string>(DEPENDENCIES_OPTION), variables);
-	}
-	#endregion
-
-	#region 条目方法
-	static List<Package.Entry> GetEntries(string source, IReadOnlyCollection<string> arguments, IDictionary<string, string> variables, string prefix)
-	{
-		var entries = new List<Package.Entry>();
-		var names = new HashSet<string>(StringComparer.Ordinal);
-
-		if(arguments == null || arguments.Count == 0)
-		{
-			foreach(var file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
-				AddEntry(entries, names, source, file, Path.GetRelativePath(source, file), prefix);
-
-			return entries;
-		}
-
-		foreach(var argument in arguments)
-		{
-			if(!Normalizer.Normalize(argument, variables, out var text))
-				continue;
-
-			var index = text.LastIndexOf(':');
-
-			if(OperatingSystem.IsWindows() && index == 1)
-				index = -1;
-
-			var path = index > 0 ? text[..index].Trim() : text;
-			var alias = index > 0 ? text[(index + 1)..].Trim() : null;
-
-			AddEntry(entries, names, source, path, alias, prefix);
-		}
-
-		return entries;
-	}
-
-	static void AddEntry(List<Package.Entry> entries, ISet<string> names, string source, string path, string alias, string prefix)
-	{
-		if(alias != null)
-			alias = alias
-				.Trim('~')
-				.Trim(Path.DirectorySeparatorChar)
-				.Trim(Path.AltDirectorySeparatorChar);
-		else if(IsExternal(source, path))
-			alias = string.Empty;
-
-		if(!Path.IsPathFullyQualified(path))
-			path = Path.Combine(source, path);
-
-		if(path.Contains('*') || path.Contains('?'))
-		{
-			var working = Path.GetDirectoryName(path);
-			var pattern = Path.GetFileName(path);
-
-			if(string.IsNullOrEmpty(working) || !Directory.Exists(working))
-			{
-				Terminal.WriteLine(CommandOutletColor.DarkYellow, $"[Warn] The source path '{path}' does not exist.");
-				return;
-			}
-
-			alias ??= Path.GetRelativePath(source, working);
-
-			if(alias == "." || alias.StartsWith(".."))
-				alias = string.Empty;
-
-			foreach(var file in Directory.GetFiles(working, pattern))
-				AddFile(entries, names, file, Path.Combine(alias, Path.GetFileName(file)), prefix);
-
-			foreach(var directory in Directory.GetDirectories(working, pattern))
-				AddDirectory(entries, names, source, directory, Path.Combine(alias, Path.GetFileName(directory)), prefix);
-		}
-		else
-		{
-			alias ??= Path.GetRelativePath(source, path);
-
-			if(alias == "." || alias.StartsWith(".."))
-				alias = string.Empty;
-
-			if(File.Exists(path))
-				AddFile(entries, names, path, alias, prefix);
-			else if(Directory.Exists(path))
-				AddDirectory(entries, names, source, path, alias, prefix);
-			else
-				Terminal.WriteLine(CommandOutletColor.DarkYellow, $"[Warn] The source path '{path}' does not exist.");
-		}
-	}
-
-	static void AddDirectory(List<Package.Entry> entries, ISet<string> names, string source, string path, string alias, string prefix)
-	{
-		foreach(var file in Directory.GetFiles(path))
-			AddFile(entries, names, file, Path.Combine(alias, Path.GetFileName(file)), prefix);
-
-		foreach(var directory in Directory.GetDirectories(path))
-			AddDirectory(entries, names, source, directory, Path.Combine(alias, Path.GetFileName(directory)), prefix);
-	}
-
-	static void AddFile(List<Package.Entry> entries, ISet<string> names, string source, string entryName, string prefix)
-	{
-		if(string.IsNullOrEmpty(entryName))
-			entryName = Path.GetFileName(source);
-		else
-		{
-			var filename = Path.GetFileName(entryName);
-
-			if(string.IsNullOrEmpty(filename) || filename == ".")
-				entryName = Path.Combine(Path.GetDirectoryName(entryName), Path.GetFileName(source));
-		}
-
-		entryName = Utility.NormalizePath(Path.Combine(prefix ?? string.Empty, entryName));
-
-		if(!names.Add(entryName))
-		{
-			Terminal.WriteLine(CommandOutletColor.DarkYellow, $"[Warn] The source file '{source}' conflicts with an existing package entry '{entryName}'.");
-			return;
-		}
-
-		var file = new FileInfo(source);
-		entries.Add(new Package.Entry(source, entryName, file.Length, GetUnixTime(file.LastWriteTimeUtc), GetFileMode(source)));
-	}
-
-	static bool IsExternal(string source, string path)
-	{
-		return Path.IsPathFullyQualified(path) &&
-			!Path.GetFullPath(path).StartsWith(source, GetComparison());
-
-		static StringComparison GetComparison() => OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 	}
 	#endregion
 
@@ -366,7 +218,7 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 
 	static string GetDaemonEntryName(string source, string daemon)
 	{
-		return IsExternal(source, daemon) ? Path.GetFileName(daemon) : Utility.NormalizePath(Path.GetRelativePath(source, daemon));
+		return Utility.IsExternal(source, daemon) ? Path.GetFileName(daemon) : Utility.NormalizePath(Path.GetRelativePath(source, daemon));
 	}
 
 	static Package.InstallScripts GetScripts(CommandContext context, string source, IDictionary<string, string> variables, Package metadata, string daemon, string daemonEntryName)
@@ -473,76 +325,5 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 
 		return variables;
 	}
-
-	static string GetOutputPath(string source, string output, string name, string edition, Version version, string runtime, string extension)
-	{
-		if(string.IsNullOrEmpty(output))
-			output = Path.Combine(source, GetFileName(name, edition, version, runtime) + extension);
-		else
-		{
-			if(!Path.IsPathFullyQualified(output))
-				output = Path.Combine(source, output);
-
-			if(Directory.Exists(output) || EndsWithDirectorySeparator(output) || string.IsNullOrEmpty(Path.GetExtension(output)))
-				output = Path.Combine(output, GetFileName(name, edition, version, runtime) + extension);
-			else if(!HasExtension(output, extension))
-				output += extension;
-		}
-
-		return Path.GetFullPath(output);
-	}
-
-	static string GetFileName(string name, string edition, Version version, string runtime) => string.IsNullOrEmpty(edition) ?
-		$"{name}@{version}_{runtime}" :
-		$"{name}-{edition}@{version}_{runtime}";
-
-	static bool HasExtension(string path, string extension)
-	{
-		return path.EndsWith(extension, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
-	}
-
-	static bool EndsWithDirectorySeparator(string path)
-	{
-		return path.EndsWith(Path.DirectorySeparatorChar) || path.EndsWith(Path.AltDirectorySeparatorChar);
-	}
-
-	static string GetInstallPath(string path, string packageName)
-	{
-		var root = NormalizeInstallPath(path);
-		return root == "/" ? "/" + packageName : root + "/" + packageName;
-	}
-
-	static string NormalizeInstallPath(string path)
-	{
-		if(string.IsNullOrWhiteSpace(path))
-			path = DEFAULT_INSTALL_PATH;
-
-		path = path.Trim().Replace('\\', '/').TrimEnd('/');
-		return string.IsNullOrEmpty(path) ? "/" : path;
-	}
-
-	static int GetFileMode(string path)
-	{
-		if(!OperatingSystem.IsWindows())
-		{
-			var mode = (int)(File.GetUnixFileMode(path) & (UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute));
-
-			if(mode > 0)
-				return mode;
-		}
-
-		return IsExecutable(path) ? 0755 : 0644;
-	}
-
-	static bool IsExecutable(string path)
-	{
-		var extension = Path.GetExtension(path);
-		return string.IsNullOrEmpty(extension) ||
-			extension.Equals(".sh", StringComparison.OrdinalIgnoreCase) ||
-			extension.Equals(".dll", StringComparison.OrdinalIgnoreCase) ||
-			extension.Equals(".exe", StringComparison.OrdinalIgnoreCase);
-	}
-
-	static long GetUnixTime(DateTime value) => new DateTimeOffset(value).ToUnixTimeSeconds();
 	#endregion
 }

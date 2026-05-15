@@ -41,7 +41,6 @@ namespace Zongsoft.Tools.Packager;
 
 public sealed class TarCommand : PackCommand<Package.Tar>
 {
-	protected override string Extension => Package.Tar.EXTENSION;
 	protected override Package.Tar CreatePackage(CommandContext context, IDictionary<string, string> variables)
 	{
 		var package = new Package.Tar(
@@ -51,7 +50,7 @@ public sealed class TarCommand : PackCommand<Package.Tar>
 			context.Options.GetValue<Platform>(PLATFORM_OPTION),
 			context.Options.GetValue<Architecture>(ARCHITECTURE_OPTION));
 
-		ConfigurePackage(package, context, variables);
+		Configure(package, context, variables);
 		return package;
 	}
 }

@@ -44,6 +44,6 @@ partial class Package
 		internal override string FileName => this.GetFileName(EXTENSION);
 		internal override string EntryPrefix => null;
 
-		public override void Pack(string output) => this.Tar(output);
+		public override void Pack(string output, bool overwrite) => this.Tar(output, overwrite);
 	}
 }

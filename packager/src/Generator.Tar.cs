@@ -41,9 +41,13 @@ namespace Zongsoft.Tools.Packager;
 
 partial class Generator
 {
-	public static void Tar(this Package package, string output)
+	public static void Tar(this Package package, string output, bool overwrite)
 	{
-		using var stream = File.Create(output);
+		using var stream = new FileStream(
+			Path.Combine(output, package.FileName),
+			overwrite ? FileMode.Create : FileMode.CreateNew,
+			FileAccess.Write);
+
 		using var gzip = new GZipStream(stream, CompressionLevel.Optimal);
 		using var writer = new TarWriter(gzip, TarEntryFormat.Pax, false);
 

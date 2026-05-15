@@ -32,6 +32,9 @@
  */
 
 using System;
+using System.IO;
+using System.Collections;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
 namespace Zongsoft.Tools.Packager;
@@ -55,6 +58,7 @@ public abstract partial class Package
 		this.PackageName = GetPackageName(name, edition);
 		this.Url = "https://github.com/Zongsoft";
 		this.Maintainer = "Zongsoft";
+		this.Entries = new(this);
 	}
 	#endregion
 
@@ -76,7 +80,7 @@ public abstract partial class Package
 	public string Category { get; set; }
 	public string InstallPath { get; set; }
 	public string[] Dependencies { get; set; }
-	public Entry[] Entries { get; set; }
+	public EntryCollection Entries { get; }
 	public InstallScripts Scripts { get; set; }
 	#endregion
 
@@ -86,7 +90,7 @@ public abstract partial class Package
 	#endregion
 
 	#region 公共方法
-	public abstract void Pack(string output);
+	public abstract void Pack(string output, bool overwrite);
 	#endregion
 
 	#region 重写方法
@@ -121,6 +125,12 @@ public abstract partial class Package
 	#endregion
 
 	#region 嵌套结构
+	public readonly record struct InstallScripts(
+		string Installing,
+		string Installed,
+		string Uninstalling,
+		string Uninstalled);
+
 	public readonly struct Entry(string source, string entryName, long size, long modifiedTime, int mode)
 	{
 		public readonly string Source = source;
@@ -134,10 +144,128 @@ public abstract partial class Package
 			$"[{this.Source}] {this.EntryName}({this.Size})";
 	}
 
-	public readonly record struct InstallScripts(
-		string Installing,
-		string Installed,
-		string Uninstalling,
-		string Uninstalled);
+	public sealed class EntryCollection(Package package) : IReadOnlyCollection<Entry>
+	{
+		private readonly Package _package = package;
+		private readonly List<Entry> _entries = new();
+
+		public int Count => _entries.Count;
+
+		internal void Load(string source, IReadOnlyCollection<string> arguments, IDictionary<string, string> variables)
+		{
+			var names = new HashSet<string>(StringComparer.Ordinal);
+
+			if(arguments == null || arguments.Count == 0)
+			{
+				foreach(var file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
+					AddEntry(_entries, names, source, file, Path.GetRelativePath(source, file), _package.EntryPrefix);
+
+				return;
+			}
+
+			foreach(var argument in arguments)
+			{
+				if(!Normalizer.Normalize(argument, variables, out var text))
+					continue;
+
+				var index = text.LastIndexOf(':');
+
+				if(OperatingSystem.IsWindows() && index == 1)
+					index = -1;
+
+				var path = index > 0 ? text[..index].Trim() : text;
+				var alias = index > 0 ? text[(index + 1)..].Trim() : null;
+
+				AddEntry(_entries, names, source, path, alias, _package.EntryPrefix);
+			}
+		}
+
+		static void AddEntry(List<Package.Entry> entries, ISet<string> names, string source, string path, string alias, string prefix)
+		{
+			if(alias != null)
+				alias = alias
+					.Trim('~')
+					.Trim(Path.DirectorySeparatorChar)
+					.Trim(Path.AltDirectorySeparatorChar);
+			else if(Utility.IsExternal(source, path))
+				alias = string.Empty;
+
+			if(!Path.IsPathFullyQualified(path))
+				path = Path.Combine(source, path);
+
+			if(path.Contains('*') || path.Contains('?'))
+			{
+				var working = Path.GetDirectoryName(path);
+				var pattern = Path.GetFileName(path);
+
+				if(string.IsNullOrEmpty(working) || !Directory.Exists(working))
+				{
+					Dumper.PathNotExist(path);
+					return;
+				}
+
+				alias ??= Path.GetRelativePath(source, working);
+
+				if(alias == "." || alias.StartsWith(".."))
+					alias = string.Empty;
+
+				foreach(var file in Directory.GetFiles(working, pattern))
+					AddFile(entries, names, file, Path.Combine(alias, Path.GetFileName(file)), prefix);
+
+				foreach(var directory in Directory.GetDirectories(working, pattern))
+					AddDirectory(entries, names, source, directory, Path.Combine(alias, Path.GetFileName(directory)), prefix);
+			}
+			else
+			{
+				alias ??= Path.GetRelativePath(source, path);
+
+				if(alias == "." || alias.StartsWith(".."))
+					alias = string.Empty;
+
+				if(File.Exists(path))
+					AddFile(entries, names, path, alias, prefix);
+				else if(Directory.Exists(path))
+					AddDirectory(entries, names, source, path, alias, prefix);
+				else
+					Dumper.PathNotExist(path);
+			}
+		}
+
+		static void AddDirectory(List<Package.Entry> entries, ISet<string> names, string source, string path, string alias, string prefix)
+		{
+			foreach(var file in Directory.GetFiles(path))
+				AddFile(entries, names, file, Path.Combine(alias, Path.GetFileName(file)), prefix);
+
+			foreach(var directory in Directory.GetDirectories(path))
+				AddDirectory(entries, names, source, directory, Path.Combine(alias, Path.GetFileName(directory)), prefix);
+		}
+
+		static void AddFile(List<Package.Entry> entries, ISet<string> names, string source, string entryName, string prefix)
+		{
+			if(string.IsNullOrEmpty(entryName))
+				entryName = Path.GetFileName(source);
+			else
+			{
+				var filename = Path.GetFileName(entryName);
+
+				if(string.IsNullOrEmpty(filename) || filename == ".")
+					entryName = Path.Combine(Path.GetDirectoryName(entryName), Path.GetFileName(source));
+			}
+
+			entryName = Utility.NormalizePath(Path.Combine(prefix ?? string.Empty, entryName));
+
+			if(!names.Add(entryName))
+			{
+				Dumper.PackageEntryConflicted(source, entryName);
+				return;
+			}
+
+			var file = new FileInfo(source);
+			entries.Add(new Package.Entry(source, entryName, file.Length, Utility.Unix.GetTimestamp(file.LastWriteTimeUtc), Utility.Unix.GetFileMode(source)));
+		}
+
+		IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
+		public IEnumerator<Entry> GetEnumerator() => _entries.GetEnumerator();
+	}
 	#endregion
 }

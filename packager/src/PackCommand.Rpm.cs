@@ -46,7 +46,6 @@ public sealed class RpmCommand : PackCommand<Package.Rpm>
 	private const string PROVIDES_OPTION = "provides";
 	private const string CONFLICTS_OPTION = "conflicts";
 
-	protected override string Extension => Package.Rpm.EXTENSION;
 	protected override Package.Rpm CreatePackage(CommandContext context, IDictionary<string, string> variables)
 	{
 		var package = new Package.Rpm(
@@ -60,7 +59,7 @@ public sealed class RpmCommand : PackCommand<Package.Rpm>
 			Conflicts = Normalizer.NormalizeList(context.Options.GetValue<string>(CONFLICTS_OPTION), variables),
 		};
 
-		ConfigurePackage(package, context, variables);
+		Configure(package, context, variables);
 		return package;
 	}
 }

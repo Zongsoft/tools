@@ -54,6 +54,14 @@ internal static class Utility
 		(!architecture.HasValue ? "win" : $"win-{architecture.ToString().ToLowerInvariant()}") :
 		(!architecture.HasValue ? platform.ToString().ToLowerInvariant() : $"{platform.ToString().ToLowerInvariant()}-{architecture.ToString().ToLowerInvariant()}");
 
+	public static bool IsExternal(string source, string path)
+	{
+		return Path.IsPathFullyQualified(path) &&
+			!Path.GetFullPath(path).StartsWith(source, GetComparison());
+
+		static StringComparison GetComparison() => OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+	}
+
 	public static string NormalizePath(string value)
 	{
 		if(string.IsNullOrWhiteSpace(value))
@@ -63,5 +71,33 @@ internal static class Utility
 			.Replace(Path.DirectorySeparatorChar, '/')
 			.Replace(Path.AltDirectorySeparatorChar, '/')
 			.TrimStart('/');
+	}
+
+	public static class Unix
+	{
+		public static int GetFileMode(string path)
+		{
+			if(!OperatingSystem.IsWindows())
+			{
+				var mode = (int)(File.GetUnixFileMode(path) & (UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute));
+
+				if(mode > 0)
+					return mode;
+			}
+
+			return IsExecutable(path) ? 0755 : 0644;
+
+			static bool IsExecutable(string path)
+			{
+				var extension = Path.GetExtension(path);
+
+				return string.IsNullOrEmpty(extension) ||
+					extension.Equals(".sh", StringComparison.OrdinalIgnoreCase) ||
+					extension.Equals(".dll", StringComparison.OrdinalIgnoreCase) ||
+					extension.Equals(".exe", StringComparison.OrdinalIgnoreCase);
+			}
+		}
+
+		public static long GetTimestamp(DateTime value) => new DateTimeOffset(value).ToUnixTimeSeconds();
 	}
 }

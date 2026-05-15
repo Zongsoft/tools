@@ -46,6 +46,6 @@ partial class Package
 		public string[] Provides { get; set; }
 		public string[] Conflicts { get; set; }
 
-		public override void Pack(string output) => this.Rpm(output);
+		public override void Pack(string output, bool overwrite) => this.Rpm(output, overwrite);
 	}
 }

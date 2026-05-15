@@ -43,6 +43,6 @@ partial class Package
 		internal const string EXTENSION = ".deb";
 		internal override string FileName => this.GetFileName(EXTENSION);
 
-		public override void Pack(string output) => this.Deb(output);
+		public override void Pack(string output, bool overwrite) => this.Deb(output, overwrite);
 	}
 }

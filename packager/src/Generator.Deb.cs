@@ -43,10 +43,14 @@ namespace Zongsoft.Tools.Packager;
 
 partial class Generator
 {
-	public static void Deb(this Package package, string output)
+	public static void Deb(this Package package, string output, bool overwrite)
 	{
+		using var stream = new FileStream(
+			Path.Combine(output, package.FileName),
+			overwrite ? FileMode.Create : FileMode.CreateNew,
+			FileAccess.Write);
+
 		var control = GetDebControl(package);
-		using var stream = File.Create(output);
 
 		WriteArHeader(stream);
 		WriteArEntry(stream, "debian-binary", Encoding.ASCII.GetBytes("2.0\n"));

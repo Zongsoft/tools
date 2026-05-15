@@ -41,7 +41,6 @@ namespace Zongsoft.Tools.Packager;
 
 public sealed class DebCommand : PackCommand<Package.Deb>
 {
-	protected override string Extension => Package.Deb.EXTENSION;
 	protected override Package.Deb CreatePackage(CommandContext context, IDictionary<string, string> variables)
 	{
 		var package = new Package.Deb(
@@ -51,7 +50,7 @@ public sealed class DebCommand : PackCommand<Package.Deb>
 			context.Options.GetValue<Platform>(PLATFORM_OPTION),
 			context.Options.GetValue<Architecture>(ARCHITECTURE_OPTION));
 
-		ConfigurePackage(package, context, variables);
+		Configure(package, context, variables);
 		return package;
 	}
 }

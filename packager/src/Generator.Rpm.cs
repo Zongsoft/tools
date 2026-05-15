@@ -49,14 +49,18 @@ partial class Generator
 	const int RPM_SENSE_EQUAL = 8;
 	const int RPM_SENSE_RPMLIB = 1 << 24;
 
-	public static void Rpm(this Package.Rpm package, string output)
+	public static void Rpm(this Package.Rpm package, string output, bool overwrite)
 	{
+		using var stream = new FileStream(
+			Path.Combine(output, package.FileName),
+			overwrite ? FileMode.Create : FileMode.CreateNew,
+			FileAccess.Write);
+
 		var payload = CreateCpioPayload(package.Entries, out var archiveSize);
 		var header = RpmHeader.Create(package, archiveSize);
 		var body = Combine(header, payload);
 		var signature = RpmSignature.Create(body);
 
-		using var stream = File.Create(output);
 		WriteRpmLead(stream, package);
 		stream.Write(signature);
 		stream.Write(body);
