@@ -32,17 +32,98 @@
  */
 
 using System;
+using System.IO;
 using System.Collections.Generic;
 
 namespace Zongsoft.Tools.Packager;
 
 partial class Scriptor
 {
-	internal sealed class Systemd : IScriptor
+	internal sealed class Systemd(Package package) : IScriptor
 	{
-		public void Script(Package package, IDictionary<string, string> variables)
+		private readonly Package _package = package ?? throw new ArgumentNullException(nameof(package));
+
+		public void Script(Argument argument, IDictionary<string, string> variables)
 		{
-			throw new NotImplementedException();
+			var installing = ReadFile(argument.Source, argument.Installing);
+			var installed = ReadFile(argument.Source, argument.Installed);
+			var uninstalling = ReadFile(argument.Source, argument.Uninstalling);
+			var uninstalled = ReadFile(argument.Source, argument.Uninstalled);
+
+			var daemon = string.IsNullOrEmpty(argument.Daemon) ?
+				_package.Name.ToLowerInvariant() : argument.Daemon;
+
+			var fileInfo = new FileInfo(Path.GetFullPath(Path.Combine(argument.Source, daemon)));
+
+			if(!fileInfo.Exists)
+				fileInfo = GenerateService(daemon);
+
+			_package.Entries.Add(fileInfo.FullName, fileInfo.Name, fileInfo.Length, fileInfo.LastWriteTimeUtc);
+
+			var serviceName = fileInfo.Name;
+			var servicePath = $"{_package.InstallPath}/{serviceName}";
+			var serviceLink = $"/etc/systemd/system/{serviceName}";
+
+			if(string.IsNullOrWhiteSpace(installing))
+				installing = $$"""
+				if command -v systemctl >/dev/null 2>&1; then
+					systemctl stop '{{serviceName}}' >/dev/null 2>&1 || true
+				fi
+				""";
+
+			if(string.IsNullOrWhiteSpace(installed))
+				installed = $$"""
+				install -d /etc/systemd/system
+				ln -sfn '{{servicePath}}' '{{serviceLink}}'
+				if command -v systemctl >/dev/null 2>&1; then
+					systemctl daemon-reload >/dev/null 2>&1 || true
+					systemctl enable '{{serviceName}}' >/dev/null 2>&1 || true
+				fi
+				""";
+
+			if(string.IsNullOrWhiteSpace(uninstalling))
+				uninstalling = $$"""
+				if command -v systemctl >/dev/null 2>&1; then
+					systemctl stop '{{serviceName}}' >/dev/null 2>&1 || true
+				fi
+				""";
+
+			if(string.IsNullOrWhiteSpace(uninstalled))
+				uninstalled = $$"""
+				rm -f '{{serviceLink}}'
+				if command -v systemctl >/dev/null 2>&1; then
+					systemctl daemon-reload >/dev/null 2>&1 || true
+				fi
+				rm -rf '{{package.InstallPath}}'
+				""";
+
+			_package.Scripts = new(installing, installed, uninstalling, uninstalled);
+		}
+
+		private FileInfo GenerateService(string daemon)
+		{
+			const string SERVICE_SUFFIX = ".service";
+
+			if(!daemon.EndsWith(SERVICE_SUFFIX))
+				daemon += SERVICE_SUFFIX;
+
+			using var stream = new FileStream(Path.Combine(Path.GetTempPath(), daemon), FileMode.Create, FileAccess.Write);
+			using var writer = new StreamWriter(stream);
+
+			return new(stream.Name);
+		}
+
+		static string ReadFile(string source, string path)
+		{
+			if(string.IsNullOrEmpty(path))
+				return null;
+
+			path = Path.Combine(source, path);
+
+			if(!File.Exists(path))
+				throw new FileNotFoundException($"The script file '{path}' does not exist.", path);
+
+			return File.ReadAllText(path);
 		}
 	}
 }

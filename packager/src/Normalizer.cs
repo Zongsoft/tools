@@ -91,7 +91,7 @@ public static class Normalizer
 	}
 	#endregion
 
-	internal static string NormalizeText(string text, IDictionary<string, string> variables)
+	internal static string NormalizeFile(string text, IDictionary<string, string> variables)
 	{
 		if(string.IsNullOrWhiteSpace(text))
 			return null;

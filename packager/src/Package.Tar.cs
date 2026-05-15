@@ -38,10 +38,15 @@ namespace Zongsoft.Tools.Packager;
 
 partial class Package
 {
-	public sealed class Tar(string name, string edition, Version version, Platform platform, Architecture architecture) : Package(name, edition, version, platform, architecture)
+	public sealed class Tar : Package
 	{
-		internal const string EXTENSION = ".tar.gz";
-		internal override string FileName => this.GetFileName(EXTENSION);
+		public Tar(string name, string edition, Version version, Platform platform, Architecture architecture) : base(name, edition, version, platform, architecture)
+		{
+			this.Scriptor = new Scriptor.Systemd(this);
+			this.InstallPath = Utility.Unix.GetInstallPath(name);
+		}
+
+		internal override string FileName => this.GetFileName(".tar.gz");
 		internal override string EntryPrefix => null;
 
 		public override void Pack(string output, bool overwrite) => this.Tar(output, overwrite);

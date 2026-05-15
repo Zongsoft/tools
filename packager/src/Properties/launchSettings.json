@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "Zongsoft.Tools.Packager": {
+      "commandName": "Project",
+      "commandLineArgs": "rpm\r\n--name:Zongsoft.Daemon\r\n--edition:\r\n--version:1.0.0\r\n--compilation:Debug\r\n--framework:net10.0\r\n--platform:Windows\r\n--architecture:x64\r\n--source:\"D:\\\\Zongsoft\\\\hosting\\\\daemon\\\\bin\\\\%compilation%\\\\%framework%\"\r\n--output:../../../",
+      "workingDirectory": "D:\\Zongsoft\\hosting\\daemon"
+    }
+  }
+}

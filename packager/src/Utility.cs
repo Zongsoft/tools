@@ -75,6 +75,18 @@ internal static class Utility
 
 	public static class Unix
 	{
+		public static string GetInstallPath(string name)
+		{
+			if(name.IsWhiteSpace())
+				return "/opt";
+
+			var index = name.IndexOf('.');
+			if(index > 0)
+				return $"/opt/{name[..index].ToLowerInvariant()}";
+			else
+				return $"/opt/{name.ToLowerInvariant()}";
+		}
+
 		public static int GetFileMode(string path)
 		{
 			if(!OperatingSystem.IsWindows())

@@ -104,8 +104,7 @@ partial class Generator
 		stream.WriteByte(0);
 		Pad(stream, 4);
 
-		if(data != null)
-			data.CopyTo(stream);
+		data?.CopyTo(stream);
 
 		Pad(stream, 4);
 	}

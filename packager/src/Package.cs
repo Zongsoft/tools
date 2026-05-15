@@ -86,6 +86,7 @@ public abstract partial class Package
 
 	#region 内部属性
 	internal abstract string FileName { get; }
+	public IScriptor Scriptor { get; protected set; }
 	internal virtual string EntryPrefix => this.InstallPath.TrimStart('/');
 	#endregion
 
@@ -151,6 +152,7 @@ public abstract partial class Package
 
 		public int Count => _entries.Count;
 
+		internal void Add(string source, string entryName, long size, DateTime modifiedTime) => _entries.Add(new(source, entryName, size, Utility.Unix.GetTimestamp(modifiedTime), Utility.Unix.GetFileMode(source)));
 		internal void Load(string source, IReadOnlyCollection<string> arguments, IDictionary<string, string> variables)
 		{
 			var names = new HashSet<string>(StringComparer.Ordinal);

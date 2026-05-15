@@ -93,7 +93,6 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	protected const string SCRIPT_UNINSTALLING_OPTION = "script-uninstalling";
 	protected const string SCRIPT_UNINSTALLED_OPTION = "script-uninstalled";
 
-	protected const string DEFAULT_INSTALL_PATH = "/usr/local";
 	protected const string DEFAULT_MAINTAINER = "Zongsoft Studio <zongsoft@gmail.com>";
 	protected const string DEFAULT_URL = "https://github.com/Zongsoft";
 	#endregion
@@ -101,8 +100,6 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	#region 执行方法
 	protected override ValueTask<object> OnExecuteAsync(CommandContext context, CancellationToken cancellation)
 	{
-		var name = context.Options.GetValue<string>(NAME_OPTION);
-		var edition = context.Options.GetValue<string>(EDITION_OPTION);
 		var version = context.Options.GetValue<Version>(VERSION_OPTION);
 		var platform = context.Options.GetValue<Platform>(PLATFORM_OPTION);
 		var architecture = context.Options.GetValue<Architecture>(ARCHITECTURE_OPTION);
@@ -152,24 +149,22 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		if(package == null)
 			return ValueTask.FromResult<object>(null);
 
+		package.Scriptor.Script(
+			new(source,
+				Normalizer.NormalizeValue(context.Options.GetValue<string>(DAEMON_OPTION, null), variables),
+				Normalizer.NormalizeFile(context.Options.GetValue<string>(SCRIPT_INSTALLING_OPTION, null), variables),
+				Normalizer.NormalizeFile(context.Options.GetValue<string>(SCRIPT_INSTALLED_OPTION, null), variables),
+				Normalizer.NormalizeFile(context.Options.GetValue<string>(SCRIPT_UNINSTALLING_OPTION, null), variables),
+				Normalizer.NormalizeFile(context.Options.GetValue<string>(SCRIPT_UNINSTALLED_OPTION, null), variables)
+			),
+			variables);
+
 		package.Entries.Load(source, context.Arguments, variables);
 		if(package.Entries.Count == 0)
 		{
 			Terminal.WriteLine(CommandOutletColor.Red, $"The source directory '{source}' does not contain any package entries.");
 			return ValueTask.FromResult<object>(null);
 		}
-
-		var daemonPath = GetDaemonPath(context, source, variables);
-		var daemonEntryName = daemonPath == null ? null : GetDaemonEntryName(source, daemonPath);
-		package.Scripts = GetScripts(context, source, variables, package, daemonPath, daemonEntryName);
-
-		//if(daemonPath != null)
-		//	AddFile(
-		//		package.Entries,
-		//		new HashSet<string>(entries.ConvertAll(entry => entry.EntryName), StringComparer.Ordinal),
-		//		daemonPath,
-		//		daemonEntryName,
-		//		package.EntryPrefix);
 
 		package.Pack(output, context.Options.Switch(OVERWRITE_OPTION));
 
@@ -188,118 +183,13 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		package.Framework = context.Options.GetValue<string>(FRAMEWORK_OPTION);
 		package.InstallPath = Normalizer.NormalizeValue(context.Options.GetValue<string>(INSTALL_PATH_OPTION), variables);
 		package.Title = Normalizer.NormalizeValue(context.Options.GetValue<string>(TITLE_OPTION), variables);
-		package.Summary = Normalizer.NormalizeText(context.Options.GetValue<string>(SUMMARY_OPTION), variables);
-		package.Description = Normalizer.NormalizeText(context.Options.GetValue<string>(DESCRIPTION_OPTION), variables);
-		package.Maintainer = Normalizer.NormalizeValue(context.Options.GetValue<string>(MAINTAINER_OPTION), variables, DEFAULT_MAINTAINER);
-		package.License = Normalizer.NormalizeValue(context.Options.GetValue<string>(LICENSE_OPTION), variables);
+		package.Summary = Normalizer.NormalizeFile(context.Options.GetValue<string>(SUMMARY_OPTION), variables);
+		package.Description = Normalizer.NormalizeFile(context.Options.GetValue<string>(DESCRIPTION_OPTION), variables);
 		package.Url = Normalizer.NormalizeValue(context.Options.GetValue<string>(URL_OPTION), variables, DEFAULT_URL);
 		package.Category = Normalizer.NormalizeValue(context.Options.GetValue<string>(CATEGORY_OPTION), variables);
+		package.License = Normalizer.NormalizeValue(context.Options.GetValue<string>(LICENSE_OPTION), variables);
+		package.Maintainer = Normalizer.NormalizeValue(context.Options.GetValue<string>(MAINTAINER_OPTION), variables, DEFAULT_MAINTAINER);
 		package.Dependencies = Normalizer.NormalizeList(context.Options.GetValue<string>(DEPENDENCIES_OPTION), variables);
-	}
-	#endregion
-
-	#region 脚本方法
-	static string GetDaemonPath(CommandContext context, string source, IDictionary<string, string> variables)
-	{
-		if(!context.Options.TryGetValue<string>(DAEMON_OPTION, out var daemon) || string.IsNullOrWhiteSpace(daemon))
-			return null;
-
-		if(!Normalizer.Normalize(daemon, variables, out daemon))
-			return null;
-
-		if(!Path.IsPathFullyQualified(daemon))
-			daemon = Path.Combine(source, daemon);
-
-		if(!File.Exists(daemon))
-			throw new FileNotFoundException($"The daemon service file '{daemon}' does not exist.", daemon);
-
-		return Path.GetFullPath(daemon);
-	}
-
-	static string GetDaemonEntryName(string source, string daemon)
-	{
-		return Utility.IsExternal(source, daemon) ? Path.GetFileName(daemon) : Utility.NormalizePath(Path.GetRelativePath(source, daemon));
-	}
-
-	static Package.InstallScripts GetScripts(CommandContext context, string source, IDictionary<string, string> variables, Package metadata, string daemon, string daemonEntryName)
-	{
-		var scripts = new Package.InstallScripts(
-			ReadScript(context, SCRIPT_INSTALLING_OPTION, source, variables),
-			ReadScript(context, SCRIPT_INSTALLED_OPTION, source, variables),
-			ReadScript(context, SCRIPT_UNINSTALLING_OPTION, source, variables),
-			ReadScript(context, SCRIPT_UNINSTALLED_OPTION, source, variables));
-
-		if(daemon == null)
-			return scripts;
-
-		if(metadata.Platform != Platform.Linux)
-			Terminal.WriteLine(CommandOutletColor.DarkYellow, $"[Warn] The '{DAEMON_OPTION}' option is intended for Linux systemd services.");
-
-		var service = Path.GetFileName(daemon);
-		var servicePath = $"{metadata.InstallPath}/{daemonEntryName}";
-		var serviceLink = $"/etc/systemd/system/{service}";
-
-		var installing = $$"""
-			if command -v systemctl >/dev/null 2>&1; then
-				systemctl stop '{{service}}' >/dev/null 2>&1 || true
-			fi
-			""";
-
-		var installed = $$"""
-			install -d /etc/systemd/system
-			ln -sfn '{{servicePath}}' '{{serviceLink}}'
-			if command -v systemctl >/dev/null 2>&1; then
-				systemctl daemon-reload >/dev/null 2>&1 || true
-				systemctl enable '{{service}}' >/dev/null 2>&1 || true
-			fi
-			""";
-
-		var uninstalling = $$"""
-			if command -v systemctl >/dev/null 2>&1; then
-				systemctl stop '{{service}}' >/dev/null 2>&1 || true
-			fi
-			""";
-
-		var uninstalled = $$"""
-			rm -f '{{serviceLink}}'
-			if command -v systemctl >/dev/null 2>&1; then
-				systemctl daemon-reload >/dev/null 2>&1 || true
-			fi
-			rm -rf '{{metadata.InstallPath}}'
-			""";
-
-		return new(
-			CombineScript(installing, scripts.Installing),
-			CombineScript(installed, scripts.Installed),
-			CombineScript(uninstalling, scripts.Uninstalling),
-			CombineScript(uninstalled, scripts.Uninstalled));
-	}
-
-	static string ReadScript(CommandContext context, string option, string source, IDictionary<string, string> variables)
-	{
-		if(!context.Options.TryGetValue<string>(option, out var path) || string.IsNullOrWhiteSpace(path))
-			return null;
-
-		if(!Normalizer.Normalize(path, variables, out path))
-			return null;
-
-		if(!Path.IsPathFullyQualified(path))
-			path = Path.Combine(source, path);
-
-		if(!File.Exists(path))
-			throw new FileNotFoundException($"The script file '{path}' does not exist.", path);
-
-		return File.ReadAllText(path);
-	}
-
-	static string CombineScript(string first, string second)
-	{
-		if(string.IsNullOrWhiteSpace(first))
-			return string.IsNullOrWhiteSpace(second) ? null : second.Trim();
-		if(string.IsNullOrWhiteSpace(second))
-			return first.Trim();
-
-		return first.Trim() + Environment.NewLine + Environment.NewLine + second.Trim();
 	}
 	#endregion
 

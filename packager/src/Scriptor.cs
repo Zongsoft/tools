@@ -38,9 +38,18 @@ namespace Zongsoft.Tools.Packager;
 
 public interface IScriptor
 {
-	void Script(Package package, IDictionary<string, string> variables);
+	void Script(Scriptor.Argument argument, IDictionary<string, string> variables);
 }
 
 public partial class Scriptor
 {
+	public readonly struct Argument(string source, string daemon, string installing, string installed, string uninstalling, string uninstalled)
+	{
+		public readonly string Source = source;
+		public readonly string Daemon = daemon;
+		public readonly string Installing = installing;
+		public readonly string Installed = installed;
+		public readonly string Uninstalling = uninstalling;
+		public readonly string Uninstalled = uninstalled;
+	}
 }

@@ -41,6 +41,7 @@ namespace Zongsoft.Tools.Packager;
 internal class Dumper
 {
 	public static void UndefinedVariable(string variable, string expression) => Terminal.WriteLine(CommandOutletColor.Red, string.Format(Properties.Resources.VariableUndefined_Message, variable, expression));
+	public static void FileNotExist(string path) => Terminal.WriteLine(CommandOutletColor.DarkYellow, $"[Warn] The '{path}' file does not exist.");
 	public static void PathNotExist(string path) => Terminal.WriteLine(CommandOutletColor.DarkYellow, $"[Warn] The source path '{path}' does not exist.");
 	public static void PackageEntryConflicted(string path, string entry) => Terminal.WriteLine(CommandOutletColor.DarkYellow, $"[Warn] The source file '{path}' conflicts with an existing package entry '{entry}'.");
 }

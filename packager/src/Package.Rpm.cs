@@ -38,10 +38,15 @@ namespace Zongsoft.Tools.Packager;
 
 partial class Package
 {
-	public sealed class Rpm(string name, string edition, Version version, Platform platform, Architecture architecture) : Package(name, edition, version, platform, architecture)
+	public sealed class Rpm : Package
 	{
-		internal const string EXTENSION = ".rpm";
-		internal override string FileName => this.GetFileName(EXTENSION);
+		public Rpm(string name, string edition, Version version, Platform platform, Architecture architecture) : base(name, edition, version, platform, architecture)
+		{
+			this.Scriptor = new Scriptor.Systemd(this);
+			this.InstallPath = Utility.Unix.GetInstallPath(name);
+		}
+
+		internal override string FileName => this.GetFileName(".rpm");
 
 		public string[] Provides { get; set; }
 		public string[] Conflicts { get; set; }
