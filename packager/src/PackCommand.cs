@@ -158,7 +158,6 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 
 		variables[SOURCE_OPTION] = source;
 		variables[OUTPUT_OPTION] = output;
-		context.Parameters.SetValue("Variables", variables);
 
 		var directory = Path.GetDirectoryName(output);
 		if(!string.IsNullOrEmpty(directory))
