@@ -182,7 +182,7 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 			writer.WriteLine(identifier.ToString());
 			writer.Close();
 
-			package.Entries.Add(filePath, ".version");
+			package.Entries.Add(source, $"{filePath}:.version");
 		}
 
 		//打包，制作安装包
