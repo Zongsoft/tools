@@ -34,6 +34,7 @@
 using System;
 using System.IO;
 using System.Text;
+using System.Linq;
 using System.Formats.Tar;
 using System.IO.Compression;
 using System.Collections.Generic;
@@ -54,7 +55,7 @@ partial class Generator
 
 		WriteArHeader(stream);
 		WriteArEntry(stream, "debian-binary", Encoding.ASCII.GetBytes("2.0\n"));
-		WriteArEntry(stream, "control.tar.gz", CreateControlTarball(control, package.Scripts));
+		WriteArEntry(stream, "control.tar.gz", CreateControlTarball(control, package));
 		WriteArEntry(stream, "data.tar.gz", CreateDataTarball(package.Entries));
 	}
 
@@ -101,21 +102,38 @@ partial class Generator
 		return memory.ToArray();
 	}
 
-	static byte[] CreateControlTarball(string control, Package.InstallScripts scripts)
+	static byte[] CreateControlTarball(string control, Package package)
 	{
 		using var memory = new MemoryStream();
 		using(var gzip = new GZipStream(memory, CompressionLevel.Optimal, true))
 		using(var writer = new TarWriter(gzip, TarEntryFormat.Pax, true))
 		{
 			WriteTarText(writer, "control", control, 0644);
-			WriteTarScript(writer, "preinst", scripts.Installing);
-			WriteTarScript(writer, "postinst", scripts.Installed);
-			WriteTarScript(writer, "prerm", scripts.Uninstalling);
-			WriteTarScript(writer, "postrm", scripts.Uninstalled);
+			WriteTarScript(writer, "preinst", package.Scripts.Installing);
+			WriteTarScript(writer, "postinst", package.Scripts.Installed);
+			WriteTarScript(writer, "prerm", package.Scripts.Uninstalling);
+			WriteTarScript(writer, "postrm", package.Scripts.Uninstalled);
+
+			var conffiles = GetDebianConfigurationFiles(package.Entries);
+			if(!string.IsNullOrEmpty(conffiles))
+				WriteTarText(writer, "conffiles", conffiles, 0644);
 		}
 
 		return memory.ToArray();
 	}
+
+	static string GetDebianConfigurationFiles(IReadOnlyCollection<Package.Entry> entries)
+	{
+		var files = entries
+			.Where(IsDebianConfigurationFile)
+			.Select(entry => "/" + Utility.NormalizePath(entry.EntryName))
+			.Order(StringComparer.Ordinal)
+			.ToArray();
+
+		return files.Length == 0 ? null : string.Join('\n', files) + "\n";
+	}
+
+	static bool IsDebianConfigurationFile(Package.Entry entry) => entry.Rooted && entry.EntryName.StartsWith("etc/", StringComparison.Ordinal);
 
 	static void WriteArHeader(Stream stream) => stream.Write(Encoding.ASCII.GetBytes("!<arch>\n"));
 

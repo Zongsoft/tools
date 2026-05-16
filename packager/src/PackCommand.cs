@@ -66,10 +66,18 @@ namespace Zongsoft.Tools.Packager;
 [CommandOption(DAEMON_OPTION, typeof(string))]
 [CommandOption(DAEMON_BIND_OPTION, typeof(string))]
 [CommandOption(DAEMON_ENVIRONMENTS_OPTION, typeof(string))]
-[CommandOption(SCRIPT_INSTALLING_OPTION, typeof(string))]
-[CommandOption(SCRIPT_INSTALLED_OPTION, typeof(string))]
-[CommandOption(SCRIPT_UNINSTALLING_OPTION, typeof(string))]
-[CommandOption(SCRIPT_UNINSTALLED_OPTION, typeof(string))]
+[CommandOption(INSTALLING_OPTION, typeof(string))]
+[CommandOption(INSTALLED_OPTION, typeof(string))]
+[CommandOption(UNINSTALLING_OPTION, typeof(string))]
+[CommandOption(UNINSTALLED_OPTION, typeof(string))]
+[CommandOption(PREINSTALLING_OPTION, typeof(string))]
+[CommandOption(POSTINSTALLING_OPTION, typeof(string))]
+[CommandOption(PREINSTALLED_OPTION, typeof(string))]
+[CommandOption(POSTINSTALLED_OPTION, typeof(string))]
+[CommandOption(PREUNINSTALLING_OPTION, typeof(string))]
+[CommandOption(POSTUNINSTALLING_OPTION, typeof(string))]
+[CommandOption(PREUNINSTALLED_OPTION, typeof(string))]
+[CommandOption(POSTUNINSTALLED_OPTION, typeof(string))]
 public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext> where TPackage : Package
 {
 	#region 常量定义
@@ -95,10 +103,18 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	protected const string DAEMON_OPTION = Variables.DaemonVariable.DAEMON;
 	protected const string DAEMON_BIND_OPTION = Variables.DaemonVariable.DAEMON_BIND;
 	protected const string DAEMON_ENVIRONMENTS_OPTION = Variables.DaemonVariable.DAEMON_ENVIRONMENTS;
-	protected const string SCRIPT_INSTALLING_OPTION = Variables.ScriptVariable.INSTALLING;
-	protected const string SCRIPT_INSTALLED_OPTION = Variables.ScriptVariable.INSTALLED;
-	protected const string SCRIPT_UNINSTALLING_OPTION = Variables.ScriptVariable.UNINSTALLING;
-	protected const string SCRIPT_UNINSTALLED_OPTION = Variables.ScriptVariable.UNINSTALLED;
+	protected const string INSTALLING_OPTION = Variables.ScriptVariable.INSTALLING;
+	protected const string INSTALLED_OPTION = Variables.ScriptVariable.INSTALLED;
+	protected const string UNINSTALLING_OPTION = Variables.ScriptVariable.UNINSTALLING;
+	protected const string UNINSTALLED_OPTION = Variables.ScriptVariable.UNINSTALLED;
+	protected const string PREINSTALLING_OPTION = Variables.ScriptVariable.PREINSTALLING;
+	protected const string POSTINSTALLING_OPTION = Variables.ScriptVariable.POSTINSTALLING;
+	protected const string PREINSTALLED_OPTION = Variables.ScriptVariable.PREINSTALLED;
+	protected const string POSTINSTALLED_OPTION = Variables.ScriptVariable.POSTINSTALLED;
+	protected const string PREUNINSTALLING_OPTION = Variables.ScriptVariable.PREUNINSTALLING;
+	protected const string POSTUNINSTALLING_OPTION = Variables.ScriptVariable.POSTUNINSTALLING;
+	protected const string PREUNINSTALLED_OPTION = Variables.ScriptVariable.PREUNINSTALLED;
+	protected const string POSTUNINSTALLED_OPTION = Variables.ScriptVariable.POSTUNINSTALLED;
 
 	private const string DEFAULT_COMPILATION = "Release";
 	private const string DEFAULT_MAINTAINER = "Zongsoft Studio <zongsoft@gmail.com>";

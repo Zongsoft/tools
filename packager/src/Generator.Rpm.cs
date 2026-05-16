@@ -48,6 +48,7 @@ partial class Generator
 	const int RPM_SENSE_GREATER = 4;
 	const int RPM_SENSE_EQUAL = 8;
 	const int RPM_SENSE_RPMLIB = 1 << 24;
+	const int RPM_FILE_CONFIG = 1;
 
 	public static void Rpm(this Package.Rpm package, string output, bool overwrite)
 	{
@@ -163,21 +164,21 @@ partial class Generator
 		foreach(var directory in directories)
 		{
 			var fullName = directory == "/" ? "/" : directory + "/";
-			AddRpmEntry(result, directories, fullName, 0, 0040755, DateTimeOffset.UtcNow.ToUnixTimeSeconds(), string.Empty);
+			AddRpmEntry(result, directories, fullName, 0, 0040755, DateTimeOffset.UtcNow.ToUnixTimeSeconds(), string.Empty, 0);
 		}
 
 		foreach(var entry in entries)
 		{
 			using var stream = File.OpenRead(entry.Source);
 			var digest = Convert.ToHexString(SHA1.HashData(stream)).ToLowerInvariant();
-			AddRpmEntry(result, directories, GetRpmPath(entry.EntryName), entry.Size, 0100000 | entry.Mode, entry.ModifiedTime, digest);
+			AddRpmEntry(result, directories, GetRpmPath(entry.EntryName), entry.Size, 0100000 | entry.Mode, entry.ModifiedTime, digest, IsRpmConfigurationFile(entry) ? RPM_FILE_CONFIG : 0);
 		}
 
 		result.Directories.AddRange(directories.ConvertAll(directory => directory.EndsWith('/') ? directory : directory + "/"));
 		return result;
 	}
 
-	static void AddRpmEntry(RpmEntryCollection entries, IReadOnlyList<string> directories, string fullName, long size, int mode, long modified, string digest)
+	static void AddRpmEntry(RpmEntryCollection entries, IReadOnlyList<string> directories, string fullName, long size, int mode, long modified, string digest, int flags)
 	{
 		var name = fullName.TrimEnd('/');
 		var directory = fullName.EndsWith('/') ?
@@ -199,9 +200,12 @@ partial class Generator
 			mode,
 			modified,
 			digest,
+			flags,
 			directoryIndex < 0 ? 0 : directoryIndex,
 			fullName == "/" ? string.Empty : Path.GetFileName(name)));
 	}
+
+	static bool IsRpmConfigurationFile(Package.Entry entry) => entry.Rooted && entry.EntryName.StartsWith("etc/", StringComparison.Ordinal);
 
 	static void Align(Stream stream, int size) => Pad(stream, size);
 	static void Pad(Stream stream, int size)
@@ -373,7 +377,7 @@ partial class Generator
 	};
 
 	readonly record struct RpmHeaderIndex(int Tag, int Type, int Offset, int Count);
-	readonly record struct RpmEntry(int Inode, long Size, int Mode, long ModifiedTime, string Digest, int DirectoryIndex, string BaseName);
+	readonly record struct RpmEntry(int Inode, long Size, int Mode, long ModifiedTime, string Digest, int Flags, int DirectoryIndex, string BaseName);
 	readonly record struct RpmDependency(string Name, int Flags, string Version);
 
 	sealed class RpmSignature
@@ -425,7 +429,7 @@ partial class Generator
 			builder.AddInt32Array(1034, rpmEntries.ConvertAll(entry => (int)entry.ModifiedTime));
 			builder.AddStringArray(1035, rpmEntries.ConvertAll(entry => entry.Digest));
 			builder.AddStringArray(1036, rpmEntries.ConvertAll(_ => string.Empty));
-			builder.AddInt32Array(1037, rpmEntries.ConvertAll(_ => 0));
+			builder.AddInt32Array(1037, rpmEntries.ConvertAll(entry => entry.Flags));
 			builder.AddStringArray(1039, rpmEntries.ConvertAll(_ => "root"));
 			builder.AddStringArray(1040, rpmEntries.ConvertAll(_ => "root"));
 			builder.AddInt32Array(1045, rpmEntries.ConvertAll(_ => -1));

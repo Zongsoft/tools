@@ -141,6 +141,7 @@ Entry rules:
 
 - Relative paths are resolved from `--source`.
 - Absolute paths outside `--source` are allowed; if no alias is specified, their file name is used.
+- If an alias starts with `/`, the entry is installed relative to the Linux file system root; for example `nginx.conf:/etc/nginx/conf.d/app.conf`.
 - Directories are included recursively.
 - File globbing supports `*` and `?` in the last path segment.
 - Duplicate destination paths are reported as conflicts and skipped.
@@ -193,8 +194,13 @@ The packager currently uses a systemd-oriented script generator for all package 
 | `--script-installed:<path>` | Source-relative shell script file run after install. |
 | `--script-uninstalling:<path>` | Source-relative shell script file run before uninstall. |
 | `--script-uninstalled:<path>` | Source-relative shell script file run after uninstall. |
+| `--preinstalling:<paths>` / `--postinstalling:<paths>` | Extra script files run before/after the main pre-install script. |
+| `--preinstalled:<paths>` / `--postinstalled:<paths>` | Extra script files run before/after the main post-install script. |
+| `--preuninstalling:<paths>` / `--postuninstalling:<paths>` | Extra script files run before/after the main pre-uninstall script. |
+| `--preuninstalled:<paths>` / `--postuninstalled:<paths>` | Extra script files run before/after the main post-uninstall script. |
 
 If lifecycle scripts are not provided, default scripts are generated to stop the service before install/uninstall, create or update `/etc/systemd/system/<service>`, reload systemd, and enable the service.
+Extra script options append to the generated or custom main scripts instead of replacing them. Use `;` or `|` to separate multiple script paths.
 
 ### RPM-Only Options
 

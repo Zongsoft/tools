@@ -34,6 +34,7 @@
 using System;
 using System.IO;
 using System.Text;
+using System.Linq;
 using System.Formats.Tar;
 using System.IO.Compression;
 
@@ -52,7 +53,12 @@ partial class Generator
 		using var writer = new TarWriter(gzip, TarEntryFormat.Pax, false);
 
 		foreach(var entry in package.Entries)
-			WriteTarEntry(writer, entry);
+		{
+			if(entry.Rooted)
+				WriteTarEntry(writer, entry, ".install/root/" + entry.EntryName);
+			else
+				WriteTarEntry(writer, entry);
+		}
 
 		WriteTarScript(writer, ".install/installing.sh", package.Scripts.Installing);
 		WriteTarScript(writer, ".install/installed.sh", package.Scripts.Installed);
@@ -61,9 +67,9 @@ partial class Generator
 		WriteTarText(writer, "install.sh", CreateInstallScript(package), 0755);
 	}
 
-	static void WriteTarEntry(TarWriter writer, Package.Entry item)
+	static void WriteTarEntry(TarWriter writer, Package.Entry item, string name = null)
 	{
-		var entry = new PaxTarEntry(TarEntryType.RegularFile, item.EntryName)
+		var entry = new PaxTarEntry(TarEntryType.RegularFile, name ?? item.EntryName)
 		{
 			Mode = (UnixFileMode)item.Mode,
 			ModificationTime = DateTimeOffset.FromUnixTimeSeconds(item.ModifiedTime),
@@ -100,6 +106,9 @@ partial class Generator
 	{
 		var installPath = Quote(package.InstallPath);
 		var packageName = Quote(package.PackageName);
+		var rootEntries = package.Entries.Where(entry => entry.Rooted).ToArray();
+		var rootInstallScript = CreateRootInstallScript(rootEntries);
+		var rootUninstallScript = CreateRootUninstallScript(rootEntries);
 
 		return $$"""
 			#!/bin/sh
@@ -120,6 +129,7 @@ partial class Generator
 			if [ "${1:-install}" = "uninstall" ]; then
 				run_hook uninstalling.sh
 				rm -rf "$TARGET"
+				{{rootUninstallScript}}
 				run_hook uninstalled.sh
 				echo "Uninstalled {{packageName}} from $TARGET"
 				exit 0
@@ -138,10 +148,49 @@ partial class Generator
 					tar -cf - -T - |
 					tar -xpf - -C "$TARGET"
 			)
+			{{rootInstallScript}}
 			run_hook installed.sh
 			echo "Installed {{packageName}} to $TARGET"
 			""";
 
 		static string Quote(string value) => string.IsNullOrEmpty(value) ? "''" : $"'{value.Replace("'", "'\"'\"'")}'";
 	}
+
+	static string CreateRootInstallScript(Package.Entry[] entries)
+	{
+		if(entries == null || entries.Length == 0)
+			return ":";
+
+		var builder = new StringBuilder();
+
+		builder.AppendLine("if [ -d \"$SOURCE_DIR/.install/root\" ]; then");
+
+		foreach(var entry in entries)
+		{
+			var path = Quote(entry.EntryName);
+			builder.AppendLine($"\troot_source=\"$SOURCE_DIR/.install/root/{path}\"");
+			builder.AppendLine($"\troot_target=\"${{DESTDIR%/}}/{path}\"");
+			builder.AppendLine("\tinstall -d \"$(dirname -- \"$root_target\")\"");
+			builder.AppendLine($"\tinstall -m {GetInstallMode(entry.Mode)} \"$root_source\" \"$root_target\"");
+		}
+
+		builder.Append("fi");
+		return builder.ToString();
+	}
+
+	static string CreateRootUninstallScript(Package.Entry[] entries)
+	{
+		if(entries == null || entries.Length == 0)
+			return ":";
+
+		var builder = new StringBuilder();
+
+		foreach(var entry in entries)
+			builder.AppendLine($"rm -f \"${{DESTDIR%/}}/{Quote(entry.EntryName)}\"");
+
+		return builder.ToString().TrimEnd();
+	}
+
+	static string Quote(string value) => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\"", "\\\"");
+	static string GetInstallMode(int mode) => mode <= 511 ? Convert.ToString(mode, 8).PadLeft(4, '0') : mode.ToString("0000");
 }

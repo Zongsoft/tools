@@ -33,6 +33,8 @@
 
 using System;
 using System.IO;
+using System.Linq;
+using System.Collections.Generic;
 
 namespace Zongsoft.Tools.Packager;
 
@@ -44,10 +46,12 @@ partial class Scriptor
 
 		public void Script()
 		{
-			var installing = ReadFile(Normalizer.Variables.Source, Normalizer.Variables.Script.Installing);
-			var installed = ReadFile(Normalizer.Variables.Source, Normalizer.Variables.Script.Installed);
-			var uninstalling = ReadFile(Normalizer.Variables.Source, Normalizer.Variables.Script.Uninstalling);
-			var uninstalled = ReadFile(Normalizer.Variables.Source, Normalizer.Variables.Script.Uninstalled);
+			var source = Normalizer.Variables.Source;
+			var scripts = Normalizer.Variables.Script;
+			var installing = ReadFile(source, scripts.Installing);
+			var installed = ReadFile(source, scripts.Installed);
+			var uninstalling = ReadFile(source, scripts.Uninstalling);
+			var uninstalled = ReadFile(source, scripts.Uninstalled);
 			var daemon = Normalizer.Variables.Daemon;
 
 			if(daemon.Disabled)
@@ -66,7 +70,11 @@ partial class Scriptor
 					rm -rf '{{_package.InstallPath}}'
 					""";
 
-				_package.Scripts = new(installing, installed, uninstalling, uninstalled);
+				_package.Scripts = new(
+					Combine(ReadFiles(source, scripts.PreInstalling), installing, ReadFiles(source, scripts.PostInstalling)),
+					Combine(ReadFiles(source, scripts.PreInstalled), installed, ReadFiles(source, scripts.PostInstalled)),
+					Combine(ReadFiles(source, scripts.PreUninstalling), uninstalling, ReadFiles(source, scripts.PostUninstalling)),
+					Combine(ReadFiles(source, scripts.PreUninstalled), uninstalled, ReadFiles(source, scripts.PostUninstalled)));
 				return;
 			}
 
@@ -122,7 +130,11 @@ partial class Scriptor
 				rm -rf '{{_package.InstallPath}}'
 				""";
 
-			_package.Scripts = new(installing, installed, uninstalling, uninstalled);
+			_package.Scripts = new(
+				Combine(ReadFiles(source, scripts.PreInstalling), installing, ReadFiles(source, scripts.PostInstalling)),
+				Combine(ReadFiles(source, scripts.PreInstalled), installed, ReadFiles(source, scripts.PostInstalled)),
+				Combine(ReadFiles(source, scripts.PreUninstalling), uninstalling, ReadFiles(source, scripts.PostUninstalling)),
+				Combine(ReadFiles(source, scripts.PreUninstalled), uninstalled, ReadFiles(source, scripts.PostUninstalled)));
 		}
 
 		static string ReadFile(string source, string path)
@@ -130,12 +142,59 @@ partial class Scriptor
 			if(string.IsNullOrEmpty(path))
 				return null;
 
-			path = Path.Combine(source, path);
+			if(path.Contains('\r') || path.Contains('\n'))
+				return path;
 
-			if(!File.Exists(path))
-				throw new FileNotFoundException($"The script file '{path}' does not exist.", path);
+			var file = Path.IsPathFullyQualified(path) ? path : Path.Combine(source, path);
 
-			return File.ReadAllText(path);
+			if(!File.Exists(file))
+			{
+				if(!IsPathLike(path))
+					return path;
+
+				throw new FileNotFoundException($"The script file '{file}' does not exist.", file);
+			}
+
+			return File.ReadAllText(file);
+		}
+
+		static bool IsPathLike(string path) =>
+			Path.IsPathFullyQualified(path) ||
+			path.Contains('/') ||
+			path.Contains('\\') ||
+			path.EndsWith(".sh", StringComparison.OrdinalIgnoreCase);
+
+		static string[] ReadFiles(string source, string paths)
+		{
+			if(string.IsNullOrWhiteSpace(paths))
+				return [];
+
+			return paths
+				.Split([';', '|'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+				.Select(path => ReadFile(source, path))
+				.Where(script => !string.IsNullOrWhiteSpace(script))
+				.ToArray();
+		}
+
+		static string Combine(params object[] scripts)
+		{
+			if(scripts == null || scripts.Length == 0)
+				return null;
+
+			var items = scripts
+				.SelectMany(script => script switch
+				{
+					null => [],
+					string text => [text],
+					string[] values => values,
+					IEnumerable<string> values => values,
+					_ => [script.ToString()],
+				})
+				.Where(script => !string.IsNullOrWhiteSpace(script))
+				.Select(script => script.Trim())
+				.ToArray();
+
+			return items.Length == 0 ? null : string.Join(Environment.NewLine + Environment.NewLine, items);
 		}
 
 		static string GetHostFile(string source, Package package)

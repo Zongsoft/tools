@@ -104,7 +104,15 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 		this[ScriptVariable.INSTALLING],
 		this[ScriptVariable.INSTALLED],
 		this[ScriptVariable.UNINSTALLING],
-		this[ScriptVariable.UNINSTALLED]
+		this[ScriptVariable.UNINSTALLED],
+		this[ScriptVariable.PREINSTALLING],
+		this[ScriptVariable.POSTINSTALLING],
+		this[ScriptVariable.PREINSTALLED],
+		this[ScriptVariable.POSTINSTALLED],
+		this[ScriptVariable.PREUNINSTALLING],
+		this[ScriptVariable.POSTUNINSTALLING],
+		this[ScriptVariable.PREUNINSTALLED],
+		this[ScriptVariable.POSTUNINSTALLED]
 	);
 	#endregion
 
@@ -150,22 +158,59 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 
 	public readonly struct ScriptVariable
 	{
-		internal const string INSTALLING = "script-installing";
-		internal const string INSTALLED = "script-installed";
-		internal const string UNINSTALLING = "script-uninstalling";
-		internal const string UNINSTALLED = "script-uninstalled";
+		internal const string INSTALLING = "installing";
+		internal const string INSTALLED = "installed";
+		internal const string UNINSTALLING = "uninstalling";
+		internal const string UNINSTALLED = "uninstalled";
 
-		public ScriptVariable(string installing, string installed, string uninstalling, string uninstalled)
+		internal const string PREINSTALLING = "preinstalling";
+		internal const string POSTINSTALLING = "postinstalling";
+		internal const string PREINSTALLED = "preinstalled";
+		internal const string POSTINSTALLED = "postinstalled";
+		internal const string PREUNINSTALLING = "preuninstalling";
+		internal const string POSTUNINSTALLING = "postuninstalling";
+		internal const string PREUNINSTALLED = "preuninstalled";
+		internal const string POSTUNINSTALLED = "postuninstalled";
+
+		public ScriptVariable(
+			string installing,
+			string installed,
+			string uninstalling,
+			string uninstalled,
+			string preinstalling,
+			string postinstalling,
+			string preinstalled,
+			string postinstalled,
+			string preuninstalling,
+			string postuninstalling,
+			string preuninstalled,
+			string postuninstalled)
 		{
 			this.Installing = installing;
 			this.Installed = installed;
 			this.Uninstalling = uninstalling;
 			this.Uninstalled = uninstalled;
+			this.PreInstalling = preinstalling;
+			this.PostInstalling = postinstalling;
+			this.PreInstalled = preinstalled;
+			this.PostInstalled = postinstalled;
+			this.PreUninstalling = preuninstalling;
+			this.PostUninstalling = postuninstalling;
+			this.PreUninstalled = preuninstalled;
+			this.PostUninstalled = postuninstalled;
 		}
 
 		public readonly string Installing;
 		public readonly string Installed;
 		public readonly string Uninstalling;
 		public readonly string Uninstalled;
+		public readonly string PreInstalling;
+		public readonly string PostInstalling;
+		public readonly string PreInstalled;
+		public readonly string PostInstalled;
+		public readonly string PreUninstalling;
+		public readonly string PostUninstalling;
+		public readonly string PreUninstalled;
+		public readonly string PostUninstalled;
 	}
 }

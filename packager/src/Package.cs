@@ -139,13 +139,14 @@ public abstract partial class Package
 		string Uninstalling,
 		string Uninstalled);
 
-	public readonly struct Entry(string source, string entryName, long size, long modifiedTime, int mode)
+	public readonly struct Entry(string source, string entryName, long size, long modifiedTime, int mode, bool rooted)
 	{
 		public readonly string Source = source;
 		public readonly string EntryName = entryName;
 		public readonly long Size = size;
 		public readonly long ModifiedTime = modifiedTime;
 		public readonly int Mode = mode;
+		public readonly bool Rooted = rooted;
 
 		public override string ToString() => string.IsNullOrEmpty(this.Source) ?
 			$"{this.EntryName}({this.Size})" :
@@ -206,6 +207,8 @@ public abstract partial class Package
 
 		static void AddEntry(List<Package.Entry> entries, ISet<string> names, string source, string path, string alias, string prefix)
 		{
+			var rooted = IsRootedAlias(alias);
+
 			if(alias != null)
 				alias = alias
 					.Trim('~')
@@ -234,10 +237,10 @@ public abstract partial class Package
 					alias = string.Empty;
 
 				foreach(var file in Directory.GetFiles(working, pattern))
-					AddFile(entries, names, file, Path.Combine(alias, Path.GetFileName(file)), prefix);
+					AddFile(entries, names, file, Path.Combine(alias, Path.GetFileName(file)), rooted ? null : prefix, rooted);
 
 				foreach(var directory in Directory.GetDirectories(working, pattern))
-					AddDirectory(entries, names, source, directory, Path.Combine(alias, Path.GetFileName(directory)), prefix);
+					AddDirectory(entries, names, source, directory, Path.Combine(alias, Path.GetFileName(directory)), rooted ? null : prefix, rooted);
 			}
 			else
 			{
@@ -247,24 +250,26 @@ public abstract partial class Package
 					alias = string.Empty;
 
 				if(File.Exists(path))
-					AddFile(entries, names, path, alias, prefix);
+					AddFile(entries, names, path, alias, rooted ? null : prefix, rooted);
 				else if(Directory.Exists(path))
-					AddDirectory(entries, names, source, path, alias, prefix);
+					AddDirectory(entries, names, source, path, alias, rooted ? null : prefix, rooted);
 				else
 					Dumper.PathNotExist(path);
 			}
 		}
 
-		static void AddDirectory(List<Package.Entry> entries, ISet<string> names, string source, string path, string alias, string prefix)
+		static bool IsRootedAlias(string alias) => !string.IsNullOrEmpty(alias) && (alias[0] == '/' || alias[0] == '\\');
+
+		static void AddDirectory(List<Package.Entry> entries, ISet<string> names, string source, string path, string alias, string prefix, bool rooted)
 		{
 			foreach(var file in Directory.GetFiles(path))
-				AddFile(entries, names, file, Path.Combine(alias, Path.GetFileName(file)), prefix);
+				AddFile(entries, names, file, Path.Combine(alias, Path.GetFileName(file)), prefix, rooted);
 
 			foreach(var directory in Directory.GetDirectories(path))
-				AddDirectory(entries, names, source, directory, Path.Combine(alias, Path.GetFileName(directory)), prefix);
+				AddDirectory(entries, names, source, directory, Path.Combine(alias, Path.GetFileName(directory)), prefix, rooted);
 		}
 
-		static void AddFile(List<Package.Entry> entries, ISet<string> names, string source, string entryName, string prefix)
+		static void AddFile(List<Package.Entry> entries, ISet<string> names, string source, string entryName, string prefix, bool rooted)
 		{
 			if(string.IsNullOrEmpty(entryName))
 				entryName = Path.GetFileName(source);
@@ -277,15 +282,16 @@ public abstract partial class Package
 			}
 
 			entryName = Utility.NormalizePath(Path.Combine(prefix ?? string.Empty, entryName));
+			var key = rooted ? $"/{entryName}" : entryName;
 
-			if(names != null && !names.Add(entryName))
+			if(names != null && !names.Add(key))
 			{
 				Dumper.PackageEntryConflicted(source, entryName);
 				return;
 			}
 
 			var file = new FileInfo(source);
-			entries.Add(new Package.Entry(source, entryName, file.Length, Utility.Unix.GetTimestamp(file.LastWriteTimeUtc), Utility.Unix.GetFileMode(source)));
+			entries.Add(new Package.Entry(source, entryName, file.Length, Utility.Unix.GetTimestamp(file.LastWriteTimeUtc), Utility.Unix.GetFileMode(source), rooted));
 		}
 
 		IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();

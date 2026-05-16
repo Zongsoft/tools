@@ -141,6 +141,7 @@ dotnet-pack deb --name:MyApp --version:1.0.0 --platform:linux --framework:net10.
 
 - 相对路径以 `--source` 为基准解析。
 - 允许指定 `--source` 之外的绝对路径；若未指定别名，则使用该文件名。
+- 若别名以 `/` 开头，则该条目安装到 Linux 文件系统根路径；例如 `nginx.conf:/etc/nginx/conf.d/app.conf`。
 - 目录会被递归包含。
 - 文件通配符支持在最后一级路径中使用 `*` 与 `?`。
 - 重复的目标路径会被报告为冲突并跳过。
@@ -193,8 +194,13 @@ dotnet-pack deb --name:MyApp --version:1.0.0 --platform:linux --framework:net10.
 | `--script-installed:<path>` | 安装后执行的源目录相对 shell 脚本文件。 |
 | `--script-uninstalling:<path>` | 卸载前执行的源目录相对 shell 脚本文件。 |
 | `--script-uninstalled:<path>` | 卸载后执行的源目录相对 shell 脚本文件。 |
+| `--preinstalling:<paths>` / `--postinstalling:<paths>` | 在安装前主体脚本之前/之后追加执行的脚本文件列表。 |
+| `--preinstalled:<paths>` / `--postinstalled:<paths>` | 在安装后主体脚本之前/之后追加执行的脚本文件列表。 |
+| `--preuninstalling:<paths>` / `--postuninstalling:<paths>` | 在卸载前主体脚本之前/之后追加执行的脚本文件列表。 |
+| `--preuninstalled:<paths>` / `--postuninstalled:<paths>` | 在卸载后主体脚本之前/之后追加执行的脚本文件列表。 |
 
 如果未提供生命周期脚本，工具会生成默认脚本：安装/卸载前停止服务，创建或更新 `/etc/systemd/system/<service>`，重载 systemd，并启用服务。
+追加脚本选项不会替换默认脚本，多个脚本路径可用分号 `;` 或管道符 `|` 分隔。
 
 ### RPM 专用选项
 
