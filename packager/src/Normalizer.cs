@@ -107,7 +107,7 @@ public class Normalizer
 
 		try
 		{
-			var value = _variableRegex.Replace(text.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar), match =>
+			var value = _variableRegex.Replace(text, match =>
 			{
 				if(match.Success && match.Groups.TryGetValue(REGEX_VARIABLE_NAME, out var group))
 				{
