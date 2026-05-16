@@ -81,11 +81,7 @@ internal static class Utility
 				return "/opt";
 
 			name = name.ToLowerInvariant();
-			var index = name.IndexOf('.');
-
-			return index > 0 ?
-				$"/opt/{name[..index]}/{name}":
-				$"/opt/{name}";
+			return $"/opt/{name.Replace('.', '/')}";
 		}
 
 		public static int GetFileMode(string path)
