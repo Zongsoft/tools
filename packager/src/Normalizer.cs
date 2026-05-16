@@ -127,9 +127,8 @@ public class Normalizer
 			return Result.Failure(ex.Variable);
 		}
 	}
-	#endregion
 
-	internal static string NormalizeFile(string text)
+	public static string NormalizeFile(string text)
 	{
 		if(string.IsNullOrWhiteSpace(text))
 			return null;
@@ -139,15 +138,7 @@ public class Normalizer
 
 		return File.Exists(result) ? File.ReadAllText(result) : result;
 	}
-
-	internal static string[] NormalizeList(string text)
-	{
-		if(string.IsNullOrWhiteSpace(text))
-			return [];
-
-		return TryNormalize(text, out var result) ?
-			result.Split([',', ';', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) : [];
-	}
+	#endregion
 
 	#region 嵌套结构
 	public readonly struct Result

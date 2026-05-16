@@ -156,9 +156,10 @@ public abstract partial class Package
 	public sealed class EntryCollection(Package package) : IReadOnlyCollection<Entry>
 	{
 		private readonly Package _package = package;
-		private readonly List<Entry> _entries = new();
+		private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
 
 		public int Count => _entries.Count;
+		public bool Contains(string name) => name != null && _entries.ContainsKey(name);
 
 		internal void Add(string source, string argument)
 		{
@@ -173,17 +174,15 @@ public abstract partial class Package
 			var path = index > 0 ? text[..index].Trim() : text;
 			var alias = index > 0 ? text[(index + 1)..].Trim() : null;
 
-			AddEntry(_entries, null, source, path, alias, _package.EntryPrefix);
+			this.AddEntry(source, path, alias, _package.EntryPrefix);
 		}
 
 		internal void Load(string source, IReadOnlyCollection<string> arguments)
 		{
-			var names = new HashSet<string>(StringComparer.Ordinal);
-
 			if(arguments == null || arguments.Count == 0)
 			{
 				foreach(var file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
-					AddEntry(_entries, names, source, file, Path.GetRelativePath(source, file), _package.EntryPrefix);
+					this.AddEntry(source, file, Path.GetRelativePath(source, file), _package.EntryPrefix);
 
 				return;
 			}
@@ -201,11 +200,11 @@ public abstract partial class Package
 				var path = index > 0 ? text[..index].Trim() : text;
 				var alias = index > 0 ? text[(index + 1)..].Trim() : null;
 
-				AddEntry(_entries, names, source, path, alias, _package.EntryPrefix);
+				this.AddEntry(source, path, alias, _package.EntryPrefix);
 			}
 		}
 
-		static void AddEntry(List<Package.Entry> entries, ISet<string> names, string source, string path, string alias, string prefix)
+		void AddEntry(string source, string path, string alias, string prefix)
 		{
 			var rooted = IsRootedAlias(alias);
 
@@ -237,10 +236,10 @@ public abstract partial class Package
 					alias = string.Empty;
 
 				foreach(var file in Directory.GetFiles(working, pattern))
-					AddFile(entries, names, file, Path.Combine(alias, Path.GetFileName(file)), rooted ? null : prefix, rooted);
+					this.AddFile(file, Path.Combine(alias, Path.GetFileName(file)), rooted ? null : prefix, rooted);
 
 				foreach(var directory in Directory.GetDirectories(working, pattern))
-					AddDirectory(entries, names, source, directory, Path.Combine(alias, Path.GetFileName(directory)), rooted ? null : prefix, rooted);
+					this.AddDirectory(source, directory, Path.Combine(alias, Path.GetFileName(directory)), rooted ? null : prefix, rooted);
 			}
 			else
 			{
@@ -250,26 +249,26 @@ public abstract partial class Package
 					alias = string.Empty;
 
 				if(File.Exists(path))
-					AddFile(entries, names, path, alias, rooted ? null : prefix, rooted);
+					this.AddFile(path, alias, rooted ? null : prefix, rooted);
 				else if(Directory.Exists(path))
-					AddDirectory(entries, names, source, path, alias, rooted ? null : prefix, rooted);
+					this.AddDirectory(source, path, alias, rooted ? null : prefix, rooted);
 				else
 					Dumper.PathNotExist(path);
 			}
+
+			static bool IsRootedAlias(string alias) => !string.IsNullOrEmpty(alias) && (alias[0] == '/' || alias[0] == '\\');
 		}
 
-		static bool IsRootedAlias(string alias) => !string.IsNullOrEmpty(alias) && (alias[0] == '/' || alias[0] == '\\');
-
-		static void AddDirectory(List<Package.Entry> entries, ISet<string> names, string source, string path, string alias, string prefix, bool rooted)
+		void AddDirectory(string source, string path, string alias, string prefix, bool rooted)
 		{
 			foreach(var file in Directory.GetFiles(path))
-				AddFile(entries, names, file, Path.Combine(alias, Path.GetFileName(file)), prefix, rooted);
+				this.AddFile(file, Path.Combine(alias, Path.GetFileName(file)), prefix, rooted);
 
 			foreach(var directory in Directory.GetDirectories(path))
-				AddDirectory(entries, names, source, directory, Path.Combine(alias, Path.GetFileName(directory)), prefix, rooted);
+				this.AddDirectory(source, directory, Path.Combine(alias, Path.GetFileName(directory)), prefix, rooted);
 		}
 
-		static void AddFile(List<Package.Entry> entries, ISet<string> names, string source, string entryName, string prefix, bool rooted)
+		void AddFile(string source, string entryName, string prefix, bool rooted)
 		{
 			if(string.IsNullOrEmpty(entryName))
 				entryName = Path.GetFileName(source);
@@ -284,18 +283,18 @@ public abstract partial class Package
 			entryName = Utility.NormalizePath(Path.Combine(prefix ?? string.Empty, entryName));
 			var key = rooted ? $"/{entryName}" : entryName;
 
-			if(names != null && !names.Add(key))
+			if(_entries.ContainsKey(key))
 			{
 				Dumper.PackageEntryConflicted(source, entryName);
 				return;
 			}
 
 			var file = new FileInfo(source);
-			entries.Add(new Package.Entry(source, entryName, file.Length, Utility.Unix.GetTimestamp(file.LastWriteTimeUtc), Utility.Unix.GetFileMode(source), rooted));
+			_entries.Add(key, new(source, entryName, file.Length, Utility.Unix.GetTimestamp(file.LastWriteTimeUtc), Utility.Unix.GetFileMode(source), rooted));
 		}
 
 		IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
-		public IEnumerator<Entry> GetEnumerator() => _entries.GetEnumerator();
+		public IEnumerator<Entry> GetEnumerator() => _entries.Values.GetEnumerator();
 	}
 	#endregion
 }

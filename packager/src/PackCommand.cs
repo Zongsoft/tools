@@ -39,6 +39,7 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
+using Zongsoft.Services;
 using Zongsoft.Terminals;
 using Zongsoft.Components;
 
@@ -171,10 +172,17 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		//加载安装条目
 		package.Entries.Load(source, context.Arguments);
 
-		if(package.Entries.Count == 0)
+		//添加版本文件
+		if(!package.Entries.Contains(".version"))
 		{
-			Terminal.WriteLine(CommandOutletColor.Red, $"The source directory '{source}' does not contain any package entries.");
-			return ValueTask.FromResult<object>(null);
+			var filePath = Path.GetTempFileName();
+			var identifier = new ApplicationIdentifier(package.Name, package.Edition, package.Version);
+
+			using var writer = new StreamWriter(filePath);
+			writer.WriteLine(identifier.ToString());
+			writer.Close();
+
+			package.Entries.Add(filePath, ".version");
 		}
 
 		//打包，制作安装包
