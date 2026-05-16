@@ -42,22 +42,27 @@ partial class Scriptor
 	{
 		private readonly Package _package = package ?? throw new ArgumentNullException(nameof(package));
 
-		public void Script(Argument argument)
+		public bool Script()
 		{
-			var installing = ReadFile(argument.Source, argument.Installing);
-			var installed = ReadFile(argument.Source, argument.Installed);
-			var uninstalling = ReadFile(argument.Source, argument.Uninstalling);
-			var uninstalled = ReadFile(argument.Source, argument.Uninstalled);
+			var installing = ReadFile(Normalizer.Variables.Source, Normalizer.Variables.Script.Installing);
+			var installed = ReadFile(Normalizer.Variables.Source, Normalizer.Variables.Script.Installed);
+			var uninstalling = ReadFile(Normalizer.Variables.Source, Normalizer.Variables.Script.Uninstalling);
+			var uninstalled = ReadFile(Normalizer.Variables.Source, Normalizer.Variables.Script.Uninstalled);
 
-			var daemon = string.IsNullOrEmpty(argument.Daemon) ?
-				_package.Name.ToLowerInvariant() : argument.Daemon;
+			var daemon = string.IsNullOrEmpty(Normalizer.Variables.Daemon.Identifier) ?
+				_package.Name.ToLowerInvariant() : Normalizer.Variables.Daemon.Identifier;
 
-			var fileInfo = new FileInfo(Path.GetFullPath(Path.Combine(argument.Source, daemon)));
+			var fileInfo = new FileInfo(Path.GetFullPath(Path.Combine(Normalizer.Variables.Source, daemon)));
 
 			if(!fileInfo.Exists)
-				fileInfo = GenerateService(daemon);
+			{
+				fileInfo = GenerateDaemon(daemon, _package);
 
-			_package.Entries.Add(fileInfo.FullName, fileInfo.Name, fileInfo.Length, fileInfo.LastWriteTimeUtc);
+				if(fileInfo == null)
+					return false;
+			}
+
+			_package.Entries.Add(Normalizer.Variables.Source, fileInfo.FullName);
 
 			var serviceName = fileInfo.Name;
 			var servicePath = $"{_package.InstallPath}/{serviceName}";
@@ -93,23 +98,11 @@ partial class Scriptor
 				if command -v systemctl >/dev/null 2>&1; then
 					systemctl daemon-reload >/dev/null 2>&1 || true
 				fi
-				rm -rf '{{package.InstallPath}}'
+				rm -rf '{{_package.InstallPath}}'
 				""";
 
 			_package.Scripts = new(installing, installed, uninstalling, uninstalled);
-		}
-
-		private FileInfo GenerateService(string daemon)
-		{
-			const string SERVICE_SUFFIX = ".service";
-
-			if(!daemon.EndsWith(SERVICE_SUFFIX))
-				daemon += SERVICE_SUFFIX;
-
-			using var stream = new FileStream(Path.Combine(Path.GetTempPath(), daemon), FileMode.Create, FileAccess.Write);
-			using var writer = new StreamWriter(stream);
-
-			return new(stream.Name);
+			return true;
 		}
 
 		static string ReadFile(string source, string path)
@@ -123,6 +116,111 @@ partial class Scriptor
 				throw new FileNotFoundException($"The script file '{path}' does not exist.", path);
 
 			return File.ReadAllText(path);
+		}
+
+		static string GetHostFile(string source, Package package)
+		{
+			var path = Path.Combine(source, package.Name + ".dll");
+			if(File.Exists(path))
+				return Path.GetFileName(path);
+
+			path = Path.Combine(source, "bin", Normalizer.Variables.Compilation, Normalizer.Variables.Framework, package.Name + ".dll");
+			if(File.Exists(path))
+				return Path.GetFileName(path);
+
+			var files = Directory.GetFiles(source, "*.exe", SearchOption.TopDirectoryOnly);
+			if(files != null && files.Length == 1)
+				return Path.GetFileNameWithoutExtension(files[0]) + ".dll";
+
+			files = Directory.GetFiles(Path.Combine(source, "bin", Normalizer.Variables.Compilation, Normalizer.Variables.Framework), "*.exe", SearchOption.TopDirectoryOnly);
+			if(files != null && files.Length == 1)
+				return Path.GetFileNameWithoutExtension(files[0]) + ".dll";
+
+			return null;
+		}
+
+		static FileInfo GenerateDaemon(string daemon, Package package)
+		{
+			const string SERVICE_SUFFIX = ".service";
+
+			if(!daemon.EndsWith(SERVICE_SUFFIX))
+				daemon += SERVICE_SUFFIX;
+
+			var source = Normalizer.Variables.Source;
+			var type = Normalizer.Variables.Daemon.Type;
+			var bind = Normalizer.Variables.Daemon.Bind;
+			var host = GetHostFile(source, package);
+
+			if(string.IsNullOrEmpty(host))
+			{
+				Dumper.HostLocateFailed();
+				return null;
+			}
+
+			var environments = new string[Normalizer.Variables.Environments.Length];
+
+			for(int i = 0; i < environments.Length; i++)
+			{
+				var name = Normalizer.Variables.Environments[i];
+				var value = Normalizer.Variables[name];
+
+				if(value != null)
+					environments[i] = $"Environment={name}={value}";
+			}
+
+			using var stream = new FileStream(Path.Combine(Path.GetTempPath(), daemon), FileMode.Create, FileAccess.Write);
+			using var writer = new StreamWriter(stream);
+
+			if(string.Equals(type, "web", StringComparison.OrdinalIgnoreCase))
+				writer.Write($"""
+					[Unit]
+					Description={(string.IsNullOrEmpty(package.Title) ? package.Name : package.Title)}
+
+					[Service]
+					Type=simple
+					WorkingDirectory={package.InstallPath}
+					ExecStartPre=mkdir -p {package.InstallPath}/logs
+					ExecStart=dotnet {package.InstallPath}/{host} --urls {bind}
+					Restart=on-failure
+					RestartSec=10
+					KillSignal=SIGINT
+					SyslogIdentifier={package.Name}
+					DynamicUser=no
+					PrivateTmp=no
+					ReadWritePaths={package.InstallPath} {package.InstallPath}/logs /tmp
+
+					Environment=DOTNET_NOLOGO=true
+					{string.Join(Environment.NewLine, environments)}
+
+					[Install]
+					WantedBy=multi-user.target
+					""");
+			else
+				writer.Write($"""
+					[Unit]
+					Description={(string.IsNullOrEmpty(package.Title) ? package.Name : package.Title)}
+
+					[Service]
+					Type=simple
+					WorkingDirectory={package.InstallPath}
+					ExecStartPre=mkdir -p {package.InstallPath}/logs
+					ExecStart=dotnet {package.InstallPath}/{host}
+					Restart=on-failure
+					RestartSec=10
+					KillSignal=SIGINT
+					SyslogIdentifier={package.Name}
+					DynamicUser=no
+					PrivateTmp=no
+					ReadWritePaths={package.InstallPath} {package.InstallPath}/logs /tmp
+
+					Environment=DOTNET_NOLOGO=true
+					{string.Join(Environment.NewLine, environments)}
+
+					[Install]
+					WantedBy=multi-user.target
+					""");
+
+			return new(stream.Name);
 		}
 	}
 }

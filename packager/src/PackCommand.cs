@@ -33,6 +33,7 @@
 
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
@@ -49,19 +50,23 @@ namespace Zongsoft.Tools.Packager;
 [CommandOption(FRAMEWORK_OPTION, typeof(string), Required = true)]
 [CommandOption(SOURCE_OPTION, typeof(string))]
 [CommandOption(EDITION_OPTION, typeof(string))]
+[CommandOption(COMPILATION_OPTION, typeof(string), DEFAULT_COMPILATION)]
 [CommandOption(ARCHITECTURE_OPTION, typeof(Architecture), Architecture.X64)]
 [CommandOption(OUTPUT_OPTION, typeof(string))]
-[CommandOption(DAEMON_OPTION, typeof(string))]
 [CommandOption(OVERWRITE_OPTION, typeof(bool), false)]
-[CommandOption(URL_OPTION, typeof(string))]
+[CommandOption(URL_OPTION, typeof(string), DEFAULT_URL)]
 [CommandOption(TITLE_OPTION, typeof(string))]
 [CommandOption(LICENSE_OPTION, typeof(string))]
 [CommandOption(CATEGORY_OPTION, typeof(string))]
-[CommandOption(MAINTAINER_OPTION, typeof(string))]
+[CommandOption(MAINTAINER_OPTION, typeof(string), DEFAULT_MAINTAINER)]
 [CommandOption(SUMMARY_OPTION, typeof(string))]
 [CommandOption(DESCRIPTION_OPTION, typeof(string))]
 [CommandOption(DEPENDENCIES_OPTION, typeof(string))]
 [CommandOption(INSTALL_PATH_OPTION, typeof(string))]
+[CommandOption(ENVIRONMENTS_OPTION, typeof(string))]
+[CommandOption(DAEMON_OPTION, typeof(string))]
+[CommandOption(DAEMON_TYPE_OPTION, typeof(string))]
+[CommandOption(DAEMON_BIND_OPTION, typeof(string))]
 [CommandOption(SCRIPT_INSTALLING_OPTION, typeof(string))]
 [CommandOption(SCRIPT_INSTALLED_OPTION, typeof(string))]
 [CommandOption(SCRIPT_UNINSTALLING_OPTION, typeof(string))]
@@ -69,54 +74,50 @@ namespace Zongsoft.Tools.Packager;
 public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext> where TPackage : Package
 {
 	#region 常量定义
-	protected const string NAME_OPTION = "name";
-	protected const string TITLE_OPTION = "title";
-	protected const string SOURCE_OPTION = "source";
-	protected const string OUTPUT_OPTION = "output";
-	protected const string EDITION_OPTION = "edition";
-	protected const string VERSION_OPTION = "version";
-	protected const string PLATFORM_OPTION = "platform";
-	protected const string FRAMEWORK_OPTION = "framework";
-	protected const string OVERWRITE_OPTION = "overwrite";
-	protected const string ARCHITECTURE_OPTION = "architecture";
-	protected const string DAEMON_OPTION = "daemon";
+	protected const string NAME_OPTION = Variables.NAME;
+	protected const string TITLE_OPTION = Variables.TITLE;
+	protected const string SOURCE_OPTION = Variables.SOURCE;
+	protected const string OUTPUT_OPTION = Variables.OUTPUT;
+	protected const string EDITION_OPTION = Variables.EDITION;
+	protected const string VERSION_OPTION = Variables.VERSION;
+	protected const string PLATFORM_OPTION = Variables.PLATFORM;
+	protected const string FRAMEWORK_OPTION = Variables.FRAMEWORK;
+	protected const string COMPILATION_OPTION = Variables.COMPILATION;
+	protected const string ARCHITECTURE_OPTION = Variables.ARCHITECTURE;
+	protected const string SUMMARY_OPTION = Variables.SUMMARY;
+	protected const string DESCRIPTION_OPTION = Variables.DESCRIPTION;
 	protected const string URL_OPTION = "url";
 	protected const string LICENSE_OPTION = "license";
 	protected const string CATEGORY_OPTION = "category";
+	protected const string OVERWRITE_OPTION = "overwrite";
 	protected const string MAINTAINER_OPTION = "maintainer";
-	protected const string SUMMARY_OPTION = "summary";
-	protected const string DESCRIPTION_OPTION = "description";
 	protected const string DEPENDENCIES_OPTION = "dependencies";
 	protected const string INSTALL_PATH_OPTION = "install-path";
-	protected const string SCRIPT_INSTALLING_OPTION = "script-installing";
-	protected const string SCRIPT_INSTALLED_OPTION = "script-installed";
-	protected const string SCRIPT_UNINSTALLING_OPTION = "script-uninstalling";
-	protected const string SCRIPT_UNINSTALLED_OPTION = "script-uninstalled";
+	protected const string ENVIRONMENTS_OPTION = Variables.ENVIRONMENTS;
+	protected const string DAEMON_OPTION = Variables.DaemonVariable.DAEMON;
+	protected const string DAEMON_TYPE_OPTION = Variables.DaemonVariable.DAEMON_TYPE;
+	protected const string DAEMON_BIND_OPTION = Variables.DaemonVariable.DAEMON_BIND;
+	protected const string SCRIPT_INSTALLING_OPTION = Variables.ScriptVariable.INSTALLING;
+	protected const string SCRIPT_INSTALLED_OPTION = Variables.ScriptVariable.INSTALLED;
+	protected const string SCRIPT_UNINSTALLING_OPTION = Variables.ScriptVariable.UNINSTALLING;
+	protected const string SCRIPT_UNINSTALLED_OPTION = Variables.ScriptVariable.UNINSTALLED;
 
-	protected const string DEFAULT_MAINTAINER = "Zongsoft Studio <zongsoft@gmail.com>";
-	protected const string DEFAULT_URL = "https://github.com/Zongsoft";
+	private const string DEFAULT_COMPILATION = "Release";
+	private const string DEFAULT_MAINTAINER = "Zongsoft Studio <zongsoft@gmail.com>";
+	private const string DEFAULT_URL = "https://github.com/Zongsoft";
 	#endregion
 
 	#region 执行方法
 	protected override ValueTask<object> OnExecuteAsync(CommandContext context, CancellationToken cancellation)
 	{
-		var version = context.Options.GetValue<Version>(VERSION_OPTION);
-		var platform = context.Options.GetValue<Platform>(PLATFORM_OPTION);
-		var architecture = context.Options.GetValue<Architecture>(ARCHITECTURE_OPTION);
-
-		if(version.IsZero())
+		if(context.Options.GetValue<Version>(VERSION_OPTION).IsZero())
 		{
 			Terminal.WriteLine(CommandOutletColor.Red, $"The version number is invalid.");
 			return ValueTask.FromResult<object>(null);
 		}
 
-		var runtime = Utility.GetRuntimeIdentifier(platform, architecture);
-		Normalizer.Initialize(GetVariables(context,
-		[
-			new("Runtime", runtime),
-			new("RuntimeIdentifier", runtime),
-			new("Architecture", architecture.ToString().ToLowerInvariant()),
-		]));
+		//初始化变量集
+		Normalizer.Initialize(GetVariables(context).DistinctBy(variable => variable.Key).ToDictionary(StringComparer.OrdinalIgnoreCase));
 
 		if(!Normalizer.TryNormalize(context.Options.GetValue<string>(SOURCE_OPTION), out var source))
 			return ValueTask.FromResult<object>(null);
@@ -145,30 +146,31 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		Terminal.WriteLine(CommandOutletColor.DarkCyan, $"Installing package generation in progress, please wait...");
 		Terminal.WriteLine();
 
+		//创建安装包对象
 		var package = this.CreatePackage(context);
 		if(package == null)
 			return ValueTask.FromResult<object>(null);
 
-		package.Scriptor.Script(
-			new(source,
-				Normalizer.Normalize(context.Options.GetValue<string>(DAEMON_OPTION, null)),
-				Normalizer.NormalizeFile(context.Options.GetValue<string>(SCRIPT_INSTALLING_OPTION, null)),
-				Normalizer.NormalizeFile(context.Options.GetValue<string>(SCRIPT_INSTALLED_OPTION, null)),
-				Normalizer.NormalizeFile(context.Options.GetValue<string>(SCRIPT_UNINSTALLING_OPTION, null)),
-				Normalizer.NormalizeFile(context.Options.GetValue<string>(SCRIPT_UNINSTALLED_OPTION, null))
-			));
+		//生成安装脚本
+		if(!package.Scriptor.Script())
+			return ValueTask.FromResult<object>(null);
 
+		//加载安装条目
 		package.Entries.Load(source, context.Arguments);
+
 		if(package.Entries.Count == 0)
 		{
 			Terminal.WriteLine(CommandOutletColor.Red, $"The source directory '{source}' does not contain any package entries.");
 			return ValueTask.FromResult<object>(null);
 		}
 
+		//打包，制作安装包
 		package.Pack(output, context.Options.Switch(OVERWRITE_OPTION));
 
-		Terminal.WriteLine(CommandOutletColor.DarkGreen, string.Format(Properties.Resources.PackageGeneratedSuccessfully_Message, output));
-		return ValueTask.FromResult<object>(output);
+		//输出安装包制作成功
+		Terminal.WriteLine(CommandOutletColor.DarkGreen, string.Format(Properties.Resources.PackageGeneratedSuccessfully_Message, Path.Combine(output, package.FileName)));
+		//返回安装包的文件路径
+		return ValueTask.FromResult<object>(Path.Combine(output, package.FileName));
 	}
 	#endregion
 
@@ -179,40 +181,28 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	#region 配置方法
 	protected static void Configure(Package package, CommandContext context)
 	{
-		package.Framework = context.Options.GetValue<string>(FRAMEWORK_OPTION);
-		package.InstallPath = Normalizer.Normalize(context.Options.GetValue<string>(INSTALL_PATH_OPTION));
-		package.Title = Normalizer.Normalize(context.Options.GetValue<string>(TITLE_OPTION));
-		package.Summary = Normalizer.NormalizeFile(context.Options.GetValue<string>(SUMMARY_OPTION));
-		package.Description = Normalizer.NormalizeFile(context.Options.GetValue<string>(DESCRIPTION_OPTION));
-		package.Url = Normalizer.Normalize(context.Options.GetValue<string>(URL_OPTION), DEFAULT_URL);
-		package.Category = Normalizer.Normalize(context.Options.GetValue<string>(CATEGORY_OPTION));
-		package.License = Normalizer.Normalize(context.Options.GetValue<string>(LICENSE_OPTION));
-		package.Maintainer = Normalizer.Normalize(context.Options.GetValue<string>(MAINTAINER_OPTION), DEFAULT_MAINTAINER);
-		package.Dependencies = Normalizer.NormalizeList(context.Options.GetValue<string>(DEPENDENCIES_OPTION));
+		if(context.Options.TryGetValue(INSTALL_PATH_OPTION, out string installPath) && !string.IsNullOrEmpty(installPath))
+			package.InstallPath = Normalizer.Normalize(installPath);
 	}
 	#endregion
 
 	#region 私有方法
-	static Dictionary<string, string> GetVariables(CommandContext context, params KeyValuePair<string, string>[] options)
+	static IEnumerable<KeyValuePair<string, string>> GetVariables(CommandContext context, params KeyValuePair<string, string>[] options)
 	{
-		var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
 		foreach(System.Collections.DictionaryEntry variable in Environment.GetEnvironmentVariables())
-			variables[variable.Key.ToString()] = variable.Value?.ToString();
+			yield return new(variable.Key.ToString(), variable.Value?.ToString());
+
+		foreach(var option in context.Descriptor.Options)
+			yield return new(option.Name, context.Options.GetValue(option.Name)?.ToString());
 
 		foreach(var option in context.Options)
 		{
-			if(Normalizer.TryNormalize(option.Value?.ToString(), out var value))
-				variables[option.Key] = value;
+			if(!context.Descriptor.Options.Contains(option.Key))
+				yield return new(option.Key, option.Value?.ToString());
 		}
 
 		foreach(var option in options)
-		{
-			if(Normalizer.TryNormalize(option.Value, out var value))
-				variables[option.Key] = value;
-		}
-
-		return variables;
+			yield return new(option.Key, option.Value);
 	}
 	#endregion
 }

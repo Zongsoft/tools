@@ -80,11 +80,12 @@ internal static class Utility
 			if(name.IsWhiteSpace())
 				return "/opt";
 
+			name = name.ToLowerInvariant();
 			var index = name.IndexOf('.');
-			if(index > 0)
-				return $"/opt/{name[..index].ToLowerInvariant()}";
-			else
-				return $"/opt/{name.ToLowerInvariant()}";
+
+			return index > 0 ?
+				$"/opt/{name[..index]}/{name}":
+				$"/opt/{name}";
 		}
 
 		public static int GetFileMode(string path)

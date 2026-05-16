@@ -48,18 +48,34 @@ public class Normalizer
 	#endregion
 
 	#region 公共属性
-	private static IDictionary<string, string> _variables;
-	public static IDictionary<string, string> Variables => _variables;
+	private static Variables _variables;
+	public static Variables Variables => _variables;
 	#endregion
 
 	#region 初始方法
-	public static void Initialize(IDictionary<string, string> variables) => _variables = variables;
+	public static void Initialize(IReadOnlyDictionary<string, string> variables)
+	{
+		ArgumentNullException.ThrowIfNull(variables);
+
+		_variables = new Variables();
+
+		foreach(var variable in variables)
+			_variables[variable.Key] = Normalize(variable.Value, variables);
+
+		_variables[Variables.SUMMARY] = NormalizeFile(_variables[Variables.SUMMARY]);
+		_variables[Variables.DESCRIPTION] = NormalizeFile(_variables[Variables.DESCRIPTION]);
+
+		_variables[Variables.ScriptVariable.INSTALLING] = NormalizeFile(_variables[Variables.ScriptVariable.INSTALLING]);
+		_variables[Variables.ScriptVariable.INSTALLED] = NormalizeFile(_variables[Variables.ScriptVariable.INSTALLED]);
+		_variables[Variables.ScriptVariable.UNINSTALLING] = NormalizeFile(_variables[Variables.ScriptVariable.UNINSTALLING]);
+		_variables[Variables.ScriptVariable.UNINSTALLED] = NormalizeFile(_variables[Variables.ScriptVariable.UNINSTALLED]);
+	}
 	#endregion
 
 	#region 公共方法
 	public static bool TryNormalize(string text, out string result)
 	{
-		var normalized = Normalize(text);
+		var normalized = Normalize(text, _variables);
 		if(normalized)
 		{
 			result = normalized.Value;
@@ -82,13 +98,12 @@ public class Normalizer
 		return string.IsNullOrWhiteSpace(result) ? fallback : result.Trim();
 	}
 
-	public static Result Normalize(string text)
+	public static Result Normalize(string text, IReadOnlyDictionary<string, string> variables)
 	{
 		if(string.IsNullOrWhiteSpace(text))
 			return Result.Success(string.Empty);
 
-		if(_variables == null)
-			throw new InvalidOperationException($"The Normalizer has not been initialized yet.");
+		variables ??= _variables ?? throw new InvalidOperationException($"The Normalizer has not been initialized yet.");
 
 		try
 		{
@@ -96,7 +111,7 @@ public class Normalizer
 			{
 				if(match.Success && match.Groups.TryGetValue(REGEX_VARIABLE_NAME, out var group))
 				{
-					if(_variables.TryGetValue(group.Value, out var value))
+					if(variables.TryGetValue(group.Value, out var value))
 						return value;
 
 					throw new NormalizerException(group.Value);

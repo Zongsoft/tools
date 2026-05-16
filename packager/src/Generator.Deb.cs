@@ -140,7 +140,7 @@ partial class Generator
 
 	static string NormalizeDebText(string text)
 	{
-		return string.IsNullOrWhiteSpace(text) ? string.Empty : text.Replace("\r", string.Empty).Replace("\n", " ").Trim();
+		return string.IsNullOrWhiteSpace(text) ? null : text.Replace("\r", string.Empty).Replace("\n", " ").Trim();
 	}
 
 	static string GetDebianArchitecture(Architecture architecture) => architecture switch

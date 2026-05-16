@@ -32,8 +32,6 @@
  */
 
 using System;
-using System.Collections.Generic;
-using System.Runtime.InteropServices;
 
 using Zongsoft.Components;
 
@@ -44,11 +42,11 @@ public sealed class TarCommand : PackCommand<Package.Tar>
 	protected override Package.Tar CreatePackage(CommandContext context)
 	{
 		var package = new Package.Tar(
-			context.Options.GetValue<string>(NAME_OPTION),
-			context.Options.GetValue<string>(EDITION_OPTION),
-			context.Options.GetValue<Version>(VERSION_OPTION),
-			context.Options.GetValue<Platform>(PLATFORM_OPTION),
-			context.Options.GetValue<Architecture>(ARCHITECTURE_OPTION));
+			Normalizer.Variables.Name,
+			Normalizer.Variables.Edition,
+			Normalizer.Variables.Version,
+			Normalizer.Variables.Platform,
+			Normalizer.Variables.Architecture);
 
 		Configure(package, context);
 		return package;

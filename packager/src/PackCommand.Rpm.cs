@@ -32,8 +32,6 @@
  */
 
 using System;
-using System.Collections.Generic;
-using System.Runtime.InteropServices;
 
 using Zongsoft.Components;
 
@@ -49,14 +47,14 @@ public sealed class RpmCommand : PackCommand<Package.Rpm>
 	protected override Package.Rpm CreatePackage(CommandContext context)
 	{
 		var package = new Package.Rpm(
-			context.Options.GetValue<string>(NAME_OPTION),
-			context.Options.GetValue<string>(EDITION_OPTION),
-			context.Options.GetValue<Version>(VERSION_OPTION),
-			context.Options.GetValue<Platform>(PLATFORM_OPTION),
-			context.Options.GetValue<Architecture>(ARCHITECTURE_OPTION))
+			Normalizer.Variables.Name,
+			Normalizer.Variables.Edition,
+			Normalizer.Variables.Version,
+			Normalizer.Variables.Platform,
+			Normalizer.Variables.Architecture)
 		{
-			Provides = Normalizer.NormalizeList(context.Options.GetValue<string>(PROVIDES_OPTION)),
-			Conflicts = Normalizer.NormalizeList(context.Options.GetValue<string>(CONFLICTS_OPTION)),
+			Provides = context.Options.GetValue<string>(PROVIDES_OPTION)?.Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries),
+			Conflicts = context.Options.GetValue<string>(CONFLICTS_OPTION)?.Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries),
 		};
 
 		Configure(package, context);

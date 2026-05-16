@@ -56,8 +56,15 @@ public abstract partial class Package
 		this.Architecture = architecture;
 		this.Runtime = Utility.GetRuntimeIdentifier(platform, architecture);
 		this.PackageName = GetPackageName(name, edition);
-		this.Url = "https://github.com/Zongsoft";
-		this.Maintainer = "Zongsoft";
+		this.Framework = Normalizer.Variables.Framework;
+		this.Title = Normalizer.Variables.Title;
+		this.Summary = Normalizer.Variables.Summary;
+		this.Description = Normalizer.Variables.Description;
+		this.Url = Normalizer.Variables.Url;
+		this.Category = Normalizer.Variables.Category;
+		this.License = Normalizer.Variables.License;
+		this.Maintainer = Normalizer.Variables.Maintainer;
+		this.Dependencies = Normalizer.Variables.Dependencies;
 		this.Entries = new(this);
 	}
 	#endregion
@@ -152,7 +159,22 @@ public abstract partial class Package
 
 		public int Count => _entries.Count;
 
-		internal void Add(string source, string entryName, long size, DateTime modifiedTime) => _entries.Add(new(source, entryName, size, Utility.Unix.GetTimestamp(modifiedTime), Utility.Unix.GetFileMode(source)));
+		internal void Add(string source, string argument)
+		{
+			if(!Normalizer.TryNormalize(argument, out var text))
+				return;
+
+			var index = text.LastIndexOf(':');
+
+			if(OperatingSystem.IsWindows() && index == 1)
+				index = -1;
+
+			var path = index > 0 ? text[..index].Trim() : text;
+			var alias = index > 0 ? text[(index + 1)..].Trim() : null;
+
+			AddEntry(_entries, null, source, path, alias, _package.EntryPrefix);
+		}
+
 		internal void Load(string source, IReadOnlyCollection<string> arguments)
 		{
 			var names = new HashSet<string>(StringComparer.Ordinal);
@@ -256,7 +278,7 @@ public abstract partial class Package
 
 			entryName = Utility.NormalizePath(Path.Combine(prefix ?? string.Empty, entryName));
 
-			if(!names.Add(entryName))
+			if(names != null && !names.Add(entryName))
 			{
 				Dumper.PackageEntryConflicted(source, entryName);
 				return;
