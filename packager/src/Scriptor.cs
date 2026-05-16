@@ -37,5 +37,5 @@ namespace Zongsoft.Tools.Packager;
 
 public interface IScriptor
 {
-	bool Script();
+	void Script();
 }

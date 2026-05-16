@@ -106,4 +106,16 @@
   <data name="VariableUndefined.Message" xml:space="preserve">
     <value>The '{0}' variable in the '{1}' expression is undefined.</value>
   </data>
+  <data name="HostLocateFailed.Message" xml:space="preserve">
+    <value>The daemon host location failed.</value>
+  </data>
+  <data name="FileNotExist.Message" xml:space="preserve">
+    <value>The '{0}' file does not exist.</value>
+  </data>
+  <data name="PathNotExist.Message" xml:space="preserve">
+    <value>The source path '{0}' does not exist.</value>
+  </data>
+  <data name="PackageEntryConflicted.Message" xml:space="preserve">
+    <value>The source file '{0}' conflicts with an existing package entry '{1}'.</value>
+  </data>
 </root>

@@ -58,7 +58,6 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 	internal const string FRAMEWORK = "framework";
 	internal const string COMPILATION = "compilation";
 	internal const string ARCHITECTURE = "architecture";
-	internal const string ENVIRONMENTS = "environments";
 	#endregion
 
 	#region 成员字段
@@ -92,13 +91,12 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 	public string Compilation => _variables.TryGetValue(COMPILATION, out var value) ? value : "Release";
 	public string RuntimeIdentifier => _variables.TryGetValue(nameof(RuntimeIdentifier), out var value) ? value : Utility.GetRuntimeIdentifier(this.Platform, this.Architecture);
 	public string[] Dependencies => _variables.TryGetValue(DEPENDENCIES, out var value) && value != null ? value.Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) : [];
-	public string[] Environments => _variables.TryGetValue(ENVIRONMENTS, out var value) && value != null ? value.Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) : [];
 
 	public DaemonVariable Daemon => new
 	(
 		this[DaemonVariable.DAEMON],
-		this[DaemonVariable.DAEMON_TYPE],
-		this[DaemonVariable.DAEMON_BIND]
+		this[DaemonVariable.DAEMON_BIND],
+		this[DaemonVariable.DAEMON_ENVIRONMENTS]
 	);
 
 	public ScriptVariable Script => new
@@ -130,19 +128,24 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 	public readonly struct DaemonVariable
 	{
 		internal const string DAEMON = "daemon";
-		internal const string DAEMON_TYPE = "daemon-type";
 		internal const string DAEMON_BIND = "daemon-bind";
+		internal const string DAEMON_ENVIRONMENTS = "daemon-environments";
 
-		public DaemonVariable(string identifier, string type, string bind)
+		public DaemonVariable(string identifier, string bind, string environments)
 		{
 			this.Identifier = identifier;
-			this.Type = type;
 			this.Bind = bind;
+			this.Environments = string.IsNullOrEmpty(environments) ? [] : environments.Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 		}
 
 		public readonly string Identifier;
-		public readonly string Type;
 		public readonly string Bind;
+		public readonly string[] Environments;
+
+		public bool Disabled =>
+			string.Equals(this.Identifier, "none", StringComparison.OrdinalIgnoreCase) ||
+			string.Equals(this.Identifier, "disable", StringComparison.OrdinalIgnoreCase) ||
+			string.Equals(this.Identifier, "disabled", StringComparison.OrdinalIgnoreCase);
 	}
 
 	public readonly struct ScriptVariable

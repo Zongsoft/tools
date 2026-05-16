@@ -42,7 +42,7 @@ partial class Scriptor
 	{
 		private readonly Package _package = package ?? throw new ArgumentNullException(nameof(package));
 
-		public bool Script()
+		public void Script()
 		{
 			var installing = ReadFile(Normalizer.Variables.Source, Normalizer.Variables.Script.Installing);
 			var installed = ReadFile(Normalizer.Variables.Source, Normalizer.Variables.Script.Installed);
@@ -59,7 +59,7 @@ partial class Scriptor
 				fileInfo = GenerateDaemon(daemon, _package);
 
 				if(fileInfo == null)
-					return false;
+					return;
 			}
 
 			_package.Entries.Add(Normalizer.Variables.Source, fileInfo.FullName);
@@ -102,7 +102,6 @@ partial class Scriptor
 				""";
 
 			_package.Scripts = new(installing, installed, uninstalling, uninstalled);
-			return true;
 		}
 
 		static string ReadFile(string source, string path)
@@ -146,8 +145,10 @@ partial class Scriptor
 			if(!daemon.EndsWith(SERVICE_SUFFIX))
 				daemon += SERVICE_SUFFIX;
 
+			if(Normalizer.Variables.Daemon.Disabled)
+				return null;
+
 			var source = Normalizer.Variables.Source;
-			var type = Normalizer.Variables.Daemon.Type;
 			var bind = Normalizer.Variables.Daemon.Bind;
 			var host = GetHostFile(source, package);
 
@@ -157,11 +158,11 @@ partial class Scriptor
 				return null;
 			}
 
-			var environments = new string[Normalizer.Variables.Environments.Length];
+			var environments = new string[Normalizer.Variables.Daemon.Environments.Length];
 
 			for(int i = 0; i < environments.Length; i++)
 			{
-				var name = Normalizer.Variables.Environments[i];
+				var name = Normalizer.Variables.Daemon.Environments[i];
 				var value = Normalizer.Variables[name];
 
 				if(value != null)
@@ -171,31 +172,7 @@ partial class Scriptor
 			using var stream = new FileStream(Path.Combine(Path.GetTempPath(), daemon), FileMode.Create, FileAccess.Write);
 			using var writer = new StreamWriter(stream);
 
-			if(string.Equals(type, "web", StringComparison.OrdinalIgnoreCase))
-				writer.Write($"""
-					[Unit]
-					Description={(string.IsNullOrEmpty(package.Title) ? package.Name : package.Title)}
-
-					[Service]
-					Type=simple
-					WorkingDirectory={package.InstallPath}
-					ExecStartPre=mkdir -p {package.InstallPath}/logs
-					ExecStart=dotnet {package.InstallPath}/{host} --urls {bind}
-					Restart=on-failure
-					RestartSec=10
-					KillSignal=SIGINT
-					SyslogIdentifier={package.Name}
-					DynamicUser=no
-					PrivateTmp=no
-					ReadWritePaths={package.InstallPath} {package.InstallPath}/logs /tmp
-
-					Environment=DOTNET_NOLOGO=true
-					{string.Join(Environment.NewLine, environments)}
-
-					[Install]
-					WantedBy=multi-user.target
-					""");
-			else
+			if(string.IsNullOrEmpty(bind))
 				writer.Write($"""
 					[Unit]
 					Description={(string.IsNullOrEmpty(package.Title) ? package.Name : package.Title)}
@@ -219,6 +196,35 @@ partial class Scriptor
 					[Install]
 					WantedBy=multi-user.target
 					""");
+			else
+			{
+				if(ushort.TryParse(bind, out var port))
+					bind = $"http://127.0.0.1:{port}";
+
+				writer.Write($"""
+					[Unit]
+					Description={(string.IsNullOrEmpty(package.Title) ? package.Name : package.Title)}
+
+					[Service]
+					Type=simple
+					WorkingDirectory={package.InstallPath}
+					ExecStartPre=mkdir -p {package.InstallPath}/logs
+					ExecStart=dotnet {package.InstallPath}/{host} --urls {bind}
+					Restart=on-failure
+					RestartSec=10
+					KillSignal=SIGINT
+					SyslogIdentifier={package.Name}
+					DynamicUser=no
+					PrivateTmp=no
+					ReadWritePaths={package.InstallPath} {package.InstallPath}/logs /tmp
+
+					Environment=DOTNET_NOLOGO=true
+					{string.Join(Environment.NewLine, environments)}
+
+					[Install]
+					WantedBy=multi-user.target
+					""");
+			}
 
 			return new(stream.Name);
 		}

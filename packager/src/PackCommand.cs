@@ -63,10 +63,9 @@ namespace Zongsoft.Tools.Packager;
 [CommandOption(DESCRIPTION_OPTION, typeof(string))]
 [CommandOption(DEPENDENCIES_OPTION, typeof(string))]
 [CommandOption(INSTALL_PATH_OPTION, typeof(string))]
-[CommandOption(ENVIRONMENTS_OPTION, typeof(string))]
 [CommandOption(DAEMON_OPTION, typeof(string))]
-[CommandOption(DAEMON_TYPE_OPTION, typeof(string))]
 [CommandOption(DAEMON_BIND_OPTION, typeof(string))]
+[CommandOption(DAEMON_ENVIRONMENTS_OPTION, typeof(string))]
 [CommandOption(SCRIPT_INSTALLING_OPTION, typeof(string))]
 [CommandOption(SCRIPT_INSTALLED_OPTION, typeof(string))]
 [CommandOption(SCRIPT_UNINSTALLING_OPTION, typeof(string))]
@@ -93,10 +92,9 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	protected const string MAINTAINER_OPTION = "maintainer";
 	protected const string DEPENDENCIES_OPTION = "dependencies";
 	protected const string INSTALL_PATH_OPTION = "install-path";
-	protected const string ENVIRONMENTS_OPTION = Variables.ENVIRONMENTS;
 	protected const string DAEMON_OPTION = Variables.DaemonVariable.DAEMON;
-	protected const string DAEMON_TYPE_OPTION = Variables.DaemonVariable.DAEMON_TYPE;
 	protected const string DAEMON_BIND_OPTION = Variables.DaemonVariable.DAEMON_BIND;
+	protected const string DAEMON_ENVIRONMENTS_OPTION = Variables.DaemonVariable.DAEMON_ENVIRONMENTS;
 	protected const string SCRIPT_INSTALLING_OPTION = Variables.ScriptVariable.INSTALLING;
 	protected const string SCRIPT_INSTALLED_OPTION = Variables.ScriptVariable.INSTALLED;
 	protected const string SCRIPT_UNINSTALLING_OPTION = Variables.ScriptVariable.UNINSTALLING;
@@ -110,6 +108,9 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	#region 执行方法
 	protected override ValueTask<object> OnExecuteAsync(CommandContext context, CancellationToken cancellation)
 	{
+		//显示启动画面
+		Dumper.Splash();
+
 		if(context.Options.GetValue<Version>(VERSION_OPTION).IsZero())
 		{
 			Terminal.WriteLine(CommandOutletColor.Red, $"The version number is invalid.");
@@ -143,17 +144,13 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		if(!Directory.Exists(output))
 			Directory.CreateDirectory(output);
 
-		Terminal.WriteLine(CommandOutletColor.DarkCyan, $"Installing package generation in progress, please wait...");
-		Terminal.WriteLine();
-
 		//创建安装包对象
 		var package = this.CreatePackage(context);
 		if(package == null)
 			return ValueTask.FromResult<object>(null);
 
 		//生成安装脚本
-		if(!package.Scriptor.Script())
-			return ValueTask.FromResult<object>(null);
+		package.Scriptor.Script();
 
 		//加载安装条目
 		package.Entries.Load(source, context.Arguments);

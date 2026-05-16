@@ -70,11 +70,47 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
         
         /// <summary>
+        ///   查找类似 The &apos;{0}&apos; file does not exist. 的本地化字符串。
+        /// </summary>
+        internal static string FileNotExist_Message {
+            get {
+                return ResourceManager.GetString("FileNotExist.Message", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   查找类似 The daemon host location failed. 的本地化字符串。
+        /// </summary>
+        internal static string HostLocateFailed_Message {
+            get {
+                return ResourceManager.GetString("HostLocateFailed.Message", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   查找类似 The source file &apos;{0}&apos; conflicts with an existing package entry &apos;{1}&apos;. 的本地化字符串。
+        /// </summary>
+        internal static string PackageEntryConflicted_Message {
+            get {
+                return ResourceManager.GetString("PackageEntryConflicted.Message", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   查找类似 The &apos;{0}&apos; package file generated successfully. 的本地化字符串。
         /// </summary>
         internal static string PackageGeneratedSuccessfully_Message {
             get {
                 return ResourceManager.GetString("PackageGeneratedSuccessfully.Message", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   查找类似 The source path &apos;{0}&apos; does not exist. 的本地化字符串。
+        /// </summary>
+        internal static string PathNotExist_Message {
+            get {
+                return ResourceManager.GetString("PathNotExist.Message", resourceCulture);
             }
         }
         

@@ -40,9 +40,23 @@ namespace Zongsoft.Tools.Packager;
 
 internal class Dumper
 {
+	public static void Splash()
+	{
+		const string splash = @"
+     _____                                ___ __
+    /_   /  ____  ____  ____  ____ ____  / __/ /_
+      / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
+     / /__/ /_/ / / / / /_/ /\_ \/ /_/ / __/ /_
+    /____/\____/_/ /_/\__  /____/\____/_/  \__/
+                     /____/
+";
+
+		Terminal.WriteLine(splash);
+	}
+
 	public static void UndefinedVariable(string variable, string expression) => Terminal.WriteLine(CommandOutletColor.Red, string.Format(Properties.Resources.VariableUndefined_Message, variable, expression));
-	public static void HostLocateFailed() => Terminal.WriteLine(CommandOutletColor.Red, $"The daemon host location failed.");
-	public static void FileNotExist(string path) => Terminal.WriteLine(CommandOutletColor.DarkYellow, $"[Warn] The '{path}' file does not exist.");
-	public static void PathNotExist(string path) => Terminal.WriteLine(CommandOutletColor.DarkYellow, $"[Warn] The source path '{path}' does not exist.");
-	public static void PackageEntryConflicted(string path, string entry) => Terminal.WriteLine(CommandOutletColor.DarkYellow, $"[Warn] The source file '{path}' conflicts with an existing package entry '{entry}'.");
+	public static void HostLocateFailed() => Terminal.WriteLine(CommandOutletColor.Red, Properties.Resources.HostLocateFailed_Message);
+	public static void FileNotExist(string path) => Terminal.WriteLine(CommandOutletColor.DarkYellow, string.Format(Properties.Resources.FileNotExist_Message, path));
+	public static void PathNotExist(string path) => Terminal.WriteLine(CommandOutletColor.DarkYellow, string.Format(Properties.Resources.PathNotExist_Message, path));
+	public static void PackageEntryConflicted(string path, string entry) => Terminal.WriteLine(CommandOutletColor.DarkYellow, string.Format(Properties.Resources.PackageEntryConflicted_Message, path, entry));
 }

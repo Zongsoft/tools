@@ -126,4 +126,16 @@
   <data name="VariableUndefined.Message" xml:space="preserve">
     <value>在 '{1}' 表达式中的 '{0}' 变量未定义。</value>
   </data>
+  <data name="HostLocateFailed.Message" xml:space="preserve">
+    <value>后台宿主程序定位失败。</value>
+  </data>
+  <data name="FileNotExist.Message" xml:space="preserve">
+    <value>指定的 '{0}' 文件不存在。</value>
+  </data>
+  <data name="PathNotExist.Message" xml:space="preserve">
+    <value>指定的 '{0}' 源路径不存在。</value>
+  </data>
+  <data name="PackageEntryConflicted.Message" xml:space="preserve">
+    <value>源文件 ‘{0}’ 与包条目 ‘{1}’ 发生冲突。</value>
+  </data>
 </root>
