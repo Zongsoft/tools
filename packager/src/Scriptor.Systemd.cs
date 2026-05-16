@@ -48,15 +48,36 @@ partial class Scriptor
 			var installed = ReadFile(Normalizer.Variables.Source, Normalizer.Variables.Script.Installed);
 			var uninstalling = ReadFile(Normalizer.Variables.Source, Normalizer.Variables.Script.Uninstalling);
 			var uninstalled = ReadFile(Normalizer.Variables.Source, Normalizer.Variables.Script.Uninstalled);
+			var daemon = Normalizer.Variables.Daemon;
 
-			var daemon = string.IsNullOrEmpty(Normalizer.Variables.Daemon.Identifier) ?
-				_package.Name.ToLowerInvariant() : Normalizer.Variables.Daemon.Identifier;
+			if(daemon.Disabled)
+			{
+				if(string.IsNullOrWhiteSpace(installing))
+					installing = ":";
 
-			var fileInfo = new FileInfo(Path.GetFullPath(Path.Combine(Normalizer.Variables.Source, daemon)));
+				if(string.IsNullOrWhiteSpace(installed))
+					installed = ":";
+
+				if(string.IsNullOrWhiteSpace(uninstalling))
+					uninstalling = ":";
+
+				if(string.IsNullOrWhiteSpace(uninstalled))
+					uninstalled = $$"""
+					rm -rf '{{_package.InstallPath}}'
+					""";
+
+				_package.Scripts = new(installing, installed, uninstalling, uninstalled);
+				return;
+			}
+
+			var identifier = string.IsNullOrEmpty(daemon.Identifier) ?
+				_package.Name.ToLowerInvariant() : daemon.Identifier;
+
+			var fileInfo = new FileInfo(Path.GetFullPath(Path.Combine(Normalizer.Variables.Source, identifier)));
 
 			if(!fileInfo.Exists)
 			{
-				fileInfo = GenerateDaemon(daemon, _package);
+				fileInfo = GenerateDaemon(identifier, _package);
 
 				if(fileInfo == null)
 					return;
