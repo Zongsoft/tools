@@ -85,8 +85,8 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 	public string Output => _variables.TryGetValue(OUTPUT, out var value) ? value : null;
 	public string Edition => _variables.TryGetValue(EDITION, out var value) ? value : null;
 	public Version Version => _variables.TryGetValue(VERSION, out var value) ? Version.Parse(value) : null;
-	public Platform Platform => _variables.TryGetValue(PLATFORM, out var value) ? Enum.Parse<Platform>(value) : Platform.Unknown;
-	public Architecture Architecture => _variables.TryGetValue(ARCHITECTURE, out var value) ? Enum.Parse<Architecture>(value) : Architecture.X64;
+	public Platform Platform => _variables.TryGetValue(PLATFORM, out var value) ? Enum.Parse<Platform>(value, true) : Platform.Unknown;
+	public Architecture Architecture => _variables.TryGetValue(ARCHITECTURE, out var value) ? Enum.Parse<Architecture>(value, true) : Architecture.X64;
 	public string Framework => _variables.TryGetValue(FRAMEWORK, out var value) ? value : null;
 	public string Compilation => _variables.TryGetValue(COMPILATION, out var value) ? value : "Release";
 	public string RuntimeIdentifier => _variables.TryGetValue(nameof(RuntimeIdentifier), out var value) ? value : Utility.GetRuntimeIdentifier(this.Platform, this.Architecture);

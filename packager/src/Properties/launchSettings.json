@@ -2,7 +2,7 @@
   "profiles": {
     "Zongsoft.Tools.Packager": {
       "commandName": "Project",
-      "commandLineArgs": "deb\r\n--name:Zongsoft.Daemon\r\n--edition:\r\n--version:1.0.0\r\n--compilation:Debug\r\n--framework:net10.0\r\n--platform:Linux\r\n--architecture:x64\r\n--Environment:development\r\n--ASPNETCORE_ENVIRONMENT:development\r\n--daemon-bind:5001\r\n--daemon-environments:Environment,ASPNETCORE_ENVIRONMENT\r\n--install-path:/opt/zongsoft/daemon\r\n--source:\"D:\\\\Zongsoft\\\\hosting\\\\daemon\\\\bin\\\\%compilation%\\\\%framework%\"\r\n--output:../../../",
+      "commandLineArgs": "deb\r\n--name:Zongsoft.Daemon\r\n--edition:\r\n--version:1.0.0\r\n--compilation:Debug\r\n--framework:net10.0\r\n--platform:linux\r\n--architecture:x64\r\n--Environment:development\r\n--ASPNETCORE_ENVIRONMENT:development\r\n--daemon-bind:5001\r\n--daemon-environments:Environment,ASPNETCORE_ENVIRONMENT\r\n--install-path:/opt/zongsoft/daemon\r\n--source:\"D:\\\\Zongsoft\\\\hosting\\\\daemon\\\\bin\\\\%compilation%\\\\%framework%\"\r\n--output:../../../",
       "workingDirectory": "D:\\Zongsoft\\hosting\\daemon"
     }
   }
