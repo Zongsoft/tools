@@ -138,4 +138,10 @@
   <data name="PackageEntryConflicted.Message" xml:space="preserve">
     <value>源文件 ‘{0}’ 与包条目 ‘{1}’ 发生冲突。</value>
   </data>
+  <data name="InvalidVersion.Message" xml:space="preserve">
+    <value>无效的版本号。</value>
+  </data>
+  <data name="DirectoryNotExist.Message" xml:space="preserve">
+    <value>指定的 '{0}' 目录不存在。</value>
+  </data>
 </root>

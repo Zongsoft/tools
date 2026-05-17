@@ -194,6 +194,7 @@ dotnet-pack tar \
 | --- | --- | --- |
 | `--source:<path>` | 当前目录 | 待打包的源目录。 |
 | `--output:<path>` | 源目录 | 生成安装包的输出目录。相对路径基于 `--source` 解析。 |
+| `--exclude:<patterns>` | 空 | 加载打包项时跳过的文件模式列表，多个模式用逗号或分号分隔。 |
 | `--edition:<name>` | 空 | 可选发行/版本标识。会追加到包名；对 RPM 而言，有值时也作为 release。 |
 | `--compilation:<name>` | `Release` | 查找宿主文件时使用的构建配置目录，例如 `bin/<configuration>/<framework>`。 |
 | `--architecture:<arch>` | `x64` | 目标 CPU 架构，例如 `x64`、`x86`、`arm64`、`arm`。 |
@@ -266,9 +267,22 @@ dotnet-pack deb \
 - 允许指定 `--source` 之外的绝对路径；未指定别名时，只使用文件名。
 - 目录会递归包含。
 - 通配符支持最后一级路径中的 `*` 和 `?`。
+- `--exclude` 会在加载打包项时跳过匹配文件。模式相对 `--source`，统一使用 `/` 作为路径分隔符，支持 `*`、`?`、`**`，多个模式用逗号或分号分隔。
 - 重复的目标路径会报告为冲突并跳过。
 - 以 `/` 或 `\` 开头的别名是根路径条目。在 `.deb` 和 `.rpm` 中，它们会安装到对应根路径；在 `.tar.gz` 中，它们存放在 `.install/root/` 下，并由 `install.sh` 复制。
 - Unix 主机会保留文件权限。Windows 主机会给 `.sh`、`.dll`、`.exe` 和无扩展名文件分配 `0755`，其他文件使用 `0644`。
+
+排除示例：
+
+```bash
+dotnet-pack deb \
+  --name:MyApp \
+  --version:1.0.0 \
+  --platform:linux \
+  --framework:net10.0 \
+  --source:./publish \
+  --exclude:"*.pdb;appsettings.Development.json;logs/**"
+```
 
 ## systemd 服务
 

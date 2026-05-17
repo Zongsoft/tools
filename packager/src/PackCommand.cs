@@ -54,6 +54,7 @@ namespace Zongsoft.Tools.Packager;
 [CommandOption(COMPILATION_OPTION, typeof(string), DEFAULT_COMPILATION)]
 [CommandOption(ARCHITECTURE_OPTION, typeof(Architecture), Architecture.X64)]
 [CommandOption(OUTPUT_OPTION, typeof(string))]
+[CommandOption(EXCLUDE_OPTION, typeof(string))]
 [CommandOption(OVERWRITE_OPTION, typeof(bool), false)]
 [CommandOption(URL_OPTION, typeof(string), DEFAULT_URL)]
 [CommandOption(TITLE_OPTION, typeof(string))]
@@ -94,12 +95,13 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	protected const string ARCHITECTURE_OPTION = Variables.ARCHITECTURE;
 	protected const string SUMMARY_OPTION = Variables.SUMMARY;
 	protected const string DESCRIPTION_OPTION = Variables.DESCRIPTION;
-	protected const string URL_OPTION = "url";
-	protected const string LICENSE_OPTION = "license";
-	protected const string CATEGORY_OPTION = "category";
+	protected const string URL_OPTION = Variables.URL;
+	protected const string LICENSE_OPTION = Variables.LICENSE;
+	protected const string CATEGORY_OPTION = Variables.CATEGORY;
+	protected const string MAINTAINER_OPTION = Variables.MAINTAINER;
+	protected const string DEPENDENCIES_OPTION = Variables.DEPENDENCIES;
+	protected const string EXCLUDE_OPTION = Variables.EXCLUDE;
 	protected const string OVERWRITE_OPTION = "overwrite";
-	protected const string MAINTAINER_OPTION = "maintainer";
-	protected const string DEPENDENCIES_OPTION = "dependencies";
 	protected const string INSTALL_PATH_OPTION = "install-path";
 	protected const string DAEMON_OPTION = Variables.DaemonVariable.DAEMON;
 	protected const string DAEMON_BIND_OPTION = Variables.DaemonVariable.DAEMON_BIND;
@@ -130,7 +132,7 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 
 		if(context.Options.GetValue<Version>(VERSION_OPTION).IsZero())
 		{
-			Terminal.WriteLine(CommandOutletColor.Red, $"The version number is invalid.");
+			Dumper.InvalidVersion();
 			return ValueTask.FromResult<object>(null);
 		}
 
@@ -147,7 +149,7 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 
 		if(!Directory.Exists(source))
 		{
-			Terminal.WriteLine(CommandOutletColor.Red, $"The source directory '{source}' does not exist.");
+			Dumper.DirectoryNotExist(CommandOutletColor.Red, source);
 			return ValueTask.FromResult<object>(null);
 		}
 
@@ -170,7 +172,9 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		package.Scriptor.Script();
 
 		//加载安装条目
-		package.Entries.Load(source, context.Arguments);
+		package.Entries.Load(source,
+			context.Arguments,
+			context.Options.TryGetValue<string>(EXCLUDE_OPTION, out var exclusion) ? [exclusion] : []);
 
 		//添加版本文件
 		if(!package.Entries.Contains(".version"))

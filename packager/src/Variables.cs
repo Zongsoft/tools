@@ -52,6 +52,7 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 	internal const string DESCRIPTION = "description";
 	internal const string SOURCE = "source";
 	internal const string OUTPUT = "output";
+	internal const string EXCLUDE = "exclude";
 	internal const string EDITION = "edition";
 	internal const string VERSION = "version";
 	internal const string PLATFORM = "platform";
@@ -83,6 +84,7 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 	public string Description => _variables.TryGetValue(DESCRIPTION, out var value) ? value : null;
 	public string Source => _variables.TryGetValue(SOURCE, out var value) ? value : null;
 	public string Output => _variables.TryGetValue(OUTPUT, out var value) ? value : null;
+	public string Exclude => _variables.TryGetValue(EXCLUDE, out var value) ? value : null;
 	public string Edition => _variables.TryGetValue(EDITION, out var value) ? value : null;
 	public Version Version => _variables.TryGetValue(VERSION, out var value) ? Version.Parse(value) : null;
 	public Platform Platform => _variables.TryGetValue(PLATFORM, out var value) ? Enum.Parse<Platform>(value, true) : Platform.Unknown;

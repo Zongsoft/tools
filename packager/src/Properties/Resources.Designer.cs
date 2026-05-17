@@ -70,6 +70,15 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
         
         /// <summary>
+        ///   查找类似 The &apos;{0}&apos; directory does not exist. 的本地化字符串。
+        /// </summary>
+        internal static string DirectoryNotExist_Message {
+            get {
+                return ResourceManager.GetString("DirectoryNotExist.Message", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   查找类似 The &apos;{0}&apos; file does not exist. 的本地化字符串。
         /// </summary>
         internal static string FileNotExist_Message {
@@ -84,6 +93,15 @@ namespace Zongsoft.Tools.Packager.Properties {
         internal static string HostLocateFailed_Message {
             get {
                 return ResourceManager.GetString("HostLocateFailed.Message", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   查找类似 The version number is invalid. 的本地化字符串。
+        /// </summary>
+        internal static string InvalidVersion_Message {
+            get {
+                return ResourceManager.GetString("InvalidVersion.Message", resourceCulture);
             }
         }
         

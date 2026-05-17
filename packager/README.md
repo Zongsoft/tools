@@ -194,6 +194,7 @@ dotnet-pack tar \
 | --- | --- | --- |
 | `--source:<path>` | Current directory | Source directory whose files are packaged. |
 | `--output:<path>` | Source directory | Output directory for the generated package. Relative paths are resolved under `--source`. |
+| `--exclude:<patterns>` | Empty | Comma- or semicolon-separated file patterns to skip while loading package entries. |
 | `--edition:<name>` | Empty | Optional edition. Appended to package name; used as RPM release when present. |
 | `--compilation:<name>` | `Release` | Build configuration used when locating a daemon host under `bin/<configuration>/<framework>`. |
 | `--architecture:<arch>` | `x64` | Target CPU architecture, such as `x64`, `x86`, `arm64`, or `arm`. |
@@ -266,9 +267,22 @@ Entry rules:
 - Absolute paths outside `--source` are allowed; when no alias is supplied, only the file name is used.
 - Directories are included recursively.
 - Globbing supports `*` and `?` in the last path segment.
+- `--exclude` skips matching files while loading entries. Patterns are relative to `--source`, use `/` as the normalized separator, support `*`, `?`, and `**`, and may be separated by commas or semicolons.
 - Duplicate destination paths are reported as conflicts and skipped.
 - Aliases beginning with `/` or `\` are root-level entries. In `.deb` and `.rpm`, they are installed at that root path. In `.tar.gz`, they are stored under `.install/root/` and copied by `install.sh`.
 - Unix hosts preserve file permissions. Windows hosts assign `0755` to `.sh`, `.dll`, `.exe`, and extensionless files; other files use `0644`.
+
+Exclude examples:
+
+```bash
+dotnet-pack deb \
+  --name:MyApp \
+  --version:1.0.0 \
+  --platform:linux \
+  --framework:net10.0 \
+  --source:./publish \
+  --exclude:"*.pdb;appsettings.Development.json;logs/**"
+```
 
 ## systemd Services
 

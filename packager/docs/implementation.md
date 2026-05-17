@@ -92,6 +92,7 @@ protected override Package.Deb CreatePackage(CommandContext context)
 | --- | --- | --- |
 | `--source` | 当前目录 | 输入目录。 |
 | `--output` | `source` | 输出目录；相对路径基于 `source`。 |
+| `--exclude` | 空 | 加载打包项时跳过的文件模式列表，多个模式用逗号或分号分隔。 |
 | `--edition` | 空 | 包版本/渠道标识，参与包名；RPM 中也作为 release。 |
 | `--compilation` | `Release` | 查找宿主文件时使用的配置名。 |
 | `--architecture` | `x64` | 目标架构。 |
@@ -286,6 +287,17 @@ path:alias
 - 目录递归展开。
 - 通配符支持最后一级路径中的 `*` 和 `?`。
 - 重复的目标路径会触发冲突警告并跳过。
+
+### 排除规则
+
+`--exclude` 会在 `Package.EntryCollection.Load()` 收集文件时生效：
+
+- 多个模式用逗号或分号拆分。
+- 模式先经过变量展开，再统一为 `/` 路径分隔符。
+- 相对模式基于 `source`，同时会匹配源文件相对路径、最终包内路径和文件名。
+- 支持 `*`、`?`、`**`；目录模式如 `logs/` 等价于 `logs/**`。
+- 命中的文件直接跳过，不产生重复条目冲突警告。
+- systemd 生成/加入的服务文件和自动生成的 `.version` 文件不经过该过滤器。
 
 ### 根路径别名
 

@@ -35,6 +35,7 @@ using System;
 using System.IO;
 using System.Collections;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using System.Runtime.InteropServices;
 
 namespace Zongsoft.Tools.Packager;
@@ -177,12 +178,14 @@ public abstract partial class Package
 			this.AddEntry(source, path, alias, _package.EntryPrefix);
 		}
 
-		internal void Load(string source, IReadOnlyCollection<string> arguments)
+		internal void Load(string source, IReadOnlyCollection<string> arguments, IEnumerable<string> exclusions = null)
 		{
+			var exclusion = EntryExclusion.Create(source, exclusions);
+
 			if(arguments == null || arguments.Count == 0)
 			{
 				foreach(var file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
-					this.AddEntry(source, file, Path.GetRelativePath(source, file), _package.EntryPrefix);
+					this.AddEntry(source, file, Path.GetRelativePath(source, file), _package.EntryPrefix, exclusion);
 
 				return;
 			}
@@ -200,11 +203,13 @@ public abstract partial class Package
 				var path = index > 0 ? text[..index].Trim() : text;
 				var alias = index > 0 ? text[(index + 1)..].Trim() : null;
 
-				this.AddEntry(source, path, alias, _package.EntryPrefix);
+				this.AddEntry(source, path, alias, _package.EntryPrefix, exclusion);
 			}
 		}
 
-		void AddEntry(string source, string path, string alias, string prefix)
+		void AddEntry(string source, string path, string alias, string prefix) => this.AddEntry(source, path, alias, prefix, null);
+
+		void AddEntry(string source, string path, string alias, string prefix, EntryExclusion exclusion)
 		{
 			var rooted = IsRootedAlias(alias);
 
@@ -236,10 +241,10 @@ public abstract partial class Package
 					alias = string.Empty;
 
 				foreach(var file in Directory.GetFiles(working, pattern))
-					this.AddFile(file, Path.Combine(alias, Path.GetFileName(file)), rooted ? null : prefix, rooted);
+					this.AddFile(file, Path.Combine(alias, Path.GetFileName(file)), rooted ? null : prefix, rooted, exclusion);
 
 				foreach(var directory in Directory.GetDirectories(working, pattern))
-					this.AddDirectory(source, directory, Path.Combine(alias, Path.GetFileName(directory)), rooted ? null : prefix, rooted);
+					this.AddDirectory(source, directory, Path.Combine(alias, Path.GetFileName(directory)), rooted ? null : prefix, rooted, exclusion);
 			}
 			else
 			{
@@ -249,9 +254,9 @@ public abstract partial class Package
 					alias = string.Empty;
 
 				if(File.Exists(path))
-					this.AddFile(path, alias, rooted ? null : prefix, rooted);
+					this.AddFile(path, alias, rooted ? null : prefix, rooted, exclusion);
 				else if(Directory.Exists(path))
-					this.AddDirectory(source, path, alias, rooted ? null : prefix, rooted);
+					this.AddDirectory(source, path, alias, rooted ? null : prefix, rooted, exclusion);
 				else
 					Dumper.PathNotExist(path);
 			}
@@ -259,16 +264,16 @@ public abstract partial class Package
 			static bool IsRootedAlias(string alias) => !string.IsNullOrEmpty(alias) && (alias[0] == '/' || alias[0] == '\\');
 		}
 
-		void AddDirectory(string source, string path, string alias, string prefix, bool rooted)
+		void AddDirectory(string source, string path, string alias, string prefix, bool rooted, EntryExclusion exclusion)
 		{
 			foreach(var file in Directory.GetFiles(path))
-				this.AddFile(file, Path.Combine(alias, Path.GetFileName(file)), prefix, rooted);
+				this.AddFile(file, Path.Combine(alias, Path.GetFileName(file)), prefix, rooted, exclusion);
 
 			foreach(var directory in Directory.GetDirectories(path))
-				this.AddDirectory(source, directory, Path.Combine(alias, Path.GetFileName(directory)), prefix, rooted);
+				this.AddDirectory(source, directory, Path.Combine(alias, Path.GetFileName(directory)), prefix, rooted, exclusion);
 		}
 
-		void AddFile(string source, string entryName, string prefix, bool rooted)
+		void AddFile(string source, string entryName, string prefix, bool rooted, EntryExclusion exclusion)
 		{
 			if(string.IsNullOrEmpty(entryName))
 				entryName = Path.GetFileName(source);
@@ -281,6 +286,10 @@ public abstract partial class Package
 			}
 
 			entryName = Utility.NormalizePath(Path.Combine(prefix ?? string.Empty, entryName));
+
+			if(exclusion != null && exclusion.IsMatch(source, entryName))
+				return;
+
 			var key = rooted ? $"/{entryName}" : entryName;
 
 			if(_entries.ContainsKey(key))
@@ -295,6 +304,133 @@ public abstract partial class Package
 
 		IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
 		public IEnumerator<Entry> GetEnumerator() => _entries.Values.GetEnumerator();
+
+		sealed class EntryExclusion
+		{
+			private readonly string _source;
+			private readonly Pattern[] _patterns;
+
+			private EntryExclusion(string source, Pattern[] patterns)
+			{
+				_source = Utility.NormalizePath(Path.GetFullPath(source));
+				_patterns = patterns;
+			}
+
+			public static EntryExclusion Create(string source, IEnumerable<string> exclusions)
+			{
+				if(exclusions == null)
+					return null;
+
+				var patterns = new List<Pattern>();
+
+				foreach(var exclusion in exclusions)
+				{
+					if(string.IsNullOrWhiteSpace(exclusion))
+						continue;
+
+					if(!Normalizer.TryNormalize(exclusion, out var text) || string.IsNullOrWhiteSpace(text))
+						continue;
+
+					foreach(var pattern in text.Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+						patterns.Add(new(pattern));
+				}
+
+				return patterns.Count == 0 ? null : new(source, patterns.ToArray());
+			}
+
+			public bool IsMatch(string source, string entryName)
+			{
+				var packagePath = Utility.NormalizePath(entryName).TrimStart('/');
+				var sourcePath = Utility.NormalizePath(Path.GetFullPath(source));
+				var sourceRelativePath = sourcePath.StartsWith(_source + "/", StringComparison.OrdinalIgnoreCase) ?
+					sourcePath[(_source.Length + 1)..] :
+					sourcePath;
+				var fileName = Path.GetFileName(sourcePath);
+
+				foreach(var pattern in _patterns)
+				{
+					if(pattern.IsMatch(packagePath) ||
+					   pattern.IsMatch(sourceRelativePath) ||
+					   pattern.IsMatch(fileName) ||
+					   pattern.IsMatch(sourcePath))
+						return true;
+				}
+
+				return false;
+			}
+
+			sealed class Pattern
+			{
+				private readonly Regex _regex;
+				private readonly Regex _fileNameRegex;
+
+				public Pattern(string text)
+				{
+					var pattern = Utility.NormalizePath(text.Trim());
+
+					if(pattern.EndsWith("/", StringComparison.Ordinal))
+						pattern += "**";
+
+					pattern = pattern.TrimStart('/');
+					_regex = new Regex(ToRegexPattern(pattern), RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+					_fileNameRegex = pattern.Contains('/') ? null : _regex;
+				}
+
+				public bool IsMatch(string path)
+				{
+					if(string.IsNullOrEmpty(path))
+						return false;
+
+					path = Utility.NormalizePath(path).TrimStart('/');
+
+					return _regex.IsMatch(path) || (_fileNameRegex != null && _fileNameRegex.IsMatch(Path.GetFileName(path)));
+				}
+
+				static string ToRegexPattern(string pattern)
+				{
+					var result = new System.Text.StringBuilder();
+
+					result.Append('^');
+
+					for(int i = 0; i < pattern.Length; i++)
+					{
+						var character = pattern[i];
+
+						if(character == '*')
+						{
+							if(i + 1 < pattern.Length && pattern[i + 1] == '*')
+							{
+								if(i + 2 < pattern.Length && pattern[i + 2] == '/')
+								{
+									result.Append("(?:.*/)?");
+									i += 2;
+								}
+								else
+								{
+									result.Append(".*");
+									i++;
+								}
+							}
+							else
+							{
+								result.Append("[^/]*");
+							}
+						}
+						else if(character == '?')
+						{
+							result.Append("[^/]");
+						}
+						else
+						{
+							result.Append(Regex.Escape(character.ToString()));
+						}
+					}
+
+					result.Append("(?:/.*)?$");
+					return result.ToString();
+				}
+			}
+		}
 	}
 	#endregion
 }
