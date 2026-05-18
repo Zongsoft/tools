@@ -410,7 +410,13 @@ dotnet-pack deb \
 
 ### `.tar.gz`
 
-tar 包包含应用文件、`.root/` 下的可选根路径条目，以及可执行的 `install.sh` 和 `uninstall.sh`。生命周期脚本会融合进 `install.sh` 和 `uninstall.sh`。
+tar 命令会生成 `.tar.gz` 包及同名 `.sh` 安装脚本。tar 包包含应用文件、`.root/` 下的可选根路径条目，以及可执行的 `install.sh` 和 `uninstall.sh`。生命周期脚本会融合进 `install.sh` 和 `uninstall.sh`。
+
+一键安装：
+
+```bash
+sudo sh ./MyCompany.MyApp@1.0.0_linux-x64.sh
+```
 
 安装：
 

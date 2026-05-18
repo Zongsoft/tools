@@ -410,7 +410,13 @@ Common variables:
 
 ### `.tar.gz`
 
-The tar package contains application files, optional root-level entries under `.root/`, and executable `install.sh` and `uninstall.sh` scripts. Lifecycle scripts are merged into `install.sh` and `uninstall.sh`.
+The tar command generates a `.tar.gz` archive and a same-named `.sh` installer script. The tar package contains application files, optional root-level entries under `.root/`, and executable `install.sh` and `uninstall.sh` scripts. Lifecycle scripts are merged into `install.sh` and `uninstall.sh`.
+
+One-step install:
+
+```bash
+sudo sh ./MyCompany.MyApp@1.0.0_linux-x64.sh
+```
 
 Install:
 

@@ -65,6 +65,15 @@ partial class Generator
 
 		WriteTarText(writer, "install.sh", CreateInstallScript(package), Utility.Unix.Mode755);
 		WriteTarText(writer, "uninstall.sh", CreateUninstallScript(package), Utility.Unix.Mode755);
+
+		//生成与包同名的安装器脚本
+		WriteInstallerScript(
+			Path.Combine(output, GetInstallerFileName(package)),
+			CreateInstallerScript(package));
+
+		static string GetInstallerFileName(Package package) => package.FileName.EndsWith(Package.Tar.EXTENSION, StringComparison.OrdinalIgnoreCase) ?
+			package.FileName[..^Package.Tar.EXTENSION.Length] + ".sh" :
+			Path.ChangeExtension(package.FileName, ".sh");
 	}
 
 	static void WriteTarEntry(TarWriter writer, Package.Entry item, string name = null)
@@ -92,6 +101,49 @@ partial class Generator
 
 		writer.WriteEntry(entry);
 		entry.DataStream.Dispose();
+	}
+
+	static void WriteInstallerScript(string path, string text)
+	{
+		var data = Encoding.UTF8.GetBytes((text ?? string.Empty).ReplaceLineEndings("\n"));
+
+		using(var stream = new FileStream(path, FileMode.Create, FileAccess.Write))
+			stream.Write(data);
+
+		if(!OperatingSystem.IsWindows())
+			File.SetUnixFileMode(path, Utility.Unix.Mode755);
+	}
+
+	static string CreateInstallerScript(Package package)
+	{
+		var archiveName = ShellQuote(package.FileName);
+
+		return $$"""
+			#!/bin/sh
+			set -e
+
+			SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+			ARCHIVE="$SOURCE_DIR"/{{archiveName}}
+
+			if [ ! -f "$ARCHIVE" ]; then
+				echo "Package archive not found: $ARCHIVE" >&2
+				exit 1
+			fi
+
+			WORK_DIR=$(mktemp -d)
+			cleanup() {
+				rm -rf "$WORK_DIR"
+			}
+			trap cleanup EXIT HUP INT TERM
+
+			tar -xzf "$ARCHIVE" -C "$WORK_DIR"
+			if [ ! -x "$WORK_DIR/install.sh" ]; then
+				echo "Installer not found in package archive." >&2
+				exit 1
+			fi
+
+			"$WORK_DIR/install.sh" "$@"
+			""";
 	}
 
 	static string CreateInstallScript(Package package)
@@ -209,4 +261,5 @@ partial class Generator
 	}
 
 	static string Quote(string value) => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\"", "\\\"");
+	static string ShellQuote(string value) => string.IsNullOrEmpty(value) ? "''" : $"'{value.Replace("'", "'\"'\"'")}'";
 }

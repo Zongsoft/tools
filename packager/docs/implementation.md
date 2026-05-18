@@ -447,6 +447,15 @@ new TarWriter(gzip, TarEntryFormat.Pax, false)
 
 因此归档条目使用 PAX tar 格式，可支持更长路径和扩展元数据。
 
+生成 `.tar.gz` 的同时，会在输出目录生成一个同名 `.sh` 安装脚本，例如：
+
+```text
+MyApp@1.0.0_linux-x64.tar.gz
+MyApp@1.0.0_linux-x64.sh
+```
+
+该脚本定位同目录下的 `.tar.gz`，解压到临时目录，并调用解压后的 `install.sh` 完成安装。
+
 ### 归档结构
 
 ```text
@@ -896,6 +905,7 @@ RPM header 同时保存一份文件元数据，供包管理器查询和校验。
 
 ```bash
 tar -tzf package.tar.gz
+sudo sh ./package.sh
 tar -xzf package.tar.gz -C /tmp/package-test
 DESTDIR=/tmp/stage /tmp/package-test/install.sh
 find /tmp/stage -maxdepth 6 -type f | sort
