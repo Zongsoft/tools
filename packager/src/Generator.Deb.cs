@@ -62,7 +62,7 @@ partial class Generator
 	static string GetDebControl(Package package)
 	{
 		var builder = new StringBuilder();
-		var summary = string.IsNullOrWhiteSpace(package.Summary) ? package.Title : package.Summary;
+		var summary = NormalizeDebText(package.Summary) ?? NormalizeDebText(package.Title) ?? NormalizeDebText(package.Name) ?? package.PackageName;
 		var description = string.IsNullOrWhiteSpace(package.Description) ? summary : package.Description;
 
 		builder.AppendLine($"Package: {package.PackageName}");
@@ -78,7 +78,7 @@ partial class Generator
 		if(package.Dependencies.Length > 0)
 			builder.AppendLine($"Depends: {string.Join(", ", package.Dependencies)}");
 
-		builder.AppendLine($"Description: {NormalizeDebText(summary ?? package.Name)}");
+		builder.AppendLine($"Description: {summary}");
 
 		if(!string.IsNullOrWhiteSpace(description))
 		{
@@ -86,17 +86,20 @@ partial class Generator
 				builder.AppendLine(string.IsNullOrWhiteSpace(line) ? " ." : $" {NormalizeDebText(line)}");
 		}
 
-		return builder.ToString();
+		return builder.ToString().ReplaceLineEndings("\n");
 	}
 
 	static byte[] CreateDataTarball(IReadOnlyCollection<Package.Entry> entries)
 	{
 		using var memory = new MemoryStream();
 		using(var gzip = new GZipStream(memory, CompressionLevel.Optimal, true))
-		using(var writer = new TarWriter(gzip, TarEntryFormat.Pax, true))
+		using(var writer = new TarWriter(gzip, TarEntryFormat.Ustar, true))
 		{
+			foreach(var directory in GetDebianDirectories(entries))
+				WriteDebTarDirectory(writer, directory);
+
 			foreach(var entry in entries)
-				WriteTarEntry(writer, entry);
+				WriteDebTarEntry(writer, entry);
 		}
 
 		return memory.ToArray();
@@ -106,20 +109,64 @@ partial class Generator
 	{
 		using var memory = new MemoryStream();
 		using(var gzip = new GZipStream(memory, CompressionLevel.Optimal, true))
-		using(var writer = new TarWriter(gzip, TarEntryFormat.Pax, true))
+		using(var writer = new TarWriter(gzip, TarEntryFormat.Ustar, true))
 		{
-			WriteTarText(writer, "control", control, 0644);
-			WriteTarScript(writer, "preinst", package.Scripts.Installing);
-			WriteTarScript(writer, "postinst", package.Scripts.Installed);
-			WriteTarScript(writer, "prerm", package.Scripts.Uninstalling);
-			WriteTarScript(writer, "postrm", package.Scripts.Uninstalled);
+			WriteDebTarText(writer, "control", control, 420);
+			WriteDebTarScript(writer, "preinst", package.Scripts.Installing);
+			WriteDebTarScript(writer, "postinst", package.Scripts.Installed);
+			WriteDebTarScript(writer, "prerm", package.Scripts.Uninstalling);
+			WriteDebTarScript(writer, "postrm", package.Scripts.Uninstalled);
 
 			var conffiles = GetDebianConfigurationFiles(package.Entries);
 			if(!string.IsNullOrEmpty(conffiles))
-				WriteTarText(writer, "conffiles", conffiles, 0644);
+				WriteDebTarText(writer, "conffiles", conffiles, 420);
 		}
 
 		return memory.ToArray();
+	}
+
+	static void WriteDebTarEntry(TarWriter writer, Package.Entry item)
+	{
+		var entry = new UstarTarEntry(TarEntryType.RegularFile, item.EntryName)
+		{
+			Mode = GetDebianFileMode(item.Mode),
+			ModificationTime = DateTimeOffset.FromUnixTimeSeconds(item.ModifiedTime),
+			DataStream = File.OpenRead(item.Source),
+		};
+
+		writer.WriteEntry(entry);
+		entry.DataStream.Dispose();
+	}
+
+	static void WriteDebTarDirectory(TarWriter writer, string name)
+	{
+		writer.WriteEntry(new UstarTarEntry(TarEntryType.Directory, name)
+		{
+			Mode = GetDebianFileMode(493),
+			ModificationTime = DateTimeOffset.UtcNow,
+		});
+	}
+
+	static void WriteDebTarScript(TarWriter writer, string name, string script)
+	{
+		if(string.IsNullOrWhiteSpace(script))
+			return;
+
+		WriteDebTarText(writer, name, "#!/bin/sh\nset -e\n" + script.Trim().ReplaceLineEndings("\n") + "\n", 493);
+	}
+
+	static void WriteDebTarText(TarWriter writer, string name, string text, int mode)
+	{
+		var data = Encoding.UTF8.GetBytes((text ?? string.Empty).ReplaceLineEndings("\n"));
+		var entry = new UstarTarEntry(TarEntryType.RegularFile, name)
+		{
+			Mode = GetDebianFileMode(mode),
+			ModificationTime = DateTimeOffset.UtcNow,
+			DataStream = new MemoryStream(data),
+		};
+
+		writer.WriteEntry(entry);
+		entry.DataStream.Dispose();
 	}
 
 	static string GetDebianConfigurationFiles(IReadOnlyCollection<Package.Entry> entries)
@@ -133,7 +180,32 @@ partial class Generator
 		return files.Length == 0 ? null : string.Join('\n', files) + "\n";
 	}
 
+	static IEnumerable<string> GetDebianDirectories(IEnumerable<Package.Entry> entries)
+	{
+		var directories = new List<string>();
+		var unique = new HashSet<string>(StringComparer.Ordinal);
+
+		foreach(var entry in entries)
+		{
+			var path = Utility.NormalizePath(entry.EntryName);
+			var index = 0;
+
+			while((index = path.IndexOf('/', index + 1)) > 0)
+			{
+				var directory = path[..index];
+				if(unique.Add(directory))
+					directories.Add(directory);
+			}
+		}
+
+		return directories;
+	}
+
 	static bool IsDebianConfigurationFile(Package.Entry entry) => entry.Rooted && entry.EntryName.StartsWith("etc/", StringComparison.Ordinal);
+
+	static UnixFileMode GetDebianFileMode(int mode) => mode <= 0x1FF ?
+		(UnixFileMode)mode :
+		(UnixFileMode)Convert.ToInt32(mode.ToString(System.Globalization.CultureInfo.InvariantCulture), 8);
 
 	static void WriteArHeader(Stream stream) => stream.Write(Encoding.ASCII.GetBytes("!<arch>\n"));
 
