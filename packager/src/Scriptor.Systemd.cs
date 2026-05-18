@@ -117,6 +117,7 @@ partial class Scriptor
 			if(string.IsNullOrWhiteSpace(uninstalling))
 				uninstalling = $$"""
 				if command -v systemctl >/dev/null 2>&1; then
+					systemctl disable '{{serviceName}}' >/dev/null 2>&1 || true
 					systemctl stop '{{serviceName}}' >/dev/null 2>&1 || true
 				fi
 				""";
