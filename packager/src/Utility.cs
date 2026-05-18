@@ -75,14 +75,8 @@ internal static class Utility
 
 	public static class Unix
 	{
-		public const int Mode644 = (int)FileMode.Mode644;
-		public const int Mode755 = (int)FileMode.Mode755;
-
-		public static class FileMode
-		{
-			public const UnixFileMode Mode644 = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead;
-			public const UnixFileMode Mode755 = Mode644 | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute;
-		}
+		public const UnixFileMode Mode644 = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead;
+		public const UnixFileMode Mode755 = Mode644 | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute;
 
 		public static string GetInstallPath(string name)
 		{
@@ -93,13 +87,13 @@ internal static class Utility
 			return $"/opt/{name.Replace('.', '/')}";
 		}
 
-		public static int GetFileMode(string path)
+		public static UnixFileMode GetFileMode(string path)
 		{
 			if(!OperatingSystem.IsWindows())
 			{
-				var mode = (int)(File.GetUnixFileMode(path) & (UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute));
+				var mode = File.GetUnixFileMode(path) & (UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute);
 
-				if(mode > 0)
+				if(mode != 0)
 					return mode;
 			}
 

@@ -111,7 +111,7 @@ partial class Generator
 		using(var gzip = new GZipStream(memory, CompressionLevel.Optimal, true))
 		using(var writer = new TarWriter(gzip, TarEntryFormat.Ustar, true))
 		{
-			WriteDebTarText(writer, "control", control, Utility.Unix.FileMode.Mode644);
+			WriteDebTarText(writer, "control", control, Utility.Unix.Mode644);
 			WriteDebTarScript(writer, "preinst", package.Scripts.Installing);
 			WriteDebTarScript(writer, "postinst", package.Scripts.Installed);
 			WriteDebTarScript(writer, "prerm", package.Scripts.Uninstalling);
@@ -119,7 +119,7 @@ partial class Generator
 
 			var conffiles = GetDebianConfigurationFiles(package.Entries);
 			if(!string.IsNullOrEmpty(conffiles))
-				WriteDebTarText(writer, "conffiles", conffiles, Utility.Unix.FileMode.Mode644);
+				WriteDebTarText(writer, "conffiles", conffiles, Utility.Unix.Mode644);
 		}
 
 		return memory.ToArray();
@@ -129,7 +129,7 @@ partial class Generator
 	{
 		var entry = new UstarTarEntry(TarEntryType.RegularFile, item.EntryName)
 		{
-			Mode = (UnixFileMode)item.Mode,
+			Mode = item.Mode,
 			ModificationTime = DateTimeOffset.FromUnixTimeSeconds(item.ModifiedTime),
 			DataStream = File.OpenRead(item.Source),
 		};
@@ -142,7 +142,7 @@ partial class Generator
 	{
 		writer.WriteEntry(new UstarTarEntry(TarEntryType.Directory, name)
 		{
-			Mode = Utility.Unix.FileMode.Mode755,
+			Mode = Utility.Unix.Mode755,
 			ModificationTime = DateTimeOffset.UtcNow,
 		});
 	}
@@ -152,7 +152,7 @@ partial class Generator
 		if(string.IsNullOrWhiteSpace(script))
 			return;
 
-		WriteDebTarText(writer, name, "#!/bin/sh\nset -e\n" + script.Trim().ReplaceLineEndings("\n") + "\n", Utility.Unix.FileMode.Mode755);
+		WriteDebTarText(writer, name, "#!/bin/sh\nset -e\n" + script.Trim().ReplaceLineEndings("\n") + "\n", Utility.Unix.Mode755);
 	}
 
 	static void WriteDebTarText(TarWriter writer, string name, string text, UnixFileMode mode)

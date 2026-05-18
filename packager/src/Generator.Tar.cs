@@ -71,7 +71,7 @@ partial class Generator
 	{
 		var entry = new PaxTarEntry(TarEntryType.RegularFile, name ?? item.EntryName)
 		{
-			Mode = (UnixFileMode)item.Mode,
+			Mode = item.Mode,
 			ModificationTime = DateTimeOffset.FromUnixTimeSeconds(item.ModifiedTime),
 			DataStream = File.OpenRead(item.Source),
 		};
@@ -88,12 +88,12 @@ partial class Generator
 		WriteTarText(writer, name, "#!/bin/sh" + Environment.NewLine + "set -e" + Environment.NewLine + script.Trim() + Environment.NewLine, Utility.Unix.Mode755);
 	}
 
-	static void WriteTarText(TarWriter writer, string name, string text, int mode)
+	static void WriteTarText(TarWriter writer, string name, string text, UnixFileMode mode)
 	{
 		var data = Encoding.UTF8.GetBytes(text ?? string.Empty);
 		var entry = new PaxTarEntry(TarEntryType.RegularFile, name)
 		{
-			Mode = (UnixFileMode)mode,
+			Mode = mode,
 			ModificationTime = DateTimeOffset.UtcNow,
 			DataStream = new MemoryStream(data),
 		};
@@ -168,10 +168,11 @@ partial class Generator
 		foreach(var entry in entries)
 		{
 			var path = Quote(entry.EntryName);
+			var mode = Convert.ToString((int)entry.Mode, 8).PadLeft(4, '0');
 			builder.AppendLine($"\troot_source=\"$SOURCE_DIR/.install/root/{path}\"");
 			builder.AppendLine($"\troot_target=\"${{DESTDIR%/}}/{path}\"");
 			builder.AppendLine("\tinstall -d \"$(dirname -- \"$root_target\")\"");
-			builder.AppendLine($"\tinstall -m {GetInstallMode(entry.Mode)} \"$root_source\" \"$root_target\"");
+			builder.AppendLine($"\tinstall -m {mode} \"$root_source\" \"$root_target\"");
 		}
 
 		builder.Append("fi");
@@ -192,5 +193,4 @@ partial class Generator
 	}
 
 	static string Quote(string value) => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\"", "\\\"");
-	static string GetInstallMode(int mode) => mode <= 511 ? Convert.ToString(mode, 8).PadLeft(4, '0') : mode.ToString("0000");
 }

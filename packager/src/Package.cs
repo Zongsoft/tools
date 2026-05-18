@@ -140,13 +140,13 @@ public abstract partial class Package
 		string Uninstalling,
 		string Uninstalled);
 
-	public readonly struct Entry(string source, string entryName, long size, long modifiedTime, int mode, bool rooted)
+	public readonly struct Entry(string source, string entryName, long size, long modifiedTime, UnixFileMode mode, bool rooted)
 	{
 		public readonly string Source = source;
 		public readonly string EntryName = entryName;
 		public readonly long Size = size;
 		public readonly long ModifiedTime = modifiedTime;
-		public readonly int Mode = mode;
+		public readonly UnixFileMode Mode = mode;
 		public readonly bool Rooted = rooted;
 
 		public override string ToString() => string.IsNullOrEmpty(this.Source) ?

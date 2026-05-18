@@ -49,8 +49,8 @@ partial class Generator
 	const int RPM_SENSE_EQUAL = 8;
 	const int RPM_SENSE_RPMLIB = 1 << 24;
 	const int RPM_FILE_CONFIG = 1;
-	const int RPM_MODE_REGULAR_FILE = 0x8000;
-	const int RPM_MODE_DIRECTORY = 0x4000;
+	const int RPM_FILE_TYPE_REGULAR = 0x8000;
+	const int RPM_FILE_TYPE_DIRECTORY = 0x4000;
 
 	public static void Rpm(this Package.Rpm package, string output, bool overwrite)
 	{
@@ -76,15 +76,15 @@ partial class Generator
 		var inode = 1;
 
 		foreach(var directory in directories)
-			WriteCpioEntry(raw, inode++, "." + directory, RPM_MODE_DIRECTORY | Utility.Unix.Mode755, 0, DateTimeOffset.UtcNow.ToUnixTimeSeconds(), null);
+			WriteCpioEntry(raw, inode++, "." + directory, RPM_FILE_TYPE_DIRECTORY, Utility.Unix.Mode755, 0, DateTimeOffset.UtcNow.ToUnixTimeSeconds(), null);
 
 		foreach(var entry in entries)
 		{
 			using var file = File.OpenRead(entry.Source);
-			WriteCpioEntry(raw, inode++, "." + GetRpmPath(entry.EntryName), RPM_MODE_REGULAR_FILE | entry.Mode, entry.Size, entry.ModifiedTime, file);
+			WriteCpioEntry(raw, inode++, "." + GetRpmPath(entry.EntryName), RPM_FILE_TYPE_REGULAR, entry.Mode, entry.Size, entry.ModifiedTime, file);
 		}
 
-		WriteCpioEntry(raw, inode, "TRAILER!!!", 0, 0, 0, null);
+		WriteCpioEntry(raw, inode, "TRAILER!!!", 0, UnixFileMode.None, 0, 0, null);
 		Pad(raw, 512);
 
 		archiveSize = raw.Length;
@@ -97,10 +97,11 @@ partial class Generator
 		return compressed.ToArray();
 	}
 
-	static void WriteCpioEntry(Stream stream, int inode, string name, int mode, long size, long mtime, Stream data)
+	static void WriteCpioEntry(Stream stream, int inode, string name, int fileType, UnixFileMode mode, long size, long mtime, Stream data)
 	{
+		var rawMode = fileType | (int)mode;
 		var namesize = Encoding.UTF8.GetByteCount(name) + 1;
-		var header = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"070701{inode:x8}{mode:x8}{0:x8}{0:x8}{1:x8}{mtime:x8}{size:x8}{0:x8}{0:x8}{0:x8}{0:x8}{namesize:x8}{0:x8}");
+		var header = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"070701{inode:x8}{rawMode:x8}{0:x8}{0:x8}{1:x8}{mtime:x8}{size:x8}{0:x8}{0:x8}{0:x8}{0:x8}{namesize:x8}{0:x8}");
 
 		stream.Write(Encoding.ASCII.GetBytes(header));
 		stream.Write(Encoding.UTF8.GetBytes(name));
@@ -166,21 +167,21 @@ partial class Generator
 		foreach(var directory in directories)
 		{
 			var fullName = directory == "/" ? "/" : directory + "/";
-			AddRpmEntry(result, directories, fullName, 0, RPM_MODE_DIRECTORY | Utility.Unix.Mode755, DateTimeOffset.UtcNow.ToUnixTimeSeconds(), string.Empty, 0);
+			AddRpmEntry(result, directories, fullName, 0, RPM_FILE_TYPE_DIRECTORY, Utility.Unix.Mode755, DateTimeOffset.UtcNow.ToUnixTimeSeconds(), string.Empty, 0);
 		}
 
 		foreach(var entry in entries)
 		{
 			using var stream = File.OpenRead(entry.Source);
 			var digest = Convert.ToHexString(SHA1.HashData(stream)).ToLowerInvariant();
-			AddRpmEntry(result, directories, GetRpmPath(entry.EntryName), entry.Size, RPM_MODE_REGULAR_FILE | entry.Mode, entry.ModifiedTime, digest, IsRpmConfigurationFile(entry) ? RPM_FILE_CONFIG : 0);
+			AddRpmEntry(result, directories, GetRpmPath(entry.EntryName), entry.Size, RPM_FILE_TYPE_REGULAR, entry.Mode, entry.ModifiedTime, digest, IsRpmConfigurationFile(entry) ? RPM_FILE_CONFIG : 0);
 		}
 
 		result.Directories.AddRange(directories.ConvertAll(directory => directory.EndsWith('/') ? directory : directory + "/"));
 		return result;
 	}
 
-	static void AddRpmEntry(RpmEntryCollection entries, IReadOnlyList<string> directories, string fullName, long size, int mode, long modified, string digest, int flags)
+	static void AddRpmEntry(RpmEntryCollection entries, IReadOnlyList<string> directories, string fullName, long size, int fileType, UnixFileMode mode, long modified, string digest, int flags)
 	{
 		var name = fullName.TrimEnd('/');
 		var directory = fullName.EndsWith('/') ?
@@ -199,6 +200,7 @@ partial class Generator
 		entries.Add(new(
 			entries.Count + 1,
 			size,
+			fileType,
 			mode,
 			modified,
 			digest,
@@ -379,7 +381,7 @@ partial class Generator
 	};
 
 	readonly record struct RpmHeaderIndex(int Tag, int Type, int Offset, int Count);
-	readonly record struct RpmEntry(int Inode, long Size, int Mode, long ModifiedTime, string Digest, int Flags, int DirectoryIndex, string BaseName);
+	readonly record struct RpmEntry(int Inode, long Size, int FileType, UnixFileMode Mode, long ModifiedTime, string Digest, int Flags, int DirectoryIndex, string BaseName);
 	readonly record struct RpmDependency(string Name, int Flags, string Version);
 
 	sealed class RpmSignature
@@ -426,7 +428,7 @@ partial class Generator
 			builder.AddScript(1025, package.Scripts.Uninstalling);
 			builder.AddScript(1026, package.Scripts.Uninstalled);
 			builder.AddInt32Array(1028, rpmEntries.ConvertAll(entry => (int)Math.Min(int.MaxValue, entry.Size)));
-			builder.AddInt16Array(1030, rpmEntries.ConvertAll(entry => (short)entry.Mode));
+			builder.AddInt16Array(1030, rpmEntries.ConvertAll(entry => (short)(entry.FileType | (int)entry.Mode)));
 			builder.AddInt16Array(1033, rpmEntries.ConvertAll(_ => (short)0));
 			builder.AddInt32Array(1034, rpmEntries.ConvertAll(entry => (int)entry.ModifiedTime));
 			builder.AddStringArray(1035, rpmEntries.ConvertAll(entry => entry.Digest));
