@@ -480,7 +480,7 @@ partial class Generator
 		public void AddScript(int tag, string value)
 		{
 			if(!string.IsNullOrWhiteSpace(value))
-				AddString(tag, "#!/bin/sh\nset -e\n" + value.Trim() + "\n");
+				AddString(tag, "#!/bin/sh\nset -e\n" + value.Trim().ReplaceLineEndings("\n") + "\n");
 		}
 		public void AddBinary(int tag, byte[] value) => Add(tag, 7, value.Length, () => _store.Write(value));
 		public void AddInt32(int tag, int value) => AddInt32Array(tag, [value]);

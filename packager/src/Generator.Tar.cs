@@ -85,12 +85,12 @@ partial class Generator
 		if(string.IsNullOrWhiteSpace(script))
 			return;
 
-		WriteTarText(writer, name, "#!/bin/sh" + Environment.NewLine + "set -e" + Environment.NewLine + script.Trim() + Environment.NewLine, Utility.Unix.Mode755);
+		WriteTarText(writer, name, "#!/bin/sh\nset -e\n" + script.Trim().ReplaceLineEndings("\n") + "\n", Utility.Unix.Mode755);
 	}
 
 	static void WriteTarText(TarWriter writer, string name, string text, UnixFileMode mode)
 	{
-		var data = Encoding.UTF8.GetBytes(text ?? string.Empty);
+		var data = Encoding.UTF8.GetBytes((text ?? string.Empty).ReplaceLineEndings("\n"));
 		var entry = new PaxTarEntry(TarEntryType.RegularFile, name)
 		{
 			Mode = mode,
