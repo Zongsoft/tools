@@ -27,7 +27,7 @@
 | `Package.Tar.cs` | `.tar.gz` 包类型：默认安装路径、文件名、入口方法。 |
 | `Package.Deb.cs` | `.deb` 包类型：默认安装路径、文件名、入口方法。 |
 | `Package.Rpm.cs` | `.rpm` 包类型：默认安装路径、文件名、RPM 专用属性。 |
-| `Generator.Tar.cs` | 写入 gzip PAX tar、生命周期脚本、`install.sh`。 |
+| `Generator.Tar.cs` | 写入 gzip PAX tar、`install.sh`、`uninstall.sh`。 |
 | `Generator.Deb.cs` | 写入 Debian `ar` 容器、`control.tar.gz`、`data.tar.gz`。 |
 | `Generator.Rpm.cs` | 写入 RPM lead、signature/header、metadata header、gzip cpio payload。 |
 | `Scriptor.Systemd.cs` | 生成或收集 systemd 单元文件，生成安装/卸载脚本。 |
@@ -321,7 +321,7 @@ dotnet-pack deb \
 | --- | --- |
 | `.deb` | payload 路径为 `etc/myapp/appsettings.json`，安装后位于 `/etc/myapp/appsettings.json`；`/etc` 下 root 条目会写入 `conffiles`。 |
 | `.rpm` | payload 路径为 `/etc/myapp/appsettings.json`，RPM header 中标记配置文件。 |
-| `.tar.gz` | 文件存放到 `.install/root/etc/myapp/appsettings.json`，由 `install.sh` 复制到 `${DESTDIR}/etc/myapp/appsettings.json`。 |
+| `.tar.gz` | 文件存放到 `.root/etc/myapp/appsettings.json`，由 `install.sh` 复制到 `${DESTDIR}/etc/myapp/appsettings.json`。 |
 
 ### 文件权限
 
@@ -412,10 +412,10 @@ http://127.0.0.1:<port>
 
 | `Package.InstallScripts` | Debian 文件 | RPM tag | Tar 路径 |
 | --- | --- | --- | --- |
-| `Installing` | `preinst` | `1023` | `.install/installing.sh` |
-| `Installed` | `postinst` | `1024` | `.install/installed.sh` |
-| `Uninstalling` | `prerm` | `1025` | `.install/uninstalling.sh` |
-| `Uninstalled` | `postrm` | `1026` | `.install/uninstalled.sh` |
+| `Installing` | `preinst` | `1023` | 融合到 `install.sh` |
+| `Installed` | `postinst` | `1024` | 融合到 `install.sh` |
+| `Uninstalling` | `prerm` | `1025` | 融合到 `uninstall.sh` |
+| `Uninstalled` | `postrm` | `1026` | 融合到 `uninstall.sh` |
 
 未提供脚本时，默认行为：
 
@@ -451,15 +451,12 @@ new TarWriter(gzip, TarEntryFormat.Pax, false)
 
 ```text
 <application files>
-.install/root/<rooted files>
-.install/installing.sh
-.install/installed.sh
-.install/uninstalling.sh
-.install/uninstalled.sh
+.root/<rooted files>
 install.sh
+uninstall.sh
 ```
 
-`.install/*` 脚本只有在对应内容非空时写入。rooted 文件只有存在根路径别名时写入 `.install/root/`。
+rooted 文件只有存在根路径别名时写入 `.root/`。生命周期脚本不再作为独立文件写入，而是融合到 `install.sh` 和 `uninstall.sh`。
 
 ### 文件条目
 
@@ -476,20 +473,20 @@ data = File.OpenRead(entry.Source)
 rooted 文件写入为：
 
 ```text
-name = .install/root/<entry.EntryName>
+name = .root/<entry.EntryName>
 ```
 
-### install.sh
+### install.sh / uninstall.sh
 
-`install.sh` 是自包含安装器，权限 `0755`。
+`install.sh` 是自包含安装器，权限 `0755`。`uninstall.sh` 是自包含卸载器，权限 `0755`，安装时会复制到目标安装目录。
 
 支持：
 
 - 默认安装。
-- `install.sh uninstall` 卸载。
+- 从安装目录执行 `uninstall.sh` 卸载。
 - `INSTALL_PATH` 覆盖应用安装路径。
 - `DESTDIR` 暂存安装。
-- 执行 `.install/` 生命周期脚本。
+- 执行融合后的生命周期脚本。
 - 安装/卸载 rooted 文件。
 
 安装流程：
@@ -502,6 +499,7 @@ TARGET = DESTDIR + INSTALL_PATH
 执行 installing.sh
 创建 TARGET
 复制普通归档文件到 TARGET
+复制 uninstall.sh 到 TARGET
 复制 rooted 文件到 DESTDIR + /<root-path>
 执行 installed.sh
 ```
@@ -871,11 +869,11 @@ RPM header 同时保存一份文件元数据，供包管理器查询和校验。
 | --- | --- | --- | --- |
 | 外层容器 | gzip tar | Unix ar | RPM lead/signature/header |
 | 文件载荷 | PAX tar | `data.tar.gz` | gzip newc cpio |
-| 控制元数据 | `install.sh` 与 `.install/` | `control.tar.gz` | RPM metadata header |
-| 生命周期脚本 | `.install/*.sh` | `preinst/postinst/prerm/postrm` | header script tags |
+| 控制元数据 | `install.sh` 与 `uninstall.sh` | `control.tar.gz` | RPM metadata header |
+| 生命周期脚本 | 融合到 `install.sh` / `uninstall.sh` | `preinst/postinst/prerm/postrm` | header script tags |
 | 包管理器安装 | 否 | `dpkg`/`apt` | `rpm`/`dnf`/`yum` |
 | 默认安装路径 | `install.sh` 复制 | payload 内含路径 | payload/header 内含路径 |
-| root alias | `.install/root/` + installer | 直接安装到根路径 | 直接安装到根路径 |
+| root alias | `.root/` + installer | 直接安装到根路径 | 直接安装到根路径 |
 | 配置文件标记 | 无包管理器标记 | `/etc` rooted 文件写入 `conffiles` | `/etc` rooted 文件标记 config flag |
 | 签名 | 无 | 无 | 无 GPG/PGP，仅基础 digest |
 
@@ -901,7 +899,7 @@ tar -tzf package.tar.gz
 tar -xzf package.tar.gz -C /tmp/package-test
 DESTDIR=/tmp/stage /tmp/package-test/install.sh
 find /tmp/stage -maxdepth 6 -type f | sort
-DESTDIR=/tmp/stage /tmp/package-test/install.sh uninstall
+DESTDIR=/tmp/stage /tmp/stage/opt/myapp/uninstall.sh
 ```
 
 ### deb

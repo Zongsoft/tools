@@ -269,7 +269,7 @@ Entry rules:
 - Globbing supports `*` and `?` in the last path segment.
 - `--exclude` skips matching files while loading entries. Patterns are relative to `--source`, use `/` as the normalized separator, support `*`, `?`, and `**`, and may be separated by commas or semicolons.
 - Duplicate destination paths are reported as conflicts and skipped.
-- Aliases beginning with `/` or `\` are root-level entries. In `.deb` and `.rpm`, they are installed at that root path. In `.tar.gz`, they are stored under `.install/root/` and copied by `install.sh`.
+- Aliases beginning with `/` or `\` are root-level entries. In `.deb` and `.rpm`, they are installed at that root path. In `.tar.gz`, they are stored under `.root/` and copied by `install.sh`.
 - Unix hosts preserve file permissions. Windows hosts assign `0755` to `.sh`, `.dll`, `.exe`, and extensionless files; other files use `0644`.
 
 Exclude examples:
@@ -410,7 +410,7 @@ Common variables:
 
 ### `.tar.gz`
 
-The tar package contains application files, optional lifecycle scripts under `.install/`, optional root-level entries under `.install/root/`, and an executable `install.sh`.
+The tar package contains application files, optional root-level entries under `.root/`, and executable `install.sh` and `uninstall.sh` scripts. Lifecycle scripts are merged into `install.sh` and `uninstall.sh`.
 
 Install:
 
@@ -434,7 +434,8 @@ INSTALL_PATH=/srv/myapp sudo ./install.sh
 Uninstall:
 
 ```bash
-sudo ./install.sh uninstall
+cd /opt/mycompany/myapp
+sudo ./uninstall.sh
 ```
 
 ### `.deb`

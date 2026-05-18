@@ -42,6 +42,9 @@ namespace Zongsoft.Tools.Packager;
 
 partial class Generator
 {
+	const string TAR_ROOT_DIRECTORY = ".root";
+	const string TAR_ROOT_PREFIX = TAR_ROOT_DIRECTORY + "/";
+
 	public static void Tar(this Package package, string output, bool overwrite)
 	{
 		using var stream = new FileStream(
@@ -55,16 +58,13 @@ partial class Generator
 		foreach(var entry in package.Entries)
 		{
 			if(entry.Rooted)
-				WriteTarEntry(writer, entry, ".install/root/" + entry.EntryName);
+				WriteTarEntry(writer, entry, TAR_ROOT_PREFIX + entry.EntryName);
 			else
 				WriteTarEntry(writer, entry);
 		}
 
-		WriteTarScript(writer, ".install/installing.sh", package.Scripts.Installing);
-		WriteTarScript(writer, ".install/installed.sh", package.Scripts.Installed);
-		WriteTarScript(writer, ".install/uninstalling.sh", package.Scripts.Uninstalling);
-		WriteTarScript(writer, ".install/uninstalled.sh", package.Scripts.Uninstalled);
 		WriteTarText(writer, "install.sh", CreateInstallScript(package), Utility.Unix.Mode755);
+		WriteTarText(writer, "uninstall.sh", CreateUninstallScript(package), Utility.Unix.Mode755);
 	}
 
 	static void WriteTarEntry(TarWriter writer, Package.Entry item, string name = null)
@@ -78,14 +78,6 @@ partial class Generator
 
 		writer.WriteEntry(entry);
 		entry.DataStream.Dispose();
-	}
-
-	static void WriteTarScript(TarWriter writer, string name, string script)
-	{
-		if(string.IsNullOrWhiteSpace(script))
-			return;
-
-		WriteTarText(writer, name, "#!/bin/sh\nset -e\n" + script.Trim().ReplaceLineEndings("\n") + "\n", Utility.Unix.Mode755);
 	}
 
 	static void WriteTarText(TarWriter writer, string name, string text, UnixFileMode mode)
@@ -108,7 +100,8 @@ partial class Generator
 		var packageName = Quote(package.PackageName);
 		var rootEntries = package.Entries.Where(entry => entry.Rooted).ToArray();
 		var rootInstallScript = CreateRootInstallScript(rootEntries);
-		var rootUninstallScript = CreateRootUninstallScript(rootEntries);
+		var installingScript = NormalizeScript(package.Scripts.Installing);
+		var installedScript = NormalizeScript(package.Scripts.Installed);
 
 		return $$"""
 			#!/bin/sh
@@ -120,41 +113,64 @@ partial class Generator
 			TARGET="${DESTDIR%/}$INSTALL_PATH"
 			export SOURCE_DIR INSTALL_PATH DESTDIR TARGET
 
-			run_hook() {
-				if [ -f "$SOURCE_DIR/.install/$1" ]; then
-					sh "$SOURCE_DIR/.install/$1"
-				fi
-			}
-
-			if [ "${1:-install}" = "uninstall" ]; then
-				run_hook uninstalling.sh
-				rm -rf "$TARGET"
-				{{rootUninstallScript}}
-				run_hook uninstalled.sh
-				echo "Uninstalled {{packageName}} from $TARGET"
-				exit 0
-			fi
-
 			if [ "$(id -u)" -ne 0 ] && [ -z "$DESTDIR" ] && [ "${INSTALL_PATH#/}" != "$INSTALL_PATH" ]; then
 				echo "Installing to $INSTALL_PATH requires root privileges. Re-run with sudo or set DESTDIR." >&2
 				exit 1
 			fi
 
-			run_hook installing.sh
+			{{installingScript}}
 			mkdir -p "$TARGET"
 			(
 				cd "$SOURCE_DIR"
-				find . -mindepth 1 \( -path './install.sh' -o -path './.install' -o -path './.install/*' \) -prune -o -print |
+				find . -mindepth 1 \( -path './install.sh' -o -path './uninstall.sh' -o -path './{{TAR_ROOT_DIRECTORY}}' -o -path './{{TAR_ROOT_DIRECTORY}}/*' \) -prune -o -print |
 					tar -cf - -T - |
 					tar -xpf - -C "$TARGET"
 			)
+			install -m 0755 "$SOURCE_DIR/uninstall.sh" "$TARGET/uninstall.sh"
 			{{rootInstallScript}}
-			run_hook installed.sh
+			{{installedScript}}
 			echo "Installed {{packageName}} to $TARGET"
 			""";
 
 		static string Quote(string value) => string.IsNullOrEmpty(value) ? "''" : $"'{value.Replace("'", "'\"'\"'")}'";
 	}
+
+	static string CreateUninstallScript(Package package)
+	{
+		var installPath = Quote(package.InstallPath);
+		var packageName = Quote(package.PackageName);
+		var rootEntries = package.Entries.Where(entry => entry.Rooted).ToArray();
+		var rootUninstallScript = CreateRootUninstallScript(rootEntries);
+		var uninstallingScript = NormalizeScript(package.Scripts.Uninstalling);
+		var uninstalledScript = NormalizeScript(package.Scripts.Uninstalled);
+
+		return $$"""
+			#!/bin/sh
+			set -e
+
+			SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+			INSTALL_PATH=${INSTALL_PATH:-{{installPath}}}
+			DESTDIR=${DESTDIR:-}
+			TARGET="${DESTDIR%/}$INSTALL_PATH"
+			export SOURCE_DIR INSTALL_PATH DESTDIR TARGET
+
+			if [ "$(id -u)" -ne 0 ] && [ -z "$DESTDIR" ] && [ "${INSTALL_PATH#/}" != "$INSTALL_PATH" ]; then
+				echo "Uninstalling from $INSTALL_PATH requires root privileges. Re-run with sudo or set DESTDIR." >&2
+				exit 1
+			fi
+
+			{{uninstallingScript}}
+			cd /
+			rm -rf "$TARGET"
+			{{rootUninstallScript}}
+			{{uninstalledScript}}
+			echo "Uninstalled {{packageName}} from $TARGET"
+			""";
+
+		static string Quote(string value) => string.IsNullOrEmpty(value) ? "''" : $"'{value.Replace("'", "'\"'\"'")}'";
+	}
+
+	static string NormalizeScript(string script) => string.IsNullOrWhiteSpace(script) ? ":" : script.Trim().ReplaceLineEndings("\n");
 
 	static string CreateRootInstallScript(Package.Entry[] entries)
 	{
@@ -163,13 +179,13 @@ partial class Generator
 
 		var builder = new StringBuilder();
 
-		builder.AppendLine("if [ -d \"$SOURCE_DIR/.install/root\" ]; then");
+		builder.AppendLine($"if [ -d \"$SOURCE_DIR/{TAR_ROOT_DIRECTORY}\" ]; then");
 
 		foreach(var entry in entries)
 		{
 			var path = Quote(entry.EntryName);
 			var mode = Convert.ToString((int)entry.Mode, 8).PadLeft(4, '0');
-			builder.AppendLine($"\troot_source=\"$SOURCE_DIR/.install/root/{path}\"");
+			builder.AppendLine($"\troot_source=\"$SOURCE_DIR/{TAR_ROOT_PREFIX}{path}\"");
 			builder.AppendLine($"\troot_target=\"${{DESTDIR%/}}/{path}\"");
 			builder.AppendLine("\tinstall -d \"$(dirname -- \"$root_target\")\"");
 			builder.AppendLine($"\tinstall -m {mode} \"$root_source\" \"$root_target\"");

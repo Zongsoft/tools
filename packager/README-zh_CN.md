@@ -269,7 +269,7 @@ dotnet-pack deb \
 - 通配符支持最后一级路径中的 `*` 和 `?`。
 - `--exclude` 会在加载打包项时跳过匹配文件。模式相对 `--source`，统一使用 `/` 作为路径分隔符，支持 `*`、`?`、`**`，多个模式用逗号或分号分隔。
 - 重复的目标路径会报告为冲突并跳过。
-- 以 `/` 或 `\` 开头的别名是根路径条目。在 `.deb` 和 `.rpm` 中，它们会安装到对应根路径；在 `.tar.gz` 中，它们存放在 `.install/root/` 下，并由 `install.sh` 复制。
+- 以 `/` 或 `\` 开头的别名是根路径条目。在 `.deb` 和 `.rpm` 中，它们会安装到对应根路径；在 `.tar.gz` 中，它们存放在 `.root/` 下，并由 `install.sh` 复制。
 - Unix 主机会保留文件权限。Windows 主机会给 `.sh`、`.dll`、`.exe` 和无扩展名文件分配 `0755`，其他文件使用 `0644`。
 
 排除示例：
@@ -410,7 +410,7 @@ dotnet-pack deb \
 
 ### `.tar.gz`
 
-tar 包包含应用文件、`.install/` 下的可选生命周期脚本、`.install/root/` 下的可选根路径条目，以及可执行的 `install.sh`。
+tar 包包含应用文件、`.root/` 下的可选根路径条目，以及可执行的 `install.sh` 和 `uninstall.sh`。生命周期脚本会融合进 `install.sh` 和 `uninstall.sh`。
 
 安装：
 
@@ -434,7 +434,8 @@ INSTALL_PATH=/srv/myapp sudo ./install.sh
 卸载：
 
 ```bash
-sudo ./install.sh uninstall
+cd /opt/mycompany/myapp
+sudo ./uninstall.sh
 ```
 
 ### `.deb`
