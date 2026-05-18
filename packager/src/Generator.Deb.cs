@@ -62,7 +62,6 @@ partial class Generator
 	static string GetDebControl(Package package)
 	{
 		var builder = new StringBuilder();
-		var description = package.Description;
 
 		builder.AppendLine($"Package: {package.PackageName}");
 		builder.AppendLine($"Version: {package.Version}");
@@ -77,30 +76,30 @@ partial class Generator
 		if(package.Dependencies.Length > 0)
 			builder.AppendLine($"Depends: {string.Join(", ", package.Dependencies)}");
 
-		if(!string.IsNullOrWhiteSpace(package.Summary) && !string.IsNullOrWhiteSpace(package.Description))
+		string description;
+
+		if(string.IsNullOrWhiteSpace(package.Description))
 		{
-			string text;
-
-			if(string.IsNullOrWhiteSpace(package.Description))
-			{
-				text = package.Summary.Trim();
-			}
+			description = package.Summary.Trim();
+		}
+		else
+		{
+			if(string.IsNullOrWhiteSpace(package.Summary))
+				description = package.Description.Trim();
 			else
-			{
-				if(string.IsNullOrWhiteSpace(package.Summary))
-					text = package.Description.Trim();
-				else
-					text = package.Summary.Trim() + "\n\n" + package.Description.Trim();
-			}
+				description = package.Summary.Trim() + "\n\n" + package.Description.Trim();
+		}
 
-			using var memory = new MemoryStream(Encoding.UTF8.GetBytes(text));
+		if(!string.IsNullOrWhiteSpace(description))
+		{
+			using var memory = new MemoryStream(Encoding.UTF8.GetBytes(description));
 			using var reader = new StreamReader(memory);
 
 			builder.AppendLine($"Description: {reader.ReadLine()}");
 
-			while((text = reader.ReadLine()) != null)
+			while((description = reader.ReadLine()) != null)
 			{
-				builder.AppendLine(string.IsNullOrWhiteSpace(text) ? " ." : $" {NormalizeDebText(text)}");
+				builder.AppendLine(string.IsNullOrWhiteSpace(description) ? " ." : $" {NormalizeDebText(description)}");
 			}
 		}
 
