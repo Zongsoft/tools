@@ -111,6 +111,7 @@ partial class Scriptor
 				if command -v systemctl >/dev/null 2>&1; then
 					systemctl daemon-reload >/dev/null 2>&1 || true
 					systemctl enable '{{serviceName}}' >/dev/null 2>&1 || true
+					systemctl start '{{serviceName}}' >/dev/null 2>&1 || true
 				fi
 				""";
 

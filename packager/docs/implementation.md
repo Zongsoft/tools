@@ -421,7 +421,7 @@ http://127.0.0.1:<port>
 
 - 安装前停止同名 systemd 服务。
 - 安装后创建 `/etc/systemd/system/<service>` 符号链接。
-- 安装后执行 `systemctl daemon-reload` 和 `systemctl enable`。
+- 安装后执行 `systemctl daemon-reload`、`systemctl enable` 和 `systemctl start`。
 - 卸载前禁用并停止服务。
 - 卸载后删除服务符号链接、重载 systemd，并删除安装目录。
 
