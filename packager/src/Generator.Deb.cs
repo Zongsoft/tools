@@ -111,7 +111,7 @@ partial class Generator
 		using(var gzip = new GZipStream(memory, CompressionLevel.Optimal, true))
 		using(var writer = new TarWriter(gzip, TarEntryFormat.Ustar, true))
 		{
-			WriteDebTarText(writer, "control", control, 420);
+			WriteDebTarText(writer, "control", control, Utility.Unix.FileMode.Mode644);
 			WriteDebTarScript(writer, "preinst", package.Scripts.Installing);
 			WriteDebTarScript(writer, "postinst", package.Scripts.Installed);
 			WriteDebTarScript(writer, "prerm", package.Scripts.Uninstalling);
@@ -119,7 +119,7 @@ partial class Generator
 
 			var conffiles = GetDebianConfigurationFiles(package.Entries);
 			if(!string.IsNullOrEmpty(conffiles))
-				WriteDebTarText(writer, "conffiles", conffiles, 420);
+				WriteDebTarText(writer, "conffiles", conffiles, Utility.Unix.FileMode.Mode644);
 		}
 
 		return memory.ToArray();
@@ -129,7 +129,7 @@ partial class Generator
 	{
 		var entry = new UstarTarEntry(TarEntryType.RegularFile, item.EntryName)
 		{
-			Mode = GetDebianFileMode(item.Mode),
+			Mode = (UnixFileMode)item.Mode,
 			ModificationTime = DateTimeOffset.FromUnixTimeSeconds(item.ModifiedTime),
 			DataStream = File.OpenRead(item.Source),
 		};
@@ -142,7 +142,7 @@ partial class Generator
 	{
 		writer.WriteEntry(new UstarTarEntry(TarEntryType.Directory, name)
 		{
-			Mode = GetDebianFileMode(493),
+			Mode = Utility.Unix.FileMode.Mode755,
 			ModificationTime = DateTimeOffset.UtcNow,
 		});
 	}
@@ -152,15 +152,15 @@ partial class Generator
 		if(string.IsNullOrWhiteSpace(script))
 			return;
 
-		WriteDebTarText(writer, name, "#!/bin/sh\nset -e\n" + script.Trim().ReplaceLineEndings("\n") + "\n", 493);
+		WriteDebTarText(writer, name, "#!/bin/sh\nset -e\n" + script.Trim().ReplaceLineEndings("\n") + "\n", Utility.Unix.FileMode.Mode755);
 	}
 
-	static void WriteDebTarText(TarWriter writer, string name, string text, int mode)
+	static void WriteDebTarText(TarWriter writer, string name, string text, UnixFileMode mode)
 	{
 		var data = Encoding.UTF8.GetBytes((text ?? string.Empty).ReplaceLineEndings("\n"));
 		var entry = new UstarTarEntry(TarEntryType.RegularFile, name)
 		{
-			Mode = GetDebianFileMode(mode),
+			Mode = mode,
 			ModificationTime = DateTimeOffset.UtcNow,
 			DataStream = new MemoryStream(data),
 		};
@@ -202,10 +202,6 @@ partial class Generator
 	}
 
 	static bool IsDebianConfigurationFile(Package.Entry entry) => entry.Rooted && entry.EntryName.StartsWith("etc/", StringComparison.Ordinal);
-
-	static UnixFileMode GetDebianFileMode(int mode) => mode <= 0x1FF ?
-		(UnixFileMode)mode :
-		(UnixFileMode)Convert.ToInt32(mode.ToString(System.Globalization.CultureInfo.InvariantCulture), 8);
 
 	static void WriteArHeader(Stream stream) => stream.Write(Encoding.ASCII.GetBytes("!<arch>\n"));
 

@@ -75,6 +75,15 @@ internal static class Utility
 
 	public static class Unix
 	{
+		public const int Mode644 = (int)FileMode.Mode644;
+		public const int Mode755 = (int)FileMode.Mode755;
+
+		public static class FileMode
+		{
+			public const UnixFileMode Mode644 = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead;
+			public const UnixFileMode Mode755 = Mode644 | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute;
+		}
+
 		public static string GetInstallPath(string name)
 		{
 			if(name.IsWhiteSpace())
@@ -94,7 +103,7 @@ internal static class Utility
 					return mode;
 			}
 
-			return IsExecutable(path) ? 0755 : 0644;
+			return IsExecutable(path) ? Mode755 : Mode644;
 
 			static bool IsExecutable(string path)
 			{

@@ -49,6 +49,8 @@ partial class Generator
 	const int RPM_SENSE_EQUAL = 8;
 	const int RPM_SENSE_RPMLIB = 1 << 24;
 	const int RPM_FILE_CONFIG = 1;
+	const int RPM_MODE_REGULAR_FILE = 0x8000;
+	const int RPM_MODE_DIRECTORY = 0x4000;
 
 	public static void Rpm(this Package.Rpm package, string output, bool overwrite)
 	{
@@ -74,12 +76,12 @@ partial class Generator
 		var inode = 1;
 
 		foreach(var directory in directories)
-			WriteCpioEntry(raw, inode++, "." + directory, 0040755, 0, DateTimeOffset.UtcNow.ToUnixTimeSeconds(), null);
+			WriteCpioEntry(raw, inode++, "." + directory, RPM_MODE_DIRECTORY | Utility.Unix.Mode755, 0, DateTimeOffset.UtcNow.ToUnixTimeSeconds(), null);
 
 		foreach(var entry in entries)
 		{
 			using var file = File.OpenRead(entry.Source);
-			WriteCpioEntry(raw, inode++, "." + GetRpmPath(entry.EntryName), 0100000 | entry.Mode, entry.Size, entry.ModifiedTime, file);
+			WriteCpioEntry(raw, inode++, "." + GetRpmPath(entry.EntryName), RPM_MODE_REGULAR_FILE | entry.Mode, entry.Size, entry.ModifiedTime, file);
 		}
 
 		WriteCpioEntry(raw, inode, "TRAILER!!!", 0, 0, 0, null);
@@ -164,14 +166,14 @@ partial class Generator
 		foreach(var directory in directories)
 		{
 			var fullName = directory == "/" ? "/" : directory + "/";
-			AddRpmEntry(result, directories, fullName, 0, 0040755, DateTimeOffset.UtcNow.ToUnixTimeSeconds(), string.Empty, 0);
+			AddRpmEntry(result, directories, fullName, 0, RPM_MODE_DIRECTORY | Utility.Unix.Mode755, DateTimeOffset.UtcNow.ToUnixTimeSeconds(), string.Empty, 0);
 		}
 
 		foreach(var entry in entries)
 		{
 			using var stream = File.OpenRead(entry.Source);
 			var digest = Convert.ToHexString(SHA1.HashData(stream)).ToLowerInvariant();
-			AddRpmEntry(result, directories, GetRpmPath(entry.EntryName), entry.Size, 0100000 | entry.Mode, entry.ModifiedTime, digest, IsRpmConfigurationFile(entry) ? RPM_FILE_CONFIG : 0);
+			AddRpmEntry(result, directories, GetRpmPath(entry.EntryName), entry.Size, RPM_MODE_REGULAR_FILE | entry.Mode, entry.ModifiedTime, digest, IsRpmConfigurationFile(entry) ? RPM_FILE_CONFIG : 0);
 		}
 
 		result.Directories.AddRange(directories.ConvertAll(directory => directory.EndsWith('/') ? directory : directory + "/"));

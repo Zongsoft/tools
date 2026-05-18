@@ -64,7 +64,7 @@ partial class Generator
 		WriteTarScript(writer, ".install/installed.sh", package.Scripts.Installed);
 		WriteTarScript(writer, ".install/uninstalling.sh", package.Scripts.Uninstalling);
 		WriteTarScript(writer, ".install/uninstalled.sh", package.Scripts.Uninstalled);
-		WriteTarText(writer, "install.sh", CreateInstallScript(package), 0755);
+		WriteTarText(writer, "install.sh", CreateInstallScript(package), Utility.Unix.Mode755);
 	}
 
 	static void WriteTarEntry(TarWriter writer, Package.Entry item, string name = null)
@@ -85,7 +85,7 @@ partial class Generator
 		if(string.IsNullOrWhiteSpace(script))
 			return;
 
-		WriteTarText(writer, name, "#!/bin/sh" + Environment.NewLine + "set -e" + Environment.NewLine + script.Trim() + Environment.NewLine, 0755);
+		WriteTarText(writer, name, "#!/bin/sh" + Environment.NewLine + "set -e" + Environment.NewLine + script.Trim() + Environment.NewLine, Utility.Unix.Mode755);
 	}
 
 	static void WriteTarText(TarWriter writer, string name, string text, int mode)
