@@ -33,8 +33,8 @@
 
 using System;
 using System.IO;
-using System.Text;
 using System.Linq;
+using System.Text;
 using System.Formats.Tar;
 using System.IO.Compression;
 using System.Collections.Generic;
@@ -62,8 +62,7 @@ partial class Generator
 	static string GetDebControl(Package package)
 	{
 		var builder = new StringBuilder();
-		var summary = NormalizeDebText(package.Summary) ?? NormalizeDebText(package.Title) ?? NormalizeDebText(package.Name) ?? package.PackageName;
-		var description = string.IsNullOrWhiteSpace(package.Description) ? summary : package.Description;
+		var description = package.Description;
 
 		builder.AppendLine($"Package: {package.PackageName}");
 		builder.AppendLine($"Version: {package.Version}");
@@ -78,12 +77,31 @@ partial class Generator
 		if(package.Dependencies.Length > 0)
 			builder.AppendLine($"Depends: {string.Join(", ", package.Dependencies)}");
 
-		builder.AppendLine($"Description: {summary}");
-
-		if(!string.IsNullOrWhiteSpace(description))
+		if(!string.IsNullOrWhiteSpace(package.Summary) && !string.IsNullOrWhiteSpace(package.Description))
 		{
-			foreach(var line in description.Replace("\r", string.Empty).Split('\n'))
-				builder.AppendLine(string.IsNullOrWhiteSpace(line) ? " ." : $" {NormalizeDebText(line)}");
+			string text;
+
+			if(string.IsNullOrWhiteSpace(package.Description))
+			{
+				text = package.Summary.Trim();
+			}
+			else
+			{
+				if(string.IsNullOrWhiteSpace(package.Summary))
+					text = package.Description.Trim();
+				else
+					text = package.Summary.Trim() + "\n\n" + package.Description.Trim();
+			}
+
+			using var memory = new MemoryStream(Encoding.UTF8.GetBytes(text));
+			using var reader = new StreamReader(memory);
+
+			builder.AppendLine($"Description: {reader.ReadLine()}");
+
+			while((text = reader.ReadLine()) != null)
+			{
+				builder.AppendLine(string.IsNullOrWhiteSpace(text) ? " ." : $" {NormalizeDebText(text)}");
+			}
 		}
 
 		return builder.ToString().ReplaceLineEndings("\n");
