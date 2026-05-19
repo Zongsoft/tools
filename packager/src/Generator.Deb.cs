@@ -80,7 +80,7 @@ partial class Generator
 
 		if(string.IsNullOrWhiteSpace(package.Description))
 		{
-			description = package.Summary.Trim();
+			description = package.Summary?.Trim();
 		}
 		else
 		{
