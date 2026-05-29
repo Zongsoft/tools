@@ -69,9 +69,9 @@ partial class Generator
 		builder.AppendLine($"Priority: optional");
 		builder.AppendLine($"Architecture: {GetDebianArchitecture(package.Architecture)}");
 		builder.AppendLine($"Installed-Size: {Math.Max(1, (package.GetPackageSize() + 1023) / 1024)}");
-		builder.AppendLine($"Maintainer: {NormalizeDebText(package.Maintainer)}");
-		builder.AppendLine($"Homepage: {NormalizeDebText(package.Url)}");
-		builder.AppendLine($"License: {NormalizeDebText(package.License)}");
+		builder.AppendLine($"Maintainer: {NormalizeDebText(package.Maintainer) ?? "Unknown"}");
+		AppendDebField(builder, "Homepage", package.Url);
+		AppendDebField(builder, "License", package.License);
 
 		if(package.Dependencies.Length > 0)
 			builder.AppendLine($"Depends: {string.Join(", ", package.Dependencies)}");
@@ -80,7 +80,7 @@ partial class Generator
 
 		if(string.IsNullOrWhiteSpace(package.Description))
 		{
-			description = package.Summary?.Trim();
+			description = package.Summary?.Trim() ?? package.Title?.Trim() ?? package.Name;
 		}
 		else
 		{
@@ -95,7 +95,7 @@ partial class Generator
 			using var memory = new MemoryStream(Encoding.UTF8.GetBytes(description));
 			using var reader = new StreamReader(memory);
 
-			builder.AppendLine($"Description: {reader.ReadLine()}");
+			builder.AppendLine($"Description: {NormalizeDebText(reader.ReadLine())}");
 
 			while((description = reader.ReadLine()) != null)
 			{
@@ -104,6 +104,14 @@ partial class Generator
 		}
 
 		return builder.ToString().ReplaceLineEndings("\n");
+	}
+
+	static void AppendDebField(StringBuilder builder, string name, string value)
+	{
+		value = NormalizeDebText(value);
+
+		if(!string.IsNullOrEmpty(value))
+			builder.AppendLine($"{name}: {value}");
 	}
 
 	static byte[] CreateDataTarball(IReadOnlyCollection<Package.Entry> entries)
@@ -174,7 +182,12 @@ partial class Generator
 
 	static void WriteDebTarText(TarWriter writer, string name, string text, UnixFileMode mode)
 	{
-		var data = Encoding.UTF8.GetBytes((text ?? string.Empty).ReplaceLineEndings("\n"));
+		text = (text ?? string.Empty).ReplaceLineEndings("\n");
+
+		if(text.Length > 0 && text[^1] != '\n')
+			text += "\n";
+
+		var data = Encoding.UTF8.GetBytes(text);
 		var entry = new UstarTarEntry(TarEntryType.RegularFile, name)
 		{
 			Mode = mode,
