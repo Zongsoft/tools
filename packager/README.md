@@ -101,6 +101,13 @@ The generated package name follows this pattern:
 <name>-<edition>@<version>_<runtime>.<extension>
 ```
 
+When `--daemon:<name>` is supplied and is not disabled, the daemon identifier is preferred for the generated package name:
+
+```text
+<daemon>@<version>_<runtime>.<extension>
+<daemon>-<edition>@<version>_<runtime>.<extension>
+```
+
 Example:
 
 ```text
@@ -183,7 +190,7 @@ dotnet-pack tar \
 
 | Option | Description |
 | --- | --- |
-| `--name:<name>` | Application/package name. Also used to infer the default install path and service name. |
+| `--name:<name>` | Application/package name. Also used to locate the .NET host assembly for generated services. |
 | `--version:<version>` | Package version. `0.0.0.0` is rejected. |
 | `--platform:<platform>` | Target platform. Supported enum values include `linux`, `unix`, `osx`, `windows`/`win`, and `unknown`; Linux packages should use `linux`. |
 | `--framework:<tfm>` | Target framework moniker, for example `net8.0`, `net9.0`, or `net10.0`. |
@@ -199,7 +206,7 @@ dotnet-pack tar \
 | `--compilation:<name>` | `Release` | Build configuration used when locating a daemon host under `bin/<configuration>/<framework>`. |
 | `--architecture:<arch>` | `x64` | Target CPU architecture, such as `x64`, `x86`, `arm64`, or `arm`. |
 | `--overwrite` | `false` | Replace an existing package file. Without this switch, an existing file causes creation to fail. |
-| `--install-path:<path>` | `/opt/<vendor>/<name>` or `/opt/<name>` | Linux installation directory. Names containing dots use the first segment as the vendor directory. |
+| `--install-path:<path>` | `/opt/<vendor>/<name>` or `/opt/<name>` | Linux installation directory. Names containing dots use the first segment as the vendor directory. If `--daemon` is supplied and not disabled, its identifier is used instead of `--name` for the default path. |
 | `--title:<text>` | Empty | Human-friendly package title and generated systemd description. |
 | `--summary:<text-or-file>` | Empty | Short package summary. If the value is an existing file path, the file content is used. |
 | `--description:<text-or-file>` | Empty | Long package description. If the value is an existing file path, the file content is used. |

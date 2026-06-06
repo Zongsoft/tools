@@ -56,7 +56,8 @@ public abstract partial class Package
 		this.Platform = platform;
 		this.Architecture = architecture;
 		this.Runtime = Utility.GetRuntimeIdentifier(platform, architecture);
-		this.PackageName = GetPackageName(name, edition);
+		this.PackageIdentity = GetPackageIdentity(name);
+		this.PackageName = GetPackageName(this.PackageIdentity, edition);
 		this.Framework = Normalizer.Variables.Framework;
 		this.Title = Normalizer.Variables.Title;
 		this.Summary = Normalizer.Variables.Summary;
@@ -72,6 +73,7 @@ public abstract partial class Package
 
 	#region 公共属性
 	public string Name { get; }
+	public string PackageIdentity { get; }
 	public string PackageName { get; }
 	public string Edition { get; }
 	public Version Version { get; }
@@ -102,10 +104,22 @@ public abstract partial class Package
 	public abstract void Pack(string output, bool overwrite);
 	#endregion
 
+	#region 保护方法
+	protected string GetFileName(string extension)
+	{
+		var name = $"{this.PackageName}@{this.Version}_{this.Runtime}";
+
+		if(string.IsNullOrEmpty(extension) || extension == ".")
+			return name;
+
+		return extension[0] == '.' ? $"{name}{extension}" : $"{name}.{extension}";
+	}
+	#endregion
+
 	#region 重写方法
 	public override string ToString() => string.IsNullOrEmpty(this.Edition) ?
-		$"{this.Name}@{this.Version}_{this.Runtime}":
-		$"{this.Name}-{this.Edition}@{this.Version}_{this.Runtime}";
+		$"{this.PackageIdentity}@{this.Version}_{this.Runtime}":
+		$"{this.PackageIdentity}-{this.Edition}@{this.Version}_{this.Runtime}";
 	#endregion
 
 	#region 内部方法
@@ -118,18 +132,29 @@ public abstract partial class Package
 
 		return result;
 	}
+	#endregion
 
-	internal static string GetPackageName(string name, string edition) => string.IsNullOrEmpty(edition) ? name : $"{name}-{edition}";
-	protected string GetFileName(string extension)
+	#region 私有方法
+	private static string GetPackageName(string name, string edition) => string.IsNullOrEmpty(edition) ? name : $"{name}-{edition}";
+	private static string GetPackageIdentity(string name)
 	{
-		var name = string.IsNullOrEmpty(this.Edition) ?
-			$"{this.Name}@{this.Version}_{this.Runtime}" :
-			$"{this.Name}-{this.Edition}@{this.Version}_{this.Runtime}";
+		var daemon = Normalizer.Variables.Daemon;
 
-		if(string.IsNullOrEmpty(extension) || extension == ".")
+		if(daemon.Disabled || string.IsNullOrWhiteSpace(daemon.Identifier))
 			return name;
 
-		return extension[0] == '.' ? $"{name}{extension}" : $"{name}.{extension}";
+		var identifier = daemon.Identifier.Trim();
+		var index = identifier.LastIndexOfAny(['/', '\\']);
+
+		if(index >= 0)
+			identifier = identifier[(index + 1)..];
+
+		const string SERVICE_SUFFIX = ".service";
+
+		if(identifier.EndsWith(SERVICE_SUFFIX, StringComparison.OrdinalIgnoreCase))
+			identifier = identifier[..^SERVICE_SUFFIX.Length];
+
+		return string.IsNullOrWhiteSpace(identifier) ? name : identifier;
 	}
 	#endregion
 

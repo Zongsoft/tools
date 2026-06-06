@@ -178,6 +178,7 @@ dotnet-pack deb \
 `Package` 抽象类持有三种格式共享的元数据：
 
 - `Name`
+- `PackageIdentity`
 - `PackageName`
 - `Edition`
 - `Version`
@@ -200,15 +201,17 @@ dotnet-pack deb \
 包名规则：
 
 ```text
-name
-name-edition
+identity
+identity-edition
 ```
+
+其中 `identity` 默认等于 `name`；如果指定了未禁用的 `--daemon`，则取 daemon 标识的文件名部分，并去掉可选 `.service` 后缀。
 
 输出文件名规则：
 
 ```text
-name@version_runtime.ext
-name-edition@version_runtime.ext
+identity@version_runtime.ext
+identity-edition@version_runtime.ext
 ```
 
 示例：
@@ -233,11 +236,12 @@ windows       => win
 
 ### 默认安装路径
 
-`Utility.Unix.GetInstallPath(name)` 根据包名推导默认安装路径：
+`Utility.Unix.GetInstallPath(identity)` 根据包标识推导默认安装路径：
 
 ```text
 Zongsoft.Example => /opt/zongsoft/zongsoft.example
 MyApp            => /opt/myapp
+zongsoft.web     => /opt/zongsoft/web
 ```
 
 规则：
@@ -339,6 +343,8 @@ Windows 主机或读取不到有效权限时：
 ## systemd 生成器
 
 三种包类型当前都使用 `Scriptor.Systemd`。
+
+如果 `--daemon` 被指定且未被禁用，daemon 标识只覆盖包文件名、系统包名和默认安装路径；`Package.Name` 仍保留 `--name` 值，用于定位 .NET 宿主 DLL。
 
 ### 服务文件解析
 

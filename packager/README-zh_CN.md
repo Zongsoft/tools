@@ -101,6 +101,13 @@ dotnet-pack deb \
 <name>-<edition>@<version>_<runtime>.<extension>
 ```
 
+如果指定了未禁用的 `--daemon:<name>`，则优先使用 daemon 标识生成包文件名：
+
+```text
+<daemon>@<version>_<runtime>.<extension>
+<daemon>-<edition>@<version>_<runtime>.<extension>
+```
+
 示例：
 
 ```text
@@ -183,7 +190,7 @@ dotnet-pack tar \
 
 | 选项 | 说明 |
 | --- | --- |
-| `--name:<name>` | 应用/软件包名称，也用于推断默认安装路径和服务名。 |
+| `--name:<name>` | 应用/软件包名称，也用于定位生成服务时的 .NET 宿主程序集。 |
 | `--version:<version>` | 软件包版本，`0.0.0.0` 会被拒绝。 |
 | `--platform:<platform>` | 目标平台。支持的枚举值包括 `linux`、`unix`、`osx`、`windows`/`win`、`unknown`；Linux 包通常使用 `linux`。 |
 | `--framework:<tfm>` | 目标框架标识，例如 `net8.0`、`net9.0` 或 `net10.0`。 |
@@ -199,7 +206,7 @@ dotnet-pack tar \
 | `--compilation:<name>` | `Release` | 查找宿主文件时使用的构建配置目录，例如 `bin/<configuration>/<framework>`。 |
 | `--architecture:<arch>` | `x64` | 目标 CPU 架构，例如 `x64`、`x86`、`arm64`、`arm`。 |
 | `--overwrite` | `false` | 覆盖已存在的包文件。未指定时，输出文件已存在会导致创建失败。 |
-| `--install-path:<path>` | `/opt/<vendor>/<name>` 或 `/opt/<name>` | Linux 安装目录。名称包含点号时，第一个片段会作为 vendor 目录。 |
+| `--install-path:<path>` | `/opt/<vendor>/<name>` 或 `/opt/<name>` | Linux 安装目录。名称包含点号时，第一个片段会作为 vendor 目录；如果指定了未禁用的 `--daemon`，默认路径改用 daemon 标识而不是 `--name` 推导。 |
 | `--title:<text>` | 空 | 人类可读的软件包标题，也用于生成 systemd 描述。 |
 | `--summary:<text-or-file>` | 空 | 简短摘要。如果值是已存在文件路径，则读取文件内容。 |
 | `--description:<text-or-file>` | 空 | 详细描述。如果值是已存在文件路径，则读取文件内容。 |

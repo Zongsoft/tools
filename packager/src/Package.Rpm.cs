@@ -43,7 +43,7 @@ partial class Package
 		public Rpm(string name, string edition, Version version, Platform platform, Architecture architecture) : base(name, edition, version, platform, architecture)
 		{
 			this.Scriptor = new Scriptor.Systemd(this);
-			this.InstallPath = Utility.Unix.GetInstallPath(name);
+			this.InstallPath = Utility.Unix.GetInstallPath(this.PackageIdentity);
 		}
 
 		internal override string FileName => this.GetFileName(".rpm");
