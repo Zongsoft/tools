@@ -89,7 +89,7 @@ dotnet-pack deb \
   --architecture:x64 \
   --framework:net10.0 \
   --source:./publish \
-  --output:./packages \
+  --output:./packages/ \
   --summary:"MyApp background service" \
   --description:"A .NET service packaged with Zongsoft.Tools.Packager."
 ```
@@ -136,7 +136,7 @@ dotnet-pack tar \
   --architecture:x64 \
   --framework:net10.0 \
   --source:./publish \
-  --output:./packages
+  --output:./packages/
 ```
 
 生成 Debian 安装包，并把应用配置安装到 `/etc`：
@@ -150,7 +150,7 @@ dotnet-pack deb \
   --architecture:x64 \
   --framework:net10.0 \
   --source:./publish \
-  --output:./packages \
+  --output:./packages/ \
   --category:utils \
   MyApp.dll \
   appsettings.json \
@@ -167,7 +167,7 @@ dotnet-pack rpm \
   --architecture:x64 \
   --framework:net10.0 \
   --source:./publish \
-  --output:./packages \
+  --output:./packages/ \
   --license:MIT \
   --dependencies:"dotnet-runtime-10.0 >= 10.0" \
   --provides:"mycompany-myapp = 1.0.0" \
@@ -200,7 +200,7 @@ dotnet-pack tar \
 | 选项 | 默认值 | 说明 |
 | --- | --- | --- |
 | `--source:<path>` | 当前目录 | 待打包的源目录。 |
-| `--output:<path>` | 源目录 | 生成安装包的输出目录。相对路径基于 `--source` 解析。 |
+| `--output:<path>` | 源目录 | 生成安装包的输出路径，以目录分隔符(`/`或`\`)结尾表示目录，否则为文件。相对路径基于 `--source` 解析。 |
 | `--exclude:<patterns>` | 空 | 加载打包项时跳过的文件模式列表，多个模式用逗号或分号分隔。 |
 | `--edition:<name>` | 空 | 可选发行/版本标识。会追加到包名；对 RPM 而言，有值时也作为 release。 |
 | `--compilation:<name>` | `Release` | 查找宿主文件时使用的构建配置目录，例如 `bin/<configuration>/<framework>`。 |

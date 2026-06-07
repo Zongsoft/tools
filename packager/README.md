@@ -89,7 +89,7 @@ dotnet-pack deb \
   --architecture:x64 \
   --framework:net10.0 \
   --source:./publish \
-  --output:./packages \
+  --output:./packages/ \
   --summary:"MyApp background service" \
   --description:"A .NET service packaged with Zongsoft.Tools.Packager."
 ```
@@ -136,7 +136,7 @@ dotnet-pack tar \
   --architecture:x64 \
   --framework:net10.0 \
   --source:./publish \
-  --output:./packages
+  --output:./packages/
 ```
 
 Create a Debian package with an application config file installed under `/etc`:
@@ -150,7 +150,7 @@ dotnet-pack deb \
   --architecture:x64 \
   --framework:net10.0 \
   --source:./publish \
-  --output:./packages \
+  --output:./packages/ \
   --category:utils \
   MyApp.dll \
   appsettings.json \
@@ -167,7 +167,7 @@ dotnet-pack rpm \
   --architecture:x64 \
   --framework:net10.0 \
   --source:./publish \
-  --output:./packages \
+  --output:./packages/ \
   --license:MIT \
   --dependencies:"dotnet-runtime-10.0 >= 10.0" \
   --provides:"mycompany-myapp = 1.0.0" \
@@ -200,7 +200,7 @@ dotnet-pack tar \
 | Option | Default | Description |
 | --- | --- | --- |
 | `--source:<path>` | Current directory | Source directory whose files are packaged. |
-| `--output:<path>` | Source directory | Output directory for the generated package. Relative paths are resolved under `--source`. |
+| `--output:<path>` | Source directory | Output path for the generated package, if the value ends with a directory separator(`/` or `\`), it is a directory; otherwise, it is a file. Relative paths are resolved under `--source`. |
 | `--exclude:<patterns>` | Empty | Comma- or semicolon-separated file patterns to skip while loading package entries. |
 | `--edition:<name>` | Empty | Optional edition. Appended to package name; used as RPM release when present. |
 | `--compilation:<name>` | `Release` | Build configuration used when locating a daemon host under `bin/<configuration>/<framework>`. |
