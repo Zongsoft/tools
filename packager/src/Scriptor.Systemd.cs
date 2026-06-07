@@ -267,7 +267,7 @@ partial class Scriptor
 					Restart=on-failure
 					RestartSec=10
 					KillSignal=SIGINT
-					SyslogIdentifier={package.Name}
+					SyslogIdentifier={package.PackageIdentity}
 					DynamicUser=no
 					PrivateTmp=no
 					ReadWritePaths={package.InstallPath} {package.InstallPath}/logs /tmp
@@ -295,7 +295,7 @@ partial class Scriptor
 					Restart=on-failure
 					RestartSec=10
 					KillSignal=SIGINT
-					SyslogIdentifier={package.Name}
+					SyslogIdentifier={package.PackageIdentity}
 					DynamicUser=no
 					PrivateTmp=no
 					ReadWritePaths={package.InstallPath} {package.InstallPath}/logs /tmp
