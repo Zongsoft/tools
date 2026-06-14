@@ -111,6 +111,10 @@ public static class NugetUtility
 		if(!string.IsNullOrEmpty(library))
 			yield return library;
 
+		var runtimeLibrary = GetRuntimeLibraryPath(path, framework, variables);
+		if(!string.IsNullOrEmpty(runtimeLibrary))
+			yield return runtimeLibrary;
+
 		var runtime = GetRuntimeNativePath(path, variables);
 		if(!string.IsNullOrEmpty(runtime))
 			yield return runtime;
@@ -300,13 +304,42 @@ public static class NugetUtility
 		return null;
 	}
 
-	private static IEnumerable<string> GetRuntimeIdentifiers(string platform, string architecture)
+	private static string GetRuntimeLibraryPath(string path, string framework, IDictionary<string, string> variables)
+	{
+		if(variables == null || variables.Count == 0 || string.IsNullOrEmpty(framework))
+			return null;
+
+		if(!variables.TryGetValue("platform", out var platform) || string.IsNullOrWhiteSpace(platform))
+			return null;
+
+		if(!variables.TryGetValue("architecture", out var architecture) || string.IsNullOrWhiteSpace(architecture))
+			return null;
+
+		foreach(var runtimeIdentifier in GetRuntimeIdentifiers(platform.Trim(), architecture.Trim(), true))
+		{
+			var directory = GetNearestFrameworkPath(Path.Combine(path, "runtimes", runtimeIdentifier, "lib"), framework);
+			if(!string.IsNullOrEmpty(directory))
+				return directory;
+		}
+
+		return null;
+	}
+
+	private static IEnumerable<string> GetRuntimeIdentifiers(string platform, string architecture, bool platformOnly = false)
 	{
 		yield return $"{platform}-{architecture}";
 
 		var fallback = GetFallbackPlatform(platform);
 		if(!string.IsNullOrEmpty(fallback) && !string.Equals(fallback, platform, StringComparison.OrdinalIgnoreCase))
 			yield return $"{fallback}-{architecture}";
+
+		if(platformOnly)
+		{
+			yield return platform;
+
+			if(!string.IsNullOrEmpty(fallback) && !string.Equals(fallback, platform, StringComparison.OrdinalIgnoreCase))
+				yield return fallback;
+		}
 	}
 
 	private static string GetFallbackPlatform(string platform)

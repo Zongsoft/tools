@@ -89,17 +89,19 @@ public class NugetResolver : DeploymentResolverBase
 			if(File.Exists(Path.Combine(path, Deployer.DEFAULT_DEPLOYMENT_FILENAME)))
 				return DeploymentUtility.GetFiles(Path.Combine(path, Deployer.DEFAULT_DEPLOYMENT_FILENAME), context.Variables);
 
-			var directories = new HashSet<string>();
+			var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+			var directories = new List<string>();
+			var directorySet = new HashSet<string>(comparer);
 
 			//将当前包的最合适的资产目录加入到源路径中
 			foreach(var asset in NugetUtility.GetAssetPaths(path, framework, context.Variables))
-				directories.Add(asset);
+				AddDirectory(asset);
 
 			//将依赖包的资产目录加入到部署源中
 			foreach(var dependent in dependents)
 			{
 				foreach(var asset in NugetUtility.GetAssetPaths(dependent, framework, context.Variables))
-					directories.Add(asset);
+					AddDirectory(asset);
 			}
 
 			if(directories.Count == 0)
@@ -108,10 +110,26 @@ public class NugetResolver : DeploymentResolverBase
 				return [];
 			}
 
-			var result = new List<DeploymentUtility.PathToken>();
+			var result = new Dictionary<string, DeploymentUtility.PathToken>(comparer);
 			foreach(var directory in directories)
-				result.AddRange(DeploymentUtility.GetFiles(Path.Combine(directory, "*"), context.Variables));
-			return result;
+			{
+				foreach(var file in DeploymentUtility.GetFiles(Path.Combine(directory, "*"), context.Variables))
+					result[GetDestinationKey(file)] = file;
+			}
+
+			return result.Values;
+
+			void AddDirectory(string directory)
+			{
+				if(!string.IsNullOrEmpty(directory) && directorySet.Add(directory))
+					directories.Add(directory);
+			}
+
+			string GetDestinationKey(DeploymentUtility.PathToken sourceFile)
+			{
+				var fileName = string.IsNullOrEmpty(deployment.Destination.Name) ? Path.GetFileName(sourceFile.Path) : deployment.Destination.Name;
+				return string.IsNullOrEmpty(sourceFile.Suffix) ? fileName : Path.Combine(sourceFile.Suffix, fileName);
+			}
 		}
 
 		return DeploymentUtility.GetFiles(Path.Combine(path, argument.Path), context.Variables);
