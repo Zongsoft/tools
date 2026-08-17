@@ -80,7 +80,12 @@ partial class Generator
 
 		if(string.IsNullOrWhiteSpace(package.Description))
 		{
-			description = package.Summary?.Trim() ?? package.Title?.Trim() ?? package.Name;
+			if(!string.IsNullOrWhiteSpace(package.Summary))
+				description = package.Summary.Trim();
+			else if(!string.IsNullOrWhiteSpace(package.Title))
+				description = package.Title.Trim();
+			else
+				description = $"{package.Name}@{package.Version}";
 		}
 		else
 		{

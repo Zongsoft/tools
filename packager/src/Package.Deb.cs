@@ -47,7 +47,6 @@ partial class Package
 		}
 
 		internal override string FileName => this.GetFileName(".deb");
-
 		public override void Pack(string output, bool overwrite) => this.Deb(output, overwrite);
 	}
 }
