@@ -425,8 +425,8 @@ partial class Generator
 			builder.AddString(1022, GetRpmArchitecture(package.Architecture));
 			builder.AddScript(1023, package.Scripts.Installing);
 			builder.AddScript(1024, package.Scripts.Installed);
-			builder.AddScript(1025, package.Scripts.Uninstalling);
-			builder.AddScript(1026, package.Scripts.Uninstalled);
+			builder.AddScript(1025, GuardRpmUninstallScript(package.Scripts.Uninstalling));
+			builder.AddScript(1026, GuardRpmUninstallScript(package.Scripts.Uninstalled));
 			builder.AddInt32Array(1028, rpmEntries.ConvertAll(entry => (int)Math.Min(int.MaxValue, entry.Size)));
 			builder.AddInt16Array(1030, rpmEntries.ConvertAll(entry => (short)(entry.FileType | (int)entry.Mode)));
 			builder.AddInt16Array(1033, rpmEntries.ConvertAll(_ => (short)0));
@@ -467,6 +467,14 @@ partial class Generator
 			builder.AddInt32Array(5011, [1]);
 
 			return builder.Build(false);
+		}
+
+		static string GuardRpmUninstallScript(string script)
+		{
+			if(string.IsNullOrWhiteSpace(script))
+				return null;
+
+			return "if [ \"${1:-0}\" -eq 0 ]; then\n" + script.Trim().ReplaceLineEndings("\n") + "\nfi";
 		}
 	}
 

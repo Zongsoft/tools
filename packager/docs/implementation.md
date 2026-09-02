@@ -433,6 +433,12 @@ http://127.0.0.1:<port>
 
 禁用 systemd 时，默认脚本退化为 no-op，卸载后仍会删除安装目录。
 
+不同包格式会在写入生命周期脚本时应用各自的卸载保护：
+
+- Debian 的 `prerm` 仅在 `remove` 或 `deconfigure` 时执行 `Uninstalling`，`postrm` 仅在 `remove` 或 `purge` 时执行 `Uninstalled`；`upgrade`、`failed-upgrade`、`abort-install`、`abort-upgrade` 和 `disappear` 不执行卸载清理。
+- RPM 的 `%preun` 和 `%postun` 仅在 `$1=0`（最后一个已安装实例被删除）时执行卸载脚本；升级时 `$1>0`，不会删除新版本负载。
+- Tar 包没有包管理器升级回调，只有显式执行 `uninstall.sh` 才进入卸载生命周期；生成器统一删除解析后的 `TARGET`，默认 `Uninstalled` 脚本不再重复删除硬编码安装路径。
+
 ## `.tar.gz` 实现
 
 实现文件：`Generator.Tar.cs`

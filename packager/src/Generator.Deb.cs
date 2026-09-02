@@ -144,8 +144,8 @@ partial class Generator
 			WriteDebTarText(writer, "control", control, Utility.Unix.Mode644);
 			WriteDebTarScript(writer, "preinst", package.Scripts.Installing);
 			WriteDebTarScript(writer, "postinst", package.Scripts.Installed);
-			WriteDebTarScript(writer, "prerm", package.Scripts.Uninstalling);
-			WriteDebTarScript(writer, "postrm", package.Scripts.Uninstalled);
+			WriteDebTarScript(writer, "prerm", package.Scripts.Uninstalling, "remove", "deconfigure");
+			WriteDebTarScript(writer, "postrm", package.Scripts.Uninstalled, "remove", "purge");
 
 			var conffiles = GetDebianConfigurationFiles(package.Entries);
 			if(!string.IsNullOrEmpty(conffiles))
@@ -177,12 +177,17 @@ partial class Generator
 		});
 	}
 
-	static void WriteDebTarScript(TarWriter writer, string name, string script)
+	static void WriteDebTarScript(TarWriter writer, string name, string script, params string[] actions)
 	{
 		if(string.IsNullOrWhiteSpace(script))
 			return;
 
-		WriteDebTarText(writer, name, "#!/bin/sh\nset -e\n" + script.Trim().ReplaceLineEndings("\n") + "\n", Utility.Unix.Mode755);
+		script = script.Trim().ReplaceLineEndings("\n");
+
+		if(actions != null && actions.Length > 0)
+			script = "case \"${1:-}\" in\n\t" + string.Join('|', actions) + ")\n" + script + "\n\t\t;;\nesac";
+
+		WriteDebTarText(writer, name, "#!/bin/sh\nset -e\n" + script + "\n", Utility.Unix.Mode755);
 	}
 
 	static void WriteDebTarText(TarWriter writer, string name, string text, UnixFileMode mode)

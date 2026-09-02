@@ -66,7 +66,7 @@ partial class Scriptor
 					uninstalling = ":";
 
 				if(string.IsNullOrWhiteSpace(uninstalled))
-					uninstalled = $$"""
+					uninstalled = _package is Package.Tar ? ":" : $$"""
 					rm -rf '{{_package.InstallPath}}'
 					""";
 
@@ -124,13 +124,18 @@ partial class Scriptor
 				""";
 
 			if(string.IsNullOrWhiteSpace(uninstalled))
-				uninstalled = $$"""
-				rm -f '{{serviceLink}}'
-				if command -v systemctl >/dev/null 2>&1; then
-					systemctl daemon-reload >/dev/null 2>&1 || true
-				fi
-				rm -rf '{{_package.InstallPath}}'
-				""";
+				uninstalled = _package is Package.Tar ? $$"""
+					rm -f '{{serviceLink}}'
+					if command -v systemctl >/dev/null 2>&1; then
+						systemctl daemon-reload >/dev/null 2>&1 || true
+					fi
+					""" : $$"""
+					rm -f '{{serviceLink}}'
+					if command -v systemctl >/dev/null 2>&1; then
+						systemctl daemon-reload >/dev/null 2>&1 || true
+					fi
+					rm -rf '{{_package.InstallPath}}'
+					""";
 
 			_package.Scripts = new(
 				Combine(ReadFiles(source, scripts.PreInstalling), installing, ReadFiles(source, scripts.PostInstalling)),
