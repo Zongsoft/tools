@@ -5,7 +5,7 @@
 ![NuGet Downloads](https://img.shields.io/nuget/dt/Zongsoft.Tools.Packager)
 ![GitHub Stars](https://img.shields.io/github/stars/Zongsoft/tools?style=social)
 
-[English](README.md) | [简体中文](README-zh_CN.md)
+[English](README.md) | [简体中文](README.zh-Hans.md)
 
 `dotnet-pack` 是一个 .NET 全局工具，用于把已发布的应用目录打包成适合 Linux 分发和安装的 `.tar.gz`、`.deb`、`.rpm` 安装包。
 

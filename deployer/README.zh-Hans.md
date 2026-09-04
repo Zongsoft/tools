@@ -1,11 +1,11 @@
-﻿# Zongsoft 部署工具
+# Zongsoft 部署工具
 
 ![License](https://img.shields.io/github/license/Zongsoft/Zongsoft.Tools.Deployer)
 ![NuGet Version](https://img.shields.io/nuget/v/Zongsoft.Tools.Deployer)
 ![NuGet Downloads](https://img.shields.io/nuget/dt/Zongsoft.Tools.Deployer)
 ![GitHub Stars](https://img.shields.io/github/stars/Zongsoft/Zongsoft.Tools.Deployer?style=social)
 
-README: [English](README.md) | [简体中文](README-zh_CN.md)
+README: [English](README.md) | [简体中文](README.zh-Hans.md)
 
 -----
 

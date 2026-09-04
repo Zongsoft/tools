@@ -1,3 +1,5 @@
-﻿# Zongsoft.Tools.Regular
+# Zongsoft.Tools.Regular
 
-这是一个正则表达式的 GUI 测试器。
+[English](README.md) | [简体中文](README.zh-Hans.md)
+
+A graphical utility for testing regular expressions and inspecting matches, groups, and captures.

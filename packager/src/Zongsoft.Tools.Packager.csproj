@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
 		<LangVersion>latest</LangVersion>
@@ -27,7 +27,7 @@
 	<ItemGroup>
 		<None Include="..\..\zongsoft-logo.png" Pack="true" PackagePath="\" Visible="true" />
 		<None Include="..\README.md" Pack="true" PackagePath="\" />
-		<None Include="..\README-zh_CN.md" Pack="true" PackagePath="\" />
+		<None Include="..\README.zh-Hans.md" Pack="true" PackagePath="\" />
 	</ItemGroup>
 
 	<ItemGroup>

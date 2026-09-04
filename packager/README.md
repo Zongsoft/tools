@@ -5,7 +5,7 @@
 ![NuGet Downloads](https://img.shields.io/nuget/dt/Zongsoft.Tools.Packager)
 ![GitHub Stars](https://img.shields.io/github/stars/Zongsoft/tools?style=social)
 
-[English](README.md) | [简体中文](README-zh_CN.md)
+[English](README.md) | [简体中文](README.zh-Hans.md)
 
 `dotnet-pack` is a .NET global tool that turns a published application directory into Linux-friendly installation packages: `.tar.gz`, `.deb`, and `.rpm`.
 
