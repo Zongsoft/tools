@@ -5,7 +5,7 @@
 ![NuGet Downloads](https://img.shields.io/nuget/dt/Zongsoft.Tools.Deployer)
 ![GitHub Stars](https://img.shields.io/github/stars/Zongsoft/Zongsoft.Tools.Deployer?style=social)
 
-README: [English](README.md) | [简体中文](README.zh-Hans.md)
+[English](README.md) | [简体中文](README.zh-Hans.md)
 
 -----
 
