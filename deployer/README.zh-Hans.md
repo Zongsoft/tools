@@ -42,12 +42,16 @@
 Windows 绝对源路径含有盘符冒号时，应显式使用空解析器前缀；否则 `D:/...` 中的 `D` 会被当成解析器名。也可使用相对于部署文件的路径，或通过变量展开绝对路径。
 
 ```ini
-[plugins example]
-:D:/Example/Plugin/bin/Debug/net10.0/Example.Plugin.dll
-../Plugin/Example.Plugin.plugin
+[plugins zongsoft data]
+:D:/Zongsoft/framework/Zongsoft.Data/src/Zongsoft.Data.plugin
+
+[plugins zongsoft data mysql]
+drivers/mysql/src/Zongsoft.Data.MySql.plugin
 ```
 
-这里开头的 `:` 表示默认路径解析器，不是目标路径的一部分。替换示例路径后再执行。
+这里开头的 `:` 表示默认路径解析器，不是目标路径的一部分。此示例引用 [framework](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Data) 中实际存在的插件文件，并假定部署文件位于 `D:/Zongsoft/framework/Zongsoft.Data` 目录；请根据本地仓库位置调整路径。
+
+> 💡 提示：通常不应该在 `.deploy` 文件中指定绝对路径，因为源路径默认基于所在 `.deploy` 文件的路径，而目标路径则基于部署宿主程序或部署参数指定的目标路径的相对位置，参考 [framework](https://github.com/Zongsoft/framework) 中的相关项目的部署文件。
 
 #### Delete 解析器
 
@@ -191,9 +195,9 @@ dotnet tool uninstall -g zongsoft.tools.deployer
 dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:x64
 ```
 
-- 如果目标(宿主)目录没有默认部署文件(`.deploy`)，则必须手动指定部署文件名(支持多个部署文件)：
+- 如果目标(宿主)目录没有默认部署文件(`.deploy`)，则必须手动指定部署文件名(支持多个部署文件)。以下示例假定 `Zongsoft.Data@6.2.0` 已下载并解压到 NuGet 包目录：
 ```bash
-dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:x64 MyProject1.deploy MyProject2.deploy MyProject3.deploy
+dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:x64 "%NUGET_PACKAGES%/zongsoft.data/6.2.0/.deploy"
 ```
 
 - 为了部署方便可以在目标(宿主)项目创建相应版本的部署脚本文件，譬如：

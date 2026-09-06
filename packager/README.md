@@ -34,7 +34,7 @@ It is designed for .NET services and command-line applications that need repeata
 - Preserves Unix file modes when packaging on Unix-like hosts.
 - Provides conservative executable mode defaults when packaging from Windows.
 - Supports environment and command variables with `$(name)` and `%name%` syntax.
-- Supports explicit file entries, recursive directories, last-segment globbing, aliases, and root-level aliases such as `/etc/myapp/app.conf`.
+- Supports explicit file entries, recursive directories, last-segment globbing, aliases, and root-level aliases such as `/etc/nginx/conf.d/zongsoft.web.conf`.
 - Writes package formats directly in .NET:
   - `.tar.gz` uses gzip-compressed PAX tar.
   - `.deb` uses an `ar` container with `control.tar.gz` and `data.tar.gz`.
@@ -69,29 +69,44 @@ dotnet tool uninstall -g Zongsoft.Tools.Packager
 
 ## Quick Start
 
-Publish your application first:
+The examples use the real [Zongsoft.Hosting.Web](https://github.com/Zongsoft/hosting/tree/main/web/default) host in `D:/Zongsoft/hosting`. First follow the host's [deployment workflow](https://github.com/Zongsoft/hosting/blob/main/web/default/deploy.cmd) to prepare the application and its plugins. Run the script from a Windows console, set remote debug to `off` (Release), then select Linux, x64 and net10.0, and choose `exit` at the packaging prompt if you only want to prepare the host:
+
+```cmd
+cd /d D:\Zongsoft\hosting\web\default
+deploy.cmd
+```
+
+The following Bash commands run from the hosting checkout root (use its mounted path under WSL). Collect the prepared host into a fresh `./publish` staging directory. The project excludes `plugins/` from build content, so the deployed plugins and host configuration must be included explicitly:
 
 ```bash
-dotnet publish ./src/MyApp/MyApp.csproj \
-  -c Release \
-  -f net10.0 \
-  -o ./publish
+mkdir -p ./publish
+cp -a ./web/default/bin/Release/net10.0/. ./publish/
+cp -a ./web/default/plugins ./publish/
+cp -a ./web/default/wwwroot ./publish/
+cp ./web/default/appsettings.json ./web/default/web.config ./web/default/web*.option ./publish/
+cp ./mime ./publish/
 ```
+
+The package examples use `1.0.0` as the release version; set it to your actual release version. Keep `--name:Zongsoft.Hosting.Web`, `--title:Zongsoft.Web` and `--daemon:zongsoft.web` together, as in the host's [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd). The DLL is `Zongsoft.Hosting.Web.dll`, the package/service identifier is `zongsoft.web`, and the installation directory is `/opt/zongsoft/web`.
+
+`--output:../packages/` is resolved relative to `./publish`, so packages are written to `./packages` under the hosting checkout. The examples below are alternatives; use a different output directory or `--overwrite` when repeating the same package format.
 
 Create a Debian package:
 
 ```bash
 dotnet-pack deb \
-  --name:MyCompany.MyApp \
-  --title:"MyApp Service" \
+  --name:Zongsoft.Hosting.Web \
+  --title:Zongsoft.Web \
+  --daemon:zongsoft.web \
+  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --architecture:x64 \
   --framework:net10.0 \
   --source:./publish \
-  --output:./packages/ \
-  --summary:"MyApp background service" \
-  --description:"A .NET service packaged with Zongsoft.Tools.Packager."
+  --output:../packages/ \
+  --summary:"Zongsoft plugin-based Web host" \
+  --description:"Hosts ASP.NET applications built with Zongsoft plugins."
 ```
 
 The generated package name follows this pattern:
@@ -111,7 +126,7 @@ When `--daemon:<name>` is supplied and is not disabled, the daemon identifier is
 Example:
 
 ```text
-MyCompany.MyApp@1.0.0_linux-x64.deb
+zongsoft.web@1.0.0_linux-x64.deb
 ```
 
 ## Commands
@@ -130,60 +145,67 @@ Create a portable tarball:
 
 ```bash
 dotnet-pack tar \
-  --name:MyCompany.MyApp \
+  --name:Zongsoft.Hosting.Web \
+  --title:Zongsoft.Web \
+  --daemon:zongsoft.web \
+  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --architecture:x64 \
   --framework:net10.0 \
   --source:./publish \
-  --output:./packages/
+  --output:../packages/
 ```
 
-Create a Debian package with an application config file installed under `/etc`:
+Create a Debian package that includes the host's real [Nginx configuration](https://github.com/Zongsoft/hosting/blob/main/.deploy/default/nginx/zongsoft.web.conf) under `/etc/nginx/conf.d`. This configuration forwards requests to the generated service's port `8069`; adjust its site settings for your environment:
 
 ```bash
 dotnet-pack deb \
-  --name:MyCompany.MyApp \
-  --title:"MyApp Service" \
+  --name:Zongsoft.Hosting.Web \
+  --title:Zongsoft.Web \
+  --daemon:zongsoft.web \
+  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --architecture:x64 \
   --framework:net10.0 \
   --source:./publish \
-  --output:./packages/ \
+  --output:../packages/ \
   --category:utils \
-  MyApp.dll \
-  appsettings.json \
-  appsettings.Production.json:/etc/myapp/appsettings.json
+  . \
+  ../.deploy/default/nginx/zongsoft.web.conf:/etc/nginx/conf.d/zongsoft.web.conf
 ```
 
 Create an RPM package with dependency metadata:
 
 ```bash
 dotnet-pack rpm \
-  --name:MyCompany.MyApp \
+  --name:Zongsoft.Hosting.Web \
+  --title:Zongsoft.Web \
+  --daemon:zongsoft.web \
+  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --architecture:x64 \
   --framework:net10.0 \
   --source:./publish \
-  --output:./packages/ \
+  --output:../packages/ \
   --license:MIT \
-  --dependencies:"dotnet-runtime-10.0 >= 10.0" \
-  --provides:"mycompany-myapp = 1.0.0" \
-  --conflicts:"mycompany-myapp-legacy"
+  --dependencies:"aspnetcore-runtime-10.0 >= 10.0" \
+  --provides:"zongsoft.web = 1.0.0"
 ```
 
 Disable systemd generation and only package files:
 
 ```bash
 dotnet-pack tar \
-  --name:MyTool \
+  --name:zongsoft.hosting.web \
+  --daemon:none \
   --version:1.0.0 \
   --platform:linux \
   --framework:net10.0 \
   --source:./publish \
-  --daemon:none
+  --output:../packages/
 ```
 
 ### Required Options
@@ -206,7 +228,7 @@ dotnet-pack tar \
 | `--compilation:<name>` | `Release` | Build configuration used when locating a daemon host under `bin/<configuration>/<framework>`. |
 | `--architecture:<arch>` | `x64` | Target CPU architecture, such as `x64`, `x86`, `arm64`, or `arm`. |
 | `--overwrite` | `false` | Replace an existing package file. Without this switch, an existing file causes creation to fail. |
-| `--install-path:<path>` | `/opt/<vendor>/<name>` or `/opt/<name>` | Linux installation directory. Names containing dots use the first segment as the vendor directory. If `--daemon` is supplied and not disabled, its identifier is used instead of `--name` for the default path. |
+| `--install-path:<path>` | `/opt/<identity with dots replaced by />` | Linux installation directory. The identity is lowercased and every dot becomes a directory separator; for example, `Zongsoft.Hosting.Web` becomes `/opt/zongsoft/hosting/web`. With `--daemon:zongsoft.web`, the path is `/opt/zongsoft/web`. If `--daemon` is supplied and not disabled, its identifier is used instead of `--name` for the default path. |
 | `--title:<text>` | Empty | Human-friendly package title and generated systemd description. |
 | `--summary:<text-or-file>` | Empty | Short package summary. If the value is an existing file path, the file content is used. |
 | `--description:<text-or-file>` | Empty | Long package description. If the value is an existing file path, the file content is used. |
@@ -233,39 +255,55 @@ If no positional entry arguments are supplied, every file under `--source` is in
 
 ```bash
 dotnet-pack deb \
-  --name:MyApp \
-  --version:1.0.0 \
-  --platform:linux \
-  --framework:net10.0 \
-  --source:./publish
-```
-
-If positional entries are supplied, only those files or directories are included:
-
-```bash
-dotnet-pack deb \
-  --name:MyApp \
+  --name:Zongsoft.Hosting.Web \
+  --title:Zongsoft.Web \
+  --daemon:zongsoft.web \
+  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --framework:net10.0 \
   --source:./publish \
-  MyApp.dll \
+  --output:../packages/
+```
+
+If positional entries are supplied, only those files or directories are included. This example selects the host assemblies, runtime configuration, application settings, plugins and MIME definitions:
+
+```bash
+dotnet-pack deb \
+  --name:Zongsoft.Hosting.Web \
+  --title:Zongsoft.Web \
+  --daemon:zongsoft.web \
+  --daemon-bind:8069 \
+  --version:1.0.0 \
+  --platform:linux \
+  --framework:net10.0 \
+  --source:./publish \
+  --output:../packages/ \
+  "*.dll" \
+  Zongsoft.Hosting.Web.deps.json \
+  Zongsoft.Hosting.Web.runtimeconfig.json \
   appsettings.json \
-  wwwroot
+  "web*.config" \
+  "web*.option" \
+  plugins \
+  wwwroot \
+  mime
 ```
 
-Each entry can specify a destination alias after the last colon:
+Each entry can specify a destination alias after the last colon. The following partial file package uses existing files from the hosting checkout to demonstrate aliases; service generation is disabled for this example:
 
 ```bash
 dotnet-pack deb \
-  --name:MyApp \
+  --name:zongsoft.hosting.web \
+  --daemon:none \
   --version:1.0.0 \
   --platform:linux \
   --framework:net10.0 \
   --source:./publish \
-  appsettings.Production.json:appsettings.json \
-  ../shared/logo.png:assets/logo.png \
-  nginx.conf:/etc/nginx/conf.d/myapp.conf
+  --output:../packages/ \
+  ../web/README.md:docs/hosting-web.md \
+  ../zongsoft-logo.png:assets/logo.png \
+  ../.deploy/default/nginx/zongsoft.web.conf:/etc/nginx/conf.d/zongsoft.web.conf
 ```
 
 Entry rules:
@@ -283,12 +321,16 @@ Exclude examples:
 
 ```bash
 dotnet-pack deb \
-  --name:MyApp \
+  --name:Zongsoft.Hosting.Web \
+  --title:Zongsoft.Web \
+  --daemon:zongsoft.web \
+  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --framework:net10.0 \
   --source:./publish \
-  --exclude:"*.pdb;appsettings.Development.json;logs/**"
+  --output:../packages/ \
+  --exclude:"*.pdb;*.xml;logs/**"
 ```
 
 ## systemd Services
@@ -319,31 +361,36 @@ When a service file must be generated, the tool locates the .NET host in this or
 Generated services run:
 
 ```ini
-ExecStart=dotnet <install-path>/<host>.dll
+ExecStart=dotnet /opt/zongsoft/web/Zongsoft.Hosting.Web.dll
 ```
 
 If `--daemon-bind:<value>` is supplied, the generated service passes it as `--urls`. A numeric value is treated as a local HTTP port:
 
 ```bash
---daemon-bind:8080
+--daemon-bind:8069
 ```
 
 Generates:
 
 ```ini
-ExecStart=dotnet <install-path>/<host>.dll --urls http://127.0.0.1:8080
+ExecStart=dotnet /opt/zongsoft/web/Zongsoft.Hosting.Web.dll --urls http://127.0.0.1:8069
 ```
 
-Use `--daemon-environments:<names>` to copy selected command/environment variables into the service file:
+The Web host's `pack.cmd` passes both `Environment` and `ASPNETCORE_ENVIRONMENT` into the generated service. For example:
 
 ```bash
 dotnet-pack deb \
-  --name:MyApp \
+  --name:Zongsoft.Hosting.Web \
+  --title:Zongsoft.Web \
+  --daemon:zongsoft.web \
+  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --framework:net10.0 \
   --source:./publish \
-  --daemon-environments:ASPNETCORE_ENVIRONMENT \
+  --output:../packages/ \
+  --daemon-environments:Environment,ASPNETCORE_ENVIRONMENT \
+  --Environment:Production \
   --ASPNETCORE_ENVIRONMENT:Production
 ```
 
@@ -391,13 +438,19 @@ Variables are case-insensitive and are loaded from:
 When the same variable name appears more than once, the current implementation keeps the first value it sees. Avoid defining environment variables with the same names as package options unless that is intentional.
 
 ```bash
+export APP_NAME=Zongsoft.Hosting.Web
+export APP_VERSION=1.0.0
+
 dotnet-pack deb \
+  --daemon:zongsoft.web \
+  --daemon-bind:8069 \
   --name:%APP_NAME% \
   --version:%APP_VERSION% \
   --platform:linux \
   --architecture:x64 \
   --framework:net10.0 \
-  --source:./bin/%compilation%/%framework%/publish
+  --source:./publish \
+  --output:../packages/
 ```
 
 Common variables:
@@ -424,13 +477,13 @@ The tar command generates a `.tar.gz` archive and a same-named `.sh` installer s
 One-step install:
 
 ```bash
-sudo sh ./MyCompany.MyApp@1.0.0_linux-x64.sh
+sudo sh ./packages/zongsoft.web@1.0.0_linux-x64.sh
 ```
 
 Install:
 
 ```bash
-tar -xzf MyCompany.MyApp@1.0.0_linux-x64.tar.gz
+tar -xzf ./packages/zongsoft.web@1.0.0_linux-x64.tar.gz
 sudo ./install.sh
 ```
 
@@ -443,13 +496,13 @@ DESTDIR=/tmp/stage ./install.sh
 Override the install path:
 
 ```bash
-INSTALL_PATH=/srv/myapp sudo ./install.sh
+sudo env INSTALL_PATH=/srv/zongsoft/web ./install.sh
 ```
 
 Uninstall:
 
 ```bash
-cd /opt/mycompany/myapp
+cd /opt/zongsoft/web
 sudo ./uninstall.sh
 ```
 
@@ -466,9 +519,9 @@ data.tar.gz
 Inspect and install:
 
 ```bash
-dpkg-deb --info ./packages/MyCompany.MyApp@1.0.0_linux-x64.deb
-dpkg-deb --contents ./packages/MyCompany.MyApp@1.0.0_linux-x64.deb
-sudo dpkg -i ./packages/MyCompany.MyApp@1.0.0_linux-x64.deb
+dpkg-deb --info ./packages/zongsoft.web@1.0.0_linux-x64.deb
+dpkg-deb --contents ./packages/zongsoft.web@1.0.0_linux-x64.deb
+sudo dpkg -i ./packages/zongsoft.web@1.0.0_linux-x64.deb
 ```
 
 Root-level entries under `/etc/` are also written to Debian `conffiles` metadata.
@@ -480,15 +533,17 @@ The RPM package contains RPM lead/signature/header metadata plus a gzip-compress
 Inspect and install:
 
 ```bash
-rpm -qip ./packages/MyCompany.MyApp@1.0.0_linux-x64.rpm
-rpm -qlp ./packages/MyCompany.MyApp@1.0.0_linux-x64.rpm
-rpm -qp --scripts ./packages/MyCompany.MyApp@1.0.0_linux-x64.rpm
-sudo rpm -Uvh ./packages/MyCompany.MyApp@1.0.0_linux-x64.rpm
+rpm -qip ./packages/zongsoft.web@1.0.0_linux-x64.rpm
+rpm -qlp ./packages/zongsoft.web@1.0.0_linux-x64.rpm
+rpm -qp --scripts ./packages/zongsoft.web@1.0.0_linux-x64.rpm
+sudo rpm -Uvh ./packages/zongsoft.web@1.0.0_linux-x64.rpm
 ```
 
 Root-level entries under `/etc/` are marked as RPM configuration files.
 
 ## Build From Source
+
+Run the following commands from the tools repository's `packager` directory.
 
 Restore and build:
 

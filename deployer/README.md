@@ -42,12 +42,16 @@ The _Parser-Argument_ represents the path of the source file to be deployed, the
 For an absolute Windows source path containing a drive-letter colon, explicitly use the empty resolver prefix. Otherwise, `D` in `D:/...` is interpreted as a resolver name. Alternatively, use a path relative to the deployment file or expand the absolute path from a variable.
 
 ```ini
-[plugins example]
-:D:/Example/Plugin/bin/Debug/net10.0/Example.Plugin.dll
-../Plugin/Example.Plugin.plugin
+[plugins zongsoft data]
+:D:/Zongsoft/framework/Zongsoft.Data/src/Zongsoft.Data.plugin
+
+[plugins zongsoft data mysql]
+drivers/mysql/src/Zongsoft.Data.MySql.plugin
 ```
 
-The leading `:` selects the default path resolver; it is not part of the destination path. Replace these example paths before running.
+The leading `:` selects the default path resolver; it is not part of the destination path. This example references existing plugin files in [framework](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Data) and assumes the deployment file is located in `D:/Zongsoft/framework/Zongsoft.Data`. Adjust the checkout path for your environment.
+
+> 💡 **Tip:** You should generally avoid absolute paths in `.deploy` files. Source paths are resolved relative to the directory containing the deployment file, while destination paths are resolved relative to the host directory or the target directory specified by the deployment options. See the deployment files in [framework](https://github.com/Zongsoft/framework), such as [Zongsoft.Data.deploy](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Data/src/Zongsoft.Data.deploy), for examples.
 
 #### Delete Parser
 
@@ -195,9 +199,9 @@ dotnet tool uninstall -g zongsoft.tools.deployer
 dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:x64
 ```
 
-- If the host(target) directory does not have a default deployment file (`.deploy`), you must manually specify the deployment file name (multiple deployment files are supported):
+- If the host(target) directory does not have a default deployment file (`.deploy`), you must manually specify the deployment file name (multiple deployment files are supported). The following example assumes `Zongsoft.Data@6.2.0` has been downloaded and extracted into the NuGet package directory:
 ```bash
-dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:x64 MyProject1.deploy MyProject2.deploy MyProject3.deploy
+dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:x64 "%NUGET_PACKAGES%/zongsoft.data/6.2.0/.deploy"
 ```
 
 - For the convenience of deployment, you can create a corresponding edition of the deployment script files in the host(target) project, for example:

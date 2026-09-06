@@ -34,7 +34,7 @@
 - 在 Unix 类系统上打包时保留文件权限。
 - 在 Windows 上打包时为可执行文件提供保守的权限默认值。
 - 支持 `$(name)` 和 `%name%` 两种变量引用语法。
-- 支持显式文件条目、递归目录、最后一级路径通配、目标别名，以及 `/etc/myapp/app.conf` 这类根路径别名。
+- 支持显式文件条目、递归目录、最后一级路径通配、目标别名，以及 `/etc/nginx/conf.d/zongsoft.web.conf` 这类根路径别名。
 - 直接使用 .NET 写入包格式：
   - `.tar.gz` 使用 gzip 压缩的 PAX tar。
   - `.deb` 使用包含 `control.tar.gz` 和 `data.tar.gz` 的 `ar` 容器。
@@ -69,29 +69,44 @@ dotnet tool uninstall -g Zongsoft.Tools.Packager
 
 ## 快速开始
 
-先发布应用：
+以下示例使用 `D:/Zongsoft/hosting` 中真实的 [Zongsoft.Hosting.Web](https://github.com/Zongsoft/hosting/tree/main/web/default) 宿主。先按宿主的[部署流程](https://github.com/Zongsoft/hosting/blob/main/web/default/deploy.cmd)准备应用及其插件。在 Windows 控制台运行脚本，将远程调试设为 `off`（Release），然后选择 Linux、x64、net10.0；如果只准备宿主，在打包提示处输入 `exit`：
+
+```cmd
+cd /d D:\Zongsoft\hosting\web\default
+deploy.cmd
+```
+
+以下 Bash 命令从 hosting 仓库根目录执行（WSL 中使用对应挂载路径），将准备好的宿主内容收集到新建的 `./publish` 暂存目录。项目将 `plugins/` 排除在构建内容之外，因此必须显式包含已部署的插件和宿主配置：
 
 ```bash
-dotnet publish ./src/MyApp/MyApp.csproj \
-  -c Release \
-  -f net10.0 \
-  -o ./publish
+mkdir -p ./publish
+cp -a ./web/default/bin/Release/net10.0/. ./publish/
+cp -a ./web/default/plugins ./publish/
+cp -a ./web/default/wwwroot ./publish/
+cp ./web/default/appsettings.json ./web/default/web.config ./web/default/web*.option ./publish/
+cp ./mime ./publish/
 ```
+
+打包示例使用 `1.0.0` 作为发行版本，请按实际发布版本设置。保持宿主 [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd) 中的 `--name:Zongsoft.Hosting.Web`、`--title:Zongsoft.Web`、`--daemon:zongsoft.web` 组合：入口 DLL 为 `Zongsoft.Hosting.Web.dll`，软件包和服务标识为 `zongsoft.web`，安装目录为 `/opt/zongsoft/web`。
+
+`--output:../packages/` 相对于 `./publish` 解析，因此安装包输出到 hosting 仓库下的 `./packages`。下文示例为不同用法；重复生成同一格式时，请更换输出目录或使用 `--overwrite`。
 
 生成 Debian 安装包：
 
 ```bash
 dotnet-pack deb \
-  --name:MyCompany.MyApp \
-  --title:"MyApp Service" \
+  --name:Zongsoft.Hosting.Web \
+  --title:Zongsoft.Web \
+  --daemon:zongsoft.web \
+  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --architecture:x64 \
   --framework:net10.0 \
   --source:./publish \
-  --output:./packages/ \
-  --summary:"MyApp background service" \
-  --description:"A .NET service packaged with Zongsoft.Tools.Packager."
+  --output:../packages/ \
+  --summary:"Zongsoft plugin-based Web host" \
+  --description:"Hosts ASP.NET applications built with Zongsoft plugins."
 ```
 
 生成的包文件名遵循以下规则：
@@ -111,7 +126,7 @@ dotnet-pack deb \
 示例：
 
 ```text
-MyCompany.MyApp@1.0.0_linux-x64.deb
+zongsoft.web@1.0.0_linux-x64.deb
 ```
 
 ## 命令
@@ -130,60 +145,67 @@ dotnet-pack rpm <选项...> [打包项...]
 
 ```bash
 dotnet-pack tar \
-  --name:MyCompany.MyApp \
+  --name:Zongsoft.Hosting.Web \
+  --title:Zongsoft.Web \
+  --daemon:zongsoft.web \
+  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --architecture:x64 \
   --framework:net10.0 \
   --source:./publish \
-  --output:./packages/
+  --output:../packages/
 ```
 
-生成 Debian 安装包，并把应用配置安装到 `/etc`：
+生成 Debian 安装包，将宿主真实的 [Nginx 配置](https://github.com/Zongsoft/hosting/blob/main/.deploy/default/nginx/zongsoft.web.conf)放到 `/etc/nginx/conf.d`。该配置将请求转发到生成服务的 `8069` 端口；站点设置应按实际环境调整：
 
 ```bash
 dotnet-pack deb \
-  --name:MyCompany.MyApp \
-  --title:"MyApp Service" \
+  --name:Zongsoft.Hosting.Web \
+  --title:Zongsoft.Web \
+  --daemon:zongsoft.web \
+  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --architecture:x64 \
   --framework:net10.0 \
   --source:./publish \
-  --output:./packages/ \
+  --output:../packages/ \
   --category:utils \
-  MyApp.dll \
-  appsettings.json \
-  appsettings.Production.json:/etc/myapp/appsettings.json
+  . \
+  ../.deploy/default/nginx/zongsoft.web.conf:/etc/nginx/conf.d/zongsoft.web.conf
 ```
 
 生成带依赖元数据的 RPM 安装包：
 
 ```bash
 dotnet-pack rpm \
-  --name:MyCompany.MyApp \
+  --name:Zongsoft.Hosting.Web \
+  --title:Zongsoft.Web \
+  --daemon:zongsoft.web \
+  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --architecture:x64 \
   --framework:net10.0 \
   --source:./publish \
-  --output:./packages/ \
+  --output:../packages/ \
   --license:MIT \
-  --dependencies:"dotnet-runtime-10.0 >= 10.0" \
-  --provides:"mycompany-myapp = 1.0.0" \
-  --conflicts:"mycompany-myapp-legacy"
+  --dependencies:"aspnetcore-runtime-10.0 >= 10.0" \
+  --provides:"zongsoft.web = 1.0.0"
 ```
 
 禁用 systemd 生成，只打包文件：
 
 ```bash
 dotnet-pack tar \
-  --name:MyTool \
+  --name:zongsoft.hosting.web \
+  --daemon:none \
   --version:1.0.0 \
   --platform:linux \
   --framework:net10.0 \
   --source:./publish \
-  --daemon:none
+  --output:../packages/
 ```
 
 ### 必需选项
@@ -206,7 +228,7 @@ dotnet-pack tar \
 | `--compilation:<name>` | `Release` | 查找宿主文件时使用的构建配置目录，例如 `bin/<configuration>/<framework>`。 |
 | `--architecture:<arch>` | `x64` | 目标 CPU 架构，例如 `x64`、`x86`、`arm64`、`arm`。 |
 | `--overwrite` | `false` | 覆盖已存在的包文件。未指定时，输出文件已存在会导致创建失败。 |
-| `--install-path:<path>` | `/opt/<vendor>/<name>` 或 `/opt/<name>` | Linux 安装目录。名称包含点号时，第一个片段会作为 vendor 目录；如果指定了未禁用的 `--daemon`，默认路径改用 daemon 标识而不是 `--name` 推导。 |
+| `--install-path:<path>` | `/opt/<将点号替换为 / 的标识>` | Linux 安装目录。标识转为小写，每个点号均替换为目录分隔符，例如 `Zongsoft.Hosting.Web` 对应 `/opt/zongsoft/hosting/web`，指定 `--daemon:zongsoft.web` 后则为 `/opt/zongsoft/web`；如果指定了未禁用的 `--daemon`，默认路径改用 daemon 标识而不是 `--name` 推导。 |
 | `--title:<text>` | 空 | 人类可读的软件包标题，也用于生成 systemd 描述。 |
 | `--summary:<text-or-file>` | 空 | 简短摘要。如果值是已存在文件路径，则读取文件内容。 |
 | `--description:<text-or-file>` | 空 | 详细描述。如果值是已存在文件路径，则读取文件内容。 |
@@ -233,39 +255,55 @@ RPM 关系条目支持 `name`、`name = version`、`name >= version`、`name <= 
 
 ```bash
 dotnet-pack deb \
-  --name:MyApp \
-  --version:1.0.0 \
-  --platform:linux \
-  --framework:net10.0 \
-  --source:./publish
-```
-
-如果提供了位置参数，则只包含这些文件或目录：
-
-```bash
-dotnet-pack deb \
-  --name:MyApp \
+  --name:Zongsoft.Hosting.Web \
+  --title:Zongsoft.Web \
+  --daemon:zongsoft.web \
+  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --framework:net10.0 \
   --source:./publish \
-  MyApp.dll \
+  --output:../packages/
+```
+
+如果提供了位置参数，则只包含这些文件或目录。以下示例选择宿主程序集、运行时配置、应用设置、插件和 MIME 定义：
+
+```bash
+dotnet-pack deb \
+  --name:Zongsoft.Hosting.Web \
+  --title:Zongsoft.Web \
+  --daemon:zongsoft.web \
+  --daemon-bind:8069 \
+  --version:1.0.0 \
+  --platform:linux \
+  --framework:net10.0 \
+  --source:./publish \
+  --output:../packages/ \
+  "*.dll" \
+  Zongsoft.Hosting.Web.deps.json \
+  Zongsoft.Hosting.Web.runtimeconfig.json \
   appsettings.json \
-  wwwroot
+  "web*.config" \
+  "web*.option" \
+  plugins \
+  wwwroot \
+  mime
 ```
 
-每个条目都可以在最后一个冒号后指定目标别名：
+每个条目都可以在最后一个冒号后指定目标别名。以下局部文件包使用 hosting 仓库中已有的文件演示别名，此示例禁用服务生成：
 
 ```bash
 dotnet-pack deb \
-  --name:MyApp \
+  --name:zongsoft.hosting.web \
+  --daemon:none \
   --version:1.0.0 \
   --platform:linux \
   --framework:net10.0 \
   --source:./publish \
-  appsettings.Production.json:appsettings.json \
-  ../shared/logo.png:assets/logo.png \
-  nginx.conf:/etc/nginx/conf.d/myapp.conf
+  --output:../packages/ \
+  ../web/README.md:docs/hosting-web.md \
+  ../zongsoft-logo.png:assets/logo.png \
+  ../.deploy/default/nginx/zongsoft.web.conf:/etc/nginx/conf.d/zongsoft.web.conf
 ```
 
 打包项规则：
@@ -283,12 +321,16 @@ dotnet-pack deb \
 
 ```bash
 dotnet-pack deb \
-  --name:MyApp \
+  --name:Zongsoft.Hosting.Web \
+  --title:Zongsoft.Web \
+  --daemon:zongsoft.web \
+  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --framework:net10.0 \
   --source:./publish \
-  --exclude:"*.pdb;appsettings.Development.json;logs/**"
+  --output:../packages/ \
+  --exclude:"*.pdb;*.xml;logs/**"
 ```
 
 ## systemd 服务
@@ -319,31 +361,36 @@ dotnet-pack deb \
 生成的普通服务会运行：
 
 ```ini
-ExecStart=dotnet <install-path>/<host>.dll
+ExecStart=dotnet /opt/zongsoft/web/Zongsoft.Hosting.Web.dll
 ```
 
 如果提供 `--daemon-bind:<value>`，生成的服务会把它作为 `--urls` 传给应用。纯数字值会被当作本机 HTTP 端口：
 
 ```bash
---daemon-bind:8080
+--daemon-bind:8069
 ```
 
 生成：
 
 ```ini
-ExecStart=dotnet <install-path>/<host>.dll --urls http://127.0.0.1:8080
+ExecStart=dotnet /opt/zongsoft/web/Zongsoft.Hosting.Web.dll --urls http://127.0.0.1:8069
 ```
 
-使用 `--daemon-environments:<names>` 可将指定命令变量或环境变量写入服务文件：
+Web 宿主的 `pack.cmd` 将 `Environment` 和 `ASPNETCORE_ENVIRONMENT` 一并写入生成的服务文件，例如：
 
 ```bash
 dotnet-pack deb \
-  --name:MyApp \
+  --name:Zongsoft.Hosting.Web \
+  --title:Zongsoft.Web \
+  --daemon:zongsoft.web \
+  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --framework:net10.0 \
   --source:./publish \
-  --daemon-environments:ASPNETCORE_ENVIRONMENT \
+  --output:../packages/ \
+  --daemon-environments:Environment,ASPNETCORE_ENVIRONMENT \
+  --Environment:Production \
   --ASPNETCORE_ENVIRONMENT:Production
 ```
 
@@ -391,13 +438,19 @@ $(name)
 当前实现遇到同名变量时会保留第一次出现的值。因此，除非刻意如此，否则应避免定义与打包选项同名的环境变量。
 
 ```bash
+export APP_NAME=Zongsoft.Hosting.Web
+export APP_VERSION=1.0.0
+
 dotnet-pack deb \
+  --daemon:zongsoft.web \
+  --daemon-bind:8069 \
   --name:%APP_NAME% \
   --version:%APP_VERSION% \
   --platform:linux \
   --architecture:x64 \
   --framework:net10.0 \
-  --source:./bin/%compilation%/%framework%/publish
+  --source:./publish \
+  --output:../packages/
 ```
 
 常用变量：
@@ -424,13 +477,13 @@ tar 命令会生成 `.tar.gz` 包及同名 `.sh` 安装脚本。tar 包包含应
 一键安装：
 
 ```bash
-sudo sh ./MyCompany.MyApp@1.0.0_linux-x64.sh
+sudo sh ./packages/zongsoft.web@1.0.0_linux-x64.sh
 ```
 
 安装：
 
 ```bash
-tar -xzf MyCompany.MyApp@1.0.0_linux-x64.tar.gz
+tar -xzf ./packages/zongsoft.web@1.0.0_linux-x64.tar.gz
 sudo ./install.sh
 ```
 
@@ -443,13 +496,13 @@ DESTDIR=/tmp/stage ./install.sh
 覆盖安装路径：
 
 ```bash
-INSTALL_PATH=/srv/myapp sudo ./install.sh
+sudo env INSTALL_PATH=/srv/zongsoft/web ./install.sh
 ```
 
 卸载：
 
 ```bash
-cd /opt/mycompany/myapp
+cd /opt/zongsoft/web
 sudo ./uninstall.sh
 ```
 
@@ -466,9 +519,9 @@ data.tar.gz
 检查并安装：
 
 ```bash
-dpkg-deb --info ./packages/MyCompany.MyApp@1.0.0_linux-x64.deb
-dpkg-deb --contents ./packages/MyCompany.MyApp@1.0.0_linux-x64.deb
-sudo dpkg -i ./packages/MyCompany.MyApp@1.0.0_linux-x64.deb
+dpkg-deb --info ./packages/zongsoft.web@1.0.0_linux-x64.deb
+dpkg-deb --contents ./packages/zongsoft.web@1.0.0_linux-x64.deb
+sudo dpkg -i ./packages/zongsoft.web@1.0.0_linux-x64.deb
 ```
 
 `/etc/` 下的根路径条目也会写入 Debian `conffiles` 元数据。
@@ -480,15 +533,17 @@ RPM 包包含 RPM lead/signature/header 元数据，以及 gzip 压缩的 `newc`
 检查并安装：
 
 ```bash
-rpm -qip ./packages/MyCompany.MyApp@1.0.0_linux-x64.rpm
-rpm -qlp ./packages/MyCompany.MyApp@1.0.0_linux-x64.rpm
-rpm -qp --scripts ./packages/MyCompany.MyApp@1.0.0_linux-x64.rpm
-sudo rpm -Uvh ./packages/MyCompany.MyApp@1.0.0_linux-x64.rpm
+rpm -qip ./packages/zongsoft.web@1.0.0_linux-x64.rpm
+rpm -qlp ./packages/zongsoft.web@1.0.0_linux-x64.rpm
+rpm -qp --scripts ./packages/zongsoft.web@1.0.0_linux-x64.rpm
+sudo rpm -Uvh ./packages/zongsoft.web@1.0.0_linux-x64.rpm
 ```
 
 `/etc/` 下的根路径条目会被标记为 RPM 配置文件。
 
 ## 从源码构建
+
+以下命令从 tools 仓库的 `packager` 目录执行。
 
 还原并构建：
 

@@ -2,6 +2,8 @@
 
 本文档面向维护者，说明 `Zongsoft.Tools.Packager` 的源码结构、命令执行流水线、包模型、文件收集规则、systemd 脚本生成，以及 `.tar.gz`、`.deb`、`.rpm` 三种包格式的当前实现方式。
 
+本文的应用示例引用 hosting 中真实的 [Zongsoft.Hosting.Web](https://github.com/Zongsoft/hosting/tree/main/web/default) 宿主，暂存目录、Bash 工作目录和版本约定见 [README 快速开始](../README.zh-Hans.md#快速开始)。宿主 DLL 为 `Zongsoft.Hosting.Web.dll`，`--daemon:zongsoft.web` 指定包和服务标识；根路径配置示例引用 hosting 的 `.deploy/default/nginx/zongsoft.web.conf`。
+
 ## 设计目标
 
 `Zongsoft.Tools.Packager` 的目标是使用纯 .NET 代码生成 Linux 应用安装包，尽量减少对目标系统工具链的打包期依赖。
@@ -152,12 +154,18 @@ $(name)
 示例：
 
 ```bash
+export APP_NAME=Zongsoft.Hosting.Web
+export APP_VERSION=1.0.0
+
 dotnet-pack deb \
+  --daemon:zongsoft.web \
+  --daemon-bind:8069 \
   --name:%APP_NAME% \
   --version:%APP_VERSION% \
   --platform:linux \
   --framework:net10.0 \
-  --source:./bin/%compilation%/%framework%/publish
+  --source:./publish \
+  --output:../packages/
 ```
 
 变量展开失败时会输出未定义变量错误，并跳过相关路径或文本。
@@ -217,8 +225,8 @@ identity-edition@version_runtime.ext
 示例：
 
 ```text
-Zongsoft.Example@1.0.0_linux-x64.deb
-Zongsoft.Example-enterprise@1.0.0_linux-x64.rpm
+zongsoft.web@1.0.0_linux-x64.deb
+zongsoft.web-enterprise@1.0.0_linux-x64.rpm
 ```
 
 ### Runtime Identifier
@@ -239,17 +247,17 @@ windows       => win
 `Utility.Unix.GetInstallPath(identity)` 根据包标识推导默认安装路径：
 
 ```text
-Zongsoft.Example => /opt/zongsoft/zongsoft.example
-MyApp            => /opt/myapp
-zongsoft.web     => /opt/zongsoft/web
+Zongsoft.Hosting.Web => /opt/zongsoft/hosting/web
+zongsoft.web         => /opt/zongsoft/web
 ```
 
 规则：
 
 - 名称为空时返回 `/opt`。
 - 名称转为小写。
-- 如果名称包含点号，点号前一段作为 vendor 目录。
-- 否则安装到 `/opt/<name>`。
+- 每个点号都替换为 `/`，形成多级目录。
+- 无点号时安装到 `/opt/<name>`。
+- Web 宿主示例指定 `--daemon:zongsoft.web`，因此使用 `/opt/zongsoft/web`；`--name:Zongsoft.Hosting.Web` 仍用于定位宿主 DLL。
 
 ## 打包项加载
 
@@ -267,8 +275,8 @@ entryName = 文件相对 source 的路径
 对 `.deb` 和 `.rpm`，`entryName` 会加上安装路径前缀，例如：
 
 ```text
-InstallPath = /opt/zongsoft/zongsoft.example
-EntryName   = opt/zongsoft/zongsoft.example/app.dll
+InstallPath = /opt/zongsoft/web
+EntryName   = opt/zongsoft/web/Zongsoft.Hosting.Web.dll
 ```
 
 对 `.tar.gz`，`EntryPrefix` 为 `null`，应用文件保留在归档根目录下，安装时由 `install.sh` 复制到目标目录。
@@ -311,21 +319,23 @@ path:alias
 
 ```bash
 dotnet-pack deb \
-  --name:MyApp \
+  --name:zongsoft.hosting.web \
+  --daemon:none \
   --version:1.0.0 \
   --platform:linux \
   --framework:net10.0 \
-  --source:publish \
-  appsettings.Production.json:/etc/myapp/appsettings.json
+  --source:./publish \
+  --output:../packages/ \
+  ../.deploy/default/nginx/zongsoft.web.conf:/etc/nginx/conf.d/zongsoft.web.conf
 ```
 
 三种格式的处理方式：
 
 | 格式 | 处理方式 |
 | --- | --- |
-| `.deb` | payload 路径为 `etc/myapp/appsettings.json`，安装后位于 `/etc/myapp/appsettings.json`；`/etc` 下 root 条目会写入 `conffiles`。 |
-| `.rpm` | payload 路径为 `/etc/myapp/appsettings.json`，RPM header 中标记配置文件。 |
-| `.tar.gz` | 文件存放到 `.root/etc/myapp/appsettings.json`，由 `install.sh` 复制到 `${DESTDIR}/etc/myapp/appsettings.json`。 |
+| `.deb` | payload 路径为 `etc/nginx/conf.d/zongsoft.web.conf`，安装后位于 `/etc/nginx/conf.d/zongsoft.web.conf`；`/etc` 下 root 条目会写入 `conffiles`。 |
+| `.rpm` | payload 路径为 `/etc/nginx/conf.d/zongsoft.web.conf`，RPM header 中标记配置文件。 |
+| `.tar.gz` | 文件存放到 `.root/etc/nginx/conf.d/zongsoft.web.conf`，由 `install.sh` 复制到 `${DESTDIR}/etc/nginx/conf.d/zongsoft.web.conf`。 |
 
 ### 文件权限
 
@@ -462,8 +472,8 @@ new TarWriter(gzip, TarEntryFormat.Pax, false)
 生成 `.tar.gz` 的同时，会在输出目录生成一个同名 `.sh` 安装脚本，例如：
 
 ```text
-MyApp@1.0.0_linux-x64.tar.gz
-MyApp@1.0.0_linux-x64.sh
+zongsoft.web@1.0.0_linux-x64.tar.gz
+zongsoft.web@1.0.0_linux-x64.sh
 ```
 
 该脚本定位同目录下的 `.tar.gz`，解压到临时目录，并调用解压后的 `install.sh` 完成安装。
@@ -645,27 +655,27 @@ Description: <summary-or-title-or-name>
 对非 rooted 条目，`.deb` 的 `EntryPrefix` 是去掉开头 `/` 的安装路径：
 
 ```text
-InstallPath = /opt/zongsoft/zongsoft.example
-EntryName   = opt/zongsoft/zongsoft.example/app.dll
+InstallPath = /opt/zongsoft/web
+EntryName   = opt/zongsoft/web/Zongsoft.Hosting.Web.dll
 ```
 
 Debian 解包后文件位于：
 
 ```text
-/opt/zongsoft/zongsoft.example/app.dll
+/opt/zongsoft/web/Zongsoft.Hosting.Web.dll
 ```
 
 对 rooted 条目，prefix 被跳过，因此：
 
 ```text
-Alias     = /etc/myapp/appsettings.json
-EntryName = etc/myapp/appsettings.json
+Alias     = /etc/nginx/conf.d/zongsoft.web.conf
+EntryName = etc/nginx/conf.d/zongsoft.web.conf
 ```
 
 安装后位于：
 
 ```text
-/etc/myapp/appsettings.json
+/etc/nginx/conf.d/zongsoft.web.conf
 ```
 
 ## `.rpm` 实现
@@ -876,7 +886,7 @@ payload 是 gzip 压缩后的 ASCII `cpio` newc 归档。newc header magic：
 
 1. 根据文件路径收集目录，至少包含 `/`。
 2. 写入目录 cpio 条目，模式 `0040755`。
-3. 写入文件 cpio 条目，路径为 `.` + RPM 绝对路径，例如 `./opt/myapp/app.dll`。
+3. 写入文件 cpio 条目，路径为 `.` + RPM 绝对路径，例如 `./opt/zongsoft/web/Zongsoft.Hosting.Web.dll`。
 4. 文件模式为 `0100000 | entry.Mode`。
 5. 写入 `TRAILER!!!` 结束条目。
 6. 原始 cpio 数据补齐到 512 字节边界。
@@ -913,52 +923,32 @@ RPM header 同时保存一份文件元数据，供包管理器查询和校验。
 
 ## 验证建议
 
+使用 [README](../README.zh-Hans.md#快速开始) 中生成的真实项目安装包；以下命令从 hosting 仓库根目录执行，只检查包内容。安装与卸载用法见 [README 包格式](../README.zh-Hans.md#包格式)。
+
 ### tar.gz
 
 ```bash
-tar -tzf package.tar.gz
-sudo sh ./package.sh
-tar -xzf package.tar.gz -C /tmp/package-test
-DESTDIR=/tmp/stage /tmp/package-test/install.sh
-find /tmp/stage -maxdepth 6 -type f | sort
-DESTDIR=/tmp/stage /tmp/stage/opt/myapp/uninstall.sh
+tar -tzf ./packages/zongsoft.web@1.0.0_linux-x64.tar.gz
+tar -xOf ./packages/zongsoft.web@1.0.0_linux-x64.tar.gz install.sh
+tar -xOf ./packages/zongsoft.web@1.0.0_linux-x64.tar.gz uninstall.sh
 ```
 
 ### deb
 
 ```bash
-ar t package.deb
-dpkg-deb --info package.deb
-dpkg-deb --contents package.deb
-dpkg-deb --control package.deb /tmp/control
-cat /tmp/control/control
-test -f /tmp/control/conffiles && cat /tmp/control/conffiles
-```
-
-可进一步在 Debian/Ubuntu 容器或虚拟机中安装：
-
-```bash
-sudo dpkg -i package.deb
-systemctl status <service>
-sudo dpkg -r <package-name>
+ar t ./packages/zongsoft.web@1.0.0_linux-x64.deb
+dpkg-deb --info ./packages/zongsoft.web@1.0.0_linux-x64.deb
+dpkg-deb --contents ./packages/zongsoft.web@1.0.0_linux-x64.deb
 ```
 
 ### rpm
 
 ```bash
-rpm -qip package.rpm
-rpm -qlp package.rpm
-rpm -qp --scripts package.rpm
-rpm -qpc package.rpm
-rpm2cpio package.rpm | cpio -t
-```
-
-可进一步在 Fedora/RHEL/openSUSE 容器或虚拟机中安装：
-
-```bash
-sudo rpm -Uvh package.rpm
-systemctl status <service>
-sudo rpm -e <package-name>
+rpm -qip ./packages/zongsoft.web@1.0.0_linux-x64.rpm
+rpm -qlp ./packages/zongsoft.web@1.0.0_linux-x64.rpm
+rpm -qp --scripts ./packages/zongsoft.web@1.0.0_linux-x64.rpm
+rpm -qpc ./packages/zongsoft.web@1.0.0_linux-x64.rpm
+rpm2cpio ./packages/zongsoft.web@1.0.0_linux-x64.rpm | cpio -t
 ```
 
 ## 参考资料
