@@ -39,6 +39,16 @@
 
 解析参数表示待部署的源文件路径，源文件路径支持 `*`、`?` 以及 `**` 三种通配符，其中 `**` 表示多级目录匹配。
 
+Windows 绝对源路径含有盘符冒号时，应显式使用空解析器前缀；否则 `D:/...` 中的 `D` 会被当成解析器名。也可使用相对于部署文件的路径，或通过变量展开绝对路径。
+
+```ini
+[plugins example]
+:D:/Example/Plugin/bin/Debug/net10.0/Example.Plugin.dll
+../Plugin/Example.Plugin.plugin
+```
+
+这里开头的 `:` 表示默认路径解析器，不是目标路径的一部分。替换示例路径后再执行。
+
 #### Delete 解析器
 
 解析器名称为：`delete` 或 `remove`，表示删除指定的目标文件。
@@ -194,6 +204,10 @@ dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:
 
 ### 命令选项
 
+💡 在 Windows 上，本工具使用控制台终端。应从具有有效控制台句柄的终端运行；自动化工具需分配 PTY/ConPTY。没有控制台句柄的重定向/隐藏管道执行可能在 `ConsoleTerminal` 初始化时出现“句柄无效”，此时尚未执行部署内容。
+
+🚨 当前命令遇到未定义解析器时会打印错误，但仍可能返回退出码 `0`，且最终复制失败计数不包含该条目。自动化验证必须同时检查错误输出、预期文件清单及最终程序集版本，不能仅依赖退出码或“复制完成”。
+
 - `verbosity` 选项
 	- `quiet` 只显示必要的输出信息，通常只显示错误信息。
 	- `normal` 显示警示和错误信息，如果未指定该选项，其为默认值。
@@ -206,6 +220,9 @@ dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:
 	> 指定的部署目的目录，如果未指定该选项则默认为当前目录。
 
 ### NuGet 包
+
+NuGet 条目按顺序执行，不等同于 `dotnet restore` 对整个应用依赖图的统一版本选择。多个包可能将不同版本的同名 DLL 写入同一目录；覆盖策略又按文件时间或显式选项处理，不按程序集语义版本比较。部署后应检查共享依赖版本，并在停止宿主后用独立补充清单部署已确认兼容的版本。一个已验证的例子是 [Redis 插件依赖冲突](https://github.com/Zongsoft/framework/blob/main/externals/redis/README.zh-Hans.md)。
+
 如果部署项为 NuGet 包目录下中的库文件，会优先匹配 `Framework` 变量指定的 *目标框架* 版本的库文件。
 
 #### 最近适配
@@ -227,7 +244,7 @@ dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:
 - NuGet 包
 	- [`Zongsoft.Data.deploy`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Data/src/Zongsoft.Data.deploy)
 	⇢ [NuGet](https://www.nuget.org/packages/Zongsoft.Data)
-	- [`Zongsoft.Data.MySql.deploy`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Data/drivers/mysql/Zongsoft.Data.MySql.deploy)
+	- [`Zongsoft.Data.MySql.deploy`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Data/drivers/mysql/src/Zongsoft.Data.MySql.deploy)
 	⇢ [NuGet](https://www.nuget.org/packages/Zongsoft.Data.MySql)
 	- [`Zongsoft.Security.deploy`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Security/src/Zongsoft.Security.deploy)
 	⇢ [NuGet](https://www.nuget.org/packages/Zongsoft.Security)

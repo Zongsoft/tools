@@ -39,6 +39,16 @@ Default parser(_**U**nnamed_), which means copy the source file indicated by the
 
 The _Parser-Argument_ represents the path of the source file to be deployed, the source file path supports `*`, `?` and `**` wildcards, the `**` means multi-level directory matching.
 
+For an absolute Windows source path containing a drive-letter colon, explicitly use the empty resolver prefix. Otherwise, `D` in `D:/...` is interpreted as a resolver name. Alternatively, use a path relative to the deployment file or expand the absolute path from a variable.
+
+```ini
+[plugins example]
+:D:/Example/Plugin/bin/Debug/net10.0/Example.Plugin.dll
+../Plugin/Example.Plugin.plugin
+```
+
+The leading `:` selects the default path resolver; it is not part of the destination path. Replace these example paths before running.
+
 #### Delete Parser
 
 The parser name is `delete` or `remove`, which means delete the specified destination file.
@@ -198,6 +208,10 @@ dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:
 
 ### Command options
 
+💡 On Windows, this tool uses a console terminal. Run it with valid console handles; automation tools should allocate a PTY/ConPTY. Redirected or hidden pipe execution without those handles can fail during `ConsoleTerminal` initialization with an invalid-handle error, before any deployment entries run.
+
+🚨 An undefined resolver currently prints an error but can still result in exit code `0`; the final copy-failure count does not include that entry. Automated verification must also inspect error output, expected files, and final assembly versions instead of relying only on exit codes or the completion message.
+
 - `verbosity` option
 	- `quiet` Displays only the necessary output information, usually only error messages.
 	- `normal` Displays warning and error messages, if this command option is not specified, it is the default.
@@ -210,6 +224,9 @@ dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:
 	> The specified deployment destination directory. If this command option is not specified, it defaults to the current directory.
 
 ### NuGet Packages
+
+NuGet entries run sequentially, unlike the whole-application dependency resolution performed by `dotnet restore`. Multiple packages can write different versions of the same DLL into one directory. Overwrite policies use timestamps or explicit options, not assembly semantic versions. Check shared dependency versions after deployment and, with the host stopped, use a separate supplemental manifest for a verified compatible version. See the verified [Redis plugin dependency conflict](https://github.com/Zongsoft/framework/blob/main/externals/redis/README.md).
+
 If the deployment entry is library files in the NuGet package directory, it will preferentially match the library files of the *TargetFramework* version specified by the `Framework` variable.
 
 #### Nearest Matching
@@ -231,7 +248,7 @@ However, the above package library directory does not contains the `net9.0` fram
 - The NuGet Packages
 	- [`Zongsoft.Data.deploy`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Data/src/Zongsoft.Data.deploy)
 	⇢ [NuGet](https://www.nuget.org/packages/Zongsoft.Data)
-	- [`Zongsoft.Data.MySql.deploy`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Data/drivers/mysql/Zongsoft.Data.MySql.deploy)
+	- [`Zongsoft.Data.MySql.deploy`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Data/drivers/mysql/src/Zongsoft.Data.MySql.deploy)
 	⇢ [NuGet](https://www.nuget.org/packages/Zongsoft.Data.MySql)
 	- [`Zongsoft.Security.deploy`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Security/src/Zongsoft.Security.deploy)
 	⇢ [NuGet](https://www.nuget.org/packages/Zongsoft.Security)
