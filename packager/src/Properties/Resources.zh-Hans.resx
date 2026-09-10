@@ -144,4 +144,112 @@
   <data name="DirectoryNotExist.Message" xml:space="preserve">
     <value>指定的 '{0}' 目录不存在。</value>
   </data>
+  <data name="MigrationVariableUndefined.Message" xml:space="preserve">
+    <value>升迁变量“{0}”未定义。</value>
+  </data>
+  <data name="MigrationFileExtension" xml:space="preserve">
+    <value>升迁文件必须使用 .ini 扩展名：{0}</value>
+  </data>
+  <data name="MigrationSectionRequired" xml:space="preserve">
+    <value>升迁条目必须置于段落中：{0}</value>
+  </data>
+  <data name="MigrationSectionDuplicate" xml:space="preserve">
+    <value>升迁器段落重复。</value>
+  </data>
+  <data name="MigrationDatabaseEntryInvalid" xml:space="preserve">
+    <value>数据库条目必须是没有条目值的 SQL 文件路径。</value>
+  </data>
+  <data name="MigrationSqlExtension" xml:space="preserve">
+    <value>数据库脚本必须使用 .sql 扩展名。</value>
+  </data>
+  <data name="MigrationEntryError" xml:space="preserve">
+    <value>{0}:{1} [{2}]：{3}</value>
+  </data>
+  <data name="MigrationBucketDuplicate" xml:space="preserve">
+    <value>存储桶名称重复。</value>
+  </data>
+  <data name="MigrationTasksMissing" xml:space="preserve">
+    <value>未指定升迁任务。</value>
+  </data>
+  <data name="MigrationAliasesDuplicate" xml:space="preserve">
+    <value>参数文件中的升迁器别名重复：{0}</value>
+  </data>
+  <data name="MigrationParameterUnresolved" xml:space="preserve">
+    <value>参数“{0}”无效或无法解析，位置：{1}:{2}。</value>
+  </data>
+  <data name="MigrationParameterError" xml:space="preserve">
+    <value>{0} [{1}]：{2}</value>
+  </data>
+  <data name="MigrationParametersMissing" xml:space="preserve">
+    <value>未找到升迁器“{0}”的参数文件（{1}）。已查找：{2}</value>
+  </data>
+  <data name="MigrationBucketNameInvalid" xml:space="preserve">
+    <value>存储桶名称“{0}”无效。</value>
+  </data>
+  <data name="MigrationBucketOptionsInvalid" xml:space="preserve">
+    <value>存储桶“{0}”的选项无效或重复。支持 public/private、encryption:sse-s3/sse-kms（KMS 可指定 encryption.key）、versioning:enabled/suspended 和 tag.&lt;名称&gt;:&lt;值&gt;（最多 50 个标签，名称/值限长 128/256 字符，aws: 前缀保留）。</value>
+  </data>
+  <data name="MigrationWildcardInvalid" xml:space="preserve">
+    <value>升迁通配符只能用于文件名。</value>
+  </data>
+  <data name="MigrationScriptsMissing" xml:space="preserve">
+    <value>升迁脚本路径没有匹配的文件：{0}</value>
+  </data>
+  <data name="MigrationSectionInvalid" xml:space="preserve">
+    <value>升迁段落无效，位置：{0}:{1}。</value>
+  </data>
+  <data name="MigrationProfileSectionDuplicate" xml:space="preserve">
+    <value>段落“{0}”重复，位置：{1}:{2}。</value>
+  </data>
+  <data name="MigrationProfileInvalid" xml:space="preserve">
+    <value>INI 文件“{0}”中的条目或段落无效或重复。</value>
+  </data>
+  <data name="MigrationPlatformInvalid" xml:space="preserve">
+    <value>升迁安装包支持 linux-x64 和 linux-arm64。</value>
+  </data>
+  <data name="MigrationFrameworkInvalid" xml:space="preserve">
+    <value>升迁安装包要求宿主使用 net8.0、net9.0 或 net10.0。</value>
+  </data>
+  <data name="MigrationIdentityInvalid" xml:space="preserve">
+    <value>用于升迁状态的包标识无效。</value>
+  </data>
+  <data name="MigrationInstallPathInvalid" xml:space="preserve">
+    <value>升迁安装路径必须是 Linux 绝对路径，只能包含字母、数字、点、下划线、加号、减号和目录分隔符。</value>
+  </data>
+  <data name="MigrationPathReserved" xml:space="preserve">
+    <value>包条目使用了升迁保留路径：{0}</value>
+  </data>
+  <data name="MigrationRuntimeMissing" xml:space="preserve">
+    <value>缺少打包所需的升迁运行器。请重新构建或安装 dotnet-pack。</value>
+  </data>
+  <data name="MigrationProviderUnknown" xml:space="preserve">
+    <value>未知的升迁器。</value>
+  </data>
+  <data name="MigrationRuntimeInvalid" xml:space="preserve">
+    <value>原生升迁运行器 {0} 不是有效的 {1} ELF 可执行文件。</value>
+  </data>
+  <data name="MigrationPathsRequired" xml:space="preserve">
+    <value>--migration 必须指定至少一个 INI 文件路径。</value>
+  </data>
+  <data name="MigrationHostRequired" xml:space="preserve">
+    <value>升迁安装包必须能够定位服务宿主，或指定 --daemon:none。</value>
+  </data>
+  <data name="GeneratedEntryConflicted" xml:space="preserve">
+    <value>生成的包条目与“{0}”冲突。</value>
+  </data>
+  <data name="MigrationNotCompleted" xml:space="preserve">
+    <value>此安装包的升迁尚未完成。</value>
+  </data>
+  <data name="MigrationInstallPathFixed" xml:space="preserve">
+    <value>升迁安装包使用固定安装路径；请使用 --install-path 重新打包。</value>
+  </data>
+  <data name="MySqlDelimiterInvalid" xml:space="preserve">
+    <value>MySQL DELIMITER 分隔符无效。</value>
+  </data>
+  <data name="SqlServerGoRepeatUnsupported" xml:space="preserve">
+    <value>不支持带重复次数的 GO 批次。</value>
+  </data>
+  <data name="MigrationFilesMissing" xml:space="preserve">
+    <value>警告：未找到升迁 INI 文件 {0}，已跳过。</value>
+  </data>
 </root>

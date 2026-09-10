@@ -11,7 +11,7 @@
 - `packager`：生成 `.tar.gz`、`.deb`、`.rpm` 和安装生命周期脚本；命令为 `dotnet-pack`。
 - `regular`：面向 Windows 的正则表达式 WinForms 测试器。
 
-`deployer` 与 `packager` 支持 .NET 8、9、10 并在构建时生成 NuGet 工具包；`regular` 目标为 `net10.0-windows`。
+`deployer` 与 `packager` 支持 .NET 8、9、10；deployer 在构建时生成 NuGet 工具包，packager 由独立构建流程先准备升迁运行器产物再生成工具包；`regular` 目标为 `net10.0-windows`。
 
 ## 操作边界
 

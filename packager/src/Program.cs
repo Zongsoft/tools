@@ -1,4 +1,4 @@
-﻿/*
+/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -58,14 +58,17 @@ internal class Program
 		Executor.Root.Children.Add(new TarCommand());
 		Executor.Root.Children.Add(new DebCommand());
 		Executor.Root.Children.Add(new RpmCommand());
+		Executor.Failed += (_, _) => Environment.ExitCode = 1;
 
 		try
 		{
 			//执行命令
-			await Executor.ExecuteAsync(CommandLine.Get(args));
+			if(await Executor.ExecuteAsync(CommandLine.Get(args)) == null)
+				Environment.ExitCode = 1;
 		}
 		catch(Exception ex)
 		{
+			Environment.ExitCode = 1;
 			//打印异常消息
 			Terminal.WriteLine(CommandOutletColor.DarkRed, ex.Message + Environment.NewLine + ex.StackTrace);
 		}

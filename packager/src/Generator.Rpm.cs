@@ -60,9 +60,9 @@ partial class Generator
 			FileAccess.Write);
 
 		var payload = CreateCpioPayload(package.Entries, out var archiveSize);
-		var header = RpmHeader.Create(package, archiveSize);
+		var header = RpmHeader.Create(package, archiveSize, payload);
 		var body = Combine(header, payload);
-		var signature = RpmSignature.Create(body);
+		var signature = RpmSignature.Create(header, body);
 
 		WriteRpmLead(stream, package);
 		stream.Write(signature);
@@ -173,7 +173,7 @@ partial class Generator
 		foreach(var entry in entries)
 		{
 			using var stream = File.OpenRead(entry.Source);
-			var digest = Convert.ToHexString(SHA1.HashData(stream)).ToLowerInvariant();
+			var digest = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
 			AddRpmEntry(result, directories, GetRpmPath(entry.EntryName), entry.Size, RPM_FILE_TYPE_REGULAR, entry.Mode, entry.ModifiedTime, digest, IsRpmConfigurationFile(entry) ? RPM_FILE_CONFIG : 0);
 		}
 
@@ -243,8 +243,8 @@ partial class Generator
 		var result = new List<RpmDependency>
 		{
 			new("rpmlib(CompressedFileNames)", RPM_SENSE_RPMLIB | RPM_SENSE_LESS | RPM_SENSE_EQUAL, "3.0.4-1"),
+			new("rpmlib(FileDigests)", RPM_SENSE_RPMLIB | RPM_SENSE_LESS | RPM_SENSE_EQUAL, "4.6.0-1"),
 			new("rpmlib(PayloadFilesHavePrefix)", RPM_SENSE_RPMLIB | RPM_SENSE_LESS | RPM_SENSE_EQUAL, "4.0-1"),
-			new("rpmlib(PayloadIsGzip)", RPM_SENSE_RPMLIB | RPM_SENSE_LESS | RPM_SENSE_EQUAL, "5.4.0-1"),
 		};
 
 		AddRpmDependencies(result, package.Dependencies);
@@ -386,13 +386,15 @@ partial class Generator
 
 	sealed class RpmSignature
 	{
-		public static byte[] Create(byte[] body)
+		public static byte[] Create(byte[] metadata, byte[] body)
 		{
 			var digest = MD5.HashData(body);
 			var header = new RpmHeaderBuilder();
 
-			header.AddInt32(257, body.Length);
-			header.AddBinary(261, digest);
+			header.AddString(269, Convert.ToHexString(SHA1.HashData(metadata)).ToLowerInvariant());
+			header.AddString(273, Convert.ToHexString(SHA256.HashData(metadata)).ToLowerInvariant());
+			header.AddInt32(1000, body.Length);
+			header.AddBinary(1004, digest);
 
 			return header.Build(true);
 		}
@@ -400,7 +402,7 @@ partial class Generator
 
 	sealed class RpmHeader
 	{
-		public static byte[] Create(Package.Rpm package, long archiveSize)
+		public static byte[] Create(Package.Rpm package, long archiveSize, byte[] payload)
 		{
 			var builder = new RpmHeaderBuilder();
 			var buildTime = (int)DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -464,7 +466,9 @@ partial class Generator
 			builder.AddStringArray(1113, provides.ConvertAll(item => item.Version));
 			builder.AddInt32Array(1140, rpmEntries.ConvertAll(_ => 0));
 			builder.AddStringArray(1142, [""]);
-			builder.AddInt32Array(5011, [1]);
+			builder.AddInt32(5011, 8);
+			builder.AddStringArray(5092, [Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant()]);
+			builder.AddInt32(5093, 8);
 
 			return builder.Build(false);
 		}
@@ -482,6 +486,7 @@ partial class Generator
 	{
 		private readonly List<RpmHeaderIndex> _indexes = [];
 		private readonly MemoryStream _store = new();
+		private readonly Dictionary<int, int> _lengths = [];
 
 		public void AddString(int tag, string value) => Add(tag, 6, 1, () => WriteString(value ?? string.Empty));
 		public void AddInternationalString(int tag, string value) => Add(tag, 9, 1, () => WriteString(value ?? string.Empty));
@@ -522,36 +527,57 @@ partial class Generator
 		{
 			using var stream = new MemoryStream();
 			Span<byte> buffer = stackalloc byte[16];
+			var region = signature ? 62 : 63;
+			var count = _indexes.Count + 1;
+			var indexes = new List<RpmHeaderIndex>(_indexes);
+			indexes.Sort((left, right) => left.Tag.CompareTo(right.Tag));
+			using var store = new MemoryStream();
+			var data = _store.ToArray();
 
-			stream.Write(signature ? [0x8e, 0xad, 0xe8, 0x01] : [0x8e, 0xad, 0xe8, 0x01]);
-			stream.WriteByte(0);
-			stream.Write([0, 0, 0]);
-			WriteInt32(buffer[..4], _indexes.Count);
-			stream.Write(buffer[..4]);
-			WriteInt32(buffer[..4], (int)_store.Length);
-			stream.Write(buffer[..4]);
-
-			foreach(var index in _indexes)
+			for(int i = 0; i < indexes.Count; i++)
 			{
-				WriteInt32(buffer[..4], index.Tag);
-				WriteInt32(buffer[4..8], index.Type);
-				WriteInt32(buffer[8..12], index.Offset);
-				WriteInt32(buffer[12..16], index.Count);
-				stream.Write(buffer);
+				var index = indexes[i];
+				Align(store, GetAlignment(index.Type));
+				indexes[i] = index with { Offset = (int)store.Position };
+				store.Write(data.AsSpan(index.Offset, _lengths[index.Tag]));
 			}
 
-			_store.Position = 0;
-			_store.CopyTo(stream);
-			Pad(stream, 8);
+			stream.Write([0x8e, 0xad, 0xe8, 0x01, 0, 0, 0, 0]);
+			WriteInt32(buffer[..4], count);
+			WriteInt32(buffer[4..8], checked((int)store.Length + 16));
+			stream.Write(buffer[..8]);
+
+			WriteIndex(stream, buffer, new(region, 7, (int)store.Length, 16));
+
+			foreach(var index in indexes)
+				WriteIndex(stream, buffer, index);
+
+			store.Position = 0;
+			store.CopyTo(stream);
+			WriteIndex(stream, buffer, new(region, 7, -count * 16, 16));
+
+			// Only the signature header is padded; gzip starts immediately after the main header.
+			if(signature) Pad(stream, 8);
 
 			return stream.ToArray();
+		}
+
+		private static void WriteIndex(Stream stream, Span<byte> buffer, RpmHeaderIndex index)
+		{
+			WriteInt32(buffer[..4], index.Tag);
+			WriteInt32(buffer[4..8], index.Type);
+			WriteInt32(buffer[8..12], index.Offset);
+			WriteInt32(buffer[12..16], index.Count);
+			stream.Write(buffer);
 		}
 
 		private void Add(int tag, int type, int count, Action writer)
 		{
 			Align(_store, GetAlignment(type));
-			_indexes.Add(new(tag, type, (int)_store.Position, count));
+			var offset = (int)_store.Position;
+			_indexes.Add(new(tag, type, offset, count));
 			writer();
+			_lengths.Add(tag, (int)_store.Position - offset);
 		}
 
 		private void WriteString(string value)

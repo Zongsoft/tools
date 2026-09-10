@@ -170,7 +170,9 @@ partial class Generator
 				exit 1
 			fi
 
-			{{installingScript}}
+			if [ -z "$DESTDIR" ]; then
+				{{installingScript}}
+			fi
 			mkdir -p "$TARGET"
 			(
 				cd "$SOURCE_DIR"
@@ -180,7 +182,9 @@ partial class Generator
 			)
 			install -m 0755 "$SOURCE_DIR/uninstall.sh" "$TARGET/uninstall.sh"
 			{{rootInstallScript}}
-			{{installedScript}}
+			if [ -z "$DESTDIR" ]; then
+				{{installedScript}}
+			fi
 			echo "Installed {{packageName}} to $TARGET"
 			""";
 
@@ -211,11 +215,15 @@ partial class Generator
 				exit 1
 			fi
 
-			{{uninstallingScript}}
+			if [ -z "$DESTDIR" ]; then
+				{{uninstallingScript}}
+			fi
 			cd /
 			rm -rf "$TARGET"
 			{{rootUninstallScript}}
-			{{uninstalledScript}}
+			if [ -z "$DESTDIR" ]; then
+				{{uninstalledScript}}
+			fi
 			echo "Uninstalled {{packageName}} from $TARGET"
 			""";
 

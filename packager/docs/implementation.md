@@ -22,6 +22,9 @@
 | --- | --- |
 | `Program.cs` | 初始化终端命令树，注册 `TarCommand`、`DebCommand`、`RpmCommand`。 |
 | `PackCommand.cs` | 三种打包命令的模板方法基类，声明通用命令选项并编排执行流程。 |
+| `MigrationProfile.cs` / `MigrationLoader.cs` | 使用 Zongsoft.Core Profile 读取 INI、展开变量、查找参数、排序并计算 SQL 校验和，不解析 SQL 语法。 |
+| `MigrationBundle.cs` | 按升迁器和目标 RID 收集独立运行器，写入计划、SQL、执行入口和启动检查标识。 |
+| `../.shared/` / `../migrator/src/` | 两端链接编译的纯升迁协议；独立运行器包含嵌套数据库/S3 升迁器、状态与锁及执行入口。 |
 | `PackCommand.Tar.cs` | 创建 `Package.Tar`。 |
 | `PackCommand.Deb.cs` | 创建 `Package.Deb`。 |
 | `PackCommand.Rpm.cs` | 创建 `Package.Rpm`，解析 RPM 专用的 `provides`、`conflicts`。 |
@@ -58,9 +61,11 @@ flowchart TD
     C --> D["Initialize variables"]
     D --> E["Normalize source/output paths"]
     E --> F["Create Package.Tar/Deb/Rpm"]
-    F --> G["Generate systemd scripts and service entry"]
+    F --> M["Load and validate optional migration INI/env"]
+    M --> G["Generate systemd scripts and service entry"]
     G --> H["Load package entries"]
-    H --> I["Call package.Pack(output, overwrite)"]
+    H --> N["Attach selected migration runtime, plan and SQL"]
+    N --> I["Call package.Pack(output, overwrite)"]
     I --> J["Generator writes target package file"]
 ```
 
@@ -93,6 +98,7 @@ protected override Package.Deb CreatePackage(CommandContext context)
 | 选项 | 默认值 | 说明 |
 | --- | --- | --- |
 | `--source` | 当前目录 | 输入目录。 |
+| `--migration` | 空 | 升迁 INI 路径，多个路径以 `;` 或 `|` 分隔，相对于 source；参数文件按目录约定查找。 |
 | `--output` | `source` | 输出目录；相对路径基于 `source`。 |
 | `--exclude` | 空 | 加载打包项时跳过的文件模式列表，多个模式用逗号或分号分隔。 |
 | `--edition` | 空 | 包版本/渠道标识，参与包名；RPM 中也作为 release。 |
@@ -140,7 +146,7 @@ systemd 与生命周期脚本选项：
 Normalizer.Initialize(...)
 ```
 
-变量名不区分大小写。当前实现先对变量序列调用 `DistinctBy(variable => variable.Key)`，因此同名变量保留第一次出现的值；这意味着环境变量可能优先于同名命令选项。这个行为与“后写入覆盖前值”的直觉不同，属于后续可以整理的实现细节。
+变量名不区分大小写。初始化使用 `DistinctBy(variable => variable.Key, StringComparer.OrdinalIgnoreCase)`，保留第一次出现的值，避免 Environment/environment 这类大小写差异触发字典重复键异常。环境变量仍可能优先于同名命令选项，未改为后写入覆盖。
 
 ### 变量语法
 
@@ -739,7 +745,7 @@ index count
 store size
 index entries
 store bytes
-padding to 8 bytes
+padding to 8 bytes (signature header only)
 ```
 
 index entry：
@@ -768,14 +774,19 @@ count  int32 big-endian
 
 signature section 使用与 RPM header 相同的索引/存储区结构。
 
+只有 signature header 尾部补齐到 8 字节。主 metadata header 的 store 后立即是压缩 payload，不再填充；否则 rpm 查询可能成功，但 rpm2cpio 会读到 gzip 之前的零字节，无法解包。
+
 当前写入：
 
 | Tag | 内容 |
 | --- | --- |
-| `257` | metadata header + payload 的字节长度。 |
-| `261` | metadata header + payload 的 MD5 digest。 |
+| `62` | Signature 不可变区域，BIN 类型、16 字节 trailer。 |
+| `269` | metadata header 的 SHA-1 digest。 |
+| `273` | metadata header 的 SHA-256 digest。 |
+| `1000` | metadata header + payload 的字节长度。 |
+| `1004` | metadata header + payload 的 MD5 digest。 |
 
-signature section 末尾按 8 字节对齐。
+signature section 末尾按 8 字节对齐。两个 header 的索引均按 tag 升序写入；主 header 的不可变区域 tag 为 `63`。区域 trailer 位于 store 尾部，其负偏移为区域索引字节数，摘要覆盖完整 metadata header（包含 magic、索引、store 与 trailer）。这是完整性摘要，不是发布者的 OpenPGP 签名。格式依据 [RPM V4 格式](https://rpm-software-management.github.io/rpm/manual/format_v4.html) 和 [Header 结构](https://rpm-software-management.github.io/rpm/manual/format_header.html)。
 
 ### Metadata Header
 
@@ -813,7 +824,7 @@ signature section 末尾按 8 字节对齐。
 | `1028` | 文件大小数组。 |
 | `1030` | 文件模式数组。 |
 | `1034` | 文件修改时间数组。 |
-| `1035` | 文件 SHA-1 digest 数组。 |
+| `1035` | 文件 SHA-256 digest 数组。 |
 | `1037` | 文件 flags；`/etc` rooted 文件标记为配置文件。 |
 | `1039` / `1040` | 用户名/组名，固定 `root`。 |
 | `1048..1050` | Requires flags/name/version。 |
@@ -824,6 +835,8 @@ signature section 末尾按 8 字节对齐。
 | `1124` | Payload format，固定 `cpio`。 |
 | `1125` | Payload compressor，固定 `gzip`。 |
 | `1126` | Payload flags，固定 `9`。 |
+| `5011` | 文件摘要算法，`8`（SHA-256）。 |
+| `5092` / `5093` | 压缩 payload 的 SHA-256 digest / 算法 `8`。 |
 
 ### RPM 架构映射
 
@@ -864,8 +877,8 @@ name(>= version)
 
 ```text
 rpmlib(CompressedFileNames) <= 3.0.4-1
+rpmlib(FileDigests) <= 4.6.0-1
 rpmlib(PayloadFilesHavePrefix) <= 4.0-1
-rpmlib(PayloadIsGzip) <= 5.4.0-1
 ```
 
 默认 Provides：
@@ -921,6 +934,30 @@ RPM header 同时保存一份文件元数据，供包管理器查询和校验。
 - 变量初始化目前使用 `DistinctBy` 保留第一次出现的同名变量，命令行同名值未必能覆盖环境变量。
 - `summary`、`description` 与脚本路径/文本的读取职责分布在 `Normalizer` 和 `Scriptor.Systemd` 两处，后续可进一步统一。
 
+## 安装升迁实现
+
+实际 Native AOT 发布、第三方警告和隔离运行结果见 [验证记录](migration-verification.md) 与 [警告审查](aot-warning-review.md)。
+
+公开契约及真实 hosting 范例见 [安装升迁](migrations.zh-Hans.md) / [English](migrations.md)。`--migration` 是唯一新增打包选项。打包阶段不连接数据库或 S3；`MigrationLoader` 将 INI/参数转换为确定顺序的 `MigrationPlan`，文件路径、SQL SHA-256 和展开后的参数写入计划。路径模式无匹配、找不到参数、选项不合法等均在生成归档前失败。命令执行器的 Failed 事件及空结果均设置非零进程退出码，避免终端吞掉异常后外部脚本误判成功。
+
+`MigrationLoader` 的公共 Load 组织输入流程；私有嵌套 Database 负责脚本路径、通配符、排序、去重、批次与校验和，AmazonS3 负责 Bucket 文本及重名检查。运行器的 Database 基类只共用 ADO.NET 连接执行、建库竞争和有序脚本辅助，不要求 TDengine 使用 DbConnection。
+
+INI 直接调用 `Zongsoft.Configuration.Profiles.Profile.Load(path, options)`，与 deployer 保持一致。依赖 Core 7.59.0，`ProfileSection` 原生接受 `[amazon.s3]`，不改写段名或条目。重复段落在加载前检查，重复条目由 Profile 检查；关闭 Profile import 指令，避免导入破坏参数文件的明确查找边界。
+
+采用主项目与独立 `migrator` 两个生产项目。命名空间统一为 `Zongsoft.Tools.Packager.Migration`，`.shared` 的计划模型、`MigrationProvider` 名称及参数规则、`MigrationUtility` 通用参数方法及对应本地化资源分别编译进两端。`MigrationPlan.Step/Script/Bucket` 为嵌套模型，`Script.Source/Content` 只在主项目 partial 扩展中定义，不进入 JSON。主项目处理 INI、变量和 Bucket 选项文本，打包过程中不连接数据库或 S3。migrator 包含抽象 partial `Migrator`、抽象 `Migrator.Database` 及其六种嵌套数据库实现、`Migrator.AmazonS3` 实现、执行上下文和调度，独占数据库驱动及 AWS SDK 依赖；TDengine 使用 BCL `ClientWebSocket`，无需连接器包。
+
+主项目不引用或构建 migrator。运行器为 net10.0 Native AOT 程序，目标 glibc Linux x64/arm64，使用独立 Rocky Linux 9/glibc 2.34 环境发布。`.shared/Migration.props` 链接协议源码和资源。Cake 的显式 `migrator` 任务分别准备 `src/.migrator/linux-x64/`、`src/.migrator/linux-arm64/`，符号与发布载荷分离；完整工具包要求两个 RID 均准备成功。普通 `dotnet build/test` 不启动容器，主项目通过普通 Content 收入预先准备的目录。`MigrationBundle` 只选择 RID、检查 ELF 架构、收集完整目录；不分析驱动依赖或重写 `.deps.json`。入口设置 0755，缺失或架构错误时制包失败。原生运行器无需目标 .NET 运行时；系统库要求见升迁指南。
+
+生成载荷包含 `.migration/migration.json`（0600）、`.migration/.artifacts/<任务编号>/<四位序号>.sql` 预处理批次（0644）、原生 migrator 及必要 `.so`、计划指纹文件以及 `.migration/migrate.sh`（0755）。`AddGenerated` 遇冲突抛错；这些保留路径不得由用户载荷覆盖。参数以明文存在包内，日志只记录任务、脚本逻辑路径和异常类型，不输出驱动异常正文。SQL 校验和验证在所有外部资源操作之前。
+
+安装停止服务并使旧 ready 标记失效，部署完成后设置 `PACK_INSTALL_PATH`，建立 systemd drop-in，执行所有升迁，再进入 installed/start 及 postinstalled。重复 postinst configure 同样先清除 ready。Debian 在 configure 分支运行，RPM 在 `%post` 运行；未启用升迁时保留原有服务脚本语义。tar 的 DESTDIR 暂存跳过全部安装/卸载生命周期步骤。升迁包的实际安装路径固定，改变 INSTALL_PATH 时在载荷部署前拒绝，使用 --install-path 重新打包可改变目标目录。
+
+状态在 `/var/lib/<PackageName>/packager`；独占文件锁禁止同包同时 apply。执行器先清 ready，验证计划及 SQL，顺序运行任务，成功才写 ready。启动检查通过比较公开的计划指纹文件与 ready，不需要服务用户读取 0600 参数文件。指纹使用无缩进 JSON 的 UTF-8 SHA-256，避免 Windows/Linux 格式换行差异；参数字符串自身的换行不改变。网络数据库先建库再执行脚本，文件数据库自动建父目录；TDengine 直连 taosAdapter `/rest/ws`，顺序执行 `conn`、`query` 和 `free_result`，支持响应分片、请求关联、超时与取消；S3 采用 HeadBucket/PutBucket 创建桶，随后通过 PutBucketVersioning、PutBucketEncryption、PutBucketTagging 配置已指定的版本控制、默认加密和桶标签，最后以 PutBucketPolicy 设置公共读取，不使用 ACL。已有桶不改配置；本地 pending 文件只在所有配置完成后清除，支持建桶后任一配置失败重试。每次安装和重试都执行全部 SQL，脚本作者负责存在性/预期状态判断及数据幂等性。没有逐文件成功历史、历史校验冲突或已执行跳过逻辑，SQL 校验和仅验证当前包的完整性；不自动回滚，不在卸载时删除数据库、桶或状态。
+
+`MigrationLoader.Database` 的私有批次实现 在打包阶段处理 SQL Server GO、MySQL DELIMITER 和 TDengine 分号。MySQL（启用 AllowUserVariables）、PostgreSQL、DuckDB、SQLite 保持完整驱动批次，避免破坏函数、触发器、事务和会话变量作用域。每个批次以 UTF-8 无 BOM 写入安装根的 `.migration/.artifacts/`，保留批次内换行并计算生成字节的校验和；`Script.Content` 只存在于打包端。计划中的 Script.Path 相对于安装根目录，运行器从计划所在的 `.migration/` 推导安装根，只接受 `.migration/.artifacts/` 内的文件；每个文件直接提交一次，不再包含 SQL 分段代码。用户负责 SQL 语法、事务与幂等性。
+
+生产项目位于 `src/Zongsoft.Tools.Packager.csproj` 和 `migrator/src/Zongsoft.Tools.Packager.Migrator.csproj`，运行器的共享协议导入路径为 `../../.shared/Migration.props`。`test/Zongsoft.Tools.Packager.Tests.csproj` 覆盖 Profile、参数、SQL 批次预处理、计划与指纹、三格式制包和 JSON 交接；`migrator/test/Zongsoft.Tools.Packager.Migrator.Tests.csproj` 只引用运行器，覆盖 SQLite/DuckDB 临时数据库、S3、执行状态及 TDengine WebSocket。运行器测试采用普通类型名；主侧交接测试启动独立 migrator 的 `apply/check` 命令，验证预处理脚本执行顺序、主端指纹、篡改失败及完成标记失效。主测试项目通过 `ReferenceOutputAssembly=false` 只保留运行器构建依赖，不直接引用其类型；两组测试均无程序集或 `using` 别名。两个测试项目均纳入解决方案及 Cake 的 `**/test/*.csproj` 发现规则。测试包不是实际安装验证；真实宿主验证记录见 [升迁验证](migration-verification.md)。
+
 ## 验证建议
 
 使用 [README](../README.zh-Hans.md#快速开始) 中生成的真实项目安装包；以下命令从 hosting 仓库根目录执行，只检查包内容。安装与卸载用法见 [README 包格式](../README.zh-Hans.md#包格式)。
@@ -959,3 +996,21 @@ rpm2cpio ./packages/zongsoft.web@1.0.0_linux-x64.rpm | cpio -t
 - rpm.org: [RPM Package Format](https://rpm.org/docs/4.19.x/manual/format.html)
 - Linux Standard Base: [RPM Package File Format](https://refspecs.linuxfoundation.org/LSB_3.1.1/LSB-Core-generic/LSB-Core-generic/pkgformat.html)
 - GNU tar manual: [GNU tar](https://www.gnu.org/software/tar/manual/)
+
+### 升迁程序交接与本地化
+
+打包器产生 `.migration/migration.json`，包含 FormatVersion、Package、Version、有序 Tasks、已展开参数及包内 SQL 路径/校验和。独立运行器读取计划和 `.migration/.artifacts/` 下的批次，不读取 INI 或 `.env`。JSON 使用源码生成 `MigrationPlan.Serialization`，配置为私有实现；模型的 Validate 检查结构，MigrationProvider 检查参数。运行器使用显式数据库构造，TDengine 请求、S3 策略和状态使用 Utf8JsonWriter。`.migration/migrate.sh apply` 直接执行原生 `Zongsoft.Tools.Packager.Migrator`，退出码决定是否继续启动宿主。运行器在 `/var/lib/<包名>/packager` 维护锁、status.json 和 ready；Shell check 只比较 ready 与包内 id。Web 宿主路径为 `/opt/zongsoft/web/.migration/migration.json`，完整文件职责见 [升迁指南](migrations.zh-Hans.md#打包器与-migrator-的协作)。
+
+主项目 `Properties/Resources`、共享 `MigrationResources`、运行器 `Properties/Resources` 各自提供默认英文及 zh-Hans 资源，配置 ResXFileCodeGenerator 并生成强类型访问代码；原生发布保留中英文资源和全球化能力。C# 消息按 CurrentUICulture 选择，Shell 提示按 LC_ALL、LC_MESSAGES、LANG 选择。状态值和协议字段不本地化。
+
+
+### 可选升迁输入缺失
+
+`MigrationLoader` 按参数顺序展开 INI 文件名通配符，对不存在的指定文件或无匹配模式通过本地化警告回调提示并继续。全部输入缺失时返回空计划引用，`PackCommand` 按普通包生成脚本，不调用 `MigrationBundle.Attach`，因此不要求运行器产物，也不生成升迁启动门禁。只保留 `.migration/` 为生成内容保留目录，普通载荷可以使用安装根的 `migration/`。已经找到的 INI 仍进行完整格式和内容校验，`.env` 与 SQL 缺失不属于可跳过输入。
+
+
+### S3 桶初始化选项
+
+`MigrationLoader.AmazonS3` 解析带引号的选项文本，规范化 encryption/versioning 模式，按大小写敏感名称收集 tag.*；选项或标签重复即报错。加密描述采用 `MigrationPlan.Bucket.EncryptionOptions` 嵌套类型，包含 Mode 和可选 Key；Bucket 同时包含可选 Versioning 和 Tags。可选属性为 null 时不写入 JSON。`Bucket.Validate` 由打包端与运行端计划校验共同调用，检查模式、KMS密钥关联和标签限制；共享协议不依赖 AWS SDK。
+
+运行器 `Migrator.AmazonS3.ConfigureAsync` 只将结构化数据映射到标准 S3 请求，先版本控制、后加密与标签，随后执行公共策略。省略字段不发送配置请求；已有桶沿用跳过规则，新建桶配置失败则保留 pending。未增加修改已有桶的选项、后端选择或 RustFS 专用 API，KMS仅引用已有密钥标识。

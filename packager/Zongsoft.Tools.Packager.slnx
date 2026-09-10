@@ -1,4 +1,6 @@
 <Solution>
 	<Project Path="src/Zongsoft.Tools.Packager.csproj" />
 	<Project Path="test/Zongsoft.Tools.Packager.Tests.csproj" />
+	<Project Path="migrator/src/Zongsoft.Tools.Packager.Migrator.csproj" />
+	<Project Path="migrator/test/Zongsoft.Tools.Packager.Migrator.Tests.csproj" />
 </Solution>

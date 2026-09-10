@@ -3,7 +3,7 @@
 		<OutputType>Exe</OutputType>
 		<LangVersion>latest</LangVersion>
 		<TargetFrameworks>net8.0;net9.0;net10.0;</TargetFrameworks>
-		<Version>0.8.3</Version>
+		<Version>0.9.0</Version>
 		<Authors>Popeye Zhong(zongsoft@qq.com)</Authors>
 		<PackAsTool>true</PackAsTool>
 		<ToolCommandName>dotnet-pack</ToolCommandName>
@@ -12,7 +12,6 @@
 		<Product>Zongsoft Packaging Tool</Product>
 		<Description>Zongsoft Application Packaging Tool.</Description>
 		<Copyright>Copyright(C) Zongsoft Studio 2020-2026. All rights reserved.</Copyright>
-		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -26,12 +25,13 @@
 
 	<ItemGroup>
 		<None Include="..\..\zongsoft-logo.png" Pack="true" PackagePath="\" Visible="true" />
+		<Content Include=".migrator/**/*" Exclude=".migrator/**/*.pdb;.migrator/**/*.dbg;.migrator/**/*.dwo;.migrator/**/*.xml" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Pack="false" />
 		<None Include="..\README.md" Pack="true" PackagePath="\" />
 		<None Include="..\README.zh-Hans.md" Pack="true" PackagePath="\" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Zongsoft.Core" Version="7.48.0" />
+		<PackageReference Include="Zongsoft.Core" Version="7.59.0" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -48,4 +48,6 @@
 			<LastGenOutput>Resources.Designer.cs</LastGenOutput>
 		</EmbeddedResource>
 	</ItemGroup>
+
+	<Import Project="..\.shared\Migration.props" />
 </Project>

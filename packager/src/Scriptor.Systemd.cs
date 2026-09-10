@@ -1,4 +1,4 @@
-﻿/*
+/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -71,8 +71,8 @@ partial class Scriptor
 					""";
 
 				_package.Scripts = new(
-					Combine(ReadFiles(source, scripts.PreInstalling), installing, ReadFiles(source, scripts.PostInstalling)),
-					Combine(ReadFiles(source, scripts.PreInstalled), installed, ReadFiles(source, scripts.PostInstalled)),
+					Combine(MigrationBundle.ContextScript(_package), ReadFiles(source, scripts.PreInstalling), installing, MigrationBundle.InvalidateScript(_package), ReadFiles(source, scripts.PostInstalling)),
+					Combine(MigrationBundle.ContextScript(_package), MigrationBundle.InvalidateScript(_package), ReadFiles(source, scripts.PreInstalled), MigrationBundle.ApplyScript(_package), installed, ReadFiles(source, scripts.PostInstalled)),
 					Combine(ReadFiles(source, scripts.PreUninstalling), uninstalling, ReadFiles(source, scripts.PostUninstalling)),
 					Combine(ReadFiles(source, scripts.PreUninstalled), uninstalled, ReadFiles(source, scripts.PostUninstalled)));
 				return;
@@ -88,7 +88,12 @@ partial class Scriptor
 				fileInfo = GenerateDaemon(identifier, _package);
 
 				if(fileInfo == null)
+				{
+					if(_package.Migration != null)
+						throw new InvalidOperationException(Properties.Resources.MigrationHostRequired);
+
 					return;
+				}
 			}
 
 			_package.Entries.Add(Normalizer.Variables.Source, fileInfo.FullName);
@@ -103,6 +108,14 @@ partial class Scriptor
 					systemctl stop '{{serviceName}}' >/dev/null 2>&1 || true
 				fi
 				""";
+			if(_package.Migration != null && string.IsNullOrWhiteSpace(scripts.Installing))
+				installing = $$"""
+				if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+					if [ "$(systemctl show --property=LoadState --value '{{serviceName}}')" != not-found ]; then
+						systemctl stop '{{serviceName}}'
+					fi
+				fi
+				""";
 
 			if(string.IsNullOrWhiteSpace(installed))
 				installed = $$"""
@@ -114,6 +127,27 @@ partial class Scriptor
 					systemctl start '{{serviceName}}' >/dev/null 2>&1 || true
 				fi
 				""";
+
+			string migrationPreparation = null;
+			if(_package.Migration != null)
+			{
+				migrationPreparation = $$"""
+				install -d '/etc/systemd/system/{{serviceName}}.d'
+				printf '[Service]\nExecStartPre=/bin/sh "%s/.migration/migrate.sh" check\n' "$PACK_INSTALL_PATH" > '/etc/systemd/system/{{serviceName}}.d/20-packager-migration.conf'
+				chmod 0644 '/etc/systemd/system/{{serviceName}}.d/20-packager-migration.conf'
+				ln -sfn "$PACK_INSTALL_PATH/{{serviceName}}" '{{serviceLink}}'
+				if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+					systemctl daemon-reload
+				fi
+				""";
+				if(string.IsNullOrWhiteSpace(scripts.Installed))
+					installed = $$"""
+					if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+						systemctl enable '{{serviceName}}'
+						systemctl start '{{serviceName}}'
+					fi
+					""";
+			}
 
 			if(string.IsNullOrWhiteSpace(uninstalling))
 				uninstalling = $$"""
@@ -138,10 +172,10 @@ partial class Scriptor
 					""";
 
 			_package.Scripts = new(
-				Combine(ReadFiles(source, scripts.PreInstalling), installing, ReadFiles(source, scripts.PostInstalling)),
-				Combine(ReadFiles(source, scripts.PreInstalled), installed, ReadFiles(source, scripts.PostInstalled)),
+				Combine(MigrationBundle.ContextScript(_package), ReadFiles(source, scripts.PreInstalling), installing, MigrationBundle.InvalidateScript(_package), ReadFiles(source, scripts.PostInstalling)),
+				Combine(MigrationBundle.ContextScript(_package), MigrationBundle.InvalidateScript(_package), ReadFiles(source, scripts.PreInstalled), migrationPreparation, MigrationBundle.ApplyScript(_package), installed, ReadFiles(source, scripts.PostInstalled)),
 				Combine(ReadFiles(source, scripts.PreUninstalling), uninstalling, ReadFiles(source, scripts.PostUninstalling)),
-				Combine(ReadFiles(source, scripts.PreUninstalled), uninstalled, ReadFiles(source, scripts.PostUninstalled)));
+				Combine(ReadFiles(source, scripts.PreUninstalled), _package.Migration == null ? null : $"rm -f '/etc/systemd/system/{serviceName}.d/20-packager-migration.conf'", uninstalled, ReadFiles(source, scripts.PostUninstalled)));
 		}
 
 		static string ReadFile(string source, string path)
@@ -241,6 +275,9 @@ partial class Scriptor
 
 			if(string.IsNullOrEmpty(host))
 			{
+				if(package.Migration != null)
+					throw new InvalidOperationException(Properties.Resources.MigrationHostRequired);
+
 				Dumper.HostLocateFailed();
 				return null;
 			}

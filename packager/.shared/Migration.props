@@ -1,0 +1,18 @@
+<Project>
+	<ItemGroup>
+		<Compile Include="$(MSBuildThisFileDirectory)*.cs" Link="Shared\%(Filename)%(Extension)" />
+		<Compile Update="$(MSBuildThisFileDirectory)MigrationResources.Designer.cs">
+			<AutoGen>True</AutoGen>
+			<DesignTime>True</DesignTime>
+			<DependentUpon>MigrationResources.resx</DependentUpon>
+		</Compile>
+		<EmbeddedResource Include="$(MSBuildThisFileDirectory)MigrationResources*.resx" Link="Shared\%(Filename)%(Extension)">
+			<ManifestResourceName>Zongsoft.Tools.Packager.Migration.%(Filename)</ManifestResourceName>
+		</EmbeddedResource>
+		<EmbeddedResource Update="$(MSBuildThisFileDirectory)MigrationResources.resx">
+			<Generator>ResXFileCodeGenerator</Generator>
+			<LastGenOutput>MigrationResources.Designer.cs</LastGenOutput>
+			<CustomToolNamespace>Zongsoft.Tools.Packager.Migration</CustomToolNamespace>
+		</EmbeddedResource>
+	</ItemGroup>
+</Project>

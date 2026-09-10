@@ -194,3 +194,13 @@ FakesAssemblies/
 
 # Visual Studio 6 workspace options file
 *.opt
+
+# Packager native runtime publications and local test-agent records
+/src/.migrator/
+/.testagent/
+
+# NuGet symbol packages
+*.snupkg
+
+# Native AOT build scripts are source files, not build output
+!/migrator/build/

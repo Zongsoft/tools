@@ -143,7 +143,7 @@ partial class Generator
 		{
 			WriteDebTarText(writer, "control", control, Utility.Unix.Mode644);
 			WriteDebTarScript(writer, "preinst", package.Scripts.Installing);
-			WriteDebTarScript(writer, "postinst", package.Scripts.Installed);
+			WriteDebTarScript(writer, "postinst", package.Scripts.Installed, package.Migration == null ? [] : ["configure"]);
 			WriteDebTarScript(writer, "prerm", package.Scripts.Uninstalling, "remove", "deconfigure");
 			WriteDebTarScript(writer, "postrm", package.Scripts.Uninstalled, "remove", "purge");
 

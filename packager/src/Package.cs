@@ -1,4 +1,4 @@
-﻿/*
+/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -92,6 +92,7 @@ public abstract partial class Package
 	public string[] Dependencies { get; set; }
 	public EntryCollection Entries { get; }
 	public InstallScripts Scripts { get; set; }
+	public Migration.MigrationPlan Migration { get; set; }
 	#endregion
 
 	#region 内部属性
@@ -186,6 +187,15 @@ public abstract partial class Package
 
 		public int Count => _entries.Count;
 		public bool Contains(string name) => name != null && _entries.ContainsKey(name);
+
+		internal void AddGenerated(string source, string name, UnixFileMode mode, bool rooted = false)
+		{
+			var entryName = Utility.NormalizePath(rooted ? name.TrimStart('/') : Path.Combine(_package.EntryPrefix ?? "", name));
+			var key = rooted ? "/" + entryName : entryName;
+			if(_entries.ContainsKey(key)) throw new InvalidOperationException(string.Format(Properties.Resources.GeneratedEntryConflicted, entryName));
+			var file = new FileInfo(source);
+			_entries.Add(key, new(source, entryName, file.Length, Utility.Unix.GetTimestamp(file.LastWriteTimeUtc), mode, rooted));
+		}
 
 		internal void Add(string source, string argument)
 		{

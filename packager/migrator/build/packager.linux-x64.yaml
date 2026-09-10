@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: zongsoft-packager-aot
+spec:
+  containers:
+  - name: builder
+    image: docker.io/rockylinux/rockylinux:9.8
+    command: ["/bin/bash"]
+    args:
+    - "-c"
+    - "exec sleep infinity"
+    workingDir: /workspace
+    volumeMounts:
+    - mountPath: /workspace
+      name: packager
+    - mountPath: /aot
+      name: build-cache
+  volumes:
+  - name: packager
+    hostPath:
+      path: /mnt/d/Zongsoft/tools/packager
+      type: Directory
+  - name: build-cache
+    persistentVolumeClaim:
+      claimName: zongsoft-packager-aot-cache

@@ -20,6 +20,7 @@
 - [打包项](#打包项)
 - [systemd 服务](#systemd-服务)
 - [生命周期脚本](#生命周期脚本)
+- [安装升迁](#安装升迁)
 - [变量](#变量)
 - [包格式](#包格式)
 - [故障排查](#故障排查)
@@ -222,6 +223,7 @@ dotnet-pack tar \
 | 选项 | 默认值 | 说明 |
 | --- | --- | --- |
 | `--source:<path>` | 当前目录 | 待打包的源目录。 |
+| `--migration:<paths>` | 空 | 以 `;` 或 `\|` 分隔的升迁 INI 路径，见 [安装升迁](docs/migrations.zh-Hans.md)。 |
 | `--output:<path>` | 源目录 | 生成安装包的输出路径，以目录分隔符(`/`或`\`)结尾表示目录，否则为文件。相对路径基于 `--source` 解析。 |
 | `--exclude:<patterns>` | 空 | 加载打包项时跳过的文件模式列表，多个模式用逗号或分号分隔。 |
 | `--edition:<name>` | 空 | 可选发行/版本标识。会追加到包名；对 RPM 而言，有值时也作为 release。 |
@@ -420,6 +422,30 @@ dotnet-pack deb \
 
 包管理器升级不会进入卸载生命周期。Debian 的 `prerm`/`postrm` 脚本会根据动作参数进行保护，RPM 的 `%preun`/`%postun` 脚本仅在最后一个已安装实例被删除时运行。这可以防止旧包的卸载脚本在升级或同版本覆盖安装期间删除刚安装的新版本负载。Tar 包保持显式的 `install.sh`/`uninstall.sh` 生命周期，其生成的卸载器只删除解析后的 `TARGET` 路径。
 
+## 安装升迁
+
+从源码制作工具包时，先构建 migrator，再执行 `dotnet pack src/Zongsoft.Tools.Packager.csproj`。主项目不引用升迁器项目，详见[构建说明](docs/migrations.zh-Hans.md#构建与工具包生成)。
+
+中间文件为 `<安装目录>/.migration/migration.json`，预处理 SQL 批次保存在 `.migration/.artifacts/` 中。独立升迁运行器使用 **Native AOT** 发布到 glibc Linux，目标机无需安装 .NET 运行时。TDengine 直接使用 WebSocket 连接 taosAdapter，不依赖 `TDengine.Connector`；升迁提示提供英文和简体中文。两程序的文件交接、执行顺序与启动门禁见[协作说明](docs/migrations.zh-Hans.md#打包器与-migrator-的协作)。
+
+增加 `--migration` 即可在应用启动前创建数据库、表结构及 S3/RustFS 存储桶。一个选项指定多个 `.ini` 路径，以 `;` 或 `|` 分隔；对应 `.env` 连接参数按约定从同目录及父目录查找。
+
+S3 存储桶初始化还支持默认加密（`encryption:sse-s3` / `encryption:sse-kms`）、版本控制（`versioning:enabled` / `versioning:suspended`）和桶标签（`tag.<名称>:<值>`）。已有桶保持不变，语法及重试行为见[升迁指南](docs/migrations.zh-Hans.md)。
+
+对上文准备的 Zongsoft hosting `./publish` 目录：
+
+```text
+--migration:../.deploy/$(scheme)/migration/zongsoft.db-$(environment).ini;../.deploy/$(scheme)/migration/zongsoft.fs-$(environment).ini
+```
+
+指定的升迁 INI 不存在或文件名通配符无匹配时，输出警告并跳过；全部文件缺失时生成普通包，不附带升迁产物和门禁。已存在但无效的 INI、缺少参数文件或 SQL 脚本仍然报错。
+
+请用 Shell 引号包住整个选项，并按 [hosting 升迁指南](docs/migrations.zh-Hans.md) 创建部署文件。指南使用真实 Zongsoft.Upgrading 建表脚本，说明参数、执行顺序及恢复方法。支持 SQL Server、MySQL、SQLite、DuckDB、PostgreSQL（`postgres`/`postgresql`）、TDengine 和 `amazon.s3`。
+
+主项目负责准备升迁计划，独立 [`migrator/src`](migrator/src/Zongsoft.Tools.Packager.Migrator.csproj) 项目在 Linux 上执行。两端链接 `.shared` 中的纯协议源码，不生成共享 DLL；migrator 是 Native AOT 原生程序，并附带必要的原生库。
+
+升迁失败会阻止服务启动，之后的 systemd 启动也需要完成标记。每次安装和重试均执行全部 SQL，由脚本作者保证可重复执行，包括部分失败后的重试；不维护逐文件成功历史。包内包含展开后的连接凭据（`migration.json` 权限 `0600`），安装包也需要按含凭据产物保护。原生升迁运行器支持 glibc Linux x64/arm64。tar `DESTDIR` 暂存跳过生命周期钩子和升迁；实际升迁安装使用打包时的 `--install-path`。
+
 ## 变量
 
 选项值和打包项参数可以使用两种变量形式：
@@ -552,10 +578,19 @@ dotnet restore Zongsoft.Tools.Packager.slnx
 dotnet build Zongsoft.Tools.Packager.slnx -c Release
 ```
 
+独立 `migrator` 任务将运行器准备到 `src/.migrator/`，主项目通过普通内容声明复制这些文件，不引用或构建运行器。制作完整工具包可运行下面的 Cake 构建，或先执行 `dotnet cake --target=migrator --edition=Release`，再执行 `dotnet pack src/Zongsoft.Tools.Packager.csproj -c Release`。未准备运行器时普通打包仍可用，`--migration` 会提示缺少运行器。
+
 使用 Cake 构建：
 
 ```bash
 dotnet cake --target=build --edition=Release
+```
+
+[`test`](test/Zongsoft.Tools.Packager.Tests.csproj) 覆盖打包器输入、SQL 批次预处理、制包和调用独立 migrator 进程的 JSON 交接；[`migrator/test`](migrator/test/Zongsoft.Tools.Packager.Migrator.Tests.csproj) 只引用运行器，覆盖数据库、S3 及 TDengine WebSocket。两个测试项目可分别运行：
+
+```powershell
+dotnet test test/Zongsoft.Tools.Packager.Tests.csproj -f net10.0
+dotnet test migrator/test/Zongsoft.Tools.Packager.Migrator.Tests.csproj -f net10.0
 ```
 
 通过 Cake 脚本运行测试：

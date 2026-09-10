@@ -9,6 +9,8 @@ description: 修改或审查 Zongsoft tools/packager 的 dotnet-pack 命令、�
 
 ## 定位变更
 
+- 构建与产物：`build.cake` 编排构建/制包，`.shared/Migration.props` 共享编译声明，独立 `migrator` 任务准备 `src/.migrator/linux-x64/` 和 `src/.migrator/linux-arm64/` 的完整 Native AOT 发布目录，主项目普通 Content 收入工具输出；主项目不建立 migrator 项目引用。
+
 - 命令选项、默认值、输出路径：`PackCommand.cs` 及 `PackCommand.Tar.cs`、`.Deb.cs`、`.Rpm.cs`。
 - 变量来源、`$(name)`/`%name%`、路径规范化：`Variables.cs`、`Normalizer.cs`。
 - 打包项、别名、通配、排除、冲突和文件模式：`Package.cs`、`Utility.cs`。
@@ -17,6 +19,8 @@ description: 修改或审查 Zongsoft tools/packager 的 dotnet-pack 命令、�
 - deb：`Package.Deb.cs`、`Generator.Deb.cs`。
 - rpm：`Package.Rpm.cs`、`Generator.Rpm.cs`。
 - 升级/卸载回归：`test/PackageLifecycleTests.cs`。
+- 升迁测试：`test/` 保留输入、制包与 JSON 交接（调用独立 migrator apply/check 进程，运行器项目引用仅作构建依赖）；`migrator/test/` 的独立测试项目只引用 `migrator/src/`，覆盖数据库、S3 和 TDengine WebSocket；SQL 批次预处理测试位于主 `test/`。
+- 安装升迁：`src/MigrationProfile.cs`、`src/MigrationLoader.cs`、`src/MigrationBundle.cs`、`.shared/`（MigrationProvider/通用参数/计划/资源）、`migrator/src/`（net10.0 Native AOT、TDengine 直接 WebSocket），配置契约见 [升迁指南](docs/migrations.zh-Hans.md)。
 
 ## 实现顺序
 
@@ -33,9 +37,16 @@ description: 修改或审查 Zongsoft tools/packager 的 dotnet-pack 命令、�
 - `/etc` 等根路径条目在 tar 的 `.root`、Debian `conffiles` 和 RPM 配置文件标记中各自正确表达。
 - systemd 禁用值、服务文件优先级、宿主定位、环境变量和 `--urls` 生成规则保持兼容。
 - Debian 升级动作和 RPM 非最终实例卸载不得执行最终删除逻辑；tar 卸载器只删除解析后的目标。
+- 升迁只增加 `--migration` 选项；INI 解析复用 Core Profile。异常及提示使用带 ResXFileCodeGenerator 的双语资源，原生发布保留中英文资源和全球化能力。检查别名、参数逐级查找、无匹配脚本、完整原生目录的 RID/ELF 架构和执行权限、SQL 校验和、每次安装及失败重试均从头执行 SQL、失败 ready 标记、升迁先于启动、`DESTDIR` 不执行钩子，以及保留数据库/Bucket/状态。
 
 ## 安全验证
 
-优先运行测试项目，再从临时源目录生成代表性小包。可以使用 `tar -tf`、`dpkg-deb --info/--contents`、`rpm -qip/-qlp/--scripts` 等只读命令检查产物；工具不可用时记录未验证项。
+测试代码不添加文件头版权注释，不为本地化编写单元测试；不引入文化切换辅助类或翻译文案断言，保留异常类型、错误定位和敏感值不泄漏检查。
+
+先运行受影响的测试项目；升迁目录或交接变更同时运行 `dotnet test test/Zongsoft.Tools.Packager.Tests.csproj -f net10.0` 与 `dotnet test migrator/test/Zongsoft.Tools.Packager.Migrator.Tests.csproj -f net10.0`，再按需要从临时源目录生成代表性小包。可以使用 `tar -tf`、`dpkg-deb --info/--contents`、`rpm -qip/-qlp/--scripts` 等只读命令检查产物；工具不可用时记录未验证项。
 
 不要安装生成包、执行其生命周期脚本、写入 `/opt` 或 `/etc`、管理 systemd，也不要使用真实应用产物中的密钥。发布 NuGet 工具包仅在用户明确要求时进行。
+
+升迁目录：计划为 `.migration/migration.json`，SQL 批次位于 `.migration/.artifacts/`。检查指定 INI 缺失/无匹配的警告和全缺失普通包行为，同时保留参数文件、SQL 和无效 INI 的错误校验。
+
+S3 桶初始化支持 public/private、默认加密（sse-s3/sse-kms及可选KMS密钥标识）、版本控制（enabled/suspended）和 tag.* 桶标签。已有桶跳过，新建桶的指定配置全部完成才清除 pending；选项文本仅在打包端解析，共享 Bucket 模型校验结构，运行器使用标准 S3 API。

@@ -20,6 +20,7 @@ It is designed for .NET services and command-line applications that need repeata
 - [Package Entries](#package-entries)
 - [systemd Services](#systemd-services)
 - [Lifecycle Scripts](#lifecycle-scripts)
+- [Installation Migrations](#installation-migrations)
 - [Variables](#variables)
 - [Package Formats](#package-formats)
 - [Troubleshooting](#troubleshooting)
@@ -222,6 +223,7 @@ dotnet-pack tar \
 | Option | Default | Description |
 | --- | --- | --- |
 | `--source:<path>` | Current directory | Source directory whose files are packaged. |
+| `--migration:<paths>` | Empty | Migration INI files separated by `;` or `\|`; see [installation migrations](docs/migrations.md). |
 | `--output:<path>` | Source directory | Output path for the generated package, if the value ends with a directory separator(`/` or `\`), it is a directory; otherwise, it is a file. Relative paths are resolved under `--source`. |
 | `--exclude:<patterns>` | Empty | Comma- or semicolon-separated file patterns to skip while loading package entries. |
 | `--edition:<name>` | Empty | Optional edition. Appended to package name; used as RPM release when present. |
@@ -420,6 +422,30 @@ If no scripts are supplied, defaults are generated. For systemd packages they st
 
 Package-manager upgrades do not run the uninstall lifecycle. Debian `prerm`/`postrm` scripts are guarded by their action argument, and RPM `%preun`/`%postun` scripts run only when the final installed package instance is removed. This prevents an old package's removal scripts from deleting the newly installed payload during an upgrade or same-version reinstall. Tar packages keep the explicit `install.sh`/`uninstall.sh` lifecycle, and their generated uninstaller removes only the resolved `TARGET` path.
 
+## Installation Migrations
+
+Build migrator first, then run `dotnet pack src/Zongsoft.Tools.Packager.csproj` to create the tool package. The main project has no migrator project reference; see the [build instructions](docs/migrations.md#building-the-tool-package).
+
+The intermediate file is `<install-directory>/.migration/migration.json`; prepared SQL batches are stored in `.migration/.artifacts/`. The standalone migrator is published with **Native AOT** for glibc Linux and needs no target .NET runtime. TDengine connects directly to taosAdapter using WebSocket without `TDengine.Connector`. Migration messages support English and Simplified Chinese. See the [collaboration guide](docs/migrations.md#collaboration-between-the-packager-and-migrator) for file exchange, execution order and startup checks.
+
+Add `--migration` to create databases/tables and S3/RustFS buckets before the application starts. Supply one or more `.ini` paths separated by `;` or `|`; matching `.env` connection parameters are found by convention in the same directory or its parents.
+
+S3 bucket initialization also supports default encryption (`encryption:sse-s3` / `encryption:sse-kms`), versioning (`versioning:enabled` / `versioning:suspended`) and bucket tags (`tag.<name>:<value>`). Existing buckets remain unchanged; see the [migration guide](docs/migrations.md) for syntax and retry behavior.
+
+Missing migration INI files or unmatched filename patterns produce warnings and are skipped. If all inputs are missing, an ordinary package is generated without migration assets or startup checks. Existing invalid INI, missing parameters and missing SQL remain errors.
+
+For the prepared Zongsoft hosting `./publish` directory described above:
+
+```text
+--migration:../.deploy/$(scheme)/migration/zongsoft.db-$(environment).ini;../.deploy/$(scheme)/migration/zongsoft.fs-$(environment).ini
+```
+
+Quote the complete option in your shell. Create these deployment files using the [hosting migration guide](docs/migrations.md), which uses the real Zongsoft.Upgrading SQL schema and explains provider parameters, execution order and recovery. Providers: SQL Server, MySQL, SQLite, DuckDB, PostgreSQL (`postgres`/`postgresql`), TDengine and `amazon.s3`.
+
+The main project prepares the migration plan; the independent [`migrator/src`](migrator/src/Zongsoft.Tools.Packager.Migrator.csproj) project executes it on Linux. Both link pure protocol source from `.shared`, with no shared DLL. The migrator is a Native AOT executable with its required native libraries.
+
+Migration failure prevents service startup, including later systemd starts until the package is ready. Every installation and retry executes all SQL files; script authors must ensure repeatability, including after partial failure. There is no per-file success history. The package contains expanded connection credentials (`migration.json` mode `0600`); protect the archive accordingly. The native migrator runs on glibc Linux x64/arm64. Tar `DESTDIR` staging skips lifecycle hooks and migrations; live migration installs use the build-time `--install-path`.
+
 ## Variables
 
 Option values and entry arguments may reference variables in either form:
@@ -552,10 +578,19 @@ dotnet restore Zongsoft.Tools.Packager.slnx
 dotnet build Zongsoft.Tools.Packager.slnx -c Release
 ```
 
+The independent `migrator` task prepares runtime artifacts in `src/.migrator/`. The main project copies these as ordinary content; it neither references nor builds migrator. For a complete tool package, run the Cake build below, or run `dotnet cake --target=migrator --edition=Release` before `dotnet pack src/Zongsoft.Tools.Packager.csproj -c Release`. Without prepared artifacts, ordinary packaging remains available; `--migration` reports the missing runner.
+
 Build with Cake:
 
 ```bash
 dotnet cake --target=build --edition=Release
+```
+
+[`test`](test/Zongsoft.Tools.Packager.Tests.csproj) covers packager input, SQL batch preparation, package generation and JSON handoff through an independent migrator process; [`migrator/test`](migrator/test/Zongsoft.Tools.Packager.Migrator.Tests.csproj) references only the migrator and covers databases, S3 and TDengine WebSocket. Run the projects separately:
+
+```powershell
+dotnet test test/Zongsoft.Tools.Packager.Tests.csproj -f net10.0
+dotnet test migrator/test/Zongsoft.Tools.Packager.Migrator.Tests.csproj -f net10.0
 ```
 
 Run tests through the Cake script:

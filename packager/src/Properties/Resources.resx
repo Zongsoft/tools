@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
 		Microsoft ResX Schema
@@ -123,5 +123,113 @@
   </data>
   <data name="DirectoryNotExist.Message" xml:space="preserve">
     <value>The '{0}' directory does not exist.</value>
+  </data>
+  <data name="MigrationVariableUndefined.Message" xml:space="preserve">
+    <value>The migration variable '{0}' is undefined.</value>
+  </data>
+  <data name="MigrationFileExtension" xml:space="preserve">
+    <value>Migration file must use .ini: {0}</value>
+  </data>
+  <data name="MigrationSectionRequired" xml:space="preserve">
+    <value>Migration entries require a section: {0}</value>
+  </data>
+  <data name="MigrationSectionDuplicate" xml:space="preserve">
+    <value>Duplicate migrator section.</value>
+  </data>
+  <data name="MigrationDatabaseEntryInvalid" xml:space="preserve">
+    <value>Database entries must be SQL paths without values.</value>
+  </data>
+  <data name="MigrationSqlExtension" xml:space="preserve">
+    <value>Database scripts must use .sql.</value>
+  </data>
+  <data name="MigrationEntryError" xml:space="preserve">
+    <value>{0}:{1} [{2}]: {3}</value>
+  </data>
+  <data name="MigrationBucketDuplicate" xml:space="preserve">
+    <value>Duplicate bucket name.</value>
+  </data>
+  <data name="MigrationTasksMissing" xml:space="preserve">
+    <value>No migration tasks were specified.</value>
+  </data>
+  <data name="MigrationAliasesDuplicate" xml:space="preserve">
+    <value>Duplicate migrator aliases in parameter file: {0}</value>
+  </data>
+  <data name="MigrationParameterUnresolved" xml:space="preserve">
+    <value>Invalid or unresolved parameter '{0}' at {1}:{2}.</value>
+  </data>
+  <data name="MigrationParameterError" xml:space="preserve">
+    <value>{0} [{1}]: {2}</value>
+  </data>
+  <data name="MigrationParametersMissing" xml:space="preserve">
+    <value>No migration parameters found for '{0}' ({1}). Searched: {2}</value>
+  </data>
+  <data name="MigrationBucketNameInvalid" xml:space="preserve">
+    <value>Invalid bucket name '{0}'.</value>
+  </data>
+  <data name="MigrationBucketOptionsInvalid" xml:space="preserve">
+    <value>Bucket '{0}' has invalid or duplicate options. Use public/private, encryption:sse-s3/sse-kms with optional encryption.key for KMS, versioning:enabled/suspended, and tag.&lt;name&gt;:&lt;value&gt; (up to 50 tags; key/value limits: 128/256 characters; aws: keys are reserved).</value>
+  </data>
+  <data name="MigrationWildcardInvalid" xml:space="preserve">
+    <value>Migration wildcards are supported only in the file name.</value>
+  </data>
+  <data name="MigrationScriptsMissing" xml:space="preserve">
+    <value>Migration script pattern has no matches: {0}</value>
+  </data>
+  <data name="MigrationSectionInvalid" xml:space="preserve">
+    <value>Invalid migration section at {0}:{1}.</value>
+  </data>
+  <data name="MigrationProfileSectionDuplicate" xml:space="preserve">
+    <value>Duplicate section '{0}' at {1}:{2}.</value>
+  </data>
+  <data name="MigrationProfileInvalid" xml:space="preserve">
+    <value>Invalid or duplicate INI entry/section in '{0}'.</value>
+  </data>
+  <data name="MigrationPlatformInvalid" xml:space="preserve">
+    <value>Migration packages support linux-x64 and linux-arm64.</value>
+  </data>
+  <data name="MigrationFrameworkInvalid" xml:space="preserve">
+    <value>Migration packages require net8.0, net9.0 or net10.0.</value>
+  </data>
+  <data name="MigrationIdentityInvalid" xml:space="preserve">
+    <value>Invalid package identity for migration state.</value>
+  </data>
+  <data name="MigrationInstallPathInvalid" xml:space="preserve">
+    <value>Migration installation paths must be absolute Linux paths containing letters, digits, '.', '_', '+', '-' and directory separators.</value>
+  </data>
+  <data name="MigrationPathReserved" xml:space="preserve">
+    <value>Package entry uses a reserved migration path: {0}</value>
+  </data>
+  <data name="MigrationRuntimeMissing" xml:space="preserve">
+    <value>The packaged migration runtime is missing. Rebuild/reinstall dotnet-pack.</value>
+  </data>
+  <data name="MigrationProviderUnknown" xml:space="preserve">
+    <value>Unknown migration provider.</value>
+  </data>
+  <data name="MigrationRuntimeInvalid" xml:space="preserve">
+    <value>The native migrator {0} is not a valid {1} ELF executable.</value>
+  </data>
+  <data name="MigrationPathsRequired" xml:space="preserve">
+    <value>--migration requires at least one INI path.</value>
+  </data>
+  <data name="MigrationHostRequired" xml:space="preserve">
+    <value>A migration package requires a locatable service host or --daemon:none.</value>
+  </data>
+  <data name="GeneratedEntryConflicted" xml:space="preserve">
+    <value>Generated package entry conflicts with '{0}'.</value>
+  </data>
+  <data name="MigrationNotCompleted" xml:space="preserve">
+    <value>Migration has not completed for this package.</value>
+  </data>
+  <data name="MigrationInstallPathFixed" xml:space="preserve">
+    <value>Migration packages use a fixed installation path; rebuild with --install-path.</value>
+  </data>
+  <data name="MySqlDelimiterInvalid" xml:space="preserve">
+    <value>Invalid MySQL DELIMITER.</value>
+  </data>
+  <data name="SqlServerGoRepeatUnsupported" xml:space="preserve">
+    <value>Repeated GO batches are not supported.</value>
+  </data>
+  <data name="MigrationFilesMissing" xml:space="preserve">
+    <value>Warning: No migration INI files found for {0}; skipped.</value>
   </data>
 </root>

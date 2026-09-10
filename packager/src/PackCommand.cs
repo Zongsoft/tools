@@ -55,6 +55,7 @@ namespace Zongsoft.Tools.Packager;
 [CommandOption(ARCHITECTURE_OPTION, typeof(Architecture), Architecture.X64)]
 [CommandOption(OUTPUT_OPTION, typeof(string))]
 [CommandOption(EXCLUDE_OPTION, typeof(string))]
+[CommandOption(MIGRATION_OPTION, typeof(string))]
 [CommandOption(OVERWRITE_OPTION, typeof(bool), false)]
 [CommandOption(URL_OPTION, typeof(string), DEFAULT_URL)]
 [CommandOption(TITLE_OPTION, typeof(string))]
@@ -101,6 +102,7 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	protected const string MAINTAINER_OPTION = Variables.MAINTAINER;
 	protected const string DEPENDENCIES_OPTION = Variables.DEPENDENCIES;
 	protected const string EXCLUDE_OPTION = Variables.EXCLUDE;
+	protected const string MIGRATION_OPTION = "migration";
 	protected const string OVERWRITE_OPTION = "overwrite";
 	protected const string INSTALL_PATH_OPTION = "install-path";
 	protected const string DAEMON_OPTION = Variables.DaemonVariable.DAEMON;
@@ -137,7 +139,7 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		}
 
 		//初始化变量集
-		Normalizer.Initialize(GetVariables(context).DistinctBy(variable => variable.Key).ToDictionary(StringComparer.OrdinalIgnoreCase));
+		Normalizer.Initialize(GetVariables(context).DistinctBy(variable => variable.Key, StringComparer.OrdinalIgnoreCase).ToDictionary(StringComparer.OrdinalIgnoreCase));
 
 		if(!Normalizer.TryNormalize(context.Options.GetValue<string>(SOURCE_OPTION), out var source))
 			return ValueTask.FromResult<object>(null);
@@ -168,6 +170,17 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		if(package == null)
 			return ValueTask.FromResult<object>(null);
 
+		if(context.Options.Contains(MIGRATION_OPTION) && context.Options.TryGetValue<string>(MIGRATION_OPTION, out var migration))
+		{
+			if(string.IsNullOrWhiteSpace(migration)) throw new InvalidOperationException(Properties.Resources.MigrationPathsRequired);
+			package.Migration = new Migration.MigrationLoader(value =>
+			{
+				var result = Normalizer.Normalize(value, Normalizer.Variables);
+				if(!result.Succeed) throw new InvalidOperationException(string.Format(Properties.Resources.MigrationVariableUndefined_Message, result.Value));
+				return result.Value;
+			}).Load(migration, source, package.PackageName, package.Version.ToString());
+		}
+
 		//生成安装脚本
 		package.Scriptor.Script();
 
@@ -175,6 +188,8 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		package.Entries.Load(source,
 			context.Arguments,
 			context.Options.TryGetValue<string>(EXCLUDE_OPTION, out var exclusion) ? [exclusion] : []);
+
+		using var migrationBundle = package.Migration == null ? null : MigrationBundle.Attach(package, package.Migration);
 
 		//添加版本文件
 		if(!package.Entries.Contains(".version"))
