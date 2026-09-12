@@ -157,15 +157,15 @@ partial class Generator
 
 	static void WriteDebTarEntry(TarWriter writer, Package.Entry item)
 	{
+		using var stream = item.OpenRead();
 		var entry = new UstarTarEntry(TarEntryType.RegularFile, item.EntryName)
 		{
 			Mode = item.Mode,
 			ModificationTime = DateTimeOffset.FromUnixTimeSeconds(item.ModifiedTime),
-			DataStream = File.OpenRead(item.Source),
+			DataStream = stream,
 		};
 
 		writer.WriteEntry(entry);
-		entry.DataStream.Dispose();
 	}
 
 	static void WriteDebTarDirectory(TarWriter writer, string name)

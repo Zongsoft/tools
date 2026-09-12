@@ -80,7 +80,7 @@ partial class Generator
 
 		foreach(var entry in entries)
 		{
-			using var file = File.OpenRead(entry.Source);
+			using var file = entry.OpenRead();
 			WriteCpioEntry(raw, inode++, "." + GetRpmPath(entry.EntryName), RPM_FILE_TYPE_REGULAR, entry.Mode, entry.Size, entry.ModifiedTime, file);
 		}
 
@@ -172,7 +172,7 @@ partial class Generator
 
 		foreach(var entry in entries)
 		{
-			using var stream = File.OpenRead(entry.Source);
+			using var stream = entry.OpenRead();
 			var digest = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
 			AddRpmEntry(result, directories, GetRpmPath(entry.EntryName), entry.Size, RPM_FILE_TYPE_REGULAR, entry.Mode, entry.ModifiedTime, digest, IsRpmConfigurationFile(entry) ? RPM_FILE_CONFIG : 0);
 		}

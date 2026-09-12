@@ -46,8 +46,8 @@ internal static class Utility
 	(
 		version.Major == 0 &&
 		version.Minor == 0 &&
-		version.Build == 0 &&
-		version.Revision == 0
+		version.Build <= 0 &&
+		version.Revision <= 0
 	);
 
 	public static string GetRuntimeIdentifier(Platform platform, Architecture? architecture) => platform == Platform.Windows ?

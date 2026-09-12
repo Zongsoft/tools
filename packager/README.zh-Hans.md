@@ -209,14 +209,34 @@ dotnet-pack tar \
   --output:../packages/
 ```
 
-### 必需选项
+### 必需与条件必需选项
 
 | 选项 | 说明 |
 | --- | --- |
-| `--name:<name>` | 应用/软件包名称，也用于定位生成服务时的 .NET 宿主程序集。 |
-| `--version:<version>` | 软件包版本，`0.0.0.0` 会被拒绝。 |
+| `--name:<name>` | 源 `.version` 不存在时必需。应用/软件包名称，也用于定位生成服务时的 .NET 宿主程序集。 |
+| `--version:<version>` | 源 `.version` 不存在时必需，否则覆盖其所选版本。零版本会被拒绝。 |
 | `--platform:<platform>` | 目标平台。支持的枚举值包括 `linux`、`unix`、`osx`、`windows`/`win`、`unknown`；Linux 包通常使用 `linux`。 |
 | `--framework:<tfm>` | 目标框架标识，例如 `net8.0`、`net9.0` 或 `net10.0`。 |
+
+### 应用版本文件
+
+打包器只读取 `--source` 直属的 `.version`，不递归也不查找父目录。源文件使用 `ApplicationVersion.Load/Save` 管理应用名称与各 Edition 的版本。hosting 的 daemon 不区分 Edition 时可使用：
+
+```text
+zongsoft.daemon@1.0.0
+```
+
+hosting 的 `web/default` 宿主不区分 Edition 时可写为 `Zongsoft.Hosting.Web@1.0.0`；需要管理 Edition 时，首行只写应用名称，随后在各 `[edition]` 段落下写对应的裸版本号。两种源格式不能混用。
+
+- `--name` 未指定或为空白时使用文件名称；非空时忽略大小写比较，必须一致，最终保留文件中的拼写。
+- 未指定 `--edition` 或传入空值时，没有具名 Edition 则使用顶层版本，只有一个则自动选择，多个则要求明确指定。非空 Edition 必须在文件中存在，忽略大小写查找并保留文件拼写。单版本文件不允许指定具名 Edition。
+- 指定 `--version` 时覆盖所选版本，否则使用文件中的对应版本；最终版本必须非零。源文件不存在时必须指定有效的 `--name`、`--version`；可选的 Edition 决定创建单版本还是具名版本文件。
+
+确定身份后才初始化完整变量，使输出、载荷、安装脚本和升迁路径中的 `$(name)`、`$(edition)`、`$(version)` 使用最终值。源目录路径若依赖尚未确定的身份变量，则报变量错误，不循环推导。源文件存在但损坏或无法读取时退出打包。
+
+包内安装根 `.version` 使用 **`ApplicationIdentifier`**，仅以一行表示本次名称、Edition 和版本。内容直接从内存写入，完全采用 `ApplicationIdentifier.Save(Stream)` 的输出，不追加换行；权限为 `0644`。指向该安装位置的旧载荷会被替换，排除规则不影响自动生成的版本条目。
+
+所有制包步骤成功后才按 Core 格式保存源文件，只更新所选 Edition，保留其他 Edition 的名称、版本和顺序；注释及原始空白布局不保留。解析、校验或制包失败不更新源文件。保存源文件失败时命令返回错误，明确指出安装包已生成，并保留该包。
 
 ### 通用选项
 

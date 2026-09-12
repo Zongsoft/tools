@@ -209,14 +209,34 @@ dotnet-pack tar \
   --output:../packages/
 ```
 
-### Required Options
+### Required and Conditional Options
 
 | Option | Description |
 | --- | --- |
-| `--name:<name>` | Application/package name. Also used to locate the .NET host assembly for generated services. |
-| `--version:<version>` | Package version. `0.0.0.0` is rejected. |
+| `--name:<name>` | Required when the source `.version` is absent. Application/package name; also used to locate the .NET host assembly for generated services. |
+| `--version:<version>` | Required when the source `.version` is absent; otherwise overrides its selected version. Zero versions are rejected. |
 | `--platform:<platform>` | Target platform. Supported enum values include `linux`, `unix`, `osx`, `windows`/`win`, and `unknown`; Linux packages should use `linux`. |
 | `--framework:<tfm>` | Target framework moniker, for example `net8.0`, `net9.0`, or `net10.0`. |
+
+### Application Version Files
+
+The packager reads only `.version` directly under `--source`. This source file uses `ApplicationVersion.Load/Save` to manage an application and its editions. For the hosting daemon without a named edition:
+
+```text
+zongsoft.daemon@1.0.0
+```
+
+For the hosting `web/default` host, a single version without editions can be written as `Zongsoft.Hosting.Web@1.0.0`. When managing editions, write the application name on the first line and each edition's version under its `[edition]` section. These two source formats are mutually exclusive.
+
+- An omitted or blank `--name` defaults to the source name. A nonblank name must match ignoring case; the file's spelling is retained.
+- Omitted or empty `--edition` selects the top-level version when there are no named editions, or automatically selects the only edition. Multiple editions require an explicit selection. An explicit edition must exist, ignoring case; its stored spelling is retained. A source without editions rejects a named selection.
+- `--version` overrides the selected version; otherwise the stored version is used. The final version must be nonzero. Without a source file, valid `--name` and `--version` are required; an optional edition creates a named version.
+
+The final identity supplies `$(name)`, `$(edition)` and `$(version)` in output paths, payload selections, scripts and migration paths. A source path that needs an identity variable which is not yet known fails with a variable diagnostic; identity is not inferred recursively from that path. Invalid or unreadable source files fail packaging.
+
+The package's installation-root `.version` uses **`ApplicationIdentifier`**, containing only the selected name, edition and version on one line. It is written directly from memory using the exact output of `ApplicationIdentifier.Save(Stream)`, without appending a newline, with mode `0644`. Any payload targeting that same location is replaced; exclusions do not remove this generated entry.
+
+After all package output is successfully generated, the source file is saved using the Core format. Only the selected edition is updated; other editions and their order remain. Comments and original whitespace are not preserved. Parsing, validation or packaging failures leave the source unchanged. If saving the source fails, the command returns an error identifying the already generated package and retains that package.
 
 ### Common Options
 

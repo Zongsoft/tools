@@ -78,15 +78,15 @@ partial class Generator
 
 	static void WriteTarEntry(TarWriter writer, Package.Entry item, string name = null)
 	{
+		using var stream = item.OpenRead();
 		var entry = new PaxTarEntry(TarEntryType.RegularFile, name ?? item.EntryName)
 		{
 			Mode = item.Mode,
 			ModificationTime = DateTimeOffset.FromUnixTimeSeconds(item.ModifiedTime),
-			DataStream = File.OpenRead(item.Source),
+			DataStream = stream,
 		};
 
 		writer.WriteEntry(entry);
-		entry.DataStream.Dispose();
 	}
 
 	static void WriteTarText(TarWriter writer, string name, string text, UnixFileMode mode)

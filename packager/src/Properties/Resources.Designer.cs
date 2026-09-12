@@ -448,6 +448,87 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
+        ///   查找类似 Cannot resolve variable &quot;{0}&quot; in the source directory before application identity is determined. Specify the identity option or use a source path without it. 的本地化字符串。
+        /// </summary>
+        internal static string SourceVariableUndefined_Message {
+            get {
+                return ResourceManager.GetString("SourceVariableUndefined_Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 The --edition &quot;{1}&quot; does not exist in &quot;{0}&quot;. 的本地化字符串。
+        /// </summary>
+        internal static string SourceVersionEditionMissing_Message {
+            get {
+                return ResourceManager.GetString("SourceVersionEditionMissing_Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 The source version file &quot;{0}&quot; contains multiple editions. Specify --edition. 的本地化字符串。
+        /// </summary>
+        internal static string SourceVersionEditionRequired_Message {
+            get {
+                return ResourceManager.GetString("SourceVersionEditionRequired_Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Invalid --name or --edition for source version file &quot;{0}&quot;. 的本地化字符串。
+        /// </summary>
+        internal static string SourceVersionIdentityInvalid_Message {
+            get {
+                return ResourceManager.GetString("SourceVersionIdentityInvalid_Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 A valid nonzero --version or selected source version is required. Source: {0} 的本地化字符串。
+        /// </summary>
+        internal static string SourceVersionInvalid_Message {
+            get {
+                return ResourceManager.GetString("SourceVersionInvalid_Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Cannot load the source version file &quot;{0}&quot;. 的本地化字符串。
+        /// </summary>
+        internal static string SourceVersionLoadFailed_Message {
+            get {
+                return ResourceManager.GetString("SourceVersionLoadFailed_Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 The --name &quot;{1}&quot; does not match application &quot;{2}&quot; in &quot;{0}&quot;. 的本地化字符串。
+        /// </summary>
+        internal static string SourceVersionNameMismatch_Message {
+            get {
+                return ResourceManager.GetString("SourceVersionNameMismatch_Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 A nonempty --name is required when no source version is available. Source: {0} 的本地化字符串。
+        /// </summary>
+        internal static string SourceVersionNameRequired_Message {
+            get {
+                return ResourceManager.GetString("SourceVersionNameRequired_Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Package &quot;{0}&quot; was generated, but updating source version file &quot;{1}&quot; failed. 的本地化字符串。
+        /// </summary>
+        internal static string SourceVersionSaveFailed_Message {
+            get {
+                return ResourceManager.GetString("SourceVersionSaveFailed_Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
         ///   查找类似 Repeated GO batches are not supported. 的本地化字符串。
         /// </summary>
         internal static string SqlServerGoRepeatUnsupported {

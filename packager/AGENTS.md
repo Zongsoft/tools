@@ -39,3 +39,9 @@
 - `--migration` 指定 INI 缺失或模式无匹配只警告并跳过，全部缺失按普通包处理；存在的 INI 内容、参数与 SQL 仍严格校验。生成内容仅保留 `.migration/` 目录，SQL 位于 `.migration/.artifacts/`。
 
 S3 桶初始化支持 public/private、默认加密（sse-s3/sse-kms及可选KMS密钥标识）、版本控制（enabled/suspended）和 tag.* 桶标签。已有桶跳过，新建桶的指定配置全部完成才清除 pending；选项文本仅在打包端解析，共享 Bucket 模型校验结构，运行器使用标准 S3 API。
+
+## 应用版本管理
+
+- `PackCommand.VersionFile`（`src/PackCommand.Version.cs`）只加载源目录直属 `.version`，使用 Core `ApplicationVersion.Load(Stream)/Save(Stream)`，由打包器显式打开或创建直属文件；损坏或不可读时失败。`--name`、`--version` 为条件必填，空白名称或 Edition 等同省略，版本对象为空则采用源版本，多个 Edition 必须明确选择，名称及 Edition 忽略大小写匹配并保留文件拼写。
+- 身份解析在完整变量初始化之前；无源文件时要求有效名称和非零版本。包内版本通过 `ApplicationIdentifier.Save(Stream)` 原样写入内存，不追加换行，`EntryCollection.SetVersion` 强制替换同安装位置旧条目，内容格式由 Core 决定，权限为 0644；内存条目统一经 `OpenRead()` 供各生成器读取。
+- 全部制包成功后才保存源版本，只更新所选 Edition 并保留其他条目顺序；保存失败保留安装包并返回错误。Core 保存规范化格式，不保留原注释。测试使用临时目录，覆盖三格式内容、唯一性、长度、权限、RPM 摘要和失败时序。

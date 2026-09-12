@@ -39,14 +39,13 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
-using Zongsoft.Services;
 using Zongsoft.Terminals;
 using Zongsoft.Components;
 
 namespace Zongsoft.Tools.Packager;
 
-[CommandOption(NAME_OPTION, typeof(string), Required = true)]
-[CommandOption(VERSION_OPTION, typeof(Version), Required = true)]
+[CommandOption(NAME_OPTION, typeof(string))]
+[CommandOption(VERSION_OPTION, typeof(Version))]
 [CommandOption(PLATFORM_OPTION, typeof(Platform), Required = true)]
 [CommandOption(FRAMEWORK_OPTION, typeof(string), Required = true)]
 [CommandOption(SOURCE_OPTION, typeof(string))]
@@ -132,17 +131,23 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		//显示启动画面
 		Dumper.Splash();
 
-		if(context.Options.GetValue<Version>(VERSION_OPTION).IsZero())
+		//仅使用已知变量解析源目录，身份信息随后由源版本文件补全。
+		var variables = GetVariables(context).DistinctBy(variable => variable.Key, StringComparer.OrdinalIgnoreCase).ToDictionary(StringComparer.OrdinalIgnoreCase);
+
+		foreach(var option in new[] { NAME_OPTION, EDITION_OPTION, VERSION_OPTION })
 		{
-			Dumper.InvalidVersion();
-			return ValueTask.FromResult<object>(null);
+			var value = context.Options.GetValue(option)?.ToString();
+			if(!string.IsNullOrWhiteSpace(value))
+				variables[option] = value;
+			else
+				variables.Remove(option);
 		}
 
-		//初始化变量集
-		Normalizer.Initialize(GetVariables(context).DistinctBy(variable => variable.Key, StringComparer.OrdinalIgnoreCase).ToDictionary(StringComparer.OrdinalIgnoreCase));
+		var normalized = Normalizer.Normalize(context.Options.GetValue<string>(SOURCE_OPTION), variables);
+		if(!normalized.Succeed)
+			throw new InvalidOperationException(string.Format(Properties.Resources.SourceVariableUndefined_Message, normalized.Value));
 
-		if(!Normalizer.TryNormalize(context.Options.GetValue<string>(SOURCE_OPTION), out var source))
-			return ValueTask.FromResult<object>(null);
+		var source = normalized.Value;
 
 		if(string.IsNullOrEmpty(source))
 			source = Environment.CurrentDirectory;
@@ -154,6 +159,18 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 			Dumper.DirectoryNotExist(CommandOutletColor.Red, source);
 			return ValueTask.FromResult<object>(null);
 		}
+
+		var versionFile = VersionFile.Load(source,
+			context.Options.GetValue<string>(NAME_OPTION),
+			context.Options.GetValue<string>(EDITION_OPTION),
+			context.Options.GetValue<Version>(VERSION_OPTION));
+
+		//身份确定后初始化全部变量，输出、载荷与脚本均使用最终值。
+		variables[NAME_OPTION] = versionFile.Identifier.Name;
+		variables[EDITION_OPTION] = versionFile.Identifier.Edition;
+		variables[VERSION_OPTION] = versionFile.Identifier.Version.ToString();
+		variables[SOURCE_OPTION] = Path.GetFullPath(source);
+		Normalizer.Initialize(variables);
 
 		if(!Normalizer.TryNormalize(context.Options.GetValue<string>(OUTPUT_OPTION), out var output))
 			return ValueTask.FromResult<object>(null);
@@ -191,21 +208,12 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 
 		using var migrationBundle = package.Migration == null ? null : MigrationBundle.Attach(package, package.Migration);
 
-		//添加版本文件
-		if(!package.Entries.Contains(".version"))
-		{
-			var filePath = Path.GetTempFileName();
-			var identifier = new ApplicationIdentifier(package.Name, package.Edition, package.Version);
+		//直接添加内存版本条目，替换载荷中的旧版本文件。
+		package.Entries.SetVersion(versionFile.Identifier);
 
-			using var writer = new StreamWriter(filePath);
-			writer.WriteLine(identifier.ToString());
-			writer.Close();
-
-			package.Entries.Add(source, $"{filePath}:.version");
-		}
-
-		//打包，制作安装包
+		//安装包全部生成成功后才更新源版本文件。
 		package.Pack(output, context.Options.Switch(OVERWRITE_OPTION));
+		versionFile.Save(Path.Combine(output, package.FileName));
 
 		//输出安装包制作成功
 		Terminal.WriteLine(CommandOutletColor.DarkGreen, string.Format(Properties.Resources.PackageGeneratedSuccessfully_Message, Path.Combine(output, package.FileName)));

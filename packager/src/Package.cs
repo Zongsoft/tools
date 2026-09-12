@@ -38,6 +38,8 @@ using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Runtime.InteropServices;
 
+using Zongsoft.Services;
+
 namespace Zongsoft.Tools.Packager;
 
 public abstract partial class Package
@@ -168,12 +170,22 @@ public abstract partial class Package
 
 	public readonly struct Entry(string source, string entryName, long size, long modifiedTime, UnixFileMode mode, bool rooted)
 	{
+		private readonly byte[] _content;
+
+		internal Entry(byte[] content, string entryName, long modifiedTime, UnixFileMode mode, bool rooted) :
+			this(null, entryName, content.LongLength, modifiedTime, mode, rooted)
+		{
+			_content = (byte[])content.Clone();
+		}
+
 		public readonly string Source = source;
 		public readonly string EntryName = entryName;
 		public readonly long Size = size;
 		public readonly long ModifiedTime = modifiedTime;
 		public readonly UnixFileMode Mode = mode;
 		public readonly bool Rooted = rooted;
+
+		internal Stream OpenRead() => _content == null ? File.OpenRead(this.Source) : new MemoryStream(_content, false);
 
 		public override string ToString() => string.IsNullOrEmpty(this.Source) ?
 			$"{this.EntryName}({this.Size})" :
@@ -187,6 +199,16 @@ public abstract partial class Package
 
 		public int Count => _entries.Count;
 		public bool Contains(string name) => name != null && _entries.ContainsKey(name);
+
+		internal void SetVersion(ApplicationIdentifier identifier)
+		{
+			var name = Utility.NormalizePath(Path.Combine(_package.EntryPrefix ?? "", ".version"));
+			var rootedName = Utility.NormalizePath(Path.Combine(_package.InstallPath ?? "", ".version"));
+			_entries.Remove("/" + rootedName.TrimStart('/'));
+			using var content = new MemoryStream();
+			identifier.Save(content);
+			_entries[name] = new(content.ToArray(), name, Utility.Unix.GetTimestamp(DateTime.UtcNow), Utility.Unix.Mode644, false);
+		}
 
 		internal void AddGenerated(string source, string name, UnixFileMode mode, bool rooted = false)
 		{

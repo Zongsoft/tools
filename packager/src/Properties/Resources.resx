@@ -232,4 +232,31 @@
   <data name="MigrationFilesMissing" xml:space="preserve">
     <value>Warning: No migration INI files found for {0}; skipped.</value>
   </data>
+  <data name="SourceVariableUndefined_Message" xml:space="preserve">
+    <value>Cannot resolve variable "{0}" in the source directory before application identity is determined. Specify the identity option or use a source path without it.</value>
+  </data>
+  <data name="SourceVersionLoadFailed_Message" xml:space="preserve">
+    <value>Cannot load the source version file "{0}".</value>
+  </data>
+  <data name="SourceVersionNameRequired_Message" xml:space="preserve">
+    <value>A nonempty --name is required when no source version is available. Source: {0}</value>
+  </data>
+  <data name="SourceVersionNameMismatch_Message" xml:space="preserve">
+    <value>The --name "{1}" does not match application "{2}" in "{0}".</value>
+  </data>
+  <data name="SourceVersionEditionRequired_Message" xml:space="preserve">
+    <value>The source version file "{0}" contains multiple editions. Specify --edition.</value>
+  </data>
+  <data name="SourceVersionEditionMissing_Message" xml:space="preserve">
+    <value>The --edition "{1}" does not exist in "{0}".</value>
+  </data>
+  <data name="SourceVersionInvalid_Message" xml:space="preserve">
+    <value>A valid nonzero --version or selected source version is required. Source: {0}</value>
+  </data>
+  <data name="SourceVersionIdentityInvalid_Message" xml:space="preserve">
+    <value>Invalid --name or --edition for source version file "{0}".</value>
+  </data>
+  <data name="SourceVersionSaveFailed_Message" xml:space="preserve">
+    <value>Package "{0}" was generated, but updating source version file "{1}" failed.</value>
+  </data>
 </root>

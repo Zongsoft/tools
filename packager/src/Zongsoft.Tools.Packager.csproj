@@ -24,6 +24,10 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<InternalsVisibleTo Include="Zongsoft.Tools.Packager.Tests" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<None Include="..\..\zongsoft-logo.png" Pack="true" PackagePath="\" Visible="true" />
 		<Content Include=".migrator/**/*" Exclude=".migrator/**/*.pdb;.migrator/**/*.dbg;.migrator/**/*.dwo;.migrator/**/*.xml" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Pack="false" />
 		<None Include="..\README.md" Pack="true" PackagePath="\" />

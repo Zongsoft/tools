@@ -252,4 +252,31 @@
   <data name="MigrationFilesMissing" xml:space="preserve">
     <value>警告：未找到升迁 INI 文件 {0}，已跳过。</value>
   </data>
+  <data name="SourceVariableUndefined_Message" xml:space="preserve">
+    <value>确定应用身份之前无法解析源目录中的变量“{0}”。请指定对应身份选项或使用不包含该变量的源路径。</value>
+  </data>
+  <data name="SourceVersionLoadFailed_Message" xml:space="preserve">
+    <value>无法加载源版本文件“{0}”。</value>
+  </data>
+  <data name="SourceVersionNameRequired_Message" xml:space="preserve">
+    <value>没有源版本信息时必须指定非空 --name。源文件：{0}</value>
+  </data>
+  <data name="SourceVersionNameMismatch_Message" xml:space="preserve">
+    <value>--name“{1}”与“{0}”中的应用名称“{2}”不一致。</value>
+  </data>
+  <data name="SourceVersionEditionRequired_Message" xml:space="preserve">
+    <value>源版本文件“{0}”包含多个 Edition，请指定 --edition。</value>
+  </data>
+  <data name="SourceVersionEditionMissing_Message" xml:space="preserve">
+    <value>--edition“{1}”不存在于源版本文件“{0}”中。</value>
+  </data>
+  <data name="SourceVersionInvalid_Message" xml:space="preserve">
+    <value>必须通过 --version 或所选源版本提供有效的非零版本号。源文件：{0}</value>
+  </data>
+  <data name="SourceVersionIdentityInvalid_Message" xml:space="preserve">
+    <value>源版本文件“{0}”的 --name 或 --edition 无效。</value>
+  </data>
+  <data name="SourceVersionSaveFailed_Message" xml:space="preserve">
+    <value>安装包“{0}”已生成，但更新源版本文件“{1}”失败。</value>
+  </data>
 </root>
