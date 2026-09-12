@@ -243,7 +243,7 @@ partial class Scriptor
 				return null;
 
 			var source = Normalizer.Variables.Source;
-			var bind = Normalizer.Variables.Daemon.Bind;
+			var listen = Normalizer.Variables.Listen;
 			var host = GetHostFile(source, package);
 
 			if(string.IsNullOrEmpty(host))
@@ -269,7 +269,7 @@ partial class Scriptor
 			using var stream = new FileStream(Path.Combine(Path.GetTempPath(), daemon), FileMode.Create, FileAccess.Write);
 			using var writer = new StreamWriter(stream);
 
-			if(string.IsNullOrEmpty(bind))
+			if(string.IsNullOrEmpty(listen))
 				writer.Write($"""
 					[Unit]
 					Description={(string.IsNullOrEmpty(package.Title) ? package.Name : package.Title)}
@@ -295,8 +295,8 @@ partial class Scriptor
 					""");
 			else
 			{
-				if(ushort.TryParse(bind, out var port))
-					bind = $"http://127.0.0.1:{port}";
+				if(ushort.TryParse(listen, out var port))
+					listen = $"http://127.0.0.1:{port}";
 
 				writer.Write($"""
 					[Unit]
@@ -306,7 +306,7 @@ partial class Scriptor
 					Type=simple
 					WorkingDirectory={package.InstallPath}
 					ExecStartPre=mkdir -p {package.InstallPath}/logs
-					ExecStart=dotnet {package.InstallPath}/{host} --urls {bind}
+					ExecStart=dotnet {package.InstallPath}/{host} --urls {listen}
 					Restart=on-failure
 					RestartSec=10
 					KillSignal=SIGINT

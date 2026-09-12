@@ -65,8 +65,8 @@ namespace Zongsoft.Tools.Packager;
 [CommandOption(DESCRIPTION_OPTION, typeof(string))]
 [CommandOption(DEPENDENCIES_OPTION, typeof(string))]
 [CommandOption(INSTALL_PATH_OPTION, typeof(string))]
+[CommandOption(LISTEN_OPTION, typeof(string))]
 [CommandOption(DAEMON_OPTION, typeof(string))]
-[CommandOption(DAEMON_BIND_OPTION, typeof(string))]
 [CommandOption(DAEMON_ENVIRONMENTS_OPTION, typeof(string))]
 [CommandOption(INSTALLING_OPTION, typeof(string))]
 [CommandOption(INSTALLED_OPTION, typeof(string))]
@@ -104,8 +104,8 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	protected const string MIGRATION_OPTION = "migration";
 	protected const string OVERWRITE_OPTION = "overwrite";
 	protected const string INSTALL_PATH_OPTION = "install-path";
+	protected const string LISTEN_OPTION = Variables.LISTEN;
 	protected const string DAEMON_OPTION = Variables.DaemonVariable.DAEMON;
-	protected const string DAEMON_BIND_OPTION = Variables.DaemonVariable.DAEMON_BIND;
 	protected const string DAEMON_ENVIRONMENTS_OPTION = Variables.DaemonVariable.DAEMON_ENVIRONMENTS;
 	protected const string INSTALLING_OPTION = Variables.ScriptVariable.INSTALLING;
 	protected const string INSTALLED_OPTION = Variables.ScriptVariable.INSTALLED;

@@ -66,3 +66,5 @@ SQL 批次按规范升迁器名称组织，例如 `.migration/.artifacts/mysql/0
 - Entry.IsDirectory 保留空目录、源模式及时间；Generator.Entries 补齐 0755 父目录。目录不调用 OpenRead，不列入 Debian conffiles。tar 根目录别名卸载仅 rmdir 显式空目录。
 - Debian/RPM 大载荷用 DeleteOnClose 独占临时流及增量摘要，不分配完整载荷/包体数组；Unix 临时文件 0600，异常也释放。Debian 六种关系字段由 Package.Deb 独立校验，不复用 RPM 语法。
 - 实施清单及验收证据见 [docs/improvements.md](docs/improvements.md)，输入与归档回归位于 PackageInputTests、PackageArtifactTests。
+
+监听地址选项为 `--listen`，对应 Variables.Listen；生成 systemd 服务时写入宿主 `--urls`。纯端口转为 `http://127.0.0.1:<port>`，完整地址保留；省略时不追加 `--urls`，已有 service 文件的 ExecStart 不改写。

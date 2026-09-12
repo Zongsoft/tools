@@ -139,7 +139,7 @@ attachments
 
 此时需另外提供 `--scheme:default` 或同名环境变量。以 README 的 `hosting/publish` 暂存目录为源时也使用 `../.deploy/` 前缀。安装版本没有对应目录时只会警告并跳过，需确认本次版本目录包含所需初始化脚本。
 
-保留 Web 宿主已有的载荷条目和 Nginx 钩子。Web 入口是 `Zongsoft.Hosting.Web.dll`，命令使用 `--name:Zongsoft.Hosting.Web --title:Zongsoft.Web --daemon:zongsoft.web --daemon-bind:8069`；daemon 命令使用 `--name:zongsoft.daemon`，其入口由既有宿主定位规则确定。上述双引号用于 CMD；PowerShell/Bash 使用单引号引用整个打包器表达式选项，避免 Shell 展开 `$()`，并将 `%scheme%` 换成打包器的 `$(scheme)` 或 Shell 已展开的实际值。
+保留 Web 宿主已有的载荷条目和 Nginx 钩子。Web 入口是 `Zongsoft.Hosting.Web.dll`，命令使用 `--name:Zongsoft.Hosting.Web --title:Zongsoft.Web --listen:8069 --daemon:zongsoft.web`；daemon 命令使用 `--name:zongsoft.daemon`，其入口由既有宿主定位规则确定。上述双引号用于 CMD；PowerShell/Bash 使用单引号引用整个打包器表达式选项，避免 Shell 展开 `$()`，并将 `%scheme%` 换成打包器的 `$(scheme)` 或 Shell 已展开的实际值。
 
 ## migration.json 字段说明
 

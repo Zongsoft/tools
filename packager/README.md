@@ -135,8 +135,8 @@ Create a Debian package:
 dotnet-pack deb \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
+  --listen:8069 \
   --daemon:zongsoft.web \
-  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --architecture:x64 \
@@ -185,8 +185,8 @@ Create a portable tarball:
 dotnet-pack tar \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
+  --listen:8069 \
   --daemon:zongsoft.web \
-  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --architecture:x64 \
@@ -201,8 +201,8 @@ Create a Debian package that includes the host's real [Nginx configuration](http
 dotnet-pack deb \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
+  --listen:8069 \
   --daemon:zongsoft.web \
-  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --architecture:x64 \
@@ -220,8 +220,8 @@ Create an RPM package with dependency metadata:
 dotnet-pack rpm \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
+  --listen:8069 \
   --daemon:zongsoft.web \
-  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --architecture:x64 \
@@ -288,6 +288,7 @@ After all package output is successfully generated, the source file is saved usi
 | `--architecture:<arch>` | `x64` | Target CPU architecture, such as `x64`, `x86`, `arm64`, or `arm`. |
 | `--overwrite` | `false` | Replace an existing package file. Without this switch, an existing file causes creation to fail. |
 | `--install-path:<path>` | `/opt/<identity with dots replaced by />` | Linux installation directory. The identity is lowercased and every dot becomes a directory separator; for example, `Zongsoft.Hosting.Web` becomes `/opt/zongsoft/hosting/web`. With `--daemon:zongsoft.web`, the path is `/opt/zongsoft/web`. If `--daemon` is supplied and not disabled, its identifier is used instead of `--name` for the default path. |
+| `--listen:<port-or-url>` | Empty | Listening port or address for generated services; ports use 127.0.0.1 and complete addresses pass through as host --urls. |
 | `--title:<text>` | Empty | Human-friendly package title and generated systemd description. |
 | `--summary:<text-or-file>` | Empty | Short package summary. If the value is an existing file path, the file content is used. |
 | `--description:<text-or-file>` | Empty | Long package description. If the value is an existing file path, the file content is used. |
@@ -329,8 +330,8 @@ If no positional entry arguments are supplied, every file under `--source` is in
 dotnet-pack deb \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
+  --listen:8069 \
   --daemon:zongsoft.web \
-  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --framework:net10.0 \
@@ -344,8 +345,8 @@ If positional entries are supplied, only those files or directories are included
 dotnet-pack deb \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
+  --listen:8069 \
   --daemon:zongsoft.web \
-  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --framework:net10.0 \
@@ -396,8 +397,8 @@ Exclude examples:
 dotnet-pack deb \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
+  --listen:8069 \
   --daemon:zongsoft.web \
-  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --framework:net10.0 \
@@ -437,10 +438,10 @@ Generated services run:
 ExecStart=dotnet /opt/zongsoft/web/Zongsoft.Hosting.Web.dll
 ```
 
-If `--daemon-bind:<value>` is supplied, the generated service passes it as `--urls`. A numeric value is treated as a local HTTP port:
+If `--listen:<value>` is supplied, the generated service passes it as `--urls`. A numeric value is treated as a local HTTP port:
 
 ```bash
---daemon-bind:8069
+--listen:8069
 ```
 
 Generates:
@@ -449,14 +450,25 @@ Generates:
 ExecStart=dotnet /opt/zongsoft/web/Zongsoft.Hosting.Web.dll --urls http://127.0.0.1:8069
 ```
 
+A complete address can be supplied, for example `--listen:http://0.0.0.0:8069`. Omitting the option adds no `--urls`; an existing service file retains its ExecStart.
+
+
+Separate multiple complete addresses with semicolons and quote the entire value. To listen on both HTTP and HTTPS in the Web host, use:
+
+```text
+--listen:"http://0.0.0.0:8069;https://0.0.0.0:8443"
+```
+
+HTTPS requires a usable default server certificate configured in the host; the packager does not generate or configure certificates. See [Kestrel endpoint configuration](https://github.com/dotnet/AspNetCore.Docs/blob/main/aspnetcore/fundamentals/servers/kestrel/endpoints.md). This is an optional configuration, not a claim that the current hosting scripts enable HTTPS.
+
 The Web host's `pack.cmd` passes both `Environment` and `ASPNETCORE_ENVIRONMENT` into the generated service. For example:
 
 ```bash
 dotnet-pack deb \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
+  --listen:8069 \
   --daemon:zongsoft.web \
-  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --framework:net10.0 \
@@ -541,8 +553,8 @@ export APP_NAME=Zongsoft.Hosting.Web
 export APP_VERSION=1.0.0
 
 dotnet-pack deb \
+  --listen:8069 \
   --daemon:zongsoft.web \
-  --daemon-bind:8069 \
   --name:"$APP_NAME" \
   --version:"$APP_VERSION" \
   --platform:linux \

@@ -139,7 +139,7 @@ The trailing empty path is ignored. With `scheme=default` and version `1.0.0`, o
 
 Also provide `--scheme:default` or the equivalent environment variable. The README's `hosting/publish` staging source uses the same `../.deploy/` prefix. A missing version directory only produces a warning and is skipped, so ensure the chosen version contains the initialization scripts it needs.
 
-Keep Web's existing payload entries and Nginx hooks. Its entry is `Zongsoft.Hosting.Web.dll`, with `--name:Zongsoft.Hosting.Web --title:Zongsoft.Web --daemon:zongsoft.web --daemon-bind:8069`. The daemon command uses `--name:zongsoft.daemon`; the existing host lookup rules determine its entry assembly. The double quotes above are for CMD. In PowerShell/Bash, single-quote the entire packager-expression option to preserve `$()`, and replace `%scheme%` with the packager's `$(scheme)` or a value already expanded by the shell.
+Keep Web's existing payload entries and Nginx hooks. Its entry is `Zongsoft.Hosting.Web.dll`, with `--name:Zongsoft.Hosting.Web --title:Zongsoft.Web --listen:8069 --daemon:zongsoft.web`. The daemon command uses `--name:zongsoft.daemon`; the existing host lookup rules determine its entry assembly. The double quotes above are for CMD. In PowerShell/Bash, single-quote the entire packager-expression option to preserve `$()`, and replace `%scheme%` with the packager's `$(scheme)` or a value already expanded by the shell.
 
 ## migration.json fields
 

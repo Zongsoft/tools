@@ -151,8 +151,8 @@ systemd 与生命周期脚本选项：
 
 | 选项 | 说明 |
 | --- | --- |
+| `--listen` | 生成服务时传给 `--urls` 的绑定地址；纯数字会转成 `http://127.0.0.1:<port>`。 |
 | `--daemon` | systemd 单元文件名/标识；`none`、`disable`、`disabled` 表示禁用。 |
-| `--daemon-bind` | 生成服务时传给 `--urls` 的绑定地址；纯数字会转成 `http://127.0.0.1:<port>`。 |
 | `--daemon-environments` | 逗号或分号分隔的变量名，写入生成的服务文件。 |
 | `--installing` / `--installed` | 安装前/安装后脚本。 |
 | `--uninstalling` / `--uninstalled` | 卸载前/卸载后脚本。 |
@@ -187,8 +187,8 @@ export APP_NAME=Zongsoft.Hosting.Web
 export APP_VERSION=1.0.0
 
 dotnet-pack deb \
+  --listen:8069 \
   --daemon:zongsoft.web \
-  --daemon-bind:8069 \
   --name:"$APP_NAME" \
   --version:"$APP_VERSION" \
   --platform:linux \
@@ -441,7 +441,9 @@ Environment=DOTNET_NOLOGO=true
 WantedBy=multi-user.target
 ```
 
-如果 `--daemon-bind` 非空，则改为：
+监听值由 `Variables.Listen` 提供；多个完整 URL 以分号分隔，作为同一个 `--urls` 值保留。HTTP/HTTPS 可同时指定，HTTPS 默认服务器证书由宿主配置。省略选项时不追加 `--urls`，已有 service 的 ExecStart 不改写。
+
+如果 `--listen` 非空，则改为：
 
 ```ini
 ExecStart=dotnet <install-path>/<host> --urls <bind>

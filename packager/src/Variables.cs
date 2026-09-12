@@ -45,6 +45,7 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 	internal const string URL = "url";
 	internal const string NAME = "name";
 	internal const string TITLE = "title";
+	internal const string LISTEN = "listen";
 	internal const string LICENSE = "license";
 	internal const string CATEGORY = "category";
 	internal const string MAINTAINER = "maintainer";
@@ -88,6 +89,7 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 	public string Url => this[URL];
 	public string Name => this[NAME];
 	public string Title => this[TITLE];
+	public string Listen => this[LISTEN];
 	public string License => this[LICENSE];
 	public string Category => this[CATEGORY];
 	public string Maintainer => this[MAINTAINER];
@@ -108,7 +110,6 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 	public DaemonVariable Daemon => new
 	(
 		this[DaemonVariable.DAEMON],
-		this[DaemonVariable.DAEMON_BIND],
 		this[DaemonVariable.DAEMON_ENVIRONMENTS]
 	);
 
@@ -158,18 +159,15 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 	public readonly struct DaemonVariable
 	{
 		internal const string DAEMON = "daemon";
-		internal const string DAEMON_BIND = "daemon-bind";
 		internal const string DAEMON_ENVIRONMENTS = "daemon-environments";
 
-		public DaemonVariable(string identifier, string bind, string environments)
+		public DaemonVariable(string identifier, string environments)
 		{
 			this.Identifier = identifier;
-			this.Bind = bind;
 			this.Environments = string.IsNullOrEmpty(environments) ? [] : environments.Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 		}
 
 		public readonly string Identifier;
-		public readonly string Bind;
 		public readonly string[] Environments;
 
 		public bool Disabled =>

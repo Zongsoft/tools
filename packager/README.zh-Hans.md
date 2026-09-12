@@ -135,8 +135,8 @@ cp ./mime ./publish/
 dotnet-pack deb \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
+  --listen:8069 \
   --daemon:zongsoft.web \
-  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --architecture:x64 \
@@ -185,8 +185,8 @@ dotnet-pack rpm <选项...> [打包项...]
 dotnet-pack tar \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
+  --listen:8069 \
   --daemon:zongsoft.web \
-  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --architecture:x64 \
@@ -201,8 +201,8 @@ dotnet-pack tar \
 dotnet-pack deb \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
+  --listen:8069 \
   --daemon:zongsoft.web \
-  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --architecture:x64 \
@@ -220,8 +220,8 @@ dotnet-pack deb \
 dotnet-pack rpm \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
+  --listen:8069 \
   --daemon:zongsoft.web \
-  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --architecture:x64 \
@@ -288,6 +288,7 @@ hosting 的 `web/default` 宿主不区分 Edition 时可写为 `Zongsoft.Hosting
 | `--architecture:<arch>` | `x64` | 目标 CPU 架构，例如 `x64`、`x86`、`arm64`、`arm`。 |
 | `--overwrite` | `false` | 覆盖已存在的包文件。未指定时，输出文件已存在会导致创建失败。 |
 | `--install-path:<path>` | `/opt/<将点号替换为 / 的标识>` | Linux 安装目录。标识转为小写，每个点号均替换为目录分隔符，例如 `Zongsoft.Hosting.Web` 对应 `/opt/zongsoft/hosting/web`，指定 `--daemon:zongsoft.web` 后则为 `/opt/zongsoft/web`；如果指定了未禁用的 `--daemon`，默认路径改用 daemon 标识而不是 `--name` 推导。 |
+| `--listen:<port-or-url>` | 空 | 自动生成服务时使用的监听端口或地址；端口默认使用 127.0.0.1，完整地址原样传给宿主 --urls。 |
 | `--title:<text>` | 空 | 人类可读的软件包标题，也用于生成 systemd 描述。 |
 | `--summary:<text-or-file>` | 空 | 简短摘要。如果值是已存在文件路径，则读取文件内容。 |
 | `--description:<text-or-file>` | 空 | 详细描述。如果值是已存在文件路径，则读取文件内容。 |
@@ -329,8 +330,8 @@ RPM 关系条目支持 `name`、`name = version`、`name >= version`、`name <= 
 dotnet-pack deb \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
+  --listen:8069 \
   --daemon:zongsoft.web \
-  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --framework:net10.0 \
@@ -344,8 +345,8 @@ dotnet-pack deb \
 dotnet-pack deb \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
+  --listen:8069 \
   --daemon:zongsoft.web \
-  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --framework:net10.0 \
@@ -396,8 +397,8 @@ dotnet-pack deb \
 dotnet-pack deb \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
+  --listen:8069 \
   --daemon:zongsoft.web \
-  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --framework:net10.0 \
@@ -437,10 +438,10 @@ dotnet-pack deb \
 ExecStart=dotnet /opt/zongsoft/web/Zongsoft.Hosting.Web.dll
 ```
 
-如果提供 `--daemon-bind:<value>`，生成的服务会把它作为 `--urls` 传给应用。纯数字值会被当作本机 HTTP 端口：
+如果提供 `--listen:<value>`，生成的服务会把它作为 `--urls` 传给应用。纯数字值会被当作本机 HTTP 端口：
 
 ```bash
---daemon-bind:8069
+--listen:8069
 ```
 
 生成：
@@ -449,14 +450,24 @@ ExecStart=dotnet /opt/zongsoft/web/Zongsoft.Hosting.Web.dll
 ExecStart=dotnet /opt/zongsoft/web/Zongsoft.Hosting.Web.dll --urls http://127.0.0.1:8069
 ```
 
+完整地址也可显式指定，例如 `--listen:http://0.0.0.0:8069`。省略该选项时不追加 `--urls`；使用已有 service 文件时不改写其中的 ExecStart。
+
+多个完整地址用分号分隔，并给整个值加引号。例如，Web 宿主需要同时监听 HTTP 与 HTTPS 时，可使用：
+
+```text
+--listen:"http://0.0.0.0:8069;https://0.0.0.0:8443"
+```
+
+HTTPS 需要在宿主中配置可用的默认服务器证书，打包器不生成或配置证书；具体要求见 [Kestrel 端点说明](https://github.com/dotnet/AspNetCore.Docs/blob/main/aspnetcore/fundamentals/servers/kestrel/endpoints.md)。这表示可选配置，并非 hosting 当前脚本已启用 HTTPS。
+
 Web 宿主的 `pack.cmd` 将 `Environment` 和 `ASPNETCORE_ENVIRONMENT` 一并写入生成的服务文件，例如：
 
 ```bash
 dotnet-pack deb \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
+  --listen:8069 \
   --daemon:zongsoft.web \
-  --daemon-bind:8069 \
   --version:1.0.0 \
   --platform:linux \
   --framework:net10.0 \
@@ -541,8 +552,8 @@ export APP_NAME=Zongsoft.Hosting.Web
 export APP_VERSION=1.0.0
 
 dotnet-pack deb \
+  --listen:8069 \
   --daemon:zongsoft.web \
-  --daemon-bind:8069 \
   --name:"$APP_NAME" \
   --version:"$APP_VERSION" \
   --platform:linux \
