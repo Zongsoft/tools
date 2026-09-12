@@ -1,5 +1,7 @@
 # 升迁功能验证
 
+本文按实施阶段记录当时的验证结果；测试计数、产物路径、哈希和容器/全局工具状态不代表当前实时状态。旧路径与旧行为保留为历史证据，当前功能契约见[双语 README](../README.zh-Hans.md)、[升迁指南](migrations.zh-Hans.md)和[实现说明](implementation.md)。
+
 2026-09-10：职责拆分、Native AOT 发布和文件交接验证。契约见 [升迁指南](migrations.zh-Hans.md)，第三方警告逐条说明见 [AOT 警告审查](aot-warning-review.md)。
 
 ## 自动化回归
@@ -139,6 +141,32 @@ dotnet pack src/Zongsoft.Tools.Packager.csproj -c Release --artifacts-path src/b
 当前 `zongsoft.web@1.0.0_linux-x64.rpm` 为76,899,072字节，SHA-256：`2E716BB66DB1818051BED03BF85F113CA9602B409F2B69ECD93FD40BEADC2BE9`。旧RPM已备份至 `hosting/web/default/bin/migration-verification/layout/previous-rpm/`。本次只更新并检查安装包，没有重新安装到已运行的RPM验证容器，其已安装版本仍为前轮产物。详细结果为同目录 `rpm-package.json`。
 
 
-## S3 三项初始化配置（待验证）
+## S3 三项初始化配置（实施时未验证）
 
-新增默认加密、版本控制和桶标签的输入解析、计划描述及标准S3请求实现；同步双语指南与README。按用户要求，本次不运行构建、测试、AOT发布或容器验证。前述验证结论不覆盖这三项新增能力；当前全局工具、原生产物和已保留安装包尚未更新这些改动。
+新增默认加密、版本控制和桶标签的输入解析、计划描述及标准S3请求实现；同步双语指南与README。按用户要求，本次不运行构建、测试、AOT发布或容器验证。前述验证结论不覆盖这三项新增能力；该阶段的全局工具、原生产物和已保留安装包尚未更新这些改动；后续原生发布及全局工具更新见下一节。
+
+## 本地全局工具更新至 0.9.0
+
+按用户要求，重新发布当前源码的 linux-x64 和 linux-arm64 Native AOT 运行器，并构建包含 net8.0/net9.0/net10.0 的本地工具包，包含新增的 S3 默认加密、版本控制和桶标签实现。AOT发布成功，第三方裁剪警告仍保留在发布日志中。
+
+全局 zongsoft.tools.packager 已从0.8.3更新至0.9.0；安装仅使用本地包源，未推送公共NuGet。工具包位于 `src/bin/local-update-0.9.0/Zongsoft.Tools.Packager.0.9.0.nupkg`，27项已安装主程序集和运行器文件哈希与本地工具包一致，两个RID目录亦与本次原生发布相同，证据为同目录 `installed-hashes.json`。按此前约定未执行功能回归、S3实连或宿主安装验证；已保留的hosting安装包未重新生成。
+
+## 按升迁器组织中间批次（2026-09-12）
+
+SQL 路径改为 `.migration/.artifacts/<升迁器名称>/<四位序号>.sql`，同类独立任务共享连续编号，编号在每次 Load 时重新开始。任务参数、Id、JSON 模型与指纹算法保持原有职责。解析顺序与任务内部 SQL 顺序保留，跨任务执行顺序不作为契约。
+
+- 打包器回归：189 项通过，0 失败、0 跳过。
+- migrator 回归：33 项通过，0 失败、0 跳过。
+- 打包器 net8.0/net9.0/net10.0 构建成功，0 警告、0 错误。
+
+| 要求 | 测试证据 |
+| --- | --- |
+| 路径与通配符交错、重复 INI、别名、不同参数及同段落去重 | `Load_ProviderArtifacts_ShareCounterAcrossFilesAliasesAndTargets` |
+| 重复调用 Loader 重新计数 | `Load_ReusedLoader_RestartsProviderCounters` |
+| 三格式同类任务共享目录、批次不覆盖、内容及校验和正确 | `Bundle_PreprocessedSqlServerBatches_PreserveContentOrderAndChecksums` |
+| 独立运行器交接、两个 SQLite 目标、任务内部顺序和篡改失败 | `MainPlan_RuntimeAppliesPreparedSqliteScriptsInOrderAndRejectsTampering` |
+| 每次执行全部任务，不约定跨任务顺序 | `Apply_SuccessAndRepeat_ExecutesEveryTaskAndRecordsCurrentFingerprint` |
+
+使用 hosting 的 daemon、web/default 临时副本，复制真实 1.0.0 升迁输入及其引用的 15 份 MySQL 脚本；参数替换为本地测试值。输入 `input/*.ini;input/mysql.ini` 保留一个 S3 任务及两个独立 MySQL 任务，各宿主生成 tar.gz、deb、rpm，共六包。每包 30 份 SQL 位于 `mysql/0001.sql` 至 `mysql/0030.sql`，不存在任务编号子目录或空 S3 中间目录。逐文件检查内容 SHA-256 和 0644 权限，核对计划 0600、原生入口与 Shell 0755、运行器哈希、安装阶段的 apply 及 systemd drop-in 的 check 门禁。
+
+临时副本、六个安装包和只读归档检查脚本保留在 `src/bin/migration-artifacts/`；检查结果为其中的 `archive-checks.json`。构建与测试日志位于 `src/bin/core-overloads/artifact-*.log`。本次仅制包和检查归档，没有安装系统包或操作现有服务；使用已有 Native AOT 产物，没有重新发布运行器或更新全局工具。

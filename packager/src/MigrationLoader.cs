@@ -52,6 +52,7 @@ public sealed partial class MigrationLoader(Func<string, string> expand, Action<
 	public MigrationPlan Load(string paths, string source, string package, string version)
 	{
 		var plan = new MigrationPlan { Package = package, Version = version };
+		var indexes = new Dictionary<string, int>(StringComparer.Ordinal);
 		var found = false;
 
 		foreach(var file in this.GetMigrationFiles(paths, source))
@@ -82,7 +83,7 @@ public sealed partial class MigrationLoader(Func<string, string> expand, Action<
 					};
 
 					Action<string, string> add = provider == "amazon.s3" ?
-						new AmazonS3(task).Add : new Database(task, Path.GetDirectoryName(file)).Add;
+						new AmazonS3(task).Add : new Database(task, Path.GetDirectoryName(file), indexes).Add;
 
 					foreach(var entry in section.Entries)
 					{

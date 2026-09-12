@@ -453,6 +453,7 @@ partial class Generator
 			}
 
 			builder.AddString(1056, package.InstallPath);
+			builder.AddString(1064, GetIdentity());
 			builder.AddString(1124, "cpio");
 			builder.AddString(1125, "gzip");
 			builder.AddString(1126, "9");

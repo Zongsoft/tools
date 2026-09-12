@@ -65,6 +65,7 @@ partial class Generator
 
 		builder.AppendLine($"Package: {package.PackageName}");
 		builder.AppendLine($"Version: {package.Version}");
+		builder.AppendLine($"Packager: {GetIdentity()}");
 		builder.AppendLine($"Section: {NormalizeDebText(package.Category) ?? "utils"}");
 		builder.AppendLine($"Priority: optional");
 		builder.AppendLine($"Architecture: {GetDebianArchitecture(package.Architecture)}");

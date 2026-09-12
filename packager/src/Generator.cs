@@ -37,4 +37,11 @@ namespace Zongsoft.Tools.Packager;
 
 public static partial class Generator
 {
+	#region 私有方法
+	private static string GetIdentity()
+	{
+		var name = typeof(Generator).Assembly.GetName();
+		return $"{name.Name}@{name.Version}";
+	}
+	#endregion
 }

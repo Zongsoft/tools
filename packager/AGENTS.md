@@ -38,7 +38,19 @@
 
 - `--migration` 指定 INI 缺失或模式无匹配只警告并跳过，全部缺失按普通包处理；存在的 INI 内容、参数与 SQL 仍严格校验。生成内容仅保留 `.migration/` 目录，SQL 位于 `.migration/.artifacts/`。
 
-S3 桶初始化支持 public/private、默认加密（sse-s3/sse-kms及可选KMS密钥标识）、版本控制（enabled/suspended）和 tag.* 桶标签。已有桶跳过，新建桶的指定配置全部完成才清除 pending；选项文本仅在打包端解析，共享 Bucket 模型校验结构，运行器使用标准 S3 API。
+S3 桶初始化支持 public/private、默认加密（sse-s3/sse-kms及可选KMS密钥标识）、版本控制（enabled/suspended）和 tag.* 桶标签。省略 Encryption 时不写入 JSON、不调用加密 API，采用服务端默认；显式对象必须包含有效 Mode。已有桶通常跳过，带本地 pending 的未完成初始化会重试；新建桶的指定配置全部完成才清除 pending；选项文本仅在打包端解析，共享 Bucket 模型校验结构，运行器使用标准 S3 API。
+
+SQL 批次按规范升迁器名称组织，例如 `.migration/.artifacts/mysql/0001.sql` 和 `.migration/.artifacts/postgres/0001.sql`。每次加载计划时各升迁器从 0001 独立计数，同类任务共享连续编号；PostgreSQL 别名统一归入 postgres。每个非空段落仍是独立任务，保留自己的连接参数及脚本列表；任务 Id 用于日志和状态，不作为目录名。同段落内 SQL 重叠匹配去重，跨段落、跨文件和重复指定 INI 不合并或去重。S3 配置直接保存在计划中，不生成空中间目录。
+
+`MigrationLoader.Load` 的局部计数字典传给 `MigrationLoader.Database`，避免多次加载或失败重试继承编号。解析顺序保留；运行器当前串行，但不承诺跨任务执行顺序，数据库任务内部的脚本顺序继续保证。
+
+## 打包器来源元数据
+
+`Generator` 从自身程序集计算 `程序集名@版本号`（信息版本去除构建标识），写入 tar 的 PAX 全局 `Packager` 属性、deb 的 `Packager` 控制字段、RPM 的 `RPMVERSION`（1064）。RPM 1015 保留维护者；不新增载荷文件，不修改源/包内 `.version` 或升迁计划。格式回归核对生成工具身份与应用版本、维护者彼此独立。
+
+## 文档与验证记录
+
+当前行为以双语 README、升迁指南和实现说明为准；验证记录与 AOT 警告审查保留对应阶段的日期、计数、路径及产物哈希，不应视为当前工具或容器状态。命令示例采用本机 hosting 已有的 `.deploy/default/migration/1.0.0/*.ini`，不得复制真实连接凭据。
 
 ## 应用版本管理
 

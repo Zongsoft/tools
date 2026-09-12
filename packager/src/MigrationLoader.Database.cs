@@ -47,14 +47,16 @@ partial class MigrationLoader
 		#region 成员字段
 		private readonly MigrationPlan.Step _task;
 		private readonly string _directory;
+		private readonly Dictionary<string, int> _indexes;
 		private readonly HashSet<string> _selected = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 		#endregion
 
 		#region 构造函数
-		public Database(MigrationPlan.Step task, string directory)
+		public Database(MigrationPlan.Step task, string directory, Dictionary<string, int> indexes)
 		{
 			_task = task;
 			_directory = directory;
+			_indexes = indexes;
 		}
 		#endregion
 
@@ -72,13 +74,17 @@ partial class MigrationLoader
 					throw new InvalidDataException(Properties.Resources.MigrationSqlExtension);
 
 				foreach(var content in Read(File.ReadAllText(sql), _task.Provider))
+				{
+					var index = _indexes.GetValueOrDefault(_task.Provider) + 1;
+					_indexes[_task.Provider] = index;
 					_task.Scripts.Add(new()
 					{
 						Source = sql,
 						Content = content,
-						Path = $".migration/.artifacts/{_task.Id}/{_task.Scripts.Count + 1:D4}.sql",
+						Path = $".migration/.artifacts/{_task.Provider}/{index:D4}.sql",
 						Checksum = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content))),
 					});
+				}
 			}
 		}
 		#endregion

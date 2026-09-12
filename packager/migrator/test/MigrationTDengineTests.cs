@@ -115,7 +115,7 @@ public sealed class MigrationTDengineTests
 	{
 		Id = "0001-tdengine", Provider = "tdengine",
 		Parameters = new(StringComparer.OrdinalIgnoreCase) { ["Server"] = "127.0.0.1", ["Port"] = server.Port.ToString(System.Globalization.CultureInfo.InvariantCulture), ["Database"] = "hosting", ["UserName"] = "operator", ["Password"] = "secret;with=punctuation\"", ["Timeout"] = "3s", ["CommandTimeout"] = "3s" },
-		Scripts = batches.Select((sql, index) => directory.Script($".migration/.artifacts/0001-tdengine/{index + 1:D4}.sql", sql)).ToList(),
+		Scripts = batches.Select((sql, index) => directory.Script($".migration/.artifacts/tdengine/{index + 1:D4}.sql", sql)).ToList(),
 	};
 
 	private static string Action(JsonElement request) => request.GetProperty("action").GetString();

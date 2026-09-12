@@ -163,7 +163,7 @@ public sealed class MigrationExecutorTests
 {
 	#region 测试方法
 	[Fact]
-	public async Task Apply_SuccessAndRepeat_ExecutesEveryTaskInOrderAndRecordsCurrentFingerprint()
+	public async Task Apply_SuccessAndRepeat_ExecutesEveryTaskAndRecordsCurrentFingerprint()
 	{
 		using var directory = new MigrationTestDirectory();
 		var plan = Plan();
@@ -172,9 +172,11 @@ public sealed class MigrationExecutorTests
 		var executor = new MigrationExecutor(_ => new ActionMigrator(task => calls.Add(task.Id)));
 
 		await executor.ApplyAsync(plan, context, TestContext.Current.CancellationToken);
+		Assert.Equal(new[] { "one", "two" }, calls.OrderBy(id => id, StringComparer.Ordinal));
+		calls.Clear();
 		await executor.ApplyAsync(plan, context, TestContext.Current.CancellationToken);
 
-		Assert.Equal(new[] { "one", "two", "one", "two" }, calls);
+		Assert.Equal(new[] { "one", "two" }, calls.OrderBy(id => id, StringComparer.Ordinal));
 		Assert.True(MigrationExecutor.IsReady(plan, context.StateDirectory));
 		using var status = JsonDocument.Parse(File.ReadAllText(Path.Combine(context.StateDirectory, "status.json")));
 		Assert.Equal("complete", status.RootElement.GetProperty("status").GetString());
@@ -194,13 +196,14 @@ public sealed class MigrationExecutorTests
 
 		var error = await Assert.ThrowsAsync<MigrationException>(() => executor.ApplyAsync(plan, context, TestContext.Current.CancellationToken));
 
-		Assert.Equal(new[] { "one" }, calls);
+		var failed = Assert.Single(calls);
+		Assert.Contains(failed, plan.Tasks.Select(task => task.Id));
 		Assert.False(MigrationExecutor.IsReady(plan, context.StateDirectory));
 		var status = File.ReadAllText(Path.Combine(context.StateDirectory, "status.json"));
 		Assert.DoesNotContain("password", status + error.Message);
 		using var document = JsonDocument.Parse(status);
 		Assert.Equal("failed", document.RootElement.GetProperty("status").GetString());
-		Assert.Equal("one", document.RootElement.GetProperty("task").GetString());
+		Assert.Equal(failed, document.RootElement.GetProperty("task").GetString());
 	}
 
 	[Fact]

@@ -13,6 +13,7 @@ It is designed for .NET services and command-line applications that need repeata
 
 ## Quick Links
 
+- [Packager version metadata](#packager-version-metadata)
 - [Features](#features)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
@@ -41,6 +42,18 @@ It is designed for .NET services and command-line applications that need repeata
   - `.deb` uses an `ar` container with `control.tar.gz` and `data.tar.gz`.
   - `.rpm` uses RPM lead/header metadata with a gzip-compressed `newc` cpio payload.
 
+## Packager version metadata
+
+Every package records the current generator identity, logically `Packager:Zongsoft.Tools.Packager@0.9.0`. The value is `assembly-name@version`, read from the packager's own assembly, independently of the host application's version. No additional option or migration configuration is required.
+
+| Format | Location | Inspection |
+| --- | --- | --- |
+| tar.gz | PAX global extended attribute `Packager` | Use a PAX-aware reader, such as Python `tarfile` and its `pax_headers["Packager"]`. |
+| deb | `Packager` field in `control.tar.gz` → `control` | `dpkg-deb -f <package.deb> Packager` |
+| rpm | Main header string tag `RPMVERSION` (1064) | `rpm -qp --queryformat '%{RPMVERSION}\n' <package.rpm>` |
+
+RPM's generator-version tag stores this tool's identity; its `PACKAGER` tag (1015) continues to contain the maintainer from `--maintainer`. Metadata resides in format headers, adds no installed file, and does not change `.version` or `migration.json`.
+
 ## Installation
 
 Install as a .NET global tool:
@@ -67,6 +80,30 @@ Uninstall:
 ```bash
 dotnet tool uninstall -g Zongsoft.Tools.Packager
 ```
+
+### Installing a local source build for testing
+
+Install the generated `.nupkg` directly without publishing it to NuGet.org. The following commands use the .NET 10 SDK and run from `D:/Zongsoft/tools/packager`; use the corresponding directory for another checkout location.
+
+Before testing migrations, follow the [build instructions](docs/migrations.md#building-the-tool-package) to prepare complete Native AOT artifacts in `src/.migrator/linux-x64/` and `src/.migrator/linux-arm64/`. Existing unchanged artifacts can be reused; ordinary `dotnet build` does not produce them. Then generate the local tool package:
+
+```powershell
+dotnet pack src/Zongsoft.Tools.Packager.csproj -c Release
+```
+
+After the build succeeds and `src/bin/Release/Zongsoft.Tools.Packager.0.9.0.nupkg` exists, install it for the first time:
+
+```powershell
+dotnet tool install -g Zongsoft.Tools.Packager --version 0.9.0 --source ./src/bin/Release --no-http-cache
+```
+
+If the tool is already installed, especially when rebuilding the same version, uninstall it first, then repeat the local installation command above:
+
+```powershell
+dotnet tool uninstall -g Zongsoft.Tools.Packager
+```
+
+The example version `0.9.0` matches the current project; adjust it to the actual `.nupkg`. `--source` restricts installation to the local directory, avoiding a same-named package from NuGet.org; `--no-http-cache` disables the download cache. See the [.NET tool installation reference](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-tool-install). Check the installed version with `dotnet tool list -g`. Here, “local” describes the package source; `-g` still replaces the current user’s global tool. Do not run the Cake `pack` task for local testing: it pushes packages to NuGet.org.
 
 ## Quick Start
 
@@ -244,7 +281,7 @@ After all package output is successfully generated, the source file is saved usi
 | --- | --- | --- |
 | `--source:<path>` | Current directory | Source directory whose files are packaged. |
 | `--migration:<paths>` | Empty | Migration INI files separated by `;` or `\|`; see [installation migrations](docs/migrations.md). |
-| `--output:<path>` | Source directory | Output path for the generated package, if the value ends with a directory separator(`/` or `\`), it is a directory; otherwise, it is a file. Relative paths are resolved under `--source`. |
+| `--output:<path>` | Source directory | Output directory, with or without a trailing separator. This option does not select a file name. Relative paths are resolved under `--source`. |
 | `--exclude:<patterns>` | Empty | Comma- or semicolon-separated file patterns to skip while loading package entries. |
 | `--edition:<name>` | Empty | Optional edition. Appended to package name; used as RPM release when present. |
 | `--compilation:<name>` | `Release` | Build configuration used when locating a daemon host under `bin/<configuration>/<framework>`. |
@@ -332,7 +369,7 @@ Entry rules:
 
 - Relative paths are resolved from `--source`.
 - Absolute paths outside `--source` are allowed; when no alias is supplied, only the file name is used.
-- Directories are included recursively.
+- Directories are included recursively. A directory alias of `:~`, as used by hosting, places its contents directly under the installation root.
 - Globbing supports `*` and `?` in the last path segment.
 - `--exclude` skips matching files while loading entries. Patterns are relative to `--source`, use `/` as the normalized separator, support `*`, `?`, and `**`, and may be separated by commas or semicolons.
 - Duplicate destination paths are reported as conflicts and skipped.
@@ -363,7 +400,7 @@ Service resolution order:
 
 1. Use the file named by `--daemon:<name>` if it exists under `--source`.
 2. Otherwise generate `<daemon>.service`.
-3. If `--daemon` is omitted, use the lower-case package name as the service identifier.
+3. If `--daemon` is omitted, use the final application name (`Package.Name`) in lowercase, without the Edition suffix.
 
 Disable service generation with one of:
 
@@ -444,9 +481,13 @@ Package-manager upgrades do not run the uninstall lifecycle. Debian `prerm`/`pos
 
 ## Installation Migrations
 
-Build migrator first, then run `dotnet pack src/Zongsoft.Tools.Packager.csproj` to create the tool package. The main project has no migrator project reference; see the [build instructions](docs/migrations.md#building-the-tool-package).
+Publish both Native AOT RIDs with the Cake `migrator` task first, then run `dotnet pack src/Zongsoft.Tools.Packager.csproj` to create the tool package. The main project has no migrator project reference; see the [build instructions](docs/migrations.md#building-the-tool-package).
 
 The intermediate file is `<install-directory>/.migration/migration.json`; prepared SQL batches are stored in `.migration/.artifacts/`. The standalone migrator is published with **Native AOT** for glibc Linux and needs no target .NET runtime. TDengine connects directly to taosAdapter using WebSocket without `TDengine.Connector`. Migration messages support English and Simplified Chinese. See the [collaboration guide](docs/migrations.md#collaboration-between-the-packager-and-migrator) for file exchange, execution order and startup checks.
+
+SQL batches are grouped by canonical provider, for example `.migration/.artifacts/mysql/0001.sql` and `.migration/.artifacts/postgres/0001.sql`. Each plan load starts a separate counter at 0001 for each provider; tasks using the same provider share consecutive numbers. PostgreSQL aliases share the postgres directory. Each nonempty section remains an independent task with its own parameters and script list; task IDs identify logs and status, not directories. Overlapping SQL matches are deduplicated within a section, but sections, files and repeated INI arguments remain independent. S3 configuration stays in the plan without an empty artifact directory.
+
+Migration INI paths are parsed in argument order, expanding wildcard matches in ordinal filename order at the current position. Order across migration tasks is not guaranteed; SQL within each database task follows its plan list.
 
 Add `--migration` to create databases/tables and S3/RustFS buckets before the application starts. Supply one or more `.ini` paths separated by `;` or `|`; matching `.env` connection parameters are found by convention in the same directory or its parents.
 
@@ -457,7 +498,7 @@ Missing migration INI files or unmatched filename patterns produce warnings and 
 For the prepared Zongsoft hosting `./publish` directory described above:
 
 ```text
---migration:../.deploy/$(scheme)/migration/zongsoft.db-$(environment).ini;../.deploy/$(scheme)/migration/zongsoft.fs-$(environment).ini
+--migration:../.deploy/$(scheme)/migration/$(version)/*.ini
 ```
 
 Quote the complete option in your shell. Create these deployment files using the [hosting migration guide](docs/migrations.md), which uses the real Zongsoft.Upgrading SQL schema and explains provider parameters, execution order and recovery. Providers: SQL Server, MySQL, SQLite, DuckDB, PostgreSQL (`postgres`/`postgresql`), TDengine and `amazon.s3`.
@@ -481,7 +522,9 @@ Variables are case-insensitive and are loaded from:
 2. Declared command options and their default values.
 3. Extra command-line options accepted by the command parser.
 
-When the same variable name appears more than once, the current implementation keeps the first value it sees. Avoid defining environment variables with the same names as package options unless that is intentional.
+Ordinary variables keep the first value encountered, so an environment variable may take precedence over an option. After source-version resolution, `name`, `edition` and `version` are overwritten with the final identity; `source` and `output` are overwritten with resolved paths. Avoid environment names that collide with other package options.
+
+The example below uses Bash to expand the name and version first. `--version` is parsed as `System.Version` before packaging starts, so a literal `%APP_VERSION%` or `$(APP_VERSION)` is not accepted there. Name and Edition also participate in source-version validation as supplied. Packager expressions apply to paths, script text, migration configuration and other subsequently normalized values.
 
 ```bash
 export APP_NAME=Zongsoft.Hosting.Web
@@ -490,8 +533,8 @@ export APP_VERSION=1.0.0
 dotnet-pack deb \
   --daemon:zongsoft.web \
   --daemon-bind:8069 \
-  --name:%APP_NAME% \
-  --version:%APP_VERSION% \
+  --name:"$APP_NAME" \
+  --version:"$APP_VERSION" \
   --platform:linux \
   --architecture:x64 \
   --framework:net10.0 \
@@ -539,7 +582,7 @@ Install into a staging directory:
 DESTDIR=/tmp/stage ./install.sh
 ```
 
-Override the install path:
+Ordinary packages allow an install-path override. Migration packages use a fixed path; rebuild them with `--install-path` to change it:
 
 ```bash
 sudo env INSTALL_PATH=/srv/zongsoft/web ./install.sh
@@ -598,7 +641,7 @@ dotnet restore Zongsoft.Tools.Packager.slnx
 dotnet build Zongsoft.Tools.Packager.slnx -c Release
 ```
 
-The independent `migrator` task prepares runtime artifacts in `src/.migrator/`. The main project copies these as ordinary content; it neither references nor builds migrator. For a complete tool package, run the Cake build below, or run `dotnet cake --target=migrator --edition=Release` before `dotnet pack src/Zongsoft.Tools.Packager.csproj -c Release`. Without prepared artifacts, ordinary packaging remains available; `--migration` reports the missing runner.
+The independent `migrator` task prepares runtime artifacts in `src/.migrator/`. The main project copies these as ordinary content; it neither references nor builds migrator. For a complete tool package, run the Cake build below, or run `dotnet cake --target=migrator --edition=Release` before `dotnet pack src/Zongsoft.Tools.Packager.csproj -c Release`. Without prepared artifacts, ordinary packaging remains available. A plan containing migration tasks requires the matching RID artifacts; if every specified INI is missing and skipped, no runner is required.
 
 Build with Cake:
 
@@ -629,9 +672,9 @@ The `--source` value was not found after variable expansion and path normalizati
 
 No existing service file was found and the tool could not locate a host `.dll` or a single `.exe` from which to infer the `.dll` name. Supply `--daemon:<service-file>` or disable service generation with `--daemon:none`.
 
-`The version number is invalid.`
+`A valid nonzero --version or selected source version is required. Source: <path>`
 
-The version value is missing, invalid, or resolves to `0.0.0.0`.
+No usable command/source version is available, or the version is zero. Non-version text fails during command-option parsing.
 
 `The source path '<path>' does not exist.`
 

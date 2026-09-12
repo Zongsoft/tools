@@ -119,10 +119,16 @@ public sealed class MigrationPlanTests
 		directory.Write("input/sql/020-seed.sql", "INSERT INTO samples VALUES (2, '附件;ready');");
 		directory.Write("input/sql/010-schema.sql", "CREATE TABLE IF NOT EXISTS samples (id INTEGER PRIMARY KEY, title TEXT); DELETE FROM samples; INSERT INTO samples VALUES (1, 'first');");
 		directory.Write("input/sql/030-verify.sql", "CREATE TABLE IF NOT EXISTS verification (value INTEGER CHECK (value=1)); INSERT INTO verification SELECT CASE WHEN (SELECT COUNT(*) FROM samples)=2 AND (SELECT title FROM samples WHERE id=2)='附件;ready' THEN 1 ELSE 0 END;");
-		var plan = new MigrationLoader(null).Load("input/db.ini", directory.Path, "zongsoft.daemon", "1.1.0");
-		var scripts = Assert.Single(plan.Tasks).Scripts;
-		Assert.Equal(new[] { ".migration/.artifacts/0001-sqlite/0001.sql", ".migration/.artifacts/0001-sqlite/0002.sql", ".migration/.artifacts/0001-sqlite/0003.sql" }, scripts.Select(script => script.Path));
-		foreach(var script in scripts) directory.Write(script.Path, script.Content);
+		var other = Path.Combine(directory.Path, "other.db");
+		directory.Write("input/other.ini", "[sqlite]\n./other.sql\n");
+		directory.Write("input/other.env", "[sqlite]\nDatabase=/" + other[Path.GetPathRoot(other).Length..].Replace('\\', '/') + "\n");
+		directory.Write("input/other.sql", "CREATE TABLE IF NOT EXISTS independent (id INTEGER);");
+		var plan = new MigrationLoader(null).Load("input/db.ini;input/other.ini", directory.Path, "zongsoft.daemon", "1.1.0");
+		Assert.Equal(2, plan.Tasks.Count);
+		var scripts = plan.Tasks[0].Scripts;
+		Assert.Equal(".migration/.artifacts/sqlite/0004.sql", Assert.Single(plan.Tasks[1].Scripts).Path);
+		Assert.Equal(new[] { ".migration/.artifacts/sqlite/0001.sql", ".migration/.artifacts/sqlite/0002.sql", ".migration/.artifacts/sqlite/0003.sql" }, scripts.Select(script => script.Path));
+		foreach(var script in plan.Tasks.SelectMany(task => task.Scripts)) directory.Write(script.Path, script.Content);
 		var file = directory.Write(".migration/migration.json", plan.Serialize());
 		var state = Path.Combine(directory.Path, "state");
 
@@ -130,6 +136,7 @@ public sealed class MigrationPlanTests
 		await RunAsync("check", file, state, 0);
 
 		Assert.True(File.Exists(database));
+		Assert.True(File.Exists(other));
 		Assert.Equal(plan.Fingerprint(), File.ReadAllText(Path.Combine(state, "ready")));
 		Assert.DoesNotContain("Content", File.ReadAllText(file));
 		Assert.DoesNotContain("Source", File.ReadAllText(file));

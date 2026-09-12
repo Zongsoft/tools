@@ -350,6 +350,50 @@ public sealed class MigrationLoaderTests
 	}
 
 	[Fact]
+	public void Load_ProviderArtifacts_ShareCounterAcrossFilesAliasesAndTargets()
+	{
+		using var directory = new MigrationTestDirectory();
+		directory.Write("first.ini", "[POSTGRESQL]\n./first*.sql\n./first.sql\n");
+		directory.Write("first.env", "[postgres]\nServer=localhost\nDatabase=first\nUserName=operator\n");
+		directory.Write("first.sql", "SELECT 'first';");
+		directory.Write("parts/20-postgres.ini", "[postgres]\n./second.sql\n");
+		directory.Write("parts/20-postgres.env", "[postgres]\nServer=localhost\nDatabase=second\nUserName=operator\n");
+		directory.Write("parts/second.sql", "SELECT 'second';");
+		directory.Write("parts/10-mysql.ini", "[mysql]\n./mysql.sql\n");
+		directory.Write("mysql.env", "Server=localhost\nDatabase=hosting\nUserName=operator\n");
+		directory.Write("parts/mysql.sql", "SELECT 'mysql';");
+
+		var plan = Loader().Load("first.ini;parts/*.ini|first.ini", directory.Path, "zongsoft.web", "1.1.0");
+
+		Assert.Equal(new[] { "postgres", "mysql", "postgres", "postgres" }, plan.Tasks.Select(task => task.Provider));
+		Assert.Equal(new[] { "first", "hosting", "second", "first" }, plan.Tasks.Select(task => task.Parameters["Database"]));
+		Assert.Equal(4, plan.Tasks.Select(task => task.Id).Distinct().Count());
+		var scripts = plan.Tasks.Select(task => Assert.Single(task.Scripts)).ToArray();
+		Assert.Equal(new[] { ".migration/.artifacts/postgres/0001.sql", ".migration/.artifacts/mysql/0001.sql", ".migration/.artifacts/postgres/0002.sql", ".migration/.artifacts/postgres/0003.sql" }, scripts.Select(script => script.Path));
+		Assert.Equal(new[] { "SELECT 'first';", "SELECT 'mysql';", "SELECT 'second';", "SELECT 'first';" }, scripts.Select(script => script.Content));
+		Assert.All(scripts, script => Assert.Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(script.Content))), script.Checksum));
+		Assert.Equal(scripts[0].Source, scripts[3].Source);
+		Assert.Equal(scripts[0].Checksum, scripts[3].Checksum);
+	}
+
+	[Fact]
+	public void Load_ReusedLoader_RestartsProviderCounters()
+	{
+		using var directory = new MigrationTestDirectory();
+		directory.Write("db.ini", "[sqlite]\n./schema.sql\n");
+		directory.Write("sqlite.env", "Database=/var/lib/zongsoft/hosting.db\n");
+		directory.Write("schema.sql", "SELECT 1;");
+		var loader = Loader();
+
+		var first = loader.Load("db.ini;db.ini", directory.Path, "zongsoft.daemon", "1.1.0");
+		var second = loader.Load("db.ini;db.ini", directory.Path, "zongsoft.daemon", "1.1.0");
+
+		Assert.Equal(new[] { ".migration/.artifacts/sqlite/0001.sql", ".migration/.artifacts/sqlite/0002.sql" }, second.Tasks.SelectMany(task => task.Scripts).Select(script => script.Path));
+		Assert.Equal(first.Serialize(), second.Serialize());
+		Assert.Equal(first.Fingerprint(), second.Fingerprint());
+	}
+
+	[Fact]
 	public void Load_SameSqlAcrossSeparateInis_RemainsTwoIndependentTasks()
 	{
 		using var directory = new MigrationTestDirectory();
@@ -512,7 +556,7 @@ public sealed class MigrationLoaderTests
 		var step = Assert.Single(plan.Tasks);
 		Assert.Equal(new[] { "SELECT N'附件';\r\n-- retained", "SELECT 2;", "SELECT 3;" }, step.Scripts.Select(script => script.Content));
 		Assert.Equal(new[] { first, first, later }, step.Scripts.Select(script => script.Source));
-		Assert.Equal(new[] { ".migration/.artifacts/0001-mssql/0001.sql", ".migration/.artifacts/0001-mssql/0002.sql", ".migration/.artifacts/0001-mssql/0003.sql" }, step.Scripts.Select(script => script.Path));
+		Assert.Equal(new[] { ".migration/.artifacts/mssql/0001.sql", ".migration/.artifacts/mssql/0002.sql", ".migration/.artifacts/mssql/0003.sql" }, step.Scripts.Select(script => script.Path));
 		foreach(var script in step.Scripts)
 		{
 			Assert.Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(script.Content))), script.Checksum);

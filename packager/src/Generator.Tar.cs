@@ -37,6 +37,7 @@ using System.Text;
 using System.Linq;
 using System.Formats.Tar;
 using System.IO.Compression;
+using System.Collections.Generic;
 
 namespace Zongsoft.Tools.Packager;
 
@@ -54,6 +55,7 @@ partial class Generator
 
 		using var gzip = new GZipStream(stream, CompressionLevel.Optimal);
 		using var writer = new TarWriter(gzip, TarEntryFormat.Pax, false);
+		writer.WriteEntry(new PaxGlobalExtendedAttributesTarEntry([new KeyValuePair<string, string>("Packager", GetIdentity())]));
 
 		foreach(var entry in package.Entries)
 		{

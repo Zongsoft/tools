@@ -5,20 +5,22 @@
 `--migration` 为 tar、Debian 和 RPM 安装包增加数据库建库、建表以及 S3 存储桶初始化。生成的中间文件名为 **`migration.json`**，安装位置为 `<安装目录>/.migration/migration.json`。用 `;` 或 `|` 分隔多个 `.ini` 路径。请引用整个选项，避免 Shell 解释分隔符和变量表达式。
 
 ```text
---migration:../.deploy/$(scheme)/migration/zongsoft.db-$(environment).ini;../.deploy/$(scheme)/migration/zongsoft.fs-$(environment).ini
+--migration:../../.deploy/$(scheme)/migration/$(version)/*.ini
 ```
 
-命令行路径相对于 `--source`；INI 内的 SQL 路径相对于该 INI 文件。升迁文件及 `.env` 参数文件均使用部署工具所采用的 Zongsoft.Core `Profile` 解析器，支持整行 `#`/`;` 注释和无值条目。`Profile` 的条目名称不区分大小写，重复键报错。重复升迁器段落（包括 PostgreSQL 两个别名并存）也会报错。
+命令行路径相对于 `--source`；INI 内的 SQL 路径相对于该 INI 文件。升迁文件及 `.env` 参数文件均使用部署工具所采用的 Zongsoft.Core `Profile` 解析器，支持整行 `#`/`;` 注释和无值条目。`Profile` 的条目名称不区分大小写，重复键报错。同一个 INI 中重复升迁器段落（包括 PostgreSQL 两个别名并存）也会报错；不同文件和重复指定同一文件仍独立解析。
 
 升迁文件路径、SQL 路径、Bucket 名称/选项及参数值支持既有 `$(name)`、`%name%` 变量，在打包时展开。SQL 内容不进行变量展开，客户端批次分隔符在打包时处理。未定义变量、无匹配 SQL、未知升迁器/选项、缺少参数以及生成路径冲突均使打包以非零退出码失败。参数文件是 INI，不执行 Shell 表达式。
 
-升迁 INI 路径支持文件名中的 `*` 和 `?`，例如 `../../.deploy/$(scheme)/migration/$(version)/*.ini`。每个模式按文件名 Ordinal 顺序展开，保留命令参数顺序；指定 INI 文件不存在或通配符无匹配时，输出警告并跳过，继续处理其余文件。若全部文件均未找到，仍生成普通安装包，不附带升迁文件、运行器及升迁启动门禁；已存在但为空或无效的 INI、缺少 `.env` 参数以及缺少 SQL 脚本仍使打包失败。
+升迁 INI 路径支持文件名中的 `*` 和 `?`，例如 `../../.deploy/$(scheme)/migration/$(version)/*.ini`。每个模式按文件名 Ordinal 顺序展开，保留命令参数顺序；指定 INI 文件不存在或通配符无匹配时，输出警告并跳过，继续处理其余文件。若全部文件均未找到，仍生成普通安装包，不附带升迁文件、运行器及升迁启动门禁；已存在但无效的 INI、缺少 `.env` 参数以及缺少 SQL 脚本仍使打包失败。有效空 INI 不增加任务；若找到了 INI，但全部解析后没有任何非空段落，则报无升迁任务错误。
+
+SQL 批次按规范升迁器名称组织，例如 `.migration/.artifacts/mysql/0001.sql` 和 `.migration/.artifacts/postgres/0001.sql`。每次加载计划时各升迁器从 0001 独立计数，同类任务共享连续编号；PostgreSQL 别名统一归入 postgres。每个非空段落仍是独立任务，保留自己的连接参数及脚本列表；任务 Id 用于日志和状态，不作为目录名。同段落内 SQL 重叠匹配去重，跨段落、跨文件和重复指定 INI 不合并或去重。S3 配置直接保存在计划中，不生成空中间目录。
 
 ## 升迁器与执行顺序
 
-段落名称不区分大小写：`mssql`、`mysql`、`sqlite`、`duckdb`、`postgres`/`postgresql`、`tdengine`、`amazon.s3`。空段落不执行，整个输入必须至少包含一个任务。
+段落名称不区分大小写：`mssql`、`mysql`、`sqlite`、`duckdb`、`postgres`/`postgresql`、`tdengine`、`amazon.s3`。空段落不创建任务；只要找到了 INI，全部输入合计必须产生至少一个任务。未知段落即使为空也会报错。
 
-按命令行文件顺序、文件内段落顺序、段落内条目顺序执行。SQL 通配符 `*`、`?` 只允许出现在文件名中；每个模式匹配的文件按相对路径进行 Ordinal 排序，同一段落内重叠匹配只执行一次。建议文件名使用补零序号。每次安装和重试均执行全部 SQL，由脚本作者保证可重复执行，包括部分失败后的重试。不对跨脚本、跨资源操作自动回滚，详见下文重试规则。
+按命令行文件顺序、文件内段落顺序、段落内条目顺序解析，通配符匹配按文件名 Ordinal 排序并在当前参数位置展开，不对全部输入重新排序。不同任务之间不承诺执行顺序，不应依赖先后关系；每个数据库任务内部按脚本列表顺序执行。SQL 通配符 `*`、`?` 只允许出现在文件名中；每个模式匹配的文件按相对路径进行 Ordinal 排序，同一段落内重叠匹配只执行一次。建议文件名使用补零序号。每次安装和重试均执行全部 SQL，由脚本作者保证可重复执行，包括部分失败后的重试。不对跨脚本、跨资源操作自动回滚，详见下文重试规则。
 
 数据库条目只写 SQL 路径，不写值。多数驱动接收完整文件；SQL Server、TDengine 需要分批，MySQL 的客户端 `DELIMITER` 指令在提交前适配。运行器不模拟交互式数据库客户端。
 
@@ -26,7 +28,7 @@
 
 ## SQL 脚本如何提交给驱动
 
-[`MigrationLoader.Database`](../src/MigrationLoader.Database.Batches.cs) 由打包器调用，处理客户端分隔符并生成可以直接提交给驱动的批次。每个批次写入 `<安装目录>/.migration/.artifacts/<任务编号>/<四位序号>.sql`，顺序和 SHA-256 校验和记录在计划中。运行器按计划逐文件读取并执行，不再分段。SQL 语法、结构变更和业务含义仍由脚本作者负责，SQL 错误由安装时的驱动或数据库报告。
+[`MigrationLoader.Database`](../src/MigrationLoader.Database.Batches.cs) 由打包器调用，处理客户端分隔符并生成可以直接提交给驱动的批次。每个批次写入 `<安装目录>/.migration/.artifacts/<升迁器名称>/<四位序号>.sql`，顺序和 SHA-256 校验和记录在计划中。运行器按计划逐文件读取并执行，不再分段。SQL 语法、结构变更和业务含义仍由脚本作者负责，SQL 错误由安装时的驱动或数据库报告。
 
 | 升迁器 | 提交方式 |
 | --- | --- |
@@ -85,66 +87,88 @@ attachments=private,encryption:sse-s3,versioning:enabled,tag.application:zongsof
 learning=private,versioning:enabled
 ```
 
-省略加密、版本控制或标签时，不调用对应配置接口，沿用服务端默认。加密配置作用于后续上传对象，不重加密已有对象；Amazon S3 的基础服务端加密不能关闭，因此不提供 encryption:false。SSE-C 涉及每次对象请求的客户密钥，不作为桶默认加密选项；本功能不创建或管理 KMS 密钥。容量配额、生命周期、CORS、日志、对象锁和 `internal` 不在支持范围。
+省略加密、版本控制或标签时，不调用对应配置接口，沿用服务端默认。`Encryption` 默认是 null，整个对象不写入 JSON；显式提供对象时 `Mode` 必须为 `sse-s3` 或 `sse-kms`，空对象或空 Mode 无效。加密配置作用于后续上传对象，不重加密已有对象；Amazon S3 的基础服务端加密不能关闭，因此不提供 encryption:false。SSE-C 涉及每次对象请求的客户密钥，不作为桶默认加密选项；本功能不创建或管理 KMS 密钥。容量配额、生命周期、CORS、日志、对象锁和 `internal` 不在支持范围。
 
 已有 Bucket 直接跳过，不改变其权限或其他配置。新桶按版本控制、加密、标签、公共读取策略的顺序初始化，全部成功后才清除本地 pending 记录。若建桶后配置失败，保留记录以便下次重试重新应用所指定的配置，不跳过部分配置操作。认证、权限错误不视为“桶不存在”；服务端不支持已指定的配置或拒绝请求时安装失败并阻止启动，不静默忽略。S3 服务端的公共访问限制也可能拒绝公开策略。
 
 ## Zongsoft hosting 范例
 
-先按现有流程部署 [`hosting/daemon`](https://github.com/Zongsoft/hosting/tree/main/daemon) 或 [`hosting/web/default`](https://github.com/Zongsoft/hosting/tree/main/web/default)。以下文件是**需要新增的部署配置**，并非假定 hosting 仓库已有这些文件。SQL 使用真实的 [Zongsoft.Upgrading 建表脚本](https://github.com/Zongsoft/framework/blob/main/upgrading/database/zongsoft.upgrading-sqlite.sql)；实际使用时应根据宿主已部署的插件选择对应脚本。
+当前本机 `D:/Zongsoft/hosting` 已有以下升迁配置，Web 的 `web/default/pack.cmd` 和 `deploy.cmd` 通过版本目录通配符选择 INI：
 
-在 `D:\Zongsoft\hosting` 执行：
-
-```cmd
-mkdir .deploy\default\migration\1.1.0
-copy ..\framework\upgrading\database\zongsoft.upgrading-sqlite.sql .deploy\default\migration\1.1.0\
+```text
+.deploy/default/migration/
+├── mysql.env
+├── amazon.s3.env
+└── 1.0.0/
+    ├── mysql.ini
+    └── amazon.s3.ini
 ```
 
-新增 `.deploy/default/migration/zongsoft.db-production.ini`：
+`1.0.0/mysql.ini` 的前几个条目如下；实际文件还包含 Administratives 的建表和省市区、街道数据脚本，应保留原文件中的完整列表和顺序：
 
 ```ini
-[sqlite]
-1.1.0/zongsoft.upgrading-sqlite.sql
+[mysql]
+../../../../../framework/Zongsoft.Security/database/Zongsoft.Security-mysql.sql
+../../../../../framework/upgrading/database/zongsoft.upgrading-mysql.sql
+../../../../../discussions/database/Zongsoft.Discussions-mysql.sql
 ```
 
-新增共享参数文件 `.deploy/default/migration/sqlite.env`：
-
-```ini
-Database=$(UPGRADING_DATABASE)
-CommandTimeout=5m
-```
-
-在打包环境中设置 `UPGRADING_DATABASE`，其值必须与**已部署 Upgrading 插件使用的目标数据库绝对路径一致**。连接参数使用实际目标配置，本文不写入真实服务器凭据。
-
-宿主需要 `attachments` 存储桶时，新增 `.deploy/default/migration/zongsoft.fs-production.ini`：
+这些路径相对于 `1.0.0/mysql.ini` 所在目录，指向本机相邻仓库的实际 SQL。`1.0.0/amazon.s3.ini` 当前内容为：
 
 ```ini
 [amazon.s3]
-attachments=private
+learning
+temporary
+upgrading
+attachments
 ```
 
-新增 `.deploy/default/migration/amazon.s3.env`：
+无值桶条目使用私有默认值，未指定加密、版本控制或标签，因此 JSON 省略这些可选属性，运行器不调用对应配置接口。共享 `mysql.env` 和 `amazon.s3.env` 位于父目录，可省略升迁器段落；连接参数按目标 MySQL、RustFS 配置填写，不在本文复制真实凭据。文件部署位置和数据库名称应与宿主插件配置一致。
 
-```ini
-Server=$(S3_SERVER)
-Region=$(S3_REGION)
-AccessKey=$(S3_ACCESS_KEY)
-SecretKey=$(S3_SECRET_KEY)
-```
-
-设置这些环境变量为目标 RustFS/S3 配置，另设置 `scheme=default`、`environment=production`。在以 `hosting/daemon` 为源目录的既有打包命令中增加**一个选项**：
+从 `hosting/web/default` 打包时，现有命令的选项为（`%scheme%` 先由 CMD 展开，`$(version)` 由打包器使用最终应用版本展开）：
 
 ```text
-"--migration:../.deploy/$(scheme)/migration/zongsoft.db-$(environment).ini;../.deploy/$(scheme)/migration/zongsoft.fs-$(environment).ini"
+--migration:"../../.deploy/%scheme%/migration/$(version)/*.ini;"
 ```
 
-`hosting/web/default` 相对前缀需要改为 `../../.deploy/`：
+末尾空路径会被忽略。选择 `scheme=default`、版本 `1.0.0` 时，按文件名 Ordinal 顺序解析 `amazon.s3.ini`、`mysql.ini`，这不构成跨任务执行先后的承诺。若从 `hosting/daemon` 为源目录复用同一配置，增加以下选项；daemon 当前的 pack.cmd 本身没有配置升迁：
 
 ```text
-"--migration:../../.deploy/$(scheme)/migration/zongsoft.db-$(environment).ini;../../.deploy/$(scheme)/migration/zongsoft.fs-$(environment).ini"
+"--migration:../.deploy/$(scheme)/migration/$(version)/*.ini"
 ```
 
-保留宿主已有的载荷条目和 Nginx 钩子。Web 入口是 `Zongsoft.Hosting.Web.dll`，使用 `--name:Zongsoft.Hosting.Web --title:Zongsoft.Web --daemon:zongsoft.web --daemon-bind:8069`；daemon 入口是 `Zongsoft.Hosting.Daemon.dll`，使用 hosting 当前脚本中的 `--name:zongsoft.daemon`，自动推断标题与服务名。上面的双引号用于 CMD；PowerShell/Bash 应用**单引号**引用整个升迁选项，保留 `$()`。
+此时需另外提供 `--scheme:default` 或同名环境变量。以 README 的 `hosting/publish` 暂存目录为源时也使用 `../.deploy/` 前缀。安装版本没有对应目录时只会警告并跳过，需确认本次版本目录包含所需初始化脚本。
+
+保留 Web 宿主已有的载荷条目和 Nginx 钩子。Web 入口是 `Zongsoft.Hosting.Web.dll`，命令使用 `--name:Zongsoft.Hosting.Web --title:Zongsoft.Web --daemon:zongsoft.web --daemon-bind:8069`；daemon 命令使用 `--name:zongsoft.daemon`，其入口由既有宿主定位规则确定。上述双引号用于 CMD；PowerShell/Bash 使用单引号引用整个打包器表达式选项，避免 Shell 展开 `$()`，并将 `%scheme%` 换成打包器的 `$(scheme)` 或 Shell 已展开的实际值。
+
+## migration.json 字段说明
+
+`migration.json` 是打包器生成、migrator 读取的 UTF-8 JSON 对象。它保存已解析的执行输入，字段名按下表输出；运行器读取属性名时忽略大小写。
+
+| 字段 | 类型 | 含义 |
+| --- | --- | --- |
+| `FormatVersion` | 整数 | 中间文件格式版本，当前为 `1`，与应用版本和打包器版本无关。 |
+| `Package` | 字符串 | 最终安装包名称，例如 hosting Web 的 `zongsoft.web`，包含已选择的 Edition 后缀（如有）。 |
+| `Version` | 字符串 | 本次打包的应用版本。 |
+| `Tasks` | 数组 | 按输入解析顺序生成的独立任务；数组位置不代表任务依赖，不保证跨任务执行顺序。 |
+| `Tasks[].Id` | 字符串 | 计划内唯一任务标识，例如 `0002-mysql`，用于日志和状态，不决定 SQL 目录。 |
+| `Tasks[].Provider` | 字符串 | 规范升迁器名称：`mssql`、`mysql`、`sqlite`、`duckdb`、`postgres`、`tdengine`、`amazon.s3`。 |
+| `Tasks[].Parameters` | 字符串键值对象 | 从 `.env` 读取并展开变量后的连接参数；参数名忽略大小写，值仍是字符串，具体规则见上文参数说明。 |
+| `Tasks[].Scripts` | 数组 | 数据库任务的有序批次列表；S3 任务为 `[]`。 |
+| `Tasks[].Scripts[].Path` | 字符串 | 相对于安装根的批次路径，例如 `.migration/.artifacts/mysql/0001.sql`。同类任务共享目录和连续编号。 |
+| `Tasks[].Scripts[].Checksum` | 字符串 | 包内批次实际 UTF-8 字节的 SHA-256，使用大写十六进制；执行前校验内容完整性。 |
+| `Tasks[].Buckets` | 数组 | S3 任务的桶描述列表；数据库任务为 `[]`。 |
+| `Tasks[].Buckets[].Name` | 字符串 | Bucket 名称，例如 hosting 的 `attachments`。 |
+| `Tasks[].Buckets[].Public` | 布尔值 | `true` 表示配置公共读取策略；`false` 表示私有桶。 |
+| `Tasks[].Buckets[].Encryption` | 对象，可省略 | 默认加密配置，包含 `Mode` 和可选 `Key`。 |
+| `Tasks[].Buckets[].Encryption.Mode` | 字符串 | `sse-s3` 或 `sse-kms`。 |
+| `Tasks[].Buckets[].Encryption.Key` | 字符串，可省略 | SSE-KMS 使用的已有密钥标识；仅适用于 `sse-kms`。 |
+| `Tasks[].Buckets[].Versioning` | 字符串，可省略 | `enabled` 或 `suspended`。 |
+| `Tasks[].Buckets[].Tags` | 字符串键值对象，可省略 | 桶标签，键名区分大小写；不是 INI 中带 `tag.` 前缀的原始选项名。 |
+
+省略的桶配置不发送对应配置请求。`Script.Source` 和 `Script.Content` 只供打包端使用，不写入 JSON；原始 INI/ENV 路径和本机 SQL 源路径也不作为协议字段保存。连接参数可能包含密码或密钥，文件权限为 `0600`。
+
+计划指纹不保存在 JSON 内：打包器对模型的无缩进 JSON UTF-8 字节计算 SHA-256，将大写十六进制结果写入 `.migration/id`；运行器全部执行成功后写入状态目录的 `ready`。它不是对带缩进的 `migration.json` 文件直接计算摘要。参数、脚本路径、校验和、桶配置以及数组顺序均参与指纹；缩进和文件换行不参与。指纹用于当前安装计划的完成判断，不是签名或逐脚本执行历史。
 
 ## 打包器与 migrator 的协作
 
@@ -171,9 +195,9 @@ SecretKey=$(S3_SECRET_KEY)
 | 文件 | 写入方 → 读取方 | 内容 |
 | --- | --- | --- |
 | `.migration/migration.json` | 打包器 → migrator | 已展开的连接参数、有序任务、SQL 路径与校验和、Bucket 描述；权限 `0600` |
-| `.migration/.artifacts/<任务编号>/<四位序号>.sql` | 打包器 → migrator | 可直接执行的 SQL 批次；执行前统一验证校验和，权限 `0644` |
+| `.migration/.artifacts/<升迁器名称>/<四位序号>.sql` | 打包器 → migrator | 可直接执行的 SQL 批次；执行前统一验证校验和，权限 `0644` |
 | `.migration/id` | 打包器 → `migrate.sh check` | 当前计划指纹；权限 `0644` |
-| `/var/lib/<包名>/packager/status.json` | migrator → `status` | 当前任务、结果及异常类型 |
+| `/var/lib/<包名>/packager/status.json` | migrator → `status` | 最近一次执行完成或失败时记录的任务、结果及异常类型，并非实时进度 |
 | `/var/lib/<包名>/packager/ready` | migrator → `migrate.sh check` | 全部任务成功后写入的计划指纹；权限 `0644` |
 
 例如 Web 宿主的计划路径是 `/opt/zongsoft/web/.migration/migration.json`，完成标记为 `/var/lib/zongsoft.web/packager/ready`。Shell 以退出码把升迁结果传回安装流程：成功为 `0`，执行失败为 `1`，独立运行器参数用法错误为 `2`。安装流程只有收到成功结果才继续启动宿主。
@@ -194,9 +218,9 @@ dotnet cake --target=migrator --edition=Release
 dotnet pack src/Zongsoft.Tools.Packager.csproj -c Release
 ```
 
-只编译打包器时使用 `dotnet build src/Zongsoft.Tools.Packager.csproj`，无需 migrator 项目或其产物，也不会自动生成 NuGet 包。制作完整工具包前先运行上面的 `migrator` 任务；也可以将独立发布的运行器完整目录分别放入 `src/.migrator/linux-x64/` 和 `src/.migrator/linux-arm64/`，再执行 `dotnet pack`。如果未准备该目录，工具仍可构建和处理普通包，使用 `--migration` 时会明确提示缺少运行器。无需指定新的命令选项或 MSBuild 路径属性。
+只编译打包器时使用 `dotnet build src/Zongsoft.Tools.Packager.csproj`，无需 migrator 项目或其产物，也不会自动生成 NuGet 包。制作完整工具包前先运行上面的 `migrator` 任务；也可以将独立发布的运行器完整目录分别放入 `src/.migrator/linux-x64/` 和 `src/.migrator/linux-arm64/`，再执行 `dotnet pack`。如果未准备该目录，工具仍可构建和处理普通包，存在有效升迁任务时会明确提示缺少对应 RID 的运行器；全部 INI 缺失并被跳过时不要求运行器。无需指定新的命令选项或 MSBuild 路径属性。
 
-[`test`](../test/Zongsoft.Tools.Packager.Tests.csproj) 覆盖打包器输入、制包和两端 JSON 交接；[`migrator/test`](../migrator/test/Zongsoft.Tools.Packager.Migrator.Tests.csproj) 只引用运行器，覆盖数据库、S3 及 TDengine WebSocket。交接测试启动独立 migrator 的 `check` 命令，确认主端生成的计划指纹得到认可，并验证任务顺序变化会使完成标记失效。主测试项目对运行器设置 `ReferenceOutputAssembly=false`，仅保留构建依赖；两组测试均不使用程序集或 `using` 别名。两个测试项目可分别运行：
+[`test`](../test/Zongsoft.Tools.Packager.Tests.csproj) 覆盖打包器输入、制包和两端 JSON 交接；[`migrator/test`](../migrator/test/Zongsoft.Tools.Packager.Migrator.Tests.csproj) 只引用运行器，覆盖数据库、S3 及 TDengine WebSocket。交接测试启动独立 migrator 的 `apply/check` 命令，验证真实 SQLite 批次、任务各自的连接参数、任务内部顺序和主端指纹；另验证任务数组变化使指纹变化，以及篡改 SQL 导致执行失败并清除完成标记。主测试项目对运行器设置 `ReferenceOutputAssembly=false`，仅保留构建依赖；两组测试均不使用程序集或 `using` 别名。两个测试项目可分别运行：
 
 ```powershell
 dotnet test test/Zongsoft.Tools.Packager.Tests.csproj -f net10.0
@@ -232,7 +256,7 @@ exec "$BASE_DIR/Zongsoft.Tools.Packager.Migrator" "${1:-apply}" "$BASE_DIR/migra
 
 **`apply/status` 直接执行原生 `Zongsoft.Tools.Packager.Migrator`。** 应分发对应 RID 的完整发布目录，包括必要的 `.so` 文件；不经过 `dotnet` 启动，不处理 `.deps.json`，目标机无需 .NET 运行时，但仍需要系统原生库。
 
-`MigrationExecutor` 在取得文件锁后清除旧 `ready`，校验全部 SQL 文件，再顺序执行任务。成功后记录状态，把当前计划指纹写入临时文件并通过替换文件形成 `ready`。指纹采用无缩进 JSON 的 UTF-8 SHA-256，避免 Windows/Linux 格式换行导致不同结果；`id` 是打包时产生的同一指纹。两者可读权限为 `0644`，使普通服务用户能够检查，而不必读取 `0600` 的参数文件。
+`MigrationExecutor` 在取得文件锁后清除旧 `ready`，校验全部 SQL 文件，当前实现再串行执行任务；串行遍历是实现方式，跨任务先后不构成执行契约。成功后记录状态，把当前计划指纹写入临时文件并通过替换文件形成 `ready`。指纹采用无缩进 JSON 的 UTF-8 SHA-256，避免 Windows/Linux 格式换行导致不同结果；`id` 是打包时产生的同一指纹。两者可读权限为 `0644`，使普通服务用户能够检查，而不必读取 `0600` 的参数文件。
 
 [`Scriptor.Systemd`](../src/Scriptor.Systemd.cs) 在安装流程中插入 `migrate.sh apply`，并在服务 drop-in 中生成 `ExecStartPre=/bin/sh "/opt/zongsoft/web/.migration/migrate.sh" check`。因此初次安装要完成升迁，之后每次服务启动只检查完成标记，不会在每次启动时重新运行 SQL。直接执行宿主 DLL 会绕过这项 systemd 检查。
 
@@ -244,7 +268,7 @@ exec "$BASE_DIR/Zongsoft.Tools.Packager.Migrator" "${1:-apply}" "$BASE_DIR/migra
 
 Debian 仅在 `postinst configure` 执行升迁；RPM 使用 `%post`。失败返回非零，不执行后续启动/钩子。升迁包默认服务停止、启动命令的失败不再被忽略。全部任务成功后才写完成标记；systemd 的 `20-packager-migration.conf` drop-in 在重启机器后仍会阻止未完成升迁的包启动。保留原服务文件，自定义服务也必须能执行该 `ExecStartPre` 检查。
 
-状态保存在应用目录之外的 `/var/lib/<包名>/packager`。文件锁阻止同一包的运行器并发执行；状态记录任务和异常类型，不记录连接值或 SQL。执行任何操作前验证所有 SQL 校验和。排除失败原因后可重新配置/安装，也可使用安装权限直接运行已安装入口：
+状态保存在应用目录之外的 `/var/lib/<包名>/packager`。文件锁阻止同一包的运行器并发执行；状态记录任务和异常类型，不记录连接值或 SQL。执行外部数据库或 S3 操作前验证所有 SQL 校验和；`status/check` 不读取 SQL 内容。排除失败原因后可重新配置/安装，也可使用安装权限直接运行已安装入口：
 
 ```sh
 /opt/zongsoft/web/.migration/migrate.sh status
@@ -258,15 +282,15 @@ tar 的 `DESTDIR` 仅用于暂存：安装/卸载均跳过全部生命周期钩�
 
 ## 脚本幂等性与失败重试
 
-首次安装、升级、覆盖安装以及每次 `apply` 均按顺序执行全部配置的 SQL 文件。不维护逐文件成功历史，也不根据先前执行结果跳过文件。结构变更和数据操作的可重复执行性由脚本作者保证：新增、更名、删除前检查对象存在性及预期状态，数据插入与更新避免重复写入或重复累加。遇到不符合预期的状态应明确报错，不应直接跳过必要变更。
+首次安装、升级、覆盖安装以及每次 `apply` 均执行全部配置的 SQL 文件，顺序保证限定在各数据库任务内部。不维护逐文件成功历史，也不根据先前执行结果跳过文件。结构变更和数据操作的可重复执行性由脚本作者保证：新增、更名、删除前检查对象存在性及预期状态，数据插入与更新避免重复写入或重复累加。遇到不符合预期的状态应明确报错，不应直接跳过必要变更。
 
-文件 A 成功、B 失败后，重试仍从 A 开始。B 也可能已有部分语句提交，脚本应处理这些中间状态，或由操作者在重试前修复。打包器不自动回滚 SQL，事务由脚本在数据库支持的范围内控制。
+同一数据库任务内文件 A 成功、B 失败后，重试仍从该任务的首个文件开始，包括重新执行 A。B 也可能已有部分语句提交，脚本应处理这些中间状态，或由操作者在重试前修复。打包器不自动回滚 SQL，事务由脚本在数据库支持的范围内控制。
 
 SQL 校验和只用于在外部资源操作之前验证包内文件与当前计划一致，不是执行历史，也不阻止重新生成的包执行修订后的 SQL。既有文件锁、状态及 ready 标记控制安装是否完成，不用于在 `apply` 时跳过文件。
 
 ## 运行时与产物
 
-升迁包支持 glibc `linux-x64`、`linux-arm64`，以 Rocky Linux 9/glibc 2.34 为构建基线，本轮不包含 Alpine/musl。原生运行器及必要 `.so` 文件位于 `.migration/`。目标机需要 glibc 2.34 或更高版本、libgcc、libstdc++、zlib、ICU、OpenSSL 和 CA 证书；PostgreSQL/SQL Server 的认证功能还可能需要发行版提供的 Kerberos/GSSAPI 库。每次发布用 `readelf`/`ldd` 核对实际动态依赖。生成的 Shell 还需要 POSIX `sh`、基础命令及 `cmp`（Rocky Linux 的 `diffutils` 软件包）。无需 .NET 运行时、数据库 CLI、AWS CLI 或 `mc`，可用既有 `--dependencies` 声明发行版对应的软件包依赖。
+升迁包支持 glibc `linux-x64`、`linux-arm64`，以 Rocky Linux 9/glibc 2.34 为构建基线，不支持 Alpine/musl。原生运行器及必要 `.so` 文件位于 `.migration/`。目标机需要 glibc 2.34 或更高版本、libgcc、libstdc++、zlib、ICU、OpenSSL 和 CA 证书；PostgreSQL/SQL Server 的认证功能还可能需要发行版提供的 Kerberos/GSSAPI 库。每次发布用 `readelf`/`ldd` 核对实际动态依赖。生成的 Shell 还需要 POSIX `sh`、基础命令及 `cmp`（Rocky Linux 的 `diffutils` 软件包）。无需 .NET 运行时、数据库 CLI、AWS CLI 或 `mc`，可用既有 `--dependencies` 声明发行版对应的软件包依赖。
 
 `.migration/migration.json` 包含**展开后的连接参数，包括密码和密钥**，安装权限为 `0600`。该权限不加密归档；安装包应按含凭据的产物分发和保管。原 `.env` 不会被自动复制，部署配置应放在载荷条目之外。`.migration/`（含 `.artifacts/`）为生成内容保留目录。SQL 路径相对于安装根目录，运行器只允许访问 `.migration/.artifacts/` 内的文件。配置在打包时固定，之后修改打包机的 `.env` 不会改变已有安装包。
 

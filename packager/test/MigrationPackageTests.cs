@@ -464,7 +464,9 @@ public sealed class MigrationPackageTests
 		directory.Write("mssql.env", "Server=localhost\nDatabase=hosting\nUserName=operator\n");
 		directory.Write("sql/020-seed.sql", "INSERT INTO samples VALUES (N'附件');\r\nGO\r\n");
 		directory.Write("sql/010-schema.sql", "CREATE TABLE samples (title NVARCHAR(100));\r\nGO\r\nSELECT N'GO';\r\n");
-		var plan = new MigrationLoader(null).Load("db.ini", directory.Path, "zongsoft.daemon", "1.1.0");
+		directory.Write("second.ini", "[mssql]\n./other.sql\n");
+		directory.Write("other.sql", "SELECT N'other task';");
+		var plan = new MigrationLoader(null).Load("db.ini;second.ini", directory.Path, "zongsoft.daemon", "1.1.0");
 		var package = Create(format, directory.Path, "disabled");
 		using var bundle = MigrationBundle.Attach(package, plan, directory.CreateRuntime());
 		package.Scriptor.Script();
@@ -474,13 +476,15 @@ public sealed class MigrationPackageTests
 		var payload = ReadPayload(directory.Path, format);
 		var archivePlan = Assert.Single(payload, pair => pair.Key.EndsWith(".migration/migration.json", StringComparison.Ordinal));
 		using var json = JsonDocument.Parse(archivePlan.Value);
-		var scripts = json.RootElement.GetProperty("Tasks")[0].GetProperty("Scripts").EnumerateArray().ToArray();
-		var expected = new[] { "CREATE TABLE samples (title NVARCHAR(100));", "SELECT N'GO';", "INSERT INTO samples VALUES (N'附件');" };
+		var tasks = json.RootElement.GetProperty("Tasks").EnumerateArray().ToArray();
+		Assert.Equal(2, tasks.Length);
+		var scripts = tasks.SelectMany(task => task.GetProperty("Scripts").EnumerateArray()).ToArray();
+		var expected = new[] { "CREATE TABLE samples (title NVARCHAR(100));", "SELECT N'GO';", "INSERT INTO samples VALUES (N'附件');", "SELECT N'other task';" };
 		Assert.Equal(expected.Length, scripts.Length);
-		Assert.Equal(expected.Length, payload.Count(pair => pair.Key.Contains(".migration/.artifacts/0001-mssql/", StringComparison.Ordinal)));
+		Assert.Equal(expected.Length, payload.Count(pair => pair.Key.Contains(".migration/.artifacts/mssql/", StringComparison.Ordinal)));
 		for(var index = 0; index < expected.Length; index++)
 		{
-			var path = $".migration/.artifacts/0001-mssql/{index + 1:D4}.sql";
+			var path = $".migration/.artifacts/mssql/{index + 1:D4}.sql";
 			Assert.Equal(path, scripts[index].GetProperty("Path").GetString());
 			var entry = Assert.Single(payload, pair => pair.Key.EndsWith(path, StringComparison.Ordinal));
 			Assert.Equal(Encoding.UTF8.GetBytes(expected[index]), entry.Value);

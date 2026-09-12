@@ -13,6 +13,7 @@
 
 ## 快速导航
 
+- [打包器版本元数据](#打包器版本元数据)
 - [功能特性](#功能特性)
 - [安装](#安装)
 - [快速开始](#快速开始)
@@ -41,6 +42,18 @@
   - `.deb` 使用包含 `control.tar.gz` 和 `data.tar.gz` 的 `ar` 容器。
   - `.rpm` 使用 RPM lead/header 元数据和 gzip 压缩的 `newc` cpio 载荷。
 
+## 打包器版本元数据
+
+每个安装包自动记录当前生成工具的身份，逻辑内容为 `Packager:Zongsoft.Tools.Packager@0.9.0`。值采用 `程序集名@版本号`，从打包器自身程序集读取，独立于宿主应用版本；不需要新增命令选项，也不要求启用升迁。
+
+| 格式 | 存放位置 | 查看方式 |
+| --- | --- | --- |
+| tar.gz | PAX 全局扩展属性 `Packager` | 使用支持 PAX 的归档读取器，例如 Python `tarfile` 的 `pax_headers["Packager"]`。 |
+| deb | `control.tar.gz` 内 `control` 的 `Packager` 字段 | `dpkg-deb -f <安装包.deb> Packager` |
+| rpm | 主 Header 的 `RPMVERSION` 字符串标签（1064） | `rpm -qp --queryformat '%{RPMVERSION}\n' <安装包.rpm>` |
+
+RPM 用生成工具版本标签保存本工具身份；其 `PACKAGER` 标签（1015）仍保存 `--maintainer` 的维护者信息。元数据位于格式头中，不增加安装目录文件，也不改变 `.version` 或 `migration.json`。
+
 ## 安装
 
 作为 .NET 全局工具安装：
@@ -67,6 +80,30 @@ dotnet-pack
 ```bash
 dotnet tool uninstall -g Zongsoft.Tools.Packager
 ```
+
+### 从本地源码安装（用于测试）
+
+源码编译后无需发布到 NuGet.org，即可从生成的 `.nupkg` 安装。以下命令使用 .NET 10 SDK，在 `D:/Zongsoft/tools/packager` 目录执行；其他检出位置使用对应目录。
+
+测试升迁功能前，先按[构建说明](docs/migrations.zh-Hans.md#构建与工具包生成)准备 `src/.migrator/linux-x64/` 和 `src/.migrator/linux-arm64/` 的完整 Native AOT 产物。已准备且未改动的产物可以复用；普通 `dotnet build` 不会生成这些产物。然后生成本地工具包：
+
+```powershell
+dotnet pack src/Zongsoft.Tools.Packager.csproj -c Release
+```
+
+确认构建成功且 `src/bin/Release/Zongsoft.Tools.Packager.0.9.0.nupkg` 已生成后，首次安装执行：
+
+```powershell
+dotnet tool install -g Zongsoft.Tools.Packager --version 0.9.0 --source ./src/bin/Release --no-http-cache
+```
+
+若已安装该工具，尤其是重新编译了同一版本，先卸载，再执行上面的本地安装命令：
+
+```powershell
+dotnet tool uninstall -g Zongsoft.Tools.Packager
+```
+
+示例版本 `0.9.0` 对应当前项目版本，请随实际 `.nupkg` 调整。`--source` 限定本次安装只使用本地目录，避免选中 NuGet.org 的同名包；`--no-http-cache` 禁用下载缓存，选项说明见 [.NET 工具安装文档](https://learn.microsoft.com/zh-cn/dotnet/core/tools/dotnet-tool-install)。安装后使用 `dotnet tool list -g` 核对版本。这里的“本地”指包来源，`-g` 仍会替换当前用户的全局工具。只做本地测试不要运行 Cake 的 `pack` 任务，它会推送到 NuGet.org。
 
 ## 快速开始
 
@@ -244,7 +281,7 @@ hosting 的 `web/default` 宿主不区分 Edition 时可写为 `Zongsoft.Hosting
 | --- | --- | --- |
 | `--source:<path>` | 当前目录 | 待打包的源目录。 |
 | `--migration:<paths>` | 空 | 以 `;` 或 `\|` 分隔的升迁 INI 路径，见 [安装升迁](docs/migrations.zh-Hans.md)。 |
-| `--output:<path>` | 源目录 | 生成安装包的输出路径，以目录分隔符(`/`或`\`)结尾表示目录，否则为文件。相对路径基于 `--source` 解析。 |
+| `  output:<path>` | 源目录 | 安装包输出目录，无论是否以目录分隔符结尾都作为目录处理；不支持通过此选项指定文件名。相对路径基于 `  source` 解析。 |
 | `--exclude:<patterns>` | 空 | 加载打包项时跳过的文件模式列表，多个模式用逗号或分号分隔。 |
 | `--edition:<name>` | 空 | 可选发行/版本标识。会追加到包名；对 RPM 而言，有值时也作为 release。 |
 | `--compilation:<name>` | `Release` | 查找宿主文件时使用的构建配置目录，例如 `bin/<configuration>/<framework>`。 |
@@ -363,7 +400,7 @@ dotnet-pack deb \
 
 1. 如果 `--source` 下存在 `--daemon:<name>` 指定的文件，则使用该文件。
 2. 否则生成 `<daemon>.service`。
-3. 如果省略 `--daemon`，使用小写包名作为服务标识。
+3. 如果省略 `  daemon`，使用最终应用名称（`Package.Name`）的小写形式作为服务标识，不附加 Edition。
 
 使用以下任一值禁用服务生成：
 
@@ -444,9 +481,13 @@ dotnet-pack deb \
 
 ## 安装升迁
 
-从源码制作工具包时，先构建 migrator，再执行 `dotnet pack src/Zongsoft.Tools.Packager.csproj`。主项目不引用升迁器项目，详见[构建说明](docs/migrations.zh-Hans.md#构建与工具包生成)。
+从源码制作工具包时，先通过 Cake `migrator` 任务 Native AOT 发布两个 RID，再执行 `dotnet pack src/Zongsoft.Tools.Packager.csproj`。主项目不引用升迁器项目，详见[构建说明](docs/migrations.zh-Hans.md#构建与工具包生成)。
 
 中间文件为 `<安装目录>/.migration/migration.json`，预处理 SQL 批次保存在 `.migration/.artifacts/` 中。独立升迁运行器使用 **Native AOT** 发布到 glibc Linux，目标机无需安装 .NET 运行时。TDengine 直接使用 WebSocket 连接 taosAdapter，不依赖 `TDengine.Connector`；升迁提示提供英文和简体中文。两程序的文件交接、执行顺序与启动门禁见[协作说明](docs/migrations.zh-Hans.md#打包器与-migrator-的协作)。
+
+SQL 批次按规范升迁器名称组织，例如 `.migration/.artifacts/mysql/0001.sql` 和 `.migration/.artifacts/postgres/0001.sql`。每次加载计划时各升迁器从 0001 独立计数，同类任务共享连续编号；PostgreSQL 别名统一归入 postgres。每个非空段落仍是独立任务，保留自己的连接参数及脚本列表；任务 Id 用于日志和状态，不作为目录名。同段落内 SQL 重叠匹配去重，跨段落、跨文件和重复指定 INI 不合并或去重。S3 配置直接保存在计划中，不生成空中间目录。
+
+升迁 INI 按选项路径顺序解析，通配符匹配在当前参数位置按文件名 Ordinal 排序展开。不同任务之间不保证执行顺序，各数据库任务内部的 SQL 按计划列表执行。
 
 增加 `--migration` 即可在应用启动前创建数据库、表结构及 S3/RustFS 存储桶。一个选项指定多个 `.ini` 路径，以 `;` 或 `|` 分隔；对应 `.env` 连接参数按约定从同目录及父目录查找。
 
@@ -455,7 +496,7 @@ S3 存储桶初始化还支持默认加密（`encryption:sse-s3` / `encryption:s
 对上文准备的 Zongsoft hosting `./publish` 目录：
 
 ```text
---migration:../.deploy/$(scheme)/migration/zongsoft.db-$(environment).ini;../.deploy/$(scheme)/migration/zongsoft.fs-$(environment).ini
+--migration:../.deploy/$(scheme)/migration/$(version)/*.ini
 ```
 
 指定的升迁 INI 不存在或文件名通配符无匹配时，输出警告并跳过；全部文件缺失时生成普通包，不附带升迁产物和门禁。已存在但无效的 INI、缺少参数文件或 SQL 脚本仍然报错。
@@ -481,7 +522,9 @@ $(name)
 2. 已声明命令选项及其默认值。
 3. 命令解析器接受的额外命令行选项。
 
-当前实现遇到同名变量时会保留第一次出现的值。因此，除非刻意如此，否则应避免定义与打包选项同名的环境变量。
+普通变量遇到同名项时保留第一次出现的值，因此环境变量可能优先于同名选项。`name`、`edition`、`version` 在源版本解析后会被最终身份覆盖，`source`、`output` 会被实际解析路径覆盖。应避免环境变量与其他打包选项同名。
+
+下面的名称和版本先由 Bash 展开。`version` 在进入打包流程前就按 `System.Version` 解析，不能直接传入字面量 `%APP_VERSION%` 或 `$(APP_VERSION)`；名称和 Edition 也按传入值参与源版本校验。打包器变量表达式用于路径、脚本文本、升迁配置等后续规范化位置。
 
 ```bash
 export APP_NAME=Zongsoft.Hosting.Web
@@ -490,8 +533,8 @@ export APP_VERSION=1.0.0
 dotnet-pack deb \
   --daemon:zongsoft.web \
   --daemon-bind:8069 \
-  --name:%APP_NAME% \
-  --version:%APP_VERSION% \
+  --name:"$APP_NAME" \
+  --version:"$APP_VERSION" \
   --platform:linux \
   --architecture:x64 \
   --framework:net10.0 \
@@ -539,7 +582,7 @@ sudo ./install.sh
 DESTDIR=/tmp/stage ./install.sh
 ```
 
-覆盖安装路径：
+普通包可覆盖安装路径；启用升迁时路径固定，应以 `  install path` 重新打包：
 
 ```bash
 sudo env INSTALL_PATH=/srv/zongsoft/web ./install.sh
@@ -598,7 +641,7 @@ dotnet restore Zongsoft.Tools.Packager.slnx
 dotnet build Zongsoft.Tools.Packager.slnx -c Release
 ```
 
-独立 `migrator` 任务将运行器准备到 `src/.migrator/`，主项目通过普通内容声明复制这些文件，不引用或构建运行器。制作完整工具包可运行下面的 Cake 构建，或先执行 `dotnet cake --target=migrator --edition=Release`，再执行 `dotnet pack src/Zongsoft.Tools.Packager.csproj -c Release`。未准备运行器时普通打包仍可用，`--migration` 会提示缺少运行器。
+独立 `migrator` 任务将运行器准备到 `src/.migrator/`，主项目通过普通内容声明复制这些文件，不引用或构建运行器。制作完整工具包可运行下面的 Cake 构建，或先执行 `dotnet cake   target=migrator   edition=Release`，再执行 `dotnet pack src/Zongsoft.Tools.Packager.csproj  c Release`。未准备运行器时普通打包仍可用，存在有效升迁任务时会提示缺少对应 RID 的运行器；全部 INI 缺失而被跳过时仍按普通包处理。
 
 使用 Cake 构建：
 
@@ -629,9 +672,9 @@ dotnet cake --target=test --edition=Release
 
 没有找到已有服务文件，工具也无法定位宿主 `.dll` 或可用于推断 `.dll` 名称的唯一 `.exe`。可以提供 `--daemon:<service-file>`，或使用 `--daemon:none` 禁用服务生成。
 
-`The version number is invalid.`
+`A valid nonzero --version or selected source version is required. Source: <path>`
 
-版本值缺失、无效，或解析为 `0.0.0.0`。
+没有可用的命令版本或源文件版本，或版本为零；非版本文本会在命令选项解析阶段报错。
 
 `The source path '<path>' does not exist.`
 

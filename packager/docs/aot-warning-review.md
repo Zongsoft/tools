@@ -1,5 +1,7 @@
 # Native AOT warning review
 
+This is the warning inventory from the 2026-09-10 full Native AOT publication, not a fresh publish or a live artifact-status report. Later incremental publishes may not repeat these warnings. Current project structure and runtime contracts are described in the [migration guide](migrations.md).
+
 The Rocky Linux 9 / glibc 2.34 publishes for `linux-x64` and `linux-arm64` completed with the existing package versions. Each publish reported 51 third-party IL warnings, including six IL3050 warnings. There were no IL warnings in the packager migration source. Publishing an ELF executable does not establish that every feature of a database driver works under AOT.
 
 固定依赖版本的两个架构原生发布均成功，但发布成功不能代替功能验证。以下列出展开后的每条警告及其对应功能；未隐藏警告、未移除驱动，也未为失败路径提供托管运行器。实际数据库连接、建库、SQL 执行和失败处理的验收结果见 [升迁验证记录](migration-verification.md)。

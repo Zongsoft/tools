@@ -5,20 +5,22 @@
 `--migration` adds database/bootstrap and S3 bucket initialization to tar, Debian and RPM installation packages. It accepts one or more `.ini` paths separated by `;` or `|`. Quote the entire option so the shell preserves separators and variable expressions.
 
 ```text
---migration:../.deploy/$(scheme)/migration/zongsoft.db-$(environment).ini;../.deploy/$(scheme)/migration/zongsoft.fs-$(environment).ini
+--migration:../../.deploy/$(scheme)/migration/$(version)/*.ini
 ```
 
-Paths on the command line are relative to `--source`. Migration INI paths support `*` and `?` in the filename, for example `../../.deploy/$(scheme)/migration/$(version)/*.ini`. Matches are processed in ordinal filename order within each argument; argument order is preserved. A missing INI file or a pattern without matches produces a warning and is skipped. Remaining files keep their order. If no input files are found, packaging proceeds without migration files, a migrator or migration startup checks; existing but empty/invalid INI files, missing `.env` parameters and missing SQL scripts remain errors. Paths inside an INI file are relative to that INI file, not the host directory. Both INI files and `.env` parameter files use Zongsoft.Core's `Profile` parser, as does the deployment tool. Full-line `#`/`;` comments and bare entries are supported. Entry names are case insensitive under `Profile`; duplicate keys are rejected. Repeated migrator sections, including the two PostgreSQL aliases, are rejected.
+Paths on the command line are relative to `--source`. Migration INI paths support `*` and `?` in the filename, for example `../../.deploy/$(scheme)/migration/$(version)/*.ini`. Matches are processed in ordinal filename order within each argument; argument order is preserved. A missing INI file or a pattern without matches produces a warning and is skipped. Remaining files keep their order. If no input files are found, packaging proceeds without migration files, a migrator or migration startup checks; invalid existing INIs, missing `.env` parameters and missing SQL scripts remain errors. A valid empty INI adds no task; if any INIs were found but none contains a nonempty section, packaging fails with no migration tasks. Paths inside an INI file are relative to that INI file, not the host directory. Both INI files and `.env` parameter files use Zongsoft.Core's `Profile` parser, as does the deployment tool. Full-line `#`/`;` comments and bare entries are supported. Entry names are case insensitive under `Profile`; duplicate keys are rejected. Repeated migrator sections within one INI, including both PostgreSQL aliases, are rejected; separate files and repeated file arguments are parsed independently.
 
 Migration files, SQL path expressions, bucket names/options and parameter values support the existing `$(name)` and `%name%` variables. They are resolved when packaging. SQL contents are not expanded; client delimiters are processed during packaging. Undefined variables, unmatched SQL patterns, unsupported providers/options, missing parameters and conflicting generated paths fail packaging with a nonzero exit code. Do not store shell expressions in parameter values; these files are INI, not shell scripts.
 
 The intermediate file is named **`migration.json`**, installed at `<install-directory>/.migration/migration.json`.
 
+SQL batches are grouped by canonical provider, for example `.migration/.artifacts/mysql/0001.sql` and `.migration/.artifacts/postgres/0001.sql`. Each plan load starts a separate counter at 0001 for each provider; tasks using the same provider share consecutive numbers. PostgreSQL aliases share the postgres directory. Each nonempty section remains an independent task with its own parameters and script list; task IDs identify logs and status, not directories. Overlapping SQL matches are deduplicated within a section, but sections, files and repeated INI arguments remain independent. S3 configuration stays in the plan without an empty artifact directory.
+
 ## Migrators and order
 
-Section names are case insensitive: `mssql`, `mysql`, `sqlite`, `duckdb`, `postgres`/`postgresql`, `tdengine`, and `amazon.s3`. Empty sections do not run. There must be at least one task.
+Section names are case insensitive: `mssql`, `mysql`, `sqlite`, `duckdb`, `postgres`/`postgresql`, `tdengine`, and `amazon.s3`. Empty sections add no task. If any INIs are found, their combined contents must produce at least one task. Unknown sections are rejected even when empty.
 
-Files run in command-line order, then section order, then entry order. SQL patterns support `*` and `?` in the filename only. Each pattern's matches are sorted by ordinal relative path; overlapping matches run once within the section. Use zero-padded names to control ordering. Every installation and retry executes all SQL files. Script authors must ensure repeatability, including after partial failure; see the retry rules below. There is no automatic rollback across scripts or resources.
+Inputs are parsed in command-line order, then section order, then entry order. Wildcard matches are sorted by ordinal filename and expanded at that argument position, without sorting the combined input list. Execution order across tasks is not guaranteed and must not express dependencies; SQL within each database task runs in script-list order. SQL patterns support `*` and `?` in the filename only. Each pattern's matches are sorted by ordinal relative path; overlapping matches run once within the section. Use zero-padded names to control ordering. Every installation and retry executes all SQL files. Script authors must ensure repeatability, including after partial failure; see the retry rules below. There is no automatic rollback across scripts or resources.
 
 Database entries contain SQL paths with no value. Most drivers receive a complete file; SQL Server and TDengine require batch boundaries, and MySQL client `DELIMITER` directives are adapted before submission. The runner does not emulate interactive database clients.
 
@@ -26,7 +28,7 @@ For network databases the runner connects to the bootstrap database, checks/crea
 
 ## How SQL scripts are submitted to drivers
 
-[`MigrationLoader.Database`](../src/MigrationLoader.Database.Batches.cs) runs in the packager and prepares batches that can be submitted directly to the driver. Each batch is written to `<installation directory>/.migration/.artifacts/<task ID>/<four-digit sequence>.sql`; the plan records their order and SHA-256 checksums. Migrator reads and executes each prepared file without splitting it. Script authors remain responsible for SQL syntax, schema changes and business semantics. Invalid SQL is reported by the driver/database during installation.
+[`MigrationLoader.Database`](../src/MigrationLoader.Database.Batches.cs) runs in the packager and prepares batches that can be submitted directly to the driver. Each batch is written to `<installation directory>/.migration/.artifacts/<provider>/<four-digit sequence>.sql`; the plan records their order and SHA-256 checksums. Migrator reads and executes each prepared file without splitting it. Script authors remain responsible for SQL syntax, schema changes and business semantics. Invalid SQL is reported by the driver/database during installation.
 
 | Migrator | Submission strategy |
 | --- | --- |
@@ -85,66 +87,88 @@ attachments=private,encryption:sse-s3,versioning:enabled,tag.application:zongsof
 learning=private,versioning:enabled
 ```
 
-Omitting encryption, versioning or tags leaves the service defaults and does not call the corresponding API. Default encryption applies to future uploads, not existing objects. Amazon S3 baseline encryption cannot be disabled, so encryption:false is not an option. SSE-C requires customer keys on individual object requests and is not a bucket default encryption option; the migrator does not create or manage KMS keys. Quotas, lifecycle rules, CORS, logging, Object Lock and internal access are outside this feature.
+Omitting encryption, versioning or tags leaves the service defaults and does not call the corresponding API. `Encryption` defaults to null and is omitted from JSON. An explicit object requires `Mode` to be `sse-s3` or `sse-kms`; an empty object or empty Mode is invalid. Default encryption applies to future uploads, not existing objects. Amazon S3 baseline encryption cannot be disabled, so encryption:false is not an option. SSE-C requires customer keys on individual object requests and is not a bucket default encryption option; the migrator does not create or manage KMS keys. Quotas, lifecycle rules, CORS, logging, Object Lock and internal access are outside this feature.
 
 Existing buckets are skipped without changing their policies or other settings. New buckets receive versioning, encryption, tags and finally public-read policy, in that order. The local pending record is removed only after all configuration succeeds. If configuration fails after creation, the record allows a later retry to reapply the specified settings without skipping individual operations. Authentication/authorization failures are not treated as missing buckets. Unsupported settings or rejected requests fail installation and prevent startup; they are not silently ignored. S3 public-access restrictions can also reject a public policy.
 
 ## Zongsoft hosting example
 
-Use the existing [`hosting/daemon`](https://github.com/Zongsoft/hosting/tree/main/daemon) or [`hosting/web/default`](https://github.com/Zongsoft/hosting/tree/main/web/default) deployment workflow first. The following files are **new deployment configuration to create**, not files assumed to exist in the hosting checkout. The SQL comes from the actual [Zongsoft.Upgrading schema](https://github.com/Zongsoft/framework/blob/main/upgrading/database/zongsoft.upgrading-sqlite.sql); select schemas for the plugins actually deployed to your host.
+The local `D:/Zongsoft/hosting` checkout already contains these migration files. Web's `web/default/pack.cmd` and `deploy.cmd` select INIs using the version directory wildcard:
 
-From `D:\Zongsoft\hosting`:
-
-```cmd
-mkdir .deploy\default\migration\1.1.0
-copy ..\framework\upgrading\database\zongsoft.upgrading-sqlite.sql .deploy\default\migration\1.1.0\
+```text
+.deploy/default/migration/
+├── mysql.env
+├── amazon.s3.env
+└── 1.0.0/
+    ├── mysql.ini
+    └── amazon.s3.ini
 ```
 
-Create `.deploy/default/migration/zongsoft.db-production.ini`:
+The first entries in `1.0.0/mysql.ini` are shown below. The actual file also includes Administratives schema and province/city/district/street data scripts; preserve its complete list and order:
 
 ```ini
-[sqlite]
-1.1.0/zongsoft.upgrading-sqlite.sql
+[mysql]
+../../../../../framework/Zongsoft.Security/database/Zongsoft.Security-mysql.sql
+../../../../../framework/upgrading/database/zongsoft.upgrading-mysql.sql
+../../../../../discussions/database/Zongsoft.Discussions-mysql.sql
 ```
 
-Create the shared `.deploy/default/migration/sqlite.env`:
-
-```ini
-Database=$(UPGRADING_DATABASE)
-CommandTimeout=5m
-```
-
-Set `UPGRADING_DATABASE` in the packaging environment to the **same absolute target path used by the deployed Upgrading plugin**. Configure actual target credentials in the packaging environment; no real server credentials are included in this documentation.
-
-If the host also needs the `attachments` bucket, create `.deploy/default/migration/zongsoft.fs-production.ini`:
+Paths resolve from the directory containing `1.0.0/mysql.ini` into adjacent local repositories. The current `1.0.0/amazon.s3.ini` contains:
 
 ```ini
 [amazon.s3]
-attachments=private
+learning
+temporary
+upgrading
+attachments
 ```
 
-Create `.deploy/default/migration/amazon.s3.env`:
+Bare bucket entries default to private. Encryption, versioning and tags are unspecified, so their JSON properties are omitted and the corresponding configuration APIs are not called. Shared `mysql.env` and `amazon.s3.env` live in the parent directory and may omit provider sections. Populate them from the target MySQL/RustFS configuration; actual credentials are not reproduced here. Database names and deployment locations must match the host's plugin configuration.
 
-```ini
-Server=$(S3_SERVER)
-Region=$(S3_REGION)
-AccessKey=$(S3_ACCESS_KEY)
-SecretKey=$(S3_SECRET_KEY)
-```
-
-Set these variables to the target RustFS/S3 configuration. Set `scheme=default` and `environment=production`. Add this **one option** to the existing daemon packaging command, whose source is `hosting/daemon`:
+When packaging from `hosting/web/default`, the existing command uses this option. CMD expands `%scheme%` first; the packager expands `$(version)` using the resolved application version:
 
 ```text
-"--migration:../.deploy/$(scheme)/migration/zongsoft.db-$(environment).ini;../.deploy/$(scheme)/migration/zongsoft.fs-$(environment).ini"
+--migration:"../../.deploy/%scheme%/migration/$(version)/*.ini;"
 ```
 
-For `hosting/web/default`, the relative prefix is `../../.deploy/`:
+The trailing empty path is ignored. With `scheme=default` and version `1.0.0`, ordinal filename order yields `amazon.s3.ini`, then `mysql.ini`; this does not promise execution order across tasks. To reuse these files with `hosting/daemon` as the source, add the option below; daemon's current pack.cmd does not itself enable migrations:
 
 ```text
-"--migration:../../.deploy/$(scheme)/migration/zongsoft.db-$(environment).ini;../../.deploy/$(scheme)/migration/zongsoft.fs-$(environment).ini"
+"--migration:../.deploy/$(scheme)/migration/$(version)/*.ini"
 ```
 
-Keep the host's existing payload entries and Nginx hooks. The Web entry is `Zongsoft.Hosting.Web.dll`: use `--name:Zongsoft.Hosting.Web --title:Zongsoft.Web --daemon:zongsoft.web --daemon-bind:8069`. The daemon entry is `Zongsoft.Hosting.Daemon.dll`: use `--name:zongsoft.daemon` from the current hosting script, with automatic title and service-name inference. In PowerShell/Bash use **single quotes** around the entire migration option to preserve `$()`; the double-quoted form above is for CMD.
+Also provide `--scheme:default` or the equivalent environment variable. The README's `hosting/publish` staging source uses the same `../.deploy/` prefix. A missing version directory only produces a warning and is skipped, so ensure the chosen version contains the initialization scripts it needs.
+
+Keep Web's existing payload entries and Nginx hooks. Its entry is `Zongsoft.Hosting.Web.dll`, with `--name:Zongsoft.Hosting.Web --title:Zongsoft.Web --daemon:zongsoft.web --daemon-bind:8069`. The daemon command uses `--name:zongsoft.daemon`; the existing host lookup rules determine its entry assembly. The double quotes above are for CMD. In PowerShell/Bash, single-quote the entire packager-expression option to preserve `$()`, and replace `%scheme%` with the packager's `$(scheme)` or a value already expanded by the shell.
+
+## migration.json fields
+
+`migration.json` is a UTF-8 JSON object written by the packager and read by migrator. It contains resolved execution inputs. Output property names appear below; the reader matches property names case insensitively.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `FormatVersion` | Integer | Intermediate format version, currently `1`; distinct from application and packager versions. |
+| `Package` | String | Final package name, such as hosting Web's `zongsoft.web`, including the selected Edition suffix when present. |
+| `Version` | String | Application version selected for this package. |
+| `Tasks` | Array | Independent tasks in input parsing order. Positions do not express dependencies or guarantee execution order across tasks. |
+| `Tasks[].Id` | String | Unique task identifier within the plan, such as `0002-mysql`, used for logs and status rather than SQL directory names. |
+| `Tasks[].Provider` | String | Canonical provider: `mssql`, `mysql`, `sqlite`, `duckdb`, `postgres`, `tdengine`, or `amazon.s3`. |
+| `Tasks[].Parameters` | String dictionary | Connection parameters resolved from `.env`, with variables expanded. Parameter names are case insensitive; values remain strings. See the parameter rules above. |
+| `Tasks[].Scripts` | Array | Ordered SQL batches for database tasks; `[]` for S3 tasks. |
+| `Tasks[].Scripts[].Path` | String | Batch path relative to the installation root, such as `.migration/.artifacts/mysql/0001.sql`. Tasks of the same provider share the directory and consecutive numbering. |
+| `Tasks[].Scripts[].Checksum` | String | Uppercase hexadecimal SHA-256 of the actual UTF-8 batch bytes, checked before execution. |
+| `Tasks[].Buckets` | Array | Bucket descriptions for S3 tasks; `[]` for database tasks. |
+| `Tasks[].Buckets[].Name` | String | Bucket name, such as hosting's `attachments`. |
+| `Tasks[].Buckets[].Public` | Boolean | `true` requests a public read policy; `false` means private. |
+| `Tasks[].Buckets[].Encryption` | Optional object | Default encryption, containing `Mode` and optional `Key`. |
+| `Tasks[].Buckets[].Encryption.Mode` | String | `sse-s3` or `sse-kms`. |
+| `Tasks[].Buckets[].Encryption.Key` | Optional string | Existing KMS key identifier, only for `sse-kms`. |
+| `Tasks[].Buckets[].Versioning` | Optional string | `enabled` or `suspended`. |
+| `Tasks[].Buckets[].Tags` | Optional string dictionary | Case-sensitive bucket tag names, without the INI option's `tag.` prefix. |
+
+Omitted bucket settings do not produce configuration requests. `Script.Source` and `Script.Content` belong only to the packager and are excluded from JSON. Original INI/ENV paths and local SQL source paths are not protocol fields. Parameters may contain passwords or keys; the file mode is `0600`.
+
+The fingerprint is stored outside JSON: the packager hashes the model's compact JSON UTF-8 bytes with SHA-256 and writes the uppercase hexadecimal result to `.migration/id`. Migrator writes it to the state directory's `ready` only after all tasks succeed. This is not a direct hash of the indented `migration.json` file. Parameters, script paths, checksums, bucket options and array order contribute to it; indentation and file line endings do not. It identifies completion of the current plan, rather than providing a signature or per-script execution history.
 
 ## Collaboration between the packager and migrator
 
@@ -171,9 +195,9 @@ Packaging does not connect to databases or S3. The programs communicate through 
 | File | Writer → reader | Content |
 | --- | --- | --- |
 | `.migration/migration.json` | Packager → migrator | Expanded parameters, ordered tasks, SQL paths/checksums and bucket descriptions; mode `0600` |
-| `.migration/.artifacts/<task ID>/<four-digit sequence>.sql` | Packager → migrator | Executable SQL batches, all checked before execution; mode `0644` |
+| `.migration/.artifacts/<provider>/<four-digit sequence>.sql` | Packager → migrator | Executable SQL batches, all checked before execution; mode `0644` |
 | `.migration/id` | Packager → `migrate.sh check` | Plan fingerprint; mode `0644` |
-| `/var/lib/<package-name>/packager/status.json` | Migrator → `status` | Current task, result and exception type |
+| `/var/lib/<package-name>/packager/status.json` | Migrator → `status` | Task, result and exception type recorded when the latest run completed or failed; not live progress |
 | `/var/lib/<package-name>/packager/ready` | Migrator → `migrate.sh check` | Fingerprint written after all tasks succeed; mode `0644` |
 
 For the Web host, the plan is `/opt/zongsoft/web/.migration/migration.json` and the completion marker is `/var/lib/zongsoft.web/packager/ready`. The shell returns the result to installation through the exit code: `0` for success, `1` for execution failure, and `2` for invalid standalone runner arguments. Installation continues to host startup only after success.
@@ -194,9 +218,9 @@ dotnet cake --target=migrator --edition=Release
 dotnet pack src/Zongsoft.Tools.Packager.csproj -c Release
 ```
 
-`dotnet build src/Zongsoft.Tools.Packager.csproj` compiles the packager without the migrator project or its artifacts and does not automatically create a NuGet package. Prepare a complete tool package by running the `migrator` task above, or place an independently published runtime directory in `src/.migrator/<RID>/` before `dotnet pack`. Without that directory, the tool still builds and creates ordinary packages; using `--migration` reports the missing runtime. No additional command option or MSBuild path property is required.
+`dotnet build src/Zongsoft.Tools.Packager.csproj` compiles the packager without the migrator project or its artifacts and does not automatically create a NuGet package. Prepare a complete tool package by running the `migrator` task above, or place an independently published runtime directory in `src/.migrator/<RID>/` before `dotnet pack`. Without that directory, the tool still builds and creates ordinary packages; a valid migration task reports the missing RID runtime; skipping all missing INIs does not require one. No additional command option or MSBuild path property is required.
 
-[`test`](../test/Zongsoft.Tools.Packager.Tests.csproj) covers packager input, SQL batch preparation, package generation and JSON handoff; [`migrator/test`](../migrator/test/Zongsoft.Tools.Packager.Migrator.Tests.csproj) references only the migrator and covers databases, S3 and TDengine WebSocket. Handoff tests run the independent migrator with `check`, verify that it accepts the packager-generated fingerprint, and confirm that changing task order invalidates readiness. The packager test project sets `ReferenceOutputAssembly=false` on its migrator reference, keeping only a build dependency. Neither suite uses assembly or `using` aliases. Run the projects separately:
+[`test`](../test/Zongsoft.Tools.Packager.Tests.csproj) covers packager input, SQL batch preparation, package generation and JSON handoff; [`migrator/test`](../migrator/test/Zongsoft.Tools.Packager.Migrator.Tests.csproj) references only the migrator and covers databases, S3 and TDengine WebSocket. Handoff tests run the independent migrator with `apply/check`, verify real SQLite batches, separate task parameters, internal SQL order and the packager fingerprint, and cover task-array fingerprint changes and SQL tampering that fails execution and clears readiness. The packager test project sets `ReferenceOutputAssembly=false` on its migrator reference, keeping only a build dependency. Neither suite uses assembly or `using` aliases. Run the projects separately:
 
 ```powershell
 dotnet test test/Zongsoft.Tools.Packager.Tests.csproj -f net10.0
@@ -232,7 +256,7 @@ exec "$BASE_DIR/Zongsoft.Tools.Packager.Migrator" "${1:-apply}" "$BASE_DIR/migra
 
 **`apply/status` directly execute the native `Zongsoft.Tools.Packager.Migrator`.** Distribute its complete RID publication, including required `.so` libraries. There is no `dotnet` launch, `.deps.json` processing or target .NET runtime requirement. Native OS libraries remain required.
 
-After acquiring the file lock, `MigrationExecutor` removes the old `ready`, validates all SQL files, then executes tasks in order. On success it records status, writes the current plan fingerprint to a temporary file and replaces `ready` with it. Fingerprints use the SHA-256 of compact JSON encoded as UTF-8, avoiding Windows/Linux formatting-newline differences; `id` contains the same fingerprint generated at packaging time. Both files have mode `0644`, allowing ordinary service users to check readiness without reading the `0600` parameter file.
+After acquiring the file lock, `MigrationExecutor` removes the old `ready`, validates all SQL files, then currently executes tasks serially; this traversal is an implementation detail, not an ordering contract across tasks. On success it records status, writes the current plan fingerprint to a temporary file and replaces `ready` with it. Fingerprints use the SHA-256 of compact JSON encoded as UTF-8, avoiding Windows/Linux formatting-newline differences; `id` contains the same fingerprint generated at packaging time. Both files have mode `0644`, allowing ordinary service users to check readiness without reading the `0600` parameter file.
 
 [`Scriptor.Systemd`](../src/Scriptor.Systemd.cs) inserts `migrate.sh apply` into installation and generates `ExecStartPre=/bin/sh "/opt/zongsoft/web/.migration/migrate.sh" check` in the service drop-in. Installation must complete migrations; subsequent service starts only check the marker rather than rerunning SQL. Launching the host DLL directly bypasses this systemd check.
 
@@ -258,9 +282,9 @@ Tar `DESTDIR` is staging only: install/uninstall skips all lifecycle hooks, migr
 
 ## Repeatable SQL and retries
 
-Every installation, upgrade, reinstall and `apply` runs all configured SQL files in order. There is no per-file success history or skip based on an earlier run. Script authors must make schema changes and data modifications repeatable: check object existence and expected state before adding, renaming or dropping objects, and prevent duplicate inserts or repeated accumulation. Unexpected states should fail explicitly rather than silently skip a required change.
+Every installation, upgrade, reinstall and `apply` runs all configured SQL files, preserving script order within each database task. There is no per-file success history or skip based on an earlier run. Script authors must make schema changes and data modifications repeatable: check object existence and expected state before adding, renaming or dropping objects, and prevent duplicate inserts or repeated accumulation. Unexpected states should fail explicitly rather than silently skip a required change.
 
-If file A succeeds and file B fails, retry starts again with A. B may also have committed some statements before failing; scripts must handle those intermediate states, or the operator must repair them before retrying. The packager does not automatically roll back SQL. Use transactions where the database supports them.
+Within one database task, if file A succeeds and file B fails, retry starts again with A. B may also have committed some statements before failing; scripts must handle those intermediate states, or the operator must repair them before retrying. The packager does not automatically roll back SQL. Use transactions where the database supports them.
 
 SQL checksums only verify that packaged files match the current plan before any external resource changes. They are not an execution history and do not prevent revised SQL from running in a newly generated package. The existing lock, status and readiness marker govern installation completion; they do not skip files during `apply`.
 

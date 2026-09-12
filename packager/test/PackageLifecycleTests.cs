@@ -21,6 +21,59 @@ public sealed class PackageLifecycleTests
 	private const string UNINSTALLED_MARKER = "echo uninstalled-lifecycle-marker";
 
 	[Theory]
+	[InlineData("tar")]
+	[InlineData("deb")]
+	[InlineData("rpm")]
+	public void Package_Provenance_RecordsGeneratorAndPreservesApplicationMetadata(string format)
+	{
+		using var directory = new TemporaryDirectory();
+		InitializeNormalizer(directory.Path);
+		var version = new Version(1, 2, 3);
+		Package package = format switch
+		{
+			"tar" => new Package.Tar("zongsoft.daemon", null, version, Platform.Linux, Architecture.X64),
+			"deb" => new Package.Deb("zongsoft.daemon", null, version, Platform.Linux, Architecture.X64),
+			_ => new Package.Rpm("zongsoft.daemon", null, version, Platform.Linux, Architecture.X64),
+		};
+		package.InstallPath = INSTALL_PATH;
+		package.Maintainer = "Hosting Maintainer";
+		package.Scripts = new(":", ":", ":", ":");
+
+		package.Pack(directory.Path, true);
+
+		var path = Path.Combine(directory.Path, package.FileName);
+		var expected = $"Zongsoft.Tools.Packager@{typeof(Package).Assembly.GetName().Version.ToString(3)}";
+		switch(format)
+		{
+			case "tar":
+				using(var stream = File.OpenRead(path))
+				using(var gzip = new GZipStream(stream, CompressionMode.Decompress))
+				using(var reader = new TarReader(gzip))
+				{
+					var metadata = Assert.IsType<PaxGlobalExtendedAttributesTarEntry>(reader.GetNextEntry());
+					Assert.Equal(expected, metadata.GlobalExtendedAttributes["Packager"]);
+					Assert.Null(metadata.DataStream);
+					Assert.Equal("install.sh", reader.GetNextEntry().Name);
+					Assert.Equal("uninstall.sh", reader.GetNextEntry().Name);
+					Assert.Null(reader.GetNextEntry());
+				}
+				break;
+			case "deb":
+				var control = PackageReader.ReadDebianControlScript(path, "control");
+				Assert.Contains($"\nPackager: {expected}\n", control);
+				Assert.Contains("\nMaintainer: Hosting Maintainer\n", control);
+				Assert.Contains("\nVersion: 1.2.3\n", control);
+				break;
+			case "rpm":
+				var tags = PackageReader.ReadRpmStringTags(path, 1001, 1015, 1064);
+				Assert.Equal(expected, tags[1064]);
+				Assert.Equal("Hosting Maintainer", tags[1015]);
+				Assert.Equal("1.2.3", tags[1001]);
+				break;
+		}
+	}
+
+	[Theory]
 	[InlineData("upgrade")]
 	[InlineData("failed-upgrade")]
 	[InlineData("abort-install")]
