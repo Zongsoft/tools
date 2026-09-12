@@ -259,4 +259,28 @@
   <data name="SourceVersionSaveFailed_Message" xml:space="preserve">
     <value>Package "{0}" was generated, but updating source version file "{1}" failed.</value>
   </data>
+  <data name="VariableResolutionFailed" xml:space="preserve">
+    <value>Variable "{0}" is undefined or contains a cyclic reference.</value>
+  </data>
+  <data name="NormalizerNotInitialized" xml:space="preserve">
+    <value>The variable normalizer has not been initialized.</value>
+  </data>
+  <data name="TextSourceMissing" xml:space="preserve">
+    <value>The text source file "{0}" does not exist.</value>
+  </data>
+  <data name="TextSourceFileRequired" xml:space="preserve">
+    <value>This option requires a file path and does not accept inline text.</value>
+  </data>
+  <data name="PackageEntryTypeConflict" xml:space="preserve">
+    <value>File and directory entries conflict at "{0}".</value>
+  </data>
+  <data name="PackagePathInvalid" xml:space="preserve">
+    <value>Invalid package entry path "{0}".</value>
+  </data>
+  <data name="PackageLinkUnsupported" xml:space="preserve">
+    <value>Symbolic links are not supported in package inputs: "{0}".</value>
+  </data>
+  <data name="DebianRelationshipInvalid" xml:space="preserve">
+    <value>Invalid Debian relationship in field "{0}".</value>
+  </data>
 </root>

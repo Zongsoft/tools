@@ -42,7 +42,7 @@ public sealed class PackageLifecycleTests
 		package.Pack(directory.Path, true);
 
 		var path = Path.Combine(directory.Path, package.FileName);
-		var expected = $"Zongsoft.Tools.Packager@{typeof(Package).Assembly.GetName().Version.ToString(3)}";
+		var expected = $"Zongsoft.Tools.Packager@{typeof(Package).Assembly.GetName().Version}";
 		switch(format)
 		{
 			case "tar":

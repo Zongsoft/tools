@@ -70,6 +70,15 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
+        ///   查找类似 Invalid Debian relationship in field &quot;{0}&quot;. 的本地化字符串。
+        /// </summary>
+        internal static string DebianRelationshipInvalid {
+            get {
+                return ResourceManager.GetString("DebianRelationshipInvalid", resourceCulture);
+            }
+        }
+
+        /// <summary>
         ///   查找类似 The &apos;{0}&apos; directory does not exist. 的本地化字符串。
         /// </summary>
         internal static string DirectoryNotExist_Message {
@@ -421,6 +430,15 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
+        ///   查找类似 The variable normalizer has not been initialized. 的本地化字符串。
+        /// </summary>
+        internal static string NormalizerNotInitialized {
+            get {
+                return ResourceManager.GetString("NormalizerNotInitialized", resourceCulture);
+            }
+        }
+
+        /// <summary>
         ///   查找类似 The source file &apos;{0}&apos; conflicts with an existing package entry &apos;{1}&apos;. 的本地化字符串。
         /// </summary>
         internal static string PackageEntryConflicted_Message {
@@ -430,11 +448,38 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
+        ///   查找类似 File and directory entries conflict at &quot;{0}&quot;. 的本地化字符串。
+        /// </summary>
+        internal static string PackageEntryTypeConflict {
+            get {
+                return ResourceManager.GetString("PackageEntryTypeConflict", resourceCulture);
+            }
+        }
+
+        /// <summary>
         ///   查找类似 The &apos;{0}&apos; package file generated successfully. 的本地化字符串。
         /// </summary>
         internal static string PackageGeneratedSuccessfully_Message {
             get {
                 return ResourceManager.GetString("PackageGeneratedSuccessfully.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Symbolic links are not supported in package inputs: &quot;{0}&quot;. 的本地化字符串。
+        /// </summary>
+        internal static string PackageLinkUnsupported {
+            get {
+                return ResourceManager.GetString("PackageLinkUnsupported", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Invalid package entry path &quot;{0}&quot;. 的本地化字符串。
+        /// </summary>
+        internal static string PackagePathInvalid {
+            get {
+                return ResourceManager.GetString("PackagePathInvalid", resourceCulture);
             }
         }
 
@@ -534,6 +579,33 @@ namespace Zongsoft.Tools.Packager.Properties {
         internal static string SqlServerGoRepeatUnsupported {
             get {
                 return ResourceManager.GetString("SqlServerGoRepeatUnsupported", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 This option requires a file path and does not accept inline text. 的本地化字符串。
+        /// </summary>
+        internal static string TextSourceFileRequired {
+            get {
+                return ResourceManager.GetString("TextSourceFileRequired", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 The text source file &quot;{0}&quot; does not exist. 的本地化字符串。
+        /// </summary>
+        internal static string TextSourceMissing {
+            get {
+                return ResourceManager.GetString("TextSourceMissing", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Variable &quot;{0}&quot; is undefined or contains a cyclic reference. 的本地化字符串。
+        /// </summary>
+        internal static string VariableResolutionFailed {
+            get {
+                return ResourceManager.GetString("VariableResolutionFailed", resourceCulture);
             }
         }
 

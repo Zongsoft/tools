@@ -132,7 +132,7 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		Dumper.Splash();
 
 		//仅使用已知变量解析源目录，身份信息随后由源版本文件补全。
-		var variables = GetVariables(context).DistinctBy(variable => variable.Key, StringComparer.OrdinalIgnoreCase).ToDictionary(StringComparer.OrdinalIgnoreCase);
+		var variables = GetVariables(context);
 
 		foreach(var option in new[] { NAME_OPTION, EDITION_OPTION, VERSION_OPTION })
 		{
@@ -143,7 +143,7 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 				variables.Remove(option);
 		}
 
-		var normalized = Normalizer.Normalize(context.Options.GetValue<string>(SOURCE_OPTION), variables);
+		var normalized = Normalizer.Normalize(variables.GetValueOrDefault(SOURCE_OPTION), variables);
 		if(!normalized.Succeed)
 			throw new InvalidOperationException(string.Format(Properties.Resources.SourceVariableUndefined_Message, normalized.Value));
 
@@ -172,8 +172,7 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		variables[SOURCE_OPTION] = Path.GetFullPath(source);
 		Normalizer.Initialize(variables);
 
-		if(!Normalizer.TryNormalize(context.Options.GetValue<string>(OUTPUT_OPTION), out var output))
-			return ValueTask.FromResult<object>(null);
+		var output = Normalizer.Variables.Output ?? source;
 
 		Normalizer.Variables[SOURCE_OPTION] = source = Path.GetFullPath(source);
 		Normalizer.Variables[OUTPUT_OPTION] = output = Path.GetFullPath(Path.Combine(source, output));
@@ -204,7 +203,7 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		//加载安装条目
 		package.Entries.Load(source,
 			context.Arguments,
-			context.Options.TryGetValue<string>(EXCLUDE_OPTION, out var exclusion) ? [exclusion] : []);
+			[Normalizer.Variables.Exclude]);
 
 		using var migrationBundle = package.Migration == null ? null : MigrationBundle.Attach(package, package.Migration);
 
@@ -229,28 +228,27 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	#region 配置方法
 	protected static void Configure(Package package, CommandContext context)
 	{
-		if(context.Options.TryGetValue(INSTALL_PATH_OPTION, out string installPath) && !string.IsNullOrEmpty(installPath))
+		var installPath = Normalizer.Variables[INSTALL_PATH_OPTION];
+		if(!string.IsNullOrEmpty(installPath))
 			package.InstallPath = Normalizer.Normalize(installPath);
 	}
 	#endregion
 
 	#region 私有方法
-	static IEnumerable<KeyValuePair<string, string>> GetVariables(CommandContext context, params KeyValuePair<string, string>[] options)
+	internal static Dictionary<string, string> GetVariables(CommandContext context)
 	{
-		foreach(System.Collections.DictionaryEntry variable in Environment.GetEnvironmentVariables())
-			yield return new(variable.Key.ToString(), variable.Value?.ToString());
-
+		var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 		foreach(var option in context.Descriptor.Options)
-			yield return new(option.Name, context.Options.GetValue(option.Name)?.ToString());
+			variables[option.Name] = option.DefaultValue?.ToString();
+
+		foreach(System.Collections.DictionaryEntry variable in Environment.GetEnvironmentVariables())
+			variables[variable.Key.ToString()] = variable.Value?.ToString();
 
 		foreach(var option in context.Options)
-		{
-			if(!context.Descriptor.Options.Contains(option.Key))
-				yield return new(option.Key, option.Value?.ToString());
-		}
+			variables[option.Key] = option.Value?.ToString();
 
-		foreach(var option in options)
-			yield return new(option.Key, option.Value);
+		return variables;
 	}
+
 	#endregion
 }

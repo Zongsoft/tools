@@ -93,12 +93,7 @@ partial class MigrationLoader
 		private static IEnumerable<string> GetFiles(string directory, string pattern)
 		{
 			var path = Path.GetFullPath(Path.Combine(directory, pattern));
-			var parent = Path.GetDirectoryName(path);
-
-			if(parent.IndexOfAny(['*', '?']) >= 0)
-				throw new InvalidDataException(Properties.Resources.MigrationWildcardInvalid);
-
-			var files = Directory.Exists(parent) ? Directory.GetFiles(parent, Path.GetFileName(path)).OrderBy(file => Path.GetRelativePath(directory, file).Replace('\\', '/'), StringComparer.Ordinal).ToArray() : [];
+			var files = FileMatcher.GetFiles(path);
 
 			if(files.Length == 0)
 				throw new FileNotFoundException(string.Format(Properties.Resources.MigrationScriptsMissing, path));

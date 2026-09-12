@@ -57,7 +57,7 @@ partial class Generator
 		using var writer = new TarWriter(gzip, TarEntryFormat.Pax, false);
 		writer.WriteEntry(new PaxGlobalExtendedAttributesTarEntry([new KeyValuePair<string, string>("Packager", GetIdentity())]));
 
-		foreach(var entry in package.Entries)
+		foreach(var entry in GetPackageDirectories(package.Entries, true).Concat(package.Entries.Where(entry => !entry.IsDirectory)))
 		{
 			if(entry.Rooted)
 				WriteTarEntry(writer, entry, TAR_ROOT_PREFIX + entry.EntryName);
@@ -80,13 +80,15 @@ partial class Generator
 
 	static void WriteTarEntry(TarWriter writer, Package.Entry item, string name = null)
 	{
-		using var stream = item.OpenRead();
-		var entry = new PaxTarEntry(TarEntryType.RegularFile, name ?? item.EntryName)
+		using var stream = item.IsDirectory ? null : item.OpenRead();
+		var entry = new PaxTarEntry(item.IsDirectory ? TarEntryType.Directory : TarEntryType.RegularFile, name ?? item.EntryName)
 		{
 			Mode = item.Mode,
 			ModificationTime = DateTimeOffset.FromUnixTimeSeconds(item.ModifiedTime),
-			DataStream = stream,
 		};
+
+		if(!item.IsDirectory)
+			entry.DataStream = stream;
 
 		writer.WriteEntry(entry);
 	}
@@ -152,8 +154,10 @@ partial class Generator
 	{
 		var installPath = Quote(package.InstallPath);
 		var packageName = Quote(package.PackageName);
-		var rootEntries = package.Entries.Where(entry => entry.Rooted).ToArray();
+		var rootEntries = GetPackageDirectories(package.Entries, true).Where(entry => entry.Rooted).Concat(package.Entries.Where(entry => entry.Rooted && !entry.IsDirectory)).ToArray();
 		var rootInstallScript = CreateRootInstallScript(rootEntries);
+		var rootDirectory = package.Entries.FirstOrDefault(entry => entry.IsDirectory && !entry.Rooted && entry.EntryName == ".");
+		var rootMode = rootDirectory.IsDirectory ? $"chmod {Convert.ToString((int)rootDirectory.Mode, 8)} \"$TARGET\"" : ":";
 		var installingScript = NormalizeScript(package.Scripts.Installing);
 		var installedScript = NormalizeScript(package.Scripts.Installed);
 
@@ -184,6 +188,7 @@ partial class Generator
 			)
 			install -m 0755 "$SOURCE_DIR/uninstall.sh" "$TARGET/uninstall.sh"
 			{{rootInstallScript}}
+			{{rootMode}}
 			if [ -z "$DESTDIR" ]; then
 				{{installedScript}}
 			fi
@@ -197,7 +202,7 @@ partial class Generator
 	{
 		var installPath = Quote(package.InstallPath);
 		var packageName = Quote(package.PackageName);
-		var rootEntries = package.Entries.Where(entry => entry.Rooted).ToArray();
+		var rootEntries = GetPackageDirectories(package.Entries, true).Where(entry => entry.Rooted).Concat(package.Entries.Where(entry => entry.Rooted && !entry.IsDirectory)).ToArray();
 		var rootUninstallScript = CreateRootUninstallScript(rootEntries);
 		var uninstallingScript = NormalizeScript(package.Scripts.Uninstalling);
 		var uninstalledScript = NormalizeScript(package.Scripts.Uninstalled);
@@ -249,8 +254,11 @@ partial class Generator
 			var mode = Convert.ToString((int)entry.Mode, 8).PadLeft(4, '0');
 			builder.AppendLine($"\troot_source=\"$SOURCE_DIR/{TAR_ROOT_PREFIX}{path}\"");
 			builder.AppendLine($"\troot_target=\"${{DESTDIR%/}}/{path}\"");
-			builder.AppendLine("\tinstall -d \"$(dirname -- \"$root_target\")\"");
-			builder.AppendLine($"\tinstall -m {mode} \"$root_source\" \"$root_target\"");
+			builder.AppendLine("\t[ -d \"$(dirname -- \"$root_target\")\" ] || install -d \"$(dirname -- \"$root_target\")\"");
+			if(entry.IsDirectory)
+				builder.AppendLine($"\tinstall -d -m {mode} \"$root_target\"");
+			else
+				builder.AppendLine($"\tinstall -m {mode} \"$root_source\" \"$root_target\"");
 		}
 
 		builder.Append("fi");
@@ -264,8 +272,11 @@ partial class Generator
 
 		var builder = new StringBuilder();
 
-		foreach(var entry in entries)
+		foreach(var entry in entries.Where(entry => !entry.IsDirectory))
 			builder.AppendLine($"rm -f \"${{DESTDIR%/}}/{Quote(entry.EntryName)}\"");
+
+		foreach(var entry in entries.Where(entry => entry.IsDirectory && entry.Source != null).Reverse())
+			builder.AppendLine($"rmdir \"${{DESTDIR%/}}/{Quote(entry.EntryName)}\" 2>/dev/null || true");
 
 		return builder.ToString().TrimEnd();
 	}

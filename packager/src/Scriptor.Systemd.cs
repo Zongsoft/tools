@@ -48,10 +48,10 @@ partial class Scriptor
 		{
 			var source = Normalizer.Variables.Source;
 			var scripts = Normalizer.Variables.Script;
-			var installing = ReadFile(source, scripts.Installing);
-			var installed = ReadFile(source, scripts.Installed);
-			var uninstalling = ReadFile(source, scripts.Uninstalling);
-			var uninstalled = ReadFile(source, scripts.Uninstalled);
+			var installing = TextSource.Read(source, scripts.Installing);
+			var installed = TextSource.Read(source, scripts.Installed);
+			var uninstalling = TextSource.Read(source, scripts.Uninstalling);
+			var uninstalled = TextSource.Read(source, scripts.Uninstalled);
 			var daemon = Normalizer.Variables.Daemon;
 
 			if(daemon.Disabled)
@@ -178,33 +178,6 @@ partial class Scriptor
 				Combine(ReadFiles(source, scripts.PreUninstalled), _package.Migration == null ? null : $"rm -f '/etc/systemd/system/{serviceName}.d/20-packager-migration.conf'", uninstalled, ReadFiles(source, scripts.PostUninstalled)));
 		}
 
-		static string ReadFile(string source, string path)
-		{
-			if(string.IsNullOrEmpty(path))
-				return null;
-
-			if(path.Contains('\r') || path.Contains('\n'))
-				return path;
-
-			var file = Path.IsPathFullyQualified(path) ? path : Path.Combine(source, path);
-
-			if(!File.Exists(file))
-			{
-				if(!IsPathLike(path))
-					return path;
-
-				throw new FileNotFoundException($"The script file '{file}' does not exist.", file);
-			}
-
-			return File.ReadAllText(file);
-		}
-
-		static bool IsPathLike(string path) =>
-			Path.IsPathFullyQualified(path) ||
-			path.Contains('/') ||
-			path.Contains('\\') ||
-			path.EndsWith(".sh", StringComparison.OrdinalIgnoreCase);
-
 		static string[] ReadFiles(string source, string paths)
 		{
 			if(string.IsNullOrWhiteSpace(paths))
@@ -212,7 +185,7 @@ partial class Scriptor
 
 			return paths
 				.Split([';', '|'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-				.Select(path => ReadFile(source, path))
+				.Select(path => TextSource.Read(source, path, true))
 				.Where(script => !string.IsNullOrWhiteSpace(script))
 				.ToArray();
 		}

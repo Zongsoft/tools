@@ -181,11 +181,14 @@ public sealed class MigrationLoaderTests
 	[Theory]
 	[InlineData("migration/*/*.ini")]
 	[InlineData("migration/release?/*.ini")]
-	public void Load_MigrationIniGlob_RejectsWildcardParentDirectory(string pattern)
+	public void Load_MigrationIniGlob_MissingWildcardParentWarnsAndSkips(string pattern)
 	{
 		using var directory = new MigrationTestDirectory();
 
-		Assert.Throws<InvalidDataException>(() => Loader().Load(pattern, directory.Path, "zongsoft.daemon", "1.1.0"));
+		var warnings = new List<string>();
+
+		Assert.Null(Loader(warning: warnings.Add).Load(pattern, directory.Path, "zongsoft.daemon", "1.1.0"));
+		Assert.Single(warnings);
 	}
 
 	[Fact]

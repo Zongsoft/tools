@@ -36,7 +36,7 @@
 - 在 Unix 类系统上打包时保留文件权限。
 - 在 Windows 上打包时为可执行文件提供保守的权限默认值。
 - 支持 `$(name)` 和 `%name%` 两种变量引用语法。
-- 支持显式文件条目、递归目录、最后一级路径通配、目标别名，以及 `/etc/nginx/conf.d/zongsoft.web.conf` 这类根路径别名。
+- 支持显式文件条目、递归目录、路径段通配（含 `**`）、目标别名，以及 `/etc/nginx/conf.d/zongsoft.web.conf` 这类根路径别名。
 - 直接使用 .NET 写入包格式：
   - `.tar.gz` 使用 gzip 压缩的 PAX tar。
   - `.deb` 使用包含 `control.tar.gz` 和 `data.tar.gz` 的 `ar` 容器。
@@ -44,7 +44,7 @@
 
 ## 打包器版本元数据
 
-每个安装包自动记录当前生成工具的身份，逻辑内容为 `Packager:Zongsoft.Tools.Packager@0.9.0`。值采用 `程序集名@版本号`，从打包器自身程序集读取，独立于宿主应用版本；不需要新增命令选项，也不要求启用升迁。
+每个安装包自动记录当前生成工具的身份，逻辑内容为 `Packager:Zongsoft.Tools.Packager@0.9.0.0`。值采用 `程序集名@版本号`，从打包器自身程序集读取，独立于宿主应用版本；不需要新增命令选项，也不要求启用升迁。
 
 | 格式 | 存放位置 | 查看方式 |
 | --- | --- | --- |
@@ -297,6 +297,19 @@ hosting 的 `web/default` 宿主不区分 Edition 时可写为 `Zongsoft.Hosting
 | `--maintainer:<text>` | `Zongsoft Studio <zongsoft@gmail.com>` | 软件包维护者/厂商文本。 |
 | `--dependencies:<list>` | 空 | 以逗号或分号分隔的依赖列表。写入 Debian `Depends` 或 RPM `Requires`。 |
 
+### Debian 选项
+
+| 选项 | control 字段 |
+| --- | --- |
+| `--provides:<list>` | Provides |
+| `--replaces:<list>` | Replaces |
+| `--breaks:<list>` | Breaks |
+| `--conflicts:<list>` | Conflicts |
+| `--recommends:<list>` | Recommends |
+| `--suggests:<list>` | Suggests |
+
+列表以逗号或分号分隔，版本关系使用括号，例如 `zongsoft.daemon (>= 1.0.0)`。`--dependencies` 写入 Depends；Depends、Recommends、Suggests 支持 `|` 替代项，Provides 的版本关系只接受 `=`。非法关系及换行会使制包失败。此处是关系语法示例，不表示 hosting 实际声明了该依赖。
+
 ### RPM 选项
 
 | 选项 | 说明 |
@@ -370,7 +383,8 @@ dotnet-pack deb \
 - 相对路径基于 `--source` 解析。
 - 允许指定 `--source` 之外的绝对路径；未指定别名时，只使用文件名。
 - 目录会递归包含。
-- 通配符支持最后一级路径中的 `*` 和 `?`。
+- 任一路径段支持 `*`、`?`；独立段 `**` 匹配零层或多层目录。每个参数在当前位置按相对固定前缀的路径 Ordinal 排序，保留全部参数顺序。Windows 匹配忽略大小写，Unix 区分大小写。
+- 目录自身入包，保留空目录与源模式（Windows 默认为 0755）；合成父目录为 0755。拒绝文件/目录冲突及符号链接、reparse point 输入。
 - `--exclude` 会在加载打包项时跳过匹配文件。模式相对 `--source`，统一使用 `/` 作为路径分隔符，支持 `*`、`?`、`**`，多个模式用逗号或分号分隔。
 - 重复的目标路径会报告为冲突并跳过。
 - 以 `/` 或 `\` 开头的别名是根路径条目。在 `.deb` 和 `.rpm` 中，它们会安装到对应根路径；在 `.tar.gz` 中，它们存放在 `.root/` 下，并由 `install.sh` 复制。
@@ -487,7 +501,7 @@ dotnet-pack deb \
 
 SQL 批次按规范升迁器名称组织，例如 `.migration/.artifacts/mysql/0001.sql` 和 `.migration/.artifacts/postgres/0001.sql`。每次加载计划时各升迁器从 0001 独立计数，同类任务共享连续编号；PostgreSQL 别名统一归入 postgres。每个非空段落仍是独立任务，保留自己的连接参数及脚本列表；任务 Id 用于日志和状态，不作为目录名。同段落内 SQL 重叠匹配去重，跨段落、跨文件和重复指定 INI 不合并或去重。S3 配置直接保存在计划中，不生成空中间目录。
 
-升迁 INI 按选项路径顺序解析，通配符匹配在当前参数位置按文件名 Ordinal 排序展开。不同任务之间不保证执行顺序，各数据库任务内部的 SQL 按计划列表执行。
+升迁 INI 按选项路径顺序解析，通配符匹配在当前参数位置按相对路径 Ordinal 排序展开。不同任务之间不保证执行顺序，各数据库任务内部的 SQL 按计划列表执行。
 
 增加 `--migration` 即可在应用启动前创建数据库、表结构及 S3/RustFS 存储桶。一个选项指定多个 `.ini` 路径，以 `;` 或 `|` 分隔；对应 `.env` 连接参数按约定从同目录及父目录查找。
 
@@ -516,13 +530,9 @@ $(name)
 %name%
 ```
 
-变量名不区分大小写，加载来源包括：
+变量名不区分大小写。显式命令选项（含额外选项）覆盖环境变量，环境变量覆盖描述符默认值。变量按使用展开，未使用的无效引用不阻止制包；用到的未知或循环引用会报错。
 
-1. 环境变量。
-2. 已声明命令选项及其默认值。
-3. 命令解析器接受的额外命令行选项。
-
-普通变量遇到同名项时保留第一次出现的值，因此环境变量可能优先于同名选项。`name`、`edition`、`version` 在源版本解析后会被最终身份覆盖，`source`、`output` 会被实际解析路径覆盖。应避免环境变量与其他打包选项同名。
+`name`、`edition`、`version` 仍由源版本文件及显式身份选项决定；同名环境变量不替代身份。最终身份与解析后的 source/output 覆盖变量集合。`--migration` 必须显式启用，`--overwrite` 仍为显式开关。
 
 下面的名称和版本先由 Bash 展开。`version` 在进入打包流程前就按 `System.Version` 解析，不能直接传入字面量 `%APP_VERSION%` 或 `$(APP_VERSION)`；名称和 Edition 也按传入值参与源版本校验。打包器变量表达式用于路径、脚本文本、升迁配置等后续规范化位置。
 
@@ -556,6 +566,12 @@ dotnet-pack deb \
 | `source` | 规范化后的源目录。 |
 | `output` | 规范化后的输出目录。 |
 | `RuntimeIdentifier` | 根据平台与架构推断的运行时标识。 |
+
+### 文本来源
+
+摘要、描述和四个主生命周期钩子共用解析规则：`file:` 明确指定文件（相对 source），`text:` 后的字面文本原样保留。无前缀时展开打包变量，读取源目录下已有文件；多行内容为文本，明显的缺失文件路径会报错，其余值为文本。文件内容不再展开变量或再次作为路径读取，Shell 表达式可放入文件或 `text:` 文本中。pre/post 钩子是以 `;` 或 `|` 分隔的严格文件列表，不接受 `text:`。
+
+Debian/RPM 载荷使用自动清理的临时文件和流式摘要，需预留临时磁盘空间；不在内存中拼接整个包体。实施状态和验证见 [改进任务清单](docs/improvements.md)。
 
 ## 包格式
 

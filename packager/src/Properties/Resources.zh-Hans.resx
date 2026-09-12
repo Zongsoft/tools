@@ -279,4 +279,28 @@
   <data name="SourceVersionSaveFailed_Message" xml:space="preserve">
     <value>安装包“{0}”已生成，但更新源版本文件“{1}”失败。</value>
   </data>
+  <data name="VariableResolutionFailed" xml:space="preserve">
+    <value>变量“{0}”未定义或包含循环引用。</value>
+  </data>
+  <data name="NormalizerNotInitialized" xml:space="preserve">
+    <value>变量解析器尚未初始化。</value>
+  </data>
+  <data name="TextSourceMissing" xml:space="preserve">
+    <value>文本来源文件“{0}”不存在。</value>
+  </data>
+  <data name="TextSourceFileRequired" xml:space="preserve">
+    <value>此选项需要指定文件路径，不支持直接填写文本内容。</value>
+  </data>
+  <data name="PackageEntryTypeConflict" xml:space="preserve">
+    <value>文件和目录条目在“{0}”冲突。</value>
+  </data>
+  <data name="PackagePathInvalid" xml:space="preserve">
+    <value>无效的包条目路径“{0}”。</value>
+  </data>
+  <data name="PackageLinkUnsupported" xml:space="preserve">
+    <value>打包输入不支持符号链接：“{0}”。</value>
+  </data>
+  <data name="DebianRelationshipInvalid" xml:space="preserve">
+    <value>Debian 关系字段“{0}”格式不正确。</value>
+  </data>
 </root>

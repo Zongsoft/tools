@@ -55,8 +55,10 @@ partial class Generator
 
 		WriteArHeader(stream);
 		WriteArEntry(stream, "debian-binary", Encoding.ASCII.GetBytes("2.0\n"));
-		WriteArEntry(stream, "control.tar.gz", CreateControlTarball(control, package));
-		WriteArEntry(stream, "data.tar.gz", CreateDataTarball(package.Entries));
+		using var controlStream = CreateControlTarball(control, package);
+		WriteArEntry(stream, "control.tar.gz", controlStream);
+		using var dataStream = CreateDataTarball(package.Entries);
+		WriteArEntry(stream, "data.tar.gz", dataStream);
 	}
 
 	static string GetDebControl(Package package)
@@ -74,8 +76,11 @@ partial class Generator
 		AppendDebField(builder, "Homepage", package.Url);
 		AppendDebField(builder, "License", package.License);
 
-		if(package.Dependencies.Length > 0)
-			builder.AppendLine($"Depends: {string.Join(", ", package.Dependencies)}");
+		if(package is Package.Deb deb)
+		{
+			foreach(var name in new[] { "Depends", "Provides", "Replaces", "Breaks", "Conflicts", "Recommends", "Suggests" })
+				AppendDebField(builder, name, deb.GetRelationship(name));
+		}
 
 		string description;
 
@@ -120,40 +125,58 @@ partial class Generator
 			builder.AppendLine($"{name}: {value}");
 	}
 
-	static byte[] CreateDataTarball(IReadOnlyCollection<Package.Entry> entries)
+	static Buffer CreateDataTarball(IReadOnlyCollection<Package.Entry> entries)
 	{
-		using var memory = new MemoryStream();
-		using(var gzip = new GZipStream(memory, CompressionLevel.Optimal, true))
-		using(var writer = new TarWriter(gzip, TarEntryFormat.Ustar, true))
+		var buffer = new Buffer();
+		try
 		{
-			foreach(var directory in GetDebianDirectories(entries))
-				WriteDebTarDirectory(writer, directory);
+			using(var gzip = new GZipStream(buffer, CompressionLevel.Optimal, true))
+			using(var writer = new TarWriter(gzip, TarEntryFormat.Ustar, true))
+			{
+				foreach(var directory in GetPackageDirectories(entries))
+					WriteDebTarDirectory(writer, directory);
 
-			foreach(var entry in entries)
-				WriteDebTarEntry(writer, entry);
+				foreach(var entry in entries.Where(entry => !entry.IsDirectory))
+					WriteDebTarEntry(writer, entry);
+			}
+
+			buffer.Position = 0;
+			return buffer;
 		}
-
-		return memory.ToArray();
+		catch
+		{
+			buffer.Dispose();
+			throw;
+		}
 	}
 
-	static byte[] CreateControlTarball(string control, Package package)
+	static Buffer CreateControlTarball(string control, Package package)
 	{
-		using var memory = new MemoryStream();
-		using(var gzip = new GZipStream(memory, CompressionLevel.Optimal, true))
-		using(var writer = new TarWriter(gzip, TarEntryFormat.Ustar, true))
+		var buffer = new Buffer();
+		try
 		{
-			WriteDebTarText(writer, "control", control, Utility.Unix.Mode644);
-			WriteDebTarScript(writer, "preinst", package.Scripts.Installing);
-			WriteDebTarScript(writer, "postinst", package.Scripts.Installed, package.Migration == null ? [] : ["configure"]);
-			WriteDebTarScript(writer, "prerm", package.Scripts.Uninstalling, "remove", "deconfigure");
-			WriteDebTarScript(writer, "postrm", package.Scripts.Uninstalled, "remove", "purge");
+			using(var gzip = new GZipStream(buffer, CompressionLevel.Optimal, true))
+			using(var writer = new TarWriter(gzip, TarEntryFormat.Ustar, true))
+			{
+				WriteDebTarText(writer, "control", control, Utility.Unix.Mode644);
+				WriteDebTarScript(writer, "preinst", package.Scripts.Installing);
+				WriteDebTarScript(writer, "postinst", package.Scripts.Installed, package.Migration == null ? [] : ["configure"]);
+				WriteDebTarScript(writer, "prerm", package.Scripts.Uninstalling, "remove", "deconfigure");
+				WriteDebTarScript(writer, "postrm", package.Scripts.Uninstalled, "remove", "purge");
 
-			var conffiles = GetDebianConfigurationFiles(package.Entries);
-			if(!string.IsNullOrEmpty(conffiles))
-				WriteDebTarText(writer, "conffiles", conffiles, Utility.Unix.Mode644);
+				var conffiles = GetDebianConfigurationFiles(package.Entries);
+				if(!string.IsNullOrEmpty(conffiles))
+					WriteDebTarText(writer, "conffiles", conffiles, Utility.Unix.Mode644);
+			}
+
+			buffer.Position = 0;
+			return buffer;
 		}
-
-		return memory.ToArray();
+		catch
+		{
+			buffer.Dispose();
+			throw;
+		}
 	}
 
 	static void WriteDebTarEntry(TarWriter writer, Package.Entry item)
@@ -169,12 +192,12 @@ partial class Generator
 		writer.WriteEntry(entry);
 	}
 
-	static void WriteDebTarDirectory(TarWriter writer, string name)
+	static void WriteDebTarDirectory(TarWriter writer, Package.Entry directory)
 	{
-		writer.WriteEntry(new UstarTarEntry(TarEntryType.Directory, name)
+		writer.WriteEntry(new UstarTarEntry(TarEntryType.Directory, directory.EntryName)
 		{
-			Mode = Utility.Unix.Mode755,
-			ModificationTime = DateTimeOffset.UtcNow,
+			Mode = directory.Mode,
+			ModificationTime = DateTimeOffset.FromUnixTimeSeconds(directory.ModifiedTime),
 		});
 	}
 
@@ -221,32 +244,17 @@ partial class Generator
 		return files.Length == 0 ? null : string.Join('\n', files) + "\n";
 	}
 
-	static IEnumerable<string> GetDebianDirectories(IEnumerable<Package.Entry> entries)
-	{
-		var directories = new List<string>();
-		var unique = new HashSet<string>(StringComparer.Ordinal);
-
-		foreach(var entry in entries)
-		{
-			var path = Utility.NormalizePath(entry.EntryName);
-			var index = 0;
-
-			while((index = path.IndexOf('/', index + 1)) > 0)
-			{
-				var directory = path[..index];
-				if(unique.Add(directory))
-					directories.Add(directory);
-			}
-		}
-
-		return directories;
-	}
-
-	static bool IsDebianConfigurationFile(Package.Entry entry) => entry.Rooted && entry.EntryName.StartsWith("etc/", StringComparison.Ordinal);
+	static bool IsDebianConfigurationFile(Package.Entry entry) => !entry.IsDirectory && entry.Rooted && entry.EntryName.StartsWith("etc/", StringComparison.Ordinal);
 
 	static void WriteArHeader(Stream stream) => stream.Write(Encoding.ASCII.GetBytes("!<arch>\n"));
 
 	static void WriteArEntry(Stream stream, string name, byte[] data)
+	{
+		using var content = new MemoryStream(data, false);
+		WriteArEntry(stream, name, content);
+	}
+
+	static void WriteArEntry(Stream stream, string name, Stream data)
 	{
 		var header = Encoding.ASCII.GetBytes(string.Format(
 			System.Globalization.CultureInfo.InvariantCulture,
@@ -259,7 +267,8 @@ partial class Generator
 			data.Length));
 
 		stream.Write(header);
-		stream.Write(data);
+		data.Position = 0;
+		data.CopyTo(stream);
 
 		if((data.Length & 1) != 0)
 			stream.WriteByte((byte)'\n');

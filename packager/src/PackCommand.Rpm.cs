@@ -53,8 +53,8 @@ public sealed class RpmCommand : PackCommand<Package.Rpm>
 			Normalizer.Variables.Platform,
 			Normalizer.Variables.Architecture)
 		{
-			Provides = context.Options.GetValue<string>(PROVIDES_OPTION)?.Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries),
-			Conflicts = context.Options.GetValue<string>(CONFLICTS_OPTION)?.Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries),
+			Provides = Normalizer.Variables[PROVIDES_OPTION]?.Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries),
+			Conflicts = Normalizer.Variables[CONFLICTS_OPTION]?.Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries),
 		};
 
 		Configure(package, context);

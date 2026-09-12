@@ -33,6 +33,7 @@
 
 using System;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Buffers.Binary;
 using System.IO.Compression;
@@ -59,42 +60,52 @@ partial class Generator
 			overwrite ? FileMode.Create : FileMode.CreateNew,
 			FileAccess.Write);
 
-		var payload = CreateCpioPayload(package.Entries, out var archiveSize);
+		using var payload = CreateCpioPayload(package.Entries, out var archiveSize);
 		var header = RpmHeader.Create(package, archiveSize, payload);
-		var body = Combine(header, payload);
-		var signature = RpmSignature.Create(header, body);
+		var signature = RpmSignature.Create(header, payload);
 
 		WriteRpmLead(stream, package);
 		stream.Write(signature);
-		stream.Write(body);
+		stream.Write(header);
+		payload.Position = 0;
+		payload.CopyTo(stream);
 	}
 
-	static byte[] CreateCpioPayload(IReadOnlyCollection<Package.Entry> entries, out long archiveSize)
+	static Buffer CreateCpioPayload(IReadOnlyCollection<Package.Entry> entries, out long archiveSize)
 	{
-		using var raw = new MemoryStream();
-		var directories = GetRpmDirectories(entries);
-		var inode = 1;
-
-		foreach(var directory in directories)
-			WriteCpioEntry(raw, inode++, "." + directory, RPM_FILE_TYPE_DIRECTORY, Utility.Unix.Mode755, 0, DateTimeOffset.UtcNow.ToUnixTimeSeconds(), null);
-
-		foreach(var entry in entries)
+		var compressed = new Buffer();
+		try
 		{
-			using var file = entry.OpenRead();
-			WriteCpioEntry(raw, inode++, "." + GetRpmPath(entry.EntryName), RPM_FILE_TYPE_REGULAR, entry.Mode, entry.Size, entry.ModifiedTime, file);
+			using var raw = new Buffer();
+			var inode = 1;
+			var metadata = GetPackageDirectories(entries).ToDictionary(entry => GetRpmPath(entry.EntryName), StringComparer.Ordinal);
+			foreach(var directory in GetRpmDirectories(entries))
+			{
+				metadata.TryGetValue(directory, out var entry);
+				WriteCpioEntry(raw, inode++, "." + directory, RPM_FILE_TYPE_DIRECTORY, entry.IsDirectory ? entry.Mode : Utility.Unix.Mode755, 0, entry.IsDirectory ? entry.ModifiedTime : DateTimeOffset.UtcNow.ToUnixTimeSeconds(), null);
+			}
+
+			foreach(var entry in entries.Where(entry => !entry.IsDirectory))
+			{
+				using var file = entry.OpenRead();
+				WriteCpioEntry(raw, inode++, "." + GetRpmPath(entry.EntryName), RPM_FILE_TYPE_REGULAR, entry.Mode, entry.Size, entry.ModifiedTime, file);
+			}
+
+			WriteCpioEntry(raw, inode, "TRAILER!!!", 0, UnixFileMode.None, 0, 0, null);
+			Pad(raw, 512);
+			archiveSize = raw.Length;
+			raw.Position = 0;
+			using(var gzip = new GZipStream(compressed, CompressionLevel.Optimal, true))
+				raw.CopyTo(gzip);
+
+			compressed.Position = 0;
+			return compressed;
 		}
-
-		WriteCpioEntry(raw, inode, "TRAILER!!!", 0, UnixFileMode.None, 0, 0, null);
-		Pad(raw, 512);
-
-		archiveSize = raw.Length;
-
-		using var compressed = new MemoryStream();
-		raw.Position = 0;
-		using(var gzip = new GZipStream(compressed, CompressionLevel.Optimal, true))
-			raw.CopyTo(gzip);
-
-		return compressed.ToArray();
+		catch
+		{
+			compressed.Dispose();
+			throw;
+		}
 	}
 
 	static void WriteCpioEntry(Stream stream, int inode, string name, int fileType, UnixFileMode mode, long size, long mtime, Stream data)
@@ -133,17 +144,9 @@ partial class Generator
 		stream.Write(lead);
 	}
 
-	static byte[] Combine(byte[] first, byte[] second)
-	{
-		var result = new byte[first.Length + second.Length];
-		Buffer.BlockCopy(first, 0, result, 0, first.Length);
-		Buffer.BlockCopy(second, 0, result, first.Length, second.Length);
-		return result;
-	}
-
 	static List<string> GetRpmDirectories(IReadOnlyCollection<Package.Entry> entries)
 	{
-		var result = new SortedSet<string>(StringComparer.Ordinal) { "/" };
+		var result = new SortedSet<string>(GetPackageDirectories(entries).Select(entry => GetRpmPath(entry.EntryName)), StringComparer.Ordinal) { "/" };
 
 		foreach(var entry in entries)
 		{
@@ -163,14 +166,16 @@ partial class Generator
 	{
 		var result = new RpmEntryCollection();
 		var directories = GetRpmDirectories(entries);
+		var metadata = GetPackageDirectories(entries).ToDictionary(entry => GetRpmPath(entry.EntryName), StringComparer.Ordinal);
 
 		foreach(var directory in directories)
 		{
 			var fullName = directory == "/" ? "/" : directory + "/";
-			AddRpmEntry(result, directories, fullName, 0, RPM_FILE_TYPE_DIRECTORY, Utility.Unix.Mode755, DateTimeOffset.UtcNow.ToUnixTimeSeconds(), string.Empty, 0);
+			metadata.TryGetValue(directory, out var entry);
+			AddRpmEntry(result, directories, fullName, 0, RPM_FILE_TYPE_DIRECTORY, entry.IsDirectory ? entry.Mode : Utility.Unix.Mode755, entry.IsDirectory ? entry.ModifiedTime : DateTimeOffset.UtcNow.ToUnixTimeSeconds(), string.Empty, 0);
 		}
 
-		foreach(var entry in entries)
+		foreach(var entry in entries.Where(entry => !entry.IsDirectory))
 		{
 			using var stream = entry.OpenRead();
 			var digest = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
@@ -386,14 +391,22 @@ partial class Generator
 
 	sealed class RpmSignature
 	{
-		public static byte[] Create(byte[] metadata, byte[] body)
+		public static byte[] Create(byte[] metadata, Stream payload)
 		{
-			var digest = MD5.HashData(body);
+			using var hash = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
+			hash.AppendData(metadata);
+			payload.Position = 0;
+			var buffer = new byte[65536];
+			int count;
+			while((count = payload.Read(buffer)) > 0)
+				hash.AppendData(buffer.AsSpan(0, count));
+
+			var digest = hash.GetHashAndReset();
 			var header = new RpmHeaderBuilder();
 
 			header.AddString(269, Convert.ToHexString(SHA1.HashData(metadata)).ToLowerInvariant());
 			header.AddString(273, Convert.ToHexString(SHA256.HashData(metadata)).ToLowerInvariant());
-			header.AddInt32(1000, body.Length);
+			header.AddInt32(1000, checked((int)(metadata.LongLength + payload.Length)));
 			header.AddBinary(1004, digest);
 
 			return header.Build(true);
@@ -402,7 +415,7 @@ partial class Generator
 
 	sealed class RpmHeader
 	{
-		public static byte[] Create(Package.Rpm package, long archiveSize, byte[] payload)
+		public static byte[] Create(Package.Rpm package, long archiveSize, Stream payload)
 		{
 			var builder = new RpmHeaderBuilder();
 			var buildTime = (int)DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -468,6 +481,7 @@ partial class Generator
 			builder.AddInt32Array(1140, rpmEntries.ConvertAll(_ => 0));
 			builder.AddStringArray(1142, [""]);
 			builder.AddInt32(5011, 8);
+			payload.Position = 0;
 			builder.AddStringArray(5092, [Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant()]);
 			builder.AddInt32(5093, 8);
 

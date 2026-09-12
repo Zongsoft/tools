@@ -57,7 +57,8 @@ internal static class Utility
 	public static bool IsExternal(string source, string path)
 	{
 		return Path.IsPathFullyQualified(path) &&
-			!Path.GetFullPath(path).StartsWith(source, GetComparison());
+			!Path.GetFullPath(path).Equals(Path.GetFullPath(source), GetComparison()) &&
+			!Path.GetFullPath(path).StartsWith(Path.TrimEndingDirectorySeparator(Path.GetFullPath(source)) + Path.DirectorySeparatorChar, GetComparison());
 
 		static StringComparison GetComparison() => OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 	}
@@ -87,6 +88,8 @@ internal static class Utility
 			return $"/opt/{name.Replace('.', '/')}";
 		}
 
+		public static long GetTimestamp(DateTime value) => new DateTimeOffset(value).ToUnixTimeSeconds();
+		public static UnixFileMode GetDirectoryMode(string path) => OperatingSystem.IsWindows() ? Mode755 : File.GetUnixFileMode(path);
 		public static UnixFileMode GetFileMode(string path)
 		{
 			if(!OperatingSystem.IsWindows())
@@ -109,7 +112,5 @@ internal static class Utility
 					extension.Equals(".exe", StringComparison.OrdinalIgnoreCase);
 			}
 		}
-
-		public static long GetTimestamp(DateTime value) => new DateTimeOffset(value).ToUnixTimeSeconds();
 	}
 }

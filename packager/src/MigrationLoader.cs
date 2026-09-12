@@ -123,14 +123,7 @@ public sealed partial class MigrationLoader(Func<string, string> expand, Action<
 		foreach(var argument in paths.Split([';', '|'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
 		{
 			var path = Path.GetFullPath(Path.Combine(source, _expand(argument)));
-			var directory = Path.GetDirectoryName(path);
-			if(directory.IndexOfAny(['*', '?']) >= 0)
-				throw new InvalidDataException(Properties.Resources.MigrationWildcardInvalid);
-
-			var name = Path.GetFileName(path);
-			var files = name.IndexOfAny(['*', '?']) < 0 ?
-				(File.Exists(path) ? [path] : Array.Empty<string>()) :
-				(Directory.Exists(directory) ? Directory.GetFiles(directory, name).OrderBy(file => Path.GetFileName(file), StringComparer.Ordinal).ToArray() : []);
+			var files = FileMatcher.GetFiles(path);
 
 			if(files.Length == 0)
 			{

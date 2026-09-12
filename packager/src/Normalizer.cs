@@ -57,18 +57,7 @@ public class Normalizer
 	{
 		ArgumentNullException.ThrowIfNull(variables);
 
-		_variables = new Variables();
-
-		foreach(var variable in variables)
-			_variables[variable.Key] = Normalize(variable.Value, variables);
-
-		_variables[Variables.SUMMARY] = NormalizeFile(_variables[Variables.SUMMARY]);
-		_variables[Variables.DESCRIPTION] = NormalizeFile(_variables[Variables.DESCRIPTION]);
-
-		_variables[Variables.ScriptVariable.INSTALLING] = NormalizeFile(_variables[Variables.ScriptVariable.INSTALLING]);
-		_variables[Variables.ScriptVariable.INSTALLED] = NormalizeFile(_variables[Variables.ScriptVariable.INSTALLED]);
-		_variables[Variables.ScriptVariable.UNINSTALLING] = NormalizeFile(_variables[Variables.ScriptVariable.UNINSTALLING]);
-		_variables[Variables.ScriptVariable.UNINSTALLED] = NormalizeFile(_variables[Variables.ScriptVariable.UNINSTALLED]);
+		_variables = new Variables(variables);
 	}
 	#endregion
 
@@ -92,10 +81,11 @@ public class Normalizer
 		if(string.IsNullOrWhiteSpace(text))
 			return fallback;
 
-		if(!TryNormalize(text, out var result))
-			return fallback;
+		var result = Normalize(text, _variables);
+		if(!result.Succeed)
+			throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed, result.Value));
 
-		return string.IsNullOrWhiteSpace(result) ? fallback : result.Trim();
+		return string.IsNullOrWhiteSpace(result.Value) ? fallback : result.Value.Trim();
 	}
 
 	public static Result Normalize(string text, IReadOnlyDictionary<string, string> variables)
@@ -103,41 +93,31 @@ public class Normalizer
 		if(string.IsNullOrWhiteSpace(text))
 			return Result.Success(string.Empty);
 
-		variables ??= _variables ?? throw new InvalidOperationException($"The Normalizer has not been initialized yet.");
+		variables ??= _variables ?? throw new InvalidOperationException(Properties.Resources.NormalizerNotInitialized);
+		if(variables is Variables collection)
+			variables = collection.Raw;
 
+		var active = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 		try
 		{
-			var value = _variableRegex.Replace(text, match =>
-			{
-				if(match.Success && match.Groups.TryGetValue(REGEX_VARIABLE_NAME, out var group))
-				{
-					if(variables.TryGetValue(group.Value, out var value))
-						return value;
-
-					throw new NormalizerException(group.Value);
-				}
-
-				return null;
-			});
-
-			return Result.Success(value);
+			return Result.Success(Expand(text));
 		}
 		catch(NormalizerException ex)
 		{
 			return Result.Failure(ex.Variable);
 		}
+
+		string Expand(string value) => _variableRegex.Replace(value ?? string.Empty, match =>
+		{
+			var name = match.Groups[REGEX_VARIABLE_NAME].Value;
+			if(!variables.TryGetValue(name, out var replacement) || active.Count >= 64 || !active.Add(name))
+				throw new NormalizerException(name);
+
+			try { return Expand(replacement); }
+			finally { active.Remove(name); }
+		});
 	}
 
-	public static string NormalizeFile(string text)
-	{
-		if(string.IsNullOrWhiteSpace(text))
-			return null;
-
-		if(!TryNormalize(text, out var result))
-			return null;
-
-		return File.Exists(result) ? File.ReadAllText(result) : result;
-	}
 	#endregion
 
 	#region 嵌套结构

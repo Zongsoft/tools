@@ -38,7 +38,8 @@
 | `Generator.Deb.cs` | 写入 Debian `ar` 容器、`control.tar.gz`、`data.tar.gz`。 |
 | `Generator.Rpm.cs` | 写入 RPM lead、signature/header、metadata header、gzip cpio payload。 |
 | `Scriptor.Systemd.cs` | 生成或收集 systemd 单元文件，生成安装/卸载脚本。 |
-| `Normalizer.cs` | 变量展开、文本规范化、文件内容读取。 |
+| `Normalizer.cs` / `TextSource.cs` | 按需展开变量；统一解析源目录文件与直接文本。 |
+| `FileMatcher.cs` / `Generator.Entries.cs` | 路径段匹配、目录元数据、受控临时载荷流。 |
 | `Variables.cs` | 变量集合和常用变量的强类型访问器。 |
 | `Utility.cs` | RID、安装路径、路径规范化、Unix 时间戳、文件权限等辅助逻辑。 |
 | `Dumper.cs` | 控制台输出启动画面、错误和警告消息。 |
@@ -164,20 +165,11 @@ systemd 与生命周期脚本选项：
 
 ### 变量来源
 
-`PackCommand<TPackage>.GetVariables()` 按以下顺序产生变量：
+`PackCommand<TPackage>.GetVariables(context)` 先加载描述符默认值，再加载环境变量，最后覆盖显式命令选项（包括额外选项）。变量名不区分大小写，优先级为显式选项 > 环境变量 > 默认值。
 
-1. 当前进程环境变量。
-2. 命令描述符声明的选项和默认值。
-3. 命令行中出现但未在描述符中声明的额外选项。
-4. 调用方显式传入的追加变量。
+`Normalizer.Initialize` 只保存原始值；访问值时递归展开引用，未使用的未知引用不会阻止制包。未知变量、循环引用及超过 64 层的展开失败，诊断指出变量名。展开不读取文件。
 
-随后调用：
-
-```csharp
-Normalizer.Initialize(...)
-```
-
-变量名不区分大小写。初始化使用 `DistinctBy(variable => variable.Key, StringComparer.OrdinalIgnoreCase)`，保留第一次出现的值，避免 Environment/environment 这类大小写差异触发字典重复键异常。普通变量中环境变量仍可能优先于同名命令选项。身份变量例外：`name`、`edition`、`version` 先取命令值参与源版本校验，随后由最终身份覆盖；`source`、`output` 由解析后的绝对路径覆盖。
+身份仍由源 `.version` 与显式 name/edition/version 选项共同确定，不从同名环境变量隐式替代身份。最终身份及已解析的 source/output 覆盖变量集合。`--migration` 仍须显式启用，`--overwrite` 仍是显式开关。
 
 ### 变量语法
 
@@ -207,18 +199,17 @@ dotnet-pack deb \
 
 此示例的身份选项由 Bash 展开；`--version` 在进入 OnExecuteAsync 前按 `System.Version` 解析，名称与 Edition 按传入值校验。打包器变量表达式主要用于后续路径、文本和升迁配置。
 
-源路径与升迁输入的未定义变量会终止打包；输出路径展开失败返回空结果。普通载荷路径或文本规范化失败会输出提示并跳过该值，不能把这类提示等同于所有场景均抛出异常。
+源路径、输出、载荷、排除表达式、文本和升迁输入引用未知变量时均失败；未使用的变量不展开。`TryNormalize` 保留返回失败的底层接口，调用方不得把错误值继续作为有效输入。
 
 ### 文本与文件
 
-`summary`、`description` 以及四个主生命周期脚本变量会经过 `NormalizeFile()`：
+`TextSource.Read(source, value, fileOnly)` 统一处理 summary、description 和生命周期钩子：
 
-1. 空值返回 `null`。
-2. 先展开变量。
-3. 如果展开结果是存在的文件路径，读取文件内容。
-4. 否则把展开结果当作文本。
-
-`Scriptor.Systemd` 对脚本值还会做第二层解释：如果脚本值看起来像路径，则相对 `source` 读取；如果包含换行，则直接视为脚本文本。
+- `text:` 后内容原样返回，适用于含 Shell `$(...)`、`%...%` 或路径样式的字面文本。
+- `file:` 后内容先展开变量，然后按绝对路径或相对 source 的路径读取；文件不存在报错。
+- 无前缀时先展开变量；多行值为文本，已有文件按 source 读取，明显的缺失路径报错，其他单行值为文本。可用前缀消除歧义。
+- 读取后的文件内容不再展开变量，也不会再次解释成另一个文件路径。
+- pre/post 钩子用 `;` 或 `|` 分隔，每项均为文件路径，允许 `file:`，不接受 `text:`；文件名本身不能包含这些列表分隔符。
 
 ## 包模型
 
@@ -336,8 +327,8 @@ path:alias
 - Windows 盘符中的 `C:` 不作为别名分隔符。
 - 相对路径基于 `source`。
 - 绝对路径可以位于 `source` 外部；如果没有别名，最终只使用文件名。
-- 目录递归展开。目录别名 `:~` 被归一化为空路径，将目录内容直接放到安装根目录，hosting 的载荷参数采用此写法。
-- 通配符支持最后一级路径中的 `*` 和 `?`。
+- 目录递归展开，目录自身也是条目，保留空目录与源目录模式（Windows 默认 0755）。目录别名 `:~` 被归一化为空路径，将目录内容直接放到安装根目录，hosting 的载荷参数采用此写法。
+- `FileMatcher` 统一支持任一路径段中的 `*`、`?`，独立段 `**` 匹配零层或多层目录。每个参数位置按相对于固定前缀的路径（`/` 分隔）Ordinal 排序，不重排全部输入；Windows 匹配忽略大小写，Unix 区分大小写。
 - 重复的目标路径会触发冲突警告并跳过。
 
 ### 排除规则
@@ -491,7 +482,7 @@ http://127.0.0.1:<port>
 
 ## 打包器版本元数据
 
-每个安装包自动记录当前生成工具的身份，逻辑内容为 `Packager:Zongsoft.Tools.Packager@0.9.0`。值采用 `程序集名@版本号`，从打包器自身程序集读取，独立于宿主应用版本；不需要新增命令选项，也不要求启用升迁。
+每个安装包自动记录当前生成工具的身份，逻辑内容为 `Packager:Zongsoft.Tools.Packager@0.9.0.0`。值采用 `程序集名@版本号`，从打包器自身程序集读取，独立于宿主应用版本；不需要新增命令选项，也不要求启用升迁。
 
 | 格式 | 存放位置 | 查看方式 |
 | --- | --- | --- |
@@ -501,7 +492,7 @@ http://127.0.0.1:<port>
 
 RPM 用生成工具版本标签保存本工具身份；其 `PACKAGER` 标签（1015）仍保存 `--maintainer` 的维护者信息。元数据位于格式头中，不增加安装目录文件，也不改变 `.version` 或 `migration.json`。
 
-`Generator` 在类型初始化时读取自身程序集的简单名称及 `AssemblyInformationalVersionAttribute`，去除 `+` 后的构建标识；缺失该属性时使用程序集版本。身份只计算一次，三个生成器共享同一个值，不取调用进程或宿主程序集版本。原始主 Header 的 RPM 摘要生成流程覆盖新增标签。
+`Generator.GetIdentity` 通过 `Assembly.GetName()` 读取自身程序集的简单名称和 `Version`，保留版本对象的完整文本，例如 `0.9.0.0`。三个生成器调用同一方法读取身份，不取调用进程或宿主程序集版本。原始主 Header 的 RPM 摘要生成流程覆盖新增标签。
 
 tar 通过 `PaxGlobalExtendedAttributesTarEntry` 写入一个全局扩展记录，不将其加入 `Package.Entries`；deb 写入控制字段；RPM 直接写入 1064 标签，不占用已有维护者字段。RPM 原生标签含义参见[官方标签说明](https://rpm-software-management.github.io/rpm/manual/tags.html)，PAX API 参见[官方构造说明](https://learn.microsoft.com/en-us/dotnet/api/system.formats.tar.paxglobalextendedattributestarentry.-ctor)。
 
@@ -707,7 +698,7 @@ Description: <summary-or-title-or-name>
 
 ### data.tar.gz
 
-`data.tar.gz` 使用 gzip + Ustar tar，先写目录条目（0755），再经 `OpenRead()` 写入 `Package.Entries`。
+`data.tar.gz` 使用 gzip + Ustar tar，先写目录条目，再经 `OpenRead()` 写入普通文件。显式目录保留模式和时间戳，自动补齐的父目录使用 0755；目录不打开内容流，也不写入 conffiles。
 
 对非 rooted 条目，`.deb` 的 `EntryPrefix` 是去掉开头 `/` 的安装路径：
 
@@ -950,7 +941,7 @@ payload 是 gzip 压缩后的 ASCII `cpio` newc 归档。newc header magic：
 生成流程：
 
 1. 根据文件路径收集目录，至少包含 `/`。
-2. 写入目录 cpio 条目，模式 `0040755`。
+2. 写入目录 cpio 条目，模式 `0040000 | entry.Mode`；源目录保留模式，合成父目录为 0755。Header 与 cpio 使用相同目录元数据。
 3. 写入文件 cpio 条目，路径为 `.` + RPM 绝对路径，例如 `./opt/zongsoft/web/Zongsoft.Hosting.Web.dll`。
 4. 文件模式为 `0100000 | entry.Mode`。
 5. 写入 `TRAILER!!!` 结束条目。
@@ -973,18 +964,26 @@ RPM header 同时保存一份文件元数据，供包管理器查询和校验。
 | 配置文件标记 | 无包管理器标记 | `/etc` rooted 文件写入 `conffiles` | `/etc` rooted 文件标记 config flag |
 | 签名 | 无 | 无 | 无 GPG/PGP，仅基础 digest |
 
+## 载荷流与目录条目
+
+`Package.Entry.IsDirectory` 区分目录与文件。目录没有内容流、大小为零；生成器统一补齐父目录，文件与目录目标冲突时失败。符号链接和 Windows reparse point 输入明确拒绝，不递归跟随；目标路径不能包含 `..`、换行或 NUL。tar 根别名目录使用 `install -d` 按模式创建，卸载仅对显式目录执行 `rmdir`，非空目录保留，合成的共享父目录不主动删除。
+
+Debian 的 control/data gzip tar 分别写入受控临时文件，ar 依据实际长度流式复制。RPM 原始 cpio 与 gzip payload 使用临时文件，压缩载荷 SHA-256、主 Header + payload MD5 均通过流计算，最后顺序写入各 Header 与载荷，避免完整包体数组。小版本内容和 Header 元数据仍保留内存处理；元数据内存随条目数增长，载荷不随文件字节数增加托管分配。临时文件使用独占 CreateNew、DeleteOnClose，Unix 模式 0600；正常结束及异常均释放。需要足够临时磁盘空间，RPM 峰值包括原始及压缩载荷；未改变 RPM 既有整数大小上限。
+
+## Debian 关系字段
+
+`DebCommand` 提供 `--provides`、`--replaces`、`--breaks`、`--conflicts`、`--recommends`、`--suggests`，分别写入同名首字母大写的 control 字段；`--dependencies` 写 Depends。`Package.Deb` 独占规则，不复用 RPM 解析器。列表以逗号或分号分隔；关系写为 `name (>= version)` 等括号语法，支持 `<< <= = >= >>`。Depends/Recommends/Suggests 可用 `|` 表达替代项，Provides 的版本关系仅允许 `=`。无值不写字段，拒绝非法包名、关系、换行和 NUL；二进制 control 不接受源包的架构限制及构建 profile 表达式。规则依据 [Debian Policy 关系字段](https://www.debian.org/doc/debian-policy/ch-relationships.html)。
+
 ## 当前实现边界
 
-- `.deb` 固定使用 `control.tar.gz` 和 `data.tar.gz`，未提供 xz/zstd 压缩选项。
-- `.deb` control 字段覆盖常用字段，但未实现 `Recommends`、`Suggests`、`Breaks`、`Conflicts` 等扩展字段。
-- `.rpm` 直接写文件格式，未调用 `rpmbuild`，没有 spec 文件，也没有 GPG 签名。
-- `.rpm` payload 固定为 gzip cpio，未提供 xz/zstd payload 选项。
-- 文件所有者和组在 RPM 中固定为 `root/root`，Debian ar 成员 uid/gid 固定为 `0/0`。
-- RPM 目录模式固定为 `0755`。
-- 载荷及升迁文件的 glob 只处理最后一级路径模式；排除规则另行支持 `**`。
-- systemd 是当前唯一脚本生成策略，尚未实现 SysV init、OpenRC、launchd 等策略。
-- 普通变量初始化使用 `DistinctBy` 保留第一次出现的值；身份及源/输出路径随后覆盖，详见变量来源。
-- `summary`、`description` 与脚本路径/文本的读取职责分布在 `Normalizer` 和 `Scriptor.Systemd` 两处，后续可进一步统一。
+- Debian 固定 gzip control/data tar，RPM 固定 gzip cpio，暂不提供 xz/zstd。
+- RPM 直接写格式，不调用 rpmbuild，不提供 spec 或 GPG 签名。
+- 文件所有者/组固定为 root，不继承构建机 UID/GID，也不提供自定义所有者选项。
+- systemd 是当前唯一脚本生成策略。
+- 暂不收录或跟随符号链接/reparse point；需要打包其实际文件。
+- 大载荷制包依赖临时磁盘容量，既有容器字段的大小上限仍然适用。
+
+已实施项目及验证证据见 [改进任务清单](improvements.md)。
 
 ## 安装升迁实现
 
@@ -1025,7 +1024,7 @@ INI 直接调用 `Zongsoft.Configuration.Profiles.Profile.Load(path, options)`�
 
 ### 可选升迁输入缺失
 
-`MigrationLoader` 按参数顺序展开 INI 文件名通配符，对不存在的指定文件或无匹配模式通过本地化警告回调提示并继续。全部输入缺失时返回空计划引用，`PackCommand` 按普通包生成脚本，不调用 `MigrationBundle.Attach`，因此不要求运行器产物，也不生成升迁启动门禁。只保留 `.migration/` 为生成内容保留目录，普通载荷可以使用安装根的 `migration/`。已经找到的 INI 仍进行完整格式和内容校验，`.env` 与 SQL 缺失不属于可跳过输入。有效空 INI 不增加任务；若找到过 INI 而最终任务总数为零，则失败。
+`MigrationLoader` 按参数顺序通过 FileMatcher 展开 INI 路径通配符，对不存在的指定文件或无匹配模式通过本地化警告回调提示并继续。全部输入缺失时返回空计划引用，`PackCommand` 按普通包生成脚本，不调用 `MigrationBundle.Attach`，因此不要求运行器产物，也不生成升迁启动门禁。只保留 `.migration/` 为生成内容保留目录，普通载荷可以使用安装根的 `migration/`。已经找到的 INI 仍进行完整格式和内容校验，`.env` 与 SQL 缺失不属于可跳过输入。有效空 INI 不增加任务；若找到过 INI 而最终任务总数为零，则失败。
 
 
 ### S3 桶初始化选项

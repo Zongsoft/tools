@@ -57,7 +57,7 @@ SQL 批次按规范升迁器名称组织，例如 `.migration/.artifacts/mysql/0
 
 ## 打包器来源元数据
 
-`Generator` 从自身程序集计算 `程序集名@版本号`（信息版本去除构建标识），写入 tar 的 PAX 全局 `Packager` 属性、deb 的 `Packager` 控制字段、RPM 的 `RPMVERSION`（1064）。RPM 1015 保留维护者；不新增载荷文件，不修改源/包内 `.version` 或升迁计划。格式回归核对生成工具身份与应用版本、维护者彼此独立。
+`Generator` 从自身程序集计算 `程序集名@版本号`（AssemblyName.Version 的完整文本），写入 tar 的 PAX 全局 `Packager` 属性、deb 的 `Packager` 控制字段、RPM 的 `RPMVERSION`（1064）。RPM 1015 保留维护者；不新增载荷文件，不修改源/包内 `.version` 或升迁计划。格式回归核对生成工具身份与应用版本、维护者彼此独立。
 
 ## 文档与验证记录
 
@@ -68,3 +68,12 @@ SQL 批次按规范升迁器名称组织，例如 `.migration/.artifacts/mysql/0
 - `PackCommand.VersionFile`（`src/PackCommand.Version.cs`）只加载源目录直属 `.version`，使用 Core `ApplicationVersion.Load(Stream)/Save(Stream)`，由打包器显式打开或创建直属文件；损坏或不可读时失败。`--name`、`--version` 为条件必填，空白名称或 Edition 等同省略，版本对象为空则采用源版本，多个 Edition 必须明确选择，名称及 Edition 忽略大小写匹配并保留文件拼写。
 - 身份解析在完整变量初始化之前；无源文件时要求有效名称和非零版本。包内版本通过 `ApplicationIdentifier.Save(Stream)` 原样写入内存，不追加换行，`EntryCollection.SetVersion` 强制替换同安装位置旧条目，内容格式由 Core 决定，权限为 0644；内存条目统一经 `OpenRead()` 供各生成器读取。
 - 全部制包成功后才保存源版本，只更新所选 Edition 并保留其他条目顺序；保存失败保留安装包并返回错误。Core 保存规范化格式，不保留原注释。测试使用临时目录，覆盖三格式内容、唯一性、长度、权限、RPM 摘要和失败时序。
+
+## 输入与归档改进
+
+- 变量优先级为显式选项 > 环境 > 描述符默认值；身份由源版本规则决定。按使用展开，不预读文件，未知/循环引用失败。
+- TextSource 统一源目录文件与文本：file: 强制文件，text: 原样文本，文件内容不展开或二次解释；pre/post 为严格文件列表。
+- FileMatcher 统一载荷、INI、SQL 的 *、?、独立段 **；每个参数位置按固定前缀下相对路径 Ordinal 展开，保留任务与段落内去重规则。拒绝符号链接/reparse point。
+- Entry.IsDirectory 保留空目录、源模式及时间；Generator.Entries 补齐 0755 父目录。目录不调用 OpenRead，不列入 Debian conffiles。tar 根目录别名卸载仅 rmdir 显式空目录。
+- Debian/RPM 大载荷用 DeleteOnClose 独占临时流及增量摘要，不分配完整载荷/包体数组；Unix 临时文件 0600，异常也释放。Debian 六种关系字段由 Package.Deb 独立校验，不复用 RPM 语法。
+- 实施清单及验收证据见 [docs/improvements.md](docs/improvements.md)，输入与归档回归位于 PackageInputTests、PackageArtifactTests。

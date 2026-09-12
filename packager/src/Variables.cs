@@ -32,6 +32,7 @@
  */
 
 using System;
+using System.Linq;
 using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -70,29 +71,39 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 	#region 公共属性
 	public string this[string name]
 	{
-		get => _variables.TryGetValue(name, out var value) ? value : null;
+		get
+		{
+			if(!_variables.TryGetValue(name, out var value))
+				return null;
+
+			var result = Normalizer.Normalize(value, _variables);
+			if(!result.Succeed)
+				throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed, result.Value));
+
+			return value == null ? null : result.Value;
+		}
 		set => _variables[name] = value;
 	}
 
-	public string Url => _variables.TryGetValue(URL, out var value) ? value : null;
-	public string Name => _variables.TryGetValue(NAME, out var value) ? value : null;
-	public string Title => _variables.TryGetValue(TITLE, out var value) ? value : null;
-	public string License => _variables.TryGetValue(LICENSE, out var value) ? value : null;
-	public string Category => _variables.TryGetValue(CATEGORY, out var value) ? value : null;
-	public string Maintainer => _variables.TryGetValue(MAINTAINER, out var value) ? value : null;
-	public string Summary => _variables.TryGetValue(SUMMARY, out var value) ? value : null;
-	public string Description => _variables.TryGetValue(DESCRIPTION, out var value) ? value : null;
-	public string Source => _variables.TryGetValue(SOURCE, out var value) ? value : null;
-	public string Output => _variables.TryGetValue(OUTPUT, out var value) ? value : null;
-	public string Exclude => _variables.TryGetValue(EXCLUDE, out var value) ? value : null;
-	public string Edition => _variables.TryGetValue(EDITION, out var value) ? value : null;
-	public Version Version => _variables.TryGetValue(VERSION, out var value) ? Version.Parse(value) : null;
-	public Platform Platform => _variables.TryGetValue(PLATFORM, out var value) ? Enum.Parse<Platform>(value, true) : Platform.Unknown;
-	public Architecture Architecture => _variables.TryGetValue(ARCHITECTURE, out var value) ? Enum.Parse<Architecture>(value, true) : Architecture.X64;
-	public string Framework => _variables.TryGetValue(FRAMEWORK, out var value) ? value : null;
-	public string Compilation => _variables.TryGetValue(COMPILATION, out var value) ? value : "Release";
-	public string RuntimeIdentifier => _variables.TryGetValue(nameof(RuntimeIdentifier), out var value) ? value : Utility.GetRuntimeIdentifier(this.Platform, this.Architecture);
-	public string[] Dependencies => _variables.TryGetValue(DEPENDENCIES, out var value) && value != null ? value.Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) : [];
+	public string Url => this[URL];
+	public string Name => this[NAME];
+	public string Title => this[TITLE];
+	public string License => this[LICENSE];
+	public string Category => this[CATEGORY];
+	public string Maintainer => this[MAINTAINER];
+	public string Summary => TextSource.Read(this.Source, GetRaw(SUMMARY));
+	public string Description => TextSource.Read(this.Source, GetRaw(DESCRIPTION));
+	public string Source => this[SOURCE];
+	public string Output => this[OUTPUT];
+	public string Exclude => this[EXCLUDE];
+	public string Edition => this[EDITION];
+	public Version Version => _variables.TryGetValue(VERSION, out var value) ? Version.Parse(this[VERSION]) : null;
+	public Platform Platform => _variables.TryGetValue(PLATFORM, out var value) ? Enum.Parse<Platform>(this[PLATFORM], true) : Platform.Unknown;
+	public Architecture Architecture => _variables.TryGetValue(ARCHITECTURE, out var value) ? Enum.Parse<Architecture>(this[ARCHITECTURE], true) : Architecture.X64;
+	public string Framework => this[FRAMEWORK];
+	public string Compilation => _variables.TryGetValue(COMPILATION, out var value) ? this[COMPILATION] : "Release";
+	public string RuntimeIdentifier => _variables.TryGetValue(nameof(RuntimeIdentifier), out var value) ? this[nameof(RuntimeIdentifier)] : Utility.GetRuntimeIdentifier(this.Platform, this.Architecture);
+	public string[] Dependencies => _variables.TryGetValue(DEPENDENCIES, out var value) && value != null ? this[DEPENDENCIES].Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) : [];
 
 	public DaemonVariable Daemon => new
 	(
@@ -103,24 +114,33 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 
 	public ScriptVariable Script => new
 	(
-		this[ScriptVariable.INSTALLING],
-		this[ScriptVariable.INSTALLED],
-		this[ScriptVariable.UNINSTALLING],
-		this[ScriptVariable.UNINSTALLED],
-		this[ScriptVariable.PREINSTALLING],
-		this[ScriptVariable.POSTINSTALLING],
-		this[ScriptVariable.PREINSTALLED],
-		this[ScriptVariable.POSTINSTALLED],
-		this[ScriptVariable.PREUNINSTALLING],
-		this[ScriptVariable.POSTUNINSTALLING],
-		this[ScriptVariable.PREUNINSTALLED],
-		this[ScriptVariable.POSTUNINSTALLED]
+		GetRaw(ScriptVariable.INSTALLING),
+		GetRaw(ScriptVariable.INSTALLED),
+		GetRaw(ScriptVariable.UNINSTALLING),
+		GetRaw(ScriptVariable.UNINSTALLED),
+		GetRaw(ScriptVariable.PREINSTALLING),
+		GetRaw(ScriptVariable.POSTINSTALLING),
+		GetRaw(ScriptVariable.PREINSTALLED),
+		GetRaw(ScriptVariable.POSTINSTALLED),
+		GetRaw(ScriptVariable.PREUNINSTALLING),
+		GetRaw(ScriptVariable.POSTUNINSTALLING),
+		GetRaw(ScriptVariable.PREUNINSTALLED),
+		GetRaw(ScriptVariable.POSTUNINSTALLED)
 	);
 	#endregion
 
 	#region 公共方法
 	public bool Contains(string name) => name != null && _variables.ContainsKey(name);
-	public bool TryGetValue(string name, out string value) => _variables.TryGetValue(name ?? string.Empty, out value);
+	public bool TryGetValue(string name, out string value)
+	{
+		value = name == null ? null : this[name];
+		return name != null && _variables.ContainsKey(name);
+	}
+	#endregion
+
+	#region 内部方法
+	internal IReadOnlyDictionary<string, string> Raw => _variables;
+	private string GetRaw(string name) => _variables.GetValueOrDefault(name);
 	#endregion
 
 	#region 显式实现

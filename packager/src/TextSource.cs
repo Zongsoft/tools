@@ -1,4 +1,4 @@
-/*
+﻿/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -32,48 +32,53 @@
  */
 
 using System;
-
-using Zongsoft.Components;
+using System.IO;
 
 namespace Zongsoft.Tools.Packager;
 
-[CommandOption("provides", typeof(string))]
-[CommandOption("replaces", typeof(string))]
-[CommandOption("breaks", typeof(string))]
-[CommandOption("conflicts", typeof(string))]
-[CommandOption("recommends", typeof(string))]
-[CommandOption("suggests", typeof(string))]
-public sealed class DebCommand : PackCommand<Package.Deb>
+internal static class TextSource
 {
-	#region 重写方法
-	protected override Package.Deb CreatePackage(CommandContext context)
+	#region 公共方法
+	public static string Read(string source, string value, bool fileOnly = false)
 	{
-		var package = new Package.Deb(
-			Normalizer.Variables.Name,
-			Normalizer.Variables.Edition,
-			Normalizer.Variables.Version,
-			Normalizer.Variables.Platform,
-			Normalizer.Variables.Architecture)
+		if(string.IsNullOrWhiteSpace(value))
+			return null;
+
+		if(value.StartsWith("text:", StringComparison.OrdinalIgnoreCase))
 		{
-			Provides = ReadRelationship("provides"),
-			Replaces = ReadRelationship("replaces"),
-			Breaks = ReadRelationship("breaks"),
-			Conflicts = ReadRelationship("conflicts"),
-			Recommends = ReadRelationship("recommends"),
-			Suggests = ReadRelationship("suggests"),
-		};
+			if(fileOnly)
+				throw new InvalidDataException(Properties.Resources.TextSourceFileRequired);
 
-		Configure(package, context);
-		return package;
+			return value[5..];
+		}
+
+		var explicitFile = value.StartsWith("file:", StringComparison.OrdinalIgnoreCase);
+		if(explicitFile)
+			value = value[5..];
+
+		var result = Normalizer.Normalize(value, Normalizer.Variables);
+		if(!result.Succeed)
+			throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed, result.Value));
+
+		value = result.Value;
+		if(!explicitFile && !fileOnly && (value.Contains('\r') || value.Contains('\n')))
+			return value;
+
+		var path = Path.GetFullPath(Path.Combine(source ?? Environment.CurrentDirectory, value));
+		if(File.Exists(path))
+			return File.ReadAllText(path);
+
+		if(explicitFile || fileOnly || IsPath(value))
+			throw new FileNotFoundException(string.Format(Properties.Resources.TextSourceMissing, path), path);
+
+		return value;
 	}
-
 	#endregion
 
 	#region 私有方法
-	private static string[] ReadRelationship(string name)
-	{
-		var value = Normalizer.Variables[name];
-		return string.IsNullOrWhiteSpace(value) ? [] : value.Split([';', ','], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-	}
+	private static bool IsPath(string value) =>
+		Path.IsPathFullyQualified(value) || value.StartsWith("./") || value.StartsWith("../") ||
+		value.StartsWith(@".\") || value.StartsWith(@"..\") ||
+		(!value.Contains(' ') && (value.Contains('/') || value.Contains('\\') || value.EndsWith(".sh", StringComparison.OrdinalIgnoreCase)));
 	#endregion
 }

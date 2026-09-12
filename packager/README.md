@@ -36,7 +36,7 @@ It is designed for .NET services and command-line applications that need repeata
 - Preserves Unix file modes when packaging on Unix-like hosts.
 - Provides conservative executable mode defaults when packaging from Windows.
 - Supports environment and command variables with `$(name)` and `%name%` syntax.
-- Supports explicit file entries, recursive directories, last-segment globbing, aliases, and root-level aliases such as `/etc/nginx/conf.d/zongsoft.web.conf`.
+- Supports explicit file entries, recursive directories, path-segment globbing (including `**`), aliases, and root-level aliases such as `/etc/nginx/conf.d/zongsoft.web.conf`.
 - Writes package formats directly in .NET:
   - `.tar.gz` uses gzip-compressed PAX tar.
   - `.deb` uses an `ar` container with `control.tar.gz` and `data.tar.gz`.
@@ -44,7 +44,7 @@ It is designed for .NET services and command-line applications that need repeata
 
 ## Packager version metadata
 
-Every package records the current generator identity, logically `Packager:Zongsoft.Tools.Packager@0.9.0`. The value is `assembly-name@version`, read from the packager's own assembly, independently of the host application's version. No additional option or migration configuration is required.
+Every package records the current generator identity, logically `Packager:Zongsoft.Tools.Packager@0.9.0.0`. The value is `assembly-name@version`, read from the packager's own assembly, independently of the host application's version. No additional option or migration configuration is required.
 
 | Format | Location | Inspection |
 | --- | --- | --- |
@@ -297,6 +297,19 @@ After all package output is successfully generated, the source file is saved usi
 | `--maintainer:<text>` | `Zongsoft Studio <zongsoft@gmail.com>` | Package maintainer/vendor text. |
 | `--dependencies:<list>` | Empty | Comma- or semicolon-separated dependency list. Written to Debian `Depends` or RPM `Requires`. |
 
+### Debian Options
+
+| Option | Control field |
+| --- | --- |
+| `--provides:<list>` | Provides |
+| `--replaces:<list>` | Replaces |
+| `--breaks:<list>` | Breaks |
+| `--conflicts:<list>` | Conflicts |
+| `--recommends:<list>` | Recommends |
+| `--suggests:<list>` | Suggests |
+
+Separate items with commas or semicolons. Version relations use parentheses, such as `zongsoft.daemon (>= 1.0.0)`. `--dependencies` writes Depends. Depends, Recommends and Suggests allow `|` alternatives; versioned Provides accepts only `=`. Invalid relations and newlines fail packaging. This illustrates syntax, not an actual dependency declared by hosting.
+
 ### RPM Options
 
 | Option | Description |
@@ -370,7 +383,8 @@ Entry rules:
 - Relative paths are resolved from `--source`.
 - Absolute paths outside `--source` are allowed; when no alias is supplied, only the file name is used.
 - Directories are included recursively. A directory alias of `:~`, as used by hosting, places its contents directly under the installation root.
-- Globbing supports `*` and `?` in the last path segment.
+- `*` and `?` match within any path segment; a standalone `**` matches zero or more directory levels. Each argument expands in ordinal path order relative to its fixed prefix, preserving argument order. Matching is case insensitive on Windows and case sensitive on Unix.
+- Directories are entries, including empty directories and source modes (0755 on Windows). Generated parents use 0755. File/directory conflicts and symbolic links/reparse points are rejected.
 - `--exclude` skips matching files while loading entries. Patterns are relative to `--source`, use `/` as the normalized separator, support `*`, `?`, and `**`, and may be separated by commas or semicolons.
 - Duplicate destination paths are reported as conflicts and skipped.
 - Aliases beginning with `/` or `\` are root-level entries. In `.deb` and `.rpm`, they are installed at that root path. In `.tar.gz`, they are stored under `.root/` and copied by `install.sh`.
@@ -487,7 +501,7 @@ The intermediate file is `<install-directory>/.migration/migration.json`; prepar
 
 SQL batches are grouped by canonical provider, for example `.migration/.artifacts/mysql/0001.sql` and `.migration/.artifacts/postgres/0001.sql`. Each plan load starts a separate counter at 0001 for each provider; tasks using the same provider share consecutive numbers. PostgreSQL aliases share the postgres directory. Each nonempty section remains an independent task with its own parameters and script list; task IDs identify logs and status, not directories. Overlapping SQL matches are deduplicated within a section, but sections, files and repeated INI arguments remain independent. S3 configuration stays in the plan without an empty artifact directory.
 
-Migration INI paths are parsed in argument order, expanding wildcard matches in ordinal filename order at the current position. Order across migration tasks is not guaranteed; SQL within each database task follows its plan list.
+Migration INI paths are parsed in argument order, expanding wildcard matches in ordinal relative-path order at the current position. Order across migration tasks is not guaranteed; SQL within each database task follows its plan list.
 
 Add `--migration` to create databases/tables and S3/RustFS buckets before the application starts. Supply one or more `.ini` paths separated by `;` or `|`; matching `.env` connection parameters are found by convention in the same directory or its parents.
 
@@ -516,13 +530,9 @@ $(name)
 %name%
 ```
 
-Variables are case-insensitive and are loaded from:
+Variable names are case insensitive. Explicit command options, including extra options, override environment variables, which override descriptor defaults. Values expand on use: unused invalid references do not block packaging; referenced missing or cyclic variables fail.
 
-1. Environment variables.
-2. Declared command options and their default values.
-3. Extra command-line options accepted by the command parser.
-
-Ordinary variables keep the first value encountered, so an environment variable may take precedence over an option. After source-version resolution, `name`, `edition` and `version` are overwritten with the final identity; `source` and `output` are overwritten with resolved paths. Avoid environment names that collide with other package options.
+Source-version rules and explicit identity options determine name, edition and version, independently of same-named environment variables. Final identity and resolved source/output paths override the collection. `--migration` requires explicit activation; `--overwrite` remains an explicit switch.
 
 The example below uses Bash to expand the name and version first. `--version` is parsed as `System.Version` before packaging starts, so a literal `%APP_VERSION%` or `$(APP_VERSION)` is not accepted there. Name and Edition also participate in source-version validation as supplied. Packager expressions apply to paths, script text, migration configuration and other subsequently normalized values.
 
@@ -556,6 +566,12 @@ Common variables:
 | `source` | Normalized source directory. |
 | `output` | Normalized output directory. |
 | `RuntimeIdentifier` | Runtime identifier inferred from platform and architecture. |
+
+### Text sources
+
+Summary, description and the four main lifecycle hooks share one resolver. `file:` selects a file relative to source; `text:` preserves literal contents. Unprefixed values expand package variables and read existing source-relative files; multiline values are text, obvious missing paths fail, and other values are text. File contents are neither expanded nor interpreted as another path. Keep shell expressions in a file or `text:` value. Pre/post hooks are strict file lists separated by `;` or `|` and reject `text:`.
+
+Debian/RPM payloads use automatically cleaned temporary files and streaming digests. Reserve temporary disk space; the complete package body is not assembled in memory. See the [implementation checklist and evidence](docs/improvements.md).
 
 ## Package Formats
 

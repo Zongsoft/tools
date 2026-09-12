@@ -33,6 +33,7 @@
 
 using System;
 using System.IO;
+using System.Linq;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
@@ -168,7 +169,7 @@ public abstract partial class Package
 		string Uninstalling,
 		string Uninstalled);
 
-	public readonly struct Entry(string source, string entryName, long size, long modifiedTime, UnixFileMode mode, bool rooted)
+	public readonly struct Entry(string source, string entryName, long size, long modifiedTime, UnixFileMode mode, bool rooted, bool isDirectory = false)
 	{
 		private readonly byte[] _content;
 
@@ -184,8 +185,9 @@ public abstract partial class Package
 		public readonly long ModifiedTime = modifiedTime;
 		public readonly UnixFileMode Mode = mode;
 		public readonly bool Rooted = rooted;
+		public readonly bool IsDirectory = isDirectory;
 
-		internal Stream OpenRead() => _content == null ? File.OpenRead(this.Source) : new MemoryStream(_content, false);
+		internal Stream OpenRead() => this.IsDirectory ? throw new InvalidOperationException(string.Format(Properties.Resources.PackageEntryTypeConflict, this.EntryName)) : _content == null ? File.OpenRead(this.Source) : new MemoryStream(_content, false);
 
 		public override string ToString() => string.IsNullOrEmpty(this.Source) ?
 			$"{this.EntryName}({this.Size})" :
@@ -214,16 +216,17 @@ public abstract partial class Package
 		{
 			var entryName = Utility.NormalizePath(rooted ? name.TrimStart('/') : Path.Combine(_package.EntryPrefix ?? "", name));
 			var key = rooted ? "/" + entryName : entryName;
-			if(_entries.ContainsKey(key)) throw new InvalidOperationException(string.Format(Properties.Resources.GeneratedEntryConflicted, entryName));
+
+			if(_entries.ContainsKey(key))
+				throw new InvalidOperationException(string.Format(Properties.Resources.GeneratedEntryConflicted, entryName));
+
 			var file = new FileInfo(source);
 			_entries.Add(key, new(source, entryName, file.Length, Utility.Unix.GetTimestamp(file.LastWriteTimeUtc), mode, rooted));
 		}
 
 		internal void Add(string source, string argument)
 		{
-			if(!Normalizer.TryNormalize(argument, out var text))
-				return;
-
+			var text = Normalizer.Normalize(argument);
 			var index = text.LastIndexOf(':');
 
 			if(OperatingSystem.IsWindows() && index == 1)
@@ -241,17 +244,13 @@ public abstract partial class Package
 
 			if(arguments == null || arguments.Count == 0)
 			{
-				foreach(var file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
-					this.AddEntry(source, file, Path.GetRelativePath(source, file), _package.EntryPrefix, exclusion);
-
+				this.AddDirectory(source, source, string.Empty, _package.EntryPrefix, false, exclusion);
 				return;
 			}
 
 			foreach(var argument in arguments)
 			{
-				if(!Normalizer.TryNormalize(argument, out var text))
-					continue;
-
+				var text = Normalizer.Normalize(argument);
 				var index = text.LastIndexOf(':');
 
 				if(OperatingSystem.IsWindows() && index == 1)
@@ -265,7 +264,6 @@ public abstract partial class Package
 		}
 
 		void AddEntry(string source, string path, string alias, string prefix) => this.AddEntry(source, path, alias, prefix, null);
-
 		void AddEntry(string source, string path, string alias, string prefix, EntryExclusion exclusion)
 		{
 			var rooted = IsRootedAlias(alias);
@@ -283,25 +281,33 @@ public abstract partial class Package
 
 			if(path.Contains('*') || path.Contains('?'))
 			{
-				var working = Path.GetDirectoryName(path);
-				var pattern = Path.GetFileName(path);
-
-				if(string.IsNullOrEmpty(working) || !Directory.Exists(working))
+				var working = FileMatcher.GetBaseDirectory(path);
+				var matches = FileMatcher.GetEntries(path);
+				if(matches.Length == 0)
 				{
 					Dumper.PathNotExist(path);
 					return;
 				}
 
 				alias ??= Path.GetRelativePath(source, working);
-
 				if(alias == "." || alias.StartsWith(".."))
 					alias = string.Empty;
 
-				foreach(var file in Directory.GetFiles(working, pattern))
-					this.AddFile(file, Path.Combine(alias, Path.GetFileName(file)), rooted ? null : prefix, rooted, exclusion);
+				var directories = new List<string>();
+				foreach(var item in matches)
+				{
+					if(directories.Any(directory => !Utility.IsExternal(directory, item)))
+						continue;
 
-				foreach(var directory in Directory.GetDirectories(working, pattern))
-					this.AddDirectory(source, directory, Path.Combine(alias, Path.GetFileName(directory)), rooted ? null : prefix, rooted, exclusion);
+					var target = Path.Combine(alias, Path.GetRelativePath(working, item));
+					if(Directory.Exists(item))
+					{
+						directories.Add(item);
+						this.AddDirectory(source, item, target, rooted ? null : prefix, rooted, exclusion);
+					}
+					else
+						this.AddFile(item, target, rooted ? null : prefix, rooted, exclusion);
+				}
 			}
 			else
 			{
@@ -323,11 +329,36 @@ public abstract partial class Package
 
 		void AddDirectory(string source, string path, string alias, string prefix, bool rooted, EntryExclusion exclusion)
 		{
-			foreach(var file in Directory.GetFiles(path))
-				this.AddFile(file, Path.Combine(alias, Path.GetFileName(file)), prefix, rooted, exclusion);
+			FileMatcher.CheckLink(path);
+			var name = Utility.NormalizePath(Path.Combine(prefix ?? string.Empty, alias));
+			if(exclusion != null && exclusion.IsMatch(path, name))
+				return;
 
-			foreach(var directory in Directory.GetDirectories(path))
-				this.AddDirectory(source, directory, Path.Combine(alias, Path.GetFileName(directory)), prefix, rooted, exclusion);
+			if(string.IsNullOrEmpty(name)) name = ".";
+			ValidatePath(name);
+			var key = rooted ? "/" + name : name;
+			if(_entries.TryGetValue(key, out var existing) && !existing.IsDirectory)
+				throw new InvalidOperationException(string.Format(Properties.Resources.PackageEntryTypeConflict, name));
+
+			var directory = new DirectoryInfo(path);
+			_entries[key] = new(path, name, 0, Utility.Unix.GetTimestamp(directory.LastWriteTimeUtc), Utility.Unix.GetDirectoryMode(path), rooted, true);
+
+			foreach(var item in Directory.EnumerateFileSystemEntries(path).OrderBy(Path.GetFileName, StringComparer.Ordinal))
+			{
+				FileMatcher.CheckLink(item);
+				var target = Path.Combine(alias, Path.GetFileName(item));
+
+				if(Directory.Exists(item))
+					this.AddDirectory(source, item, target, prefix, rooted, exclusion);
+				else
+					this.AddFile(item, target, prefix, rooted, exclusion);
+			}
+		}
+
+		static void ValidatePath(string path)
+		{
+			if(path.Split('/').Any(part => part == "..") || path.IndexOfAny(['\r', '\n', '\0']) >= 0)
+				throw new InvalidDataException(string.Format(Properties.Resources.PackagePathInvalid, path));
 		}
 
 		void AddFile(string source, string entryName, string prefix, bool rooted, EntryExclusion exclusion)
@@ -343,14 +374,19 @@ public abstract partial class Package
 			}
 
 			entryName = Utility.NormalizePath(Path.Combine(prefix ?? string.Empty, entryName));
+			ValidatePath(entryName);
+			FileMatcher.CheckLink(source);
 
 			if(exclusion != null && exclusion.IsMatch(source, entryName))
 				return;
 
 			var key = rooted ? $"/{entryName}" : entryName;
 
-			if(_entries.ContainsKey(key))
+			if(_entries.TryGetValue(key, out var existing))
 			{
+				if(existing.IsDirectory)
+					throw new InvalidOperationException(string.Format(Properties.Resources.PackageEntryTypeConflict, entryName));
+
 				Dumper.PackageEntryConflicted(source, entryName);
 				return;
 			}
@@ -385,7 +421,8 @@ public abstract partial class Package
 					if(string.IsNullOrWhiteSpace(exclusion))
 						continue;
 
-					if(!Normalizer.TryNormalize(exclusion, out var text) || string.IsNullOrWhiteSpace(text))
+					var text = Normalizer.Normalize(exclusion);
+					if(string.IsNullOrWhiteSpace(text))
 						continue;
 
 					foreach(var pattern in text.Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
