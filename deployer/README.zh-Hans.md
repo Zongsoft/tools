@@ -188,6 +188,30 @@ dotnet tool uninstall -g zongsoft.tools.deployer
 ```
 
 
+### 从本地源码安装（用于测试）
+
+源码编译后无需发布到 NuGet.org，即可从生成的 `.nupkg` 安装。以下命令使用 .NET 10 SDK，在 `D:/Zongsoft/tools/deployer` 目录执行；其他检出位置使用对应目录。
+
+部署器已启用 `GeneratePackageOnBuild`，Release 构建会同时生成工具包：
+
+```powershell
+dotnet build src/Zongsoft.Tools.Deployer.csproj -c Release
+```
+
+确认构建成功且 `src/bin/Release/Zongsoft.Tools.Deployer.7.11.0.nupkg` 已生成后，首次安装执行：
+
+```powershell
+dotnet tool install -g Zongsoft.Tools.Deployer --version 7.11.0 --source ./src/bin/Release --no-http-cache
+```
+
+若已安装该工具，尤其是重新编译了同一版本，先卸载，再执行上面的本地安装命令：
+
+```powershell
+dotnet tool uninstall -g Zongsoft.Tools.Deployer
+```
+
+示例版本 `7.11.0` 对应当前项目版本，请随实际 `.nupkg` 调整。`--source` 限定本次安装只使用本地目录，避免选中 NuGet.org 的同名包；`--no-http-cache` 禁用下载缓存，选项说明见 [.NET 工具安装文档](https://learn.microsoft.com/zh-cn/dotnet/core/tools/dotnet-tool-install)。安装后使用 `dotnet tool list -g` 核对版本。这里的“本地”指包来源，`-g` 仍会替换当前用户的全局工具。只做本地测试不要运行 Cake 的 `pack` 任务，它会推送到 NuGet.org。
+
 ## 执行
 
 - 在目标(宿主)目录执行默认部署：

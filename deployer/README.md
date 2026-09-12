@@ -192,6 +192,30 @@ dotnet tool update -g zongsoft.tools.deployer
 dotnet tool uninstall -g zongsoft.tools.deployer
 ```
 
+### Installing a local source build for testing
+
+Install the generated `.nupkg` directly without publishing it to NuGet.org. The following commands use the .NET 10 SDK and run from `D:/Zongsoft/tools/deployer`; use the corresponding directory for another checkout location.
+
+The deployer enables `GeneratePackageOnBuild`, so a Release build also creates the tool package:
+
+```powershell
+dotnet build src/Zongsoft.Tools.Deployer.csproj -c Release
+```
+
+After the build succeeds and `src/bin/Release/Zongsoft.Tools.Deployer.7.11.0.nupkg` exists, install it for the first time:
+
+```powershell
+dotnet tool install -g Zongsoft.Tools.Deployer --version 7.11.0 --source ./src/bin/Release --no-http-cache
+```
+
+If the tool is already installed, especially when rebuilding the same version, uninstall it first, then repeat the local installation command above:
+
+```powershell
+dotnet tool uninstall -g Zongsoft.Tools.Deployer
+```
+
+The example version `7.11.0` matches the current project; adjust it to the actual `.nupkg`. `--source` restricts installation to the local directory, avoiding a same-named package from NuGet.org; `--no-http-cache` disables the download cache. See the [.NET tool installation reference](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-tool-install). Check the installed version with `dotnet tool list -g`. Here, “local” describes the package source; `-g` still replaces the current user’s global tool. Do not run the Cake `pack` task for local testing: it pushes packages to NuGet.org.
+
 ## Deploy
 
 - Execute the default deployment in the host(target) directory:
