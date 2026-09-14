@@ -1,4 +1,4 @@
-/*
+﻿/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -39,11 +39,48 @@ using Zongsoft.Configuration.Profiles;
 
 namespace Zongsoft.Tools.Packager.Migration;
 
-/// <summary>Validates migration section uniqueness and loads INI through the deployer's Profile parser.</summary>
+/// <summary>Validates each migration source and loads INI through the Core Profile parser.</summary>
 internal static class MigrationProfile
 {
 	#region 公共方法
-	public static Profile Load(string path)
+	public static Profile Load(string path, Action<Profile> validate = null)
+	{
+		path = Path.GetFullPath(path);
+		var paths = new Stack<string>();
+		paths.Push(path);
+
+		try
+		{
+			Validate(path);
+
+			var options = new ProfileOptions
+			{
+				Importing = context =>
+				{
+					paths.Push(context.FilePath);
+					Validate(context.FilePath);
+				},
+				Imported = context =>
+				{
+					validate?.Invoke(context.Profile);
+					paths.Pop();
+				},
+			};
+
+			var profile = Profile.Load(path, options);
+			validate?.Invoke(profile);
+			return profile;
+		}
+		catch(Exception ex) when(ex is ArgumentException or ProfileException)
+		{
+			// Parser messages can contain parameter text. Report the active source without values.
+			throw new InvalidDataException(string.Format(Properties.Resources.MigrationProfileInvalid, paths.Peek()));
+		}
+	}
+	#endregion
+
+	#region 私有方法
+	private static void Validate(string path)
 	{
 		var lines = File.ReadAllLines(path);
 		var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -63,19 +100,6 @@ internal static class MigrationProfile
 
 			if(!names.Add(name))
 				throw new InvalidDataException(string.Format(Properties.Resources.MigrationProfileSectionDuplicate, name, path, i + 1));
-		}
-
-		var directives = new ProfileDirectiveProvider();
-		directives.Directives.Clear();
-
-		try
-		{
-			return Profile.Load(path, new ProfileOptions { Directives = directives });
-		}
-		catch(Exception ex) when(ex is ArgumentException or ProfileException)
-		{
-			// Parser messages can contain parameter text. Report the file without values.
-			throw new InvalidDataException(string.Format(Properties.Resources.MigrationProfileInvalid, path));
 		}
 	}
 	#endregion

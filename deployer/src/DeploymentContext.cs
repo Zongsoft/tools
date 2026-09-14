@@ -1,4 +1,4 @@
-﻿/*
+/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -10,7 +10,7 @@
  *   钟峰(Popeye Zhong) <zongsoft@gmail.com>
  *
  * The MIT License (MIT)
- * 
+ *
  * Copyright (C) 2015-2025 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -32,11 +32,11 @@
  */
 
 using System;
-using System.Linq;
 using System.Collections.Generic;
 
 namespace Zongsoft.Tools.Deployer;
 
+/// <summary>提供当前描述文件的部署环境，包括部署器、目标目录、变量及共享计数。</summary>
 public class DeploymentContext
 {
 	#region 构造函数
@@ -48,7 +48,7 @@ public class DeploymentContext
 		this.Deployer = deployer ?? throw new ArgumentNullException(nameof(deployer));
 		this.Profile = profile ?? throw new ArgumentNullException(nameof(profile));
 		this.DestinationDirectory = destinationDirectory;
-		this.Counter = new DeploymentCounter(profile.FilePath);
+		this.Counter = deployer.Session?.Counter ?? new DeploymentCounter(profile.FilePath);
 	}
 	#endregion
 
@@ -59,30 +59,13 @@ public class DeploymentContext
 	public Configuration.Profiles.Profile Profile { get; }
 	public IDictionary<string, string> Variables => this.Deployer.Variables;
 	#endregion
-
-	#region 公共方法
-	public void Count(DeploymentCounter counter)
-	{
-		this.Counter.Fail(counter.Failures);
-		this.Counter.Success(counter.Successes);
-	}
-	#endregion
 }
 
+/// <summary>
+/// 提供部署环境选项的查询辅助方法。
+/// </summary>
 public static class DeploymentContextUtility
 {
-	public static string Normalize(this DeploymentContext context, string text, Action<string> failure) => Normalizer.Normalize(text, context.Variables, failure);
-
-	public static bool IsVerbosity(this DeploymentContext context, Verbosity verbosity) =>
-		context.Variables.TryGetValue(Deployer.VERBOSITY_OPTION, out var variable) && Enum.TryParse<Verbosity>(variable, true, out var value) && verbosity == value;
 	public static bool IsVerbosity(this Deployer deployer, Verbosity verbosity) =>
 		deployer.Variables.TryGetValue(Deployer.VERBOSITY_OPTION, out var variable) && Enum.TryParse<Verbosity>(variable, true, out var value) && verbosity == value;
-
-	public static bool IsVerbosity(this DeploymentContext context, params Verbosity[] verbosities) =>
-		context.Variables.TryGetValue(Deployer.VERBOSITY_OPTION, out var variable) && Enum.TryParse<Verbosity>(variable, true, out var value) && verbosities != null && verbosities.Contains(value);
-	public static bool IsVerbosity(this Deployer deployer, params Verbosity[] verbosities) =>
-		deployer.Variables.TryGetValue(Deployer.VERBOSITY_OPTION, out var variable) && Enum.TryParse<Verbosity>(variable, true, out var value) && verbosities != null && verbosities.Contains(value);
-
-	public static bool IsOverwrite(this DeploymentContext context, Overwrite overwrite) =>
-		context.Variables.TryGetValue(Deployer.OVERWRITE_OPTION, out var variable) && Enum.TryParse<Overwrite>(variable, true, out var value) && overwrite == value;
 }

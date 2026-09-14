@@ -16,7 +16,7 @@ using Xunit;
 
 namespace Zongsoft.Tools.Packager.Tests;
 
-public sealed class MigrationPackageTests
+public sealed class MigrationPackageTest
 {
 	#region 测试方法
 	[Theory]
@@ -26,7 +26,7 @@ public sealed class MigrationPackageTests
 	public void Package_MigrationAndDefaultDaemon_PreparesGuardAndMigratesBeforeServiceStarts(string format)
 	{
 		using var directory = new MigrationTestDirectory();
-		File.Copy(typeof(MigrationPackageTests).Assembly.Location, Path.Combine(directory.Path, "Zongsoft.Migration.TestHost.dll"));
+		File.Copy(typeof(MigrationPackageTest).Assembly.Location, Path.Combine(directory.Path, "Zongsoft.Migration.TestHost.dll"));
 		var package = Create(format, directory.Path, "zongsoft.migration.test");
 		package.Migration = Plan(directory);
 
@@ -116,7 +116,7 @@ public sealed class MigrationPackageTests
 		using var directory = new MigrationTestDirectory();
 		var input = directory.Write("source/application.txt", "hosting payload");
 		var source = Path.GetDirectoryName(input);
-		File.Copy(typeof(MigrationPackageTests).Assembly.Location, Path.Combine(source, "Zongsoft.Migration.TestHost.dll"));
+		File.Copy(typeof(MigrationPackageTest).Assembly.Location, Path.Combine(source, "Zongsoft.Migration.TestHost.dll"));
 		var package = Create(format, source, "zongsoft.migration.test");
 		var warnings = new List<string>();
 		package.Migration = new MigrationLoader(value => value, warnings.Add).Load("missing.ini;absent/*.ini", source, package.PackageName, package.Version.ToString());

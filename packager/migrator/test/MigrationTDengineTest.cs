@@ -13,7 +13,7 @@ using Xunit;
 
 namespace Zongsoft.Tools.Packager.Migration.Tests;
 
-public sealed class MigrationTDengineTests
+public sealed class MigrationTDengineTest
 {
 	#region 测试方法
 	[Theory]

@@ -1,4 +1,4 @@
-/*
+﻿/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -38,6 +38,7 @@ using System.Collections.Generic;
 
 using Zongsoft.Terminals;
 using Zongsoft.Components;
+using Zongsoft.Configuration.Profiles;
 
 namespace Zongsoft.Tools.Packager.Migration;
 
@@ -58,52 +59,10 @@ public sealed partial class MigrationLoader(Func<string, string> expand, Action<
 		foreach(var file in this.GetMigrationFiles(paths, source))
 		{
 			found = true;
-			var profile = MigrationProfile.Load(file);
-			if(profile.Entries.Count > 0)
-				throw new InvalidDataException(string.Format(Properties.Resources.MigrationSectionRequired, file));
-
-			var providers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			var profile = MigrationProfile.Load(file, Validate);
 
 			foreach(var section in profile.Sections)
-			{
-				try
-				{
-					var provider = MigrationProvider.Get(section.Name).Name;
-					if(!providers.Add(provider))
-						throw new InvalidDataException(Properties.Resources.MigrationSectionDuplicate);
-
-					if(section.Entries.Count == 0)
-						continue;
-
-					var task = new MigrationPlan.Step
-					{
-						Id = $"{plan.Tasks.Count + 1:D4}-{provider}",
-						Provider = provider,
-						Parameters = this.FindParameters(file, provider),
-					};
-
-					Action<string, string> add = provider == "amazon.s3" ?
-						new AmazonS3(task).Add : new Database(task, Path.GetDirectoryName(file), indexes).Add;
-
-					foreach(var entry in section.Entries)
-					{
-						try
-						{
-							add(_expand(entry.Name), _expand(entry.Value));
-						}
-						catch(Exception ex) when(ex is not OutOfMemoryException)
-						{
-							throw new InvalidDataException(string.Format(Properties.Resources.MigrationEntryError, file, entry.LineNumber + 1, provider, ex.Message), ex);
-						}
-					}
-
-					plan.Tasks.Add(task);
-				}
-				catch(Exception ex) when(ex is not OutOfMemoryException)
-				{
-					throw new InvalidDataException(string.Format(Properties.Resources.MigrationEntryError, file, section.LineNumber + 1, section.Name, ex.Message), ex);
-				}
-			}
+				this.AddTasks(plan, section, indexes);
 		}
 
 		if(!found)
@@ -114,16 +73,83 @@ public sealed partial class MigrationLoader(Func<string, string> expand, Action<
 
 		return plan;
 	}
-
 	#endregion
 
 	#region 私有方法
+	private static void Validate(Profile profile)
+	{
+		if(profile.Entries.Count > 0)
+			throw new InvalidDataException(string.Format(Properties.Resources.MigrationSectionRequired, profile.FilePath));
+
+		var providers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+		foreach(var section in profile.Sections)
+		{
+			try
+			{
+				if(!providers.Add(MigrationProvider.Get(section.Name).Name))
+					throw new InvalidDataException(Properties.Resources.MigrationSectionDuplicate);
+			}
+			catch(Exception ex) when(ex is not OutOfMemoryException)
+			{
+				throw new InvalidDataException(string.Format(Properties.Resources.MigrationEntryError,
+					profile.FilePath, section.LineNumber + 1, section.Name, ex.Message), ex);
+			}
+		}
+	}
+
+	private void AddTasks(MigrationPlan plan, ProfileSection section, Dictionary<string, int> indexes)
+	{
+		var provider = MigrationProvider.Get(section.Name).Name;
+		var selections = new Dictionary<Profile, HashSet<string>>(ReferenceEqualityComparer.Instance);
+		Profile source = null;
+		Action<string, string> add = null;
+
+		foreach(var entry in section.Entries)
+		{
+			try
+			{
+				if(!ReferenceEquals(source, entry.Profile))
+				{
+					source = entry.Profile;
+
+					if(!selections.TryGetValue(source, out var selected))
+					{
+						selected = new HashSet<string>(provider == "amazon.s3" || !OperatingSystem.IsWindows() ?
+							StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
+						selections.Add(source, selected);
+					}
+
+					var task = new MigrationPlan.Step
+					{
+						Id = $"{plan.Tasks.Count + 1:D4}-{provider}",
+						Provider = provider,
+						Parameters = this.FindParameters(source.FilePath, provider),
+					};
+
+					// Split only when the declaration source changes, preserving effective entry order.
+					add = provider == "amazon.s3" ? new AmazonS3(task, selected).Add :
+						new Database(task, Path.GetDirectoryName(source.FilePath), indexes, selected).Add;
+
+					plan.Tasks.Add(task);
+				}
+
+				add(_expand(entry.Name), _expand(entry.Value));
+			}
+			catch(Exception ex) when(ex is not OutOfMemoryException)
+			{
+				throw new InvalidDataException(string.Format(Properties.Resources.MigrationEntryError,
+					entry.Profile.FilePath, entry.LineNumber + 1, section.Name, ex.Message), ex);
+			}
+		}
+	}
+
 	private IEnumerable<string> GetMigrationFiles(string paths, string source)
 	{
 		foreach(var argument in paths.Split([';', '|'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
 		{
 			var path = Path.GetFullPath(Path.Combine(source, _expand(argument)));
-			var files = FileMatcher.GetFiles(path);
+			var files = Utility.Search(path, files: true, sourceDirectory: source).Select(match => match.Path).ToArray();
 
 			if(files.Length == 0)
 			{
@@ -177,12 +203,19 @@ public sealed partial class MigrationLoader(Func<string, string> expand, Action<
 					}
 					catch
 					{
-						throw new InvalidDataException(string.Format(Properties.Resources.MigrationParameterUnresolved, entry.Name, path, entry.LineNumber + 1));
+						throw new InvalidDataException(string.Format(Properties.Resources.MigrationParameterUnresolved,
+							entry.Name, entry.Profile.FilePath, entry.LineNumber + 1));
 					}
 				}
 
-				try { MigrationProvider.Get(provider).Validate(result); }
-				catch(InvalidDataException ex) { throw new InvalidDataException(string.Format(Properties.Resources.MigrationParameterError, path, provider, ex.Message)); }
+				try
+				{
+					MigrationProvider.Get(provider).Validate(result);
+				}
+				catch(InvalidDataException ex)
+				{
+					throw new InvalidDataException(string.Format(Properties.Resources.MigrationParameterError, path, provider, ex.Message));
+				}
 
 				return result;
 			}
@@ -190,6 +223,5 @@ public sealed partial class MigrationLoader(Func<string, string> expand, Action<
 
 		throw new FileNotFoundException(string.Format(Properties.Resources.MigrationParametersMissing, provider, migration, string.Join(", ", candidates)));
 	}
-
 	#endregion
 }

@@ -117,113 +117,52 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
-  <data name="DeploymentComplete.CountBegin" xml:space="preserve">
-    <value>（</value>
+  <data name="Review.Busy" xml:space="preserve">
+    <value>此实例已有部署正在执行：{0}</value>
   </data>
-  <data name="DeploymentComplete.CountEnd" xml:space="preserve">
-    <value>）</value>
+  <data name="Review.Conflict" xml:space="preserve">
+    <value>部署资产冲突：{0}</value>
   </data>
-  <data name="DeploymentComplete.CountSparator" xml:space="preserve">
-    <value>，</value>
+  <data name="Review.Cycle" xml:space="preserve">
+    <value>部署循环引用或超出深度限制：{0}</value>
   </data>
-  <data name="DeploymentComplete.FailedCount" xml:space="preserve">
-    <value>失败 {0} 次</value>
+  <data name="Review.DependencyConflict" xml:space="preserve">
+    <value>无法满足依赖约束：{0}</value>
   </data>
-  <data name="DeploymentComplete.Message" xml:space="preserve">
-    <value>部署 {0} 文件完成，总计执行了 {1} 次文件复制操作。</value>
+  <data name="Review.Failure" xml:space="preserve">
+    <value>{0}：{1}</value>
   </data>
-  <data name="DeploymentComplete.SucceedCount" xml:space="preserve">
-    <value>成功 {0} 次</value>
+  <data name="Review.InvalidFilter" xml:space="preserve">
+    <value>无效过滤条件：{0}</value>
   </data>
-  <data name="DeploymentFileNotExists.Message" xml:space="preserve">
-    <value>指定的 {0} 部署文件是不存在的。</value>
+  <data name="Review.InvalidOption" xml:space="preserve">
+    <value>无效选项 {0}：{1}</value>
   </data>
-  <data name="DirectoryNotExists.Message" xml:space="preserve">
-    <value>指定的 {0} 目录是不存在的。</value>
+  <data name="Review.LinkedPath" xml:space="preserve">
+    <value>不允许使用链接路径：{0}</value>
   </data>
-  <data name="Error.Prompt" xml:space="preserve">
-    <value>错误：</value>
+  <data name="Review.Locked" xml:space="preserve">
+    <value>部署与锁定信息不符：{0}</value>
   </data>
-  <data name="FileDeleteFailed.Message" xml:space="preserve">
-    <value>指定的 {0} 文件删除失败。</value>
+  <data name="Review.Missing" xml:space="preserve">
+    <value>文件或包不存在：{0}</value>
   </data>
-  <data name="FileDeleteSucceed.Message" xml:space="preserve">
-    <value>指定的 {0} 文件删除成功。</value>
+  <data name="Review.Offline" xml:space="preserve">
+    <value>离线缓存中没有包：{0}</value>
   </data>
-  <data name="FileNotExists.Message" xml:space="preserve">
-    <value>指定的 {0} 文件是不存在的。</value>
+  <data name="Review.OutsideRoot" xml:space="preserve">
+    <value>目标 {0} 超出部署根目录 {1}。</value>
   </data>
-  <data name="InvalidArgumentFormat.Message" xml:space="preserve">
-    <value>输入的“{0}”是无效的参数格式。</value>
+  <data name="Review.Planned" xml:space="preserve">
+    <value>{0}：{1} → {2}</value>
   </data>
-  <data name="MissingArguments.Message" xml:space="preserve">
-    <value>未指定部署文件参数且当前目录下没有默认(.deploy)部署文件。</value>
+  <data name="Review.Summary" xml:space="preserve">
+    <value>复制 {0}，跳过 {1}，删除 {2}，失败 {3}。</value>
   </data>
-  <data name="Tips.Prompt" xml:space="preserve">
-    <value>提示：</value>
+  <data name="Review.UndefinedVariable" xml:space="preserve">
+    <value>变量未定义：{0}</value>
   </data>
-  <data name="VariableUndefined.Message" xml:space="preserve">
-    <value>在 {1} 表达式中的 {0} 变量未定义。</value>
-  </data>
-  <data name="ResolverUndefined.Message" xml:space="preserve">
-    <value>在 {1} 表达式中的 {0} 解析器未定义。</value>
-  </data>
-  <data name="VariableUndefinedInFile.Message" xml:space="preserve">
-    <value>在 {1} 表达式中的 {0} 变量未定义，位于 {2} 文件。</value>
-  </data>
-  <data name="ResolverUndefinedInFile.Message" xml:space="preserve">
-    <value>在 {1} 表达式中的 {0} 解析器未定义，位于 {2} 文件。</value>
-  </data>
-  <data name="VariableUndefinedInOption.Message" xml:space="preserve">
-    <value>指定的 {1} 命令选项值中含有未定义的 {0} 变量。</value>
-  </data>
-  <data name="Warn.Prompt" xml:space="preserve">
-    <value>警告：</value>
-  </data>
-  <data name="NuGet:IllegalArgument.Message" xml:space="preserve">
-    <value>[NuGet] 指定的 {0} 参数是无效的，位于 {1} 文件。</value>
-  </data>
-  <data name="NuGet:NotFound.Message" xml:space="preserve">
-    <value>[NuGet] 没有找到 {0} 包的 {1} 版本。</value>
-  </data>
-  <data name="NuGet:DownloadFailed.Message" xml:space="preserve">
-    <value>[NuGet] 指定的 {0}@{1} 包下载失败，请稍后重试或更换下载源。</value>
-  </data>
-  <data name="Latest" xml:space="preserve">
-    <value>最新</value>
-  </data>
-  <data name="FileDeploySucceed.Message" xml:space="preserve">
-    <value>{0} 文件部署到
-　　　{1} 成功。</value>
-  </data>
-  <data name="FileDeployFailed.Message" xml:space="preserve">
-    <value>{0} 文件部署到
-　　　{1} 失败。</value>
-  </data>
-  <data name="FileDeployFailed.Newer.Message" xml:space="preserve">
-    <value>{0} 文件部署到
-　　　{1} 失败(overwrite={2})。注：因为目标文件比原文件新。</value>
-  </data>
-  <data name="FileDeployFailed.Never.Message" xml:space="preserve">
-    <value>{0} 文件部署到
-　　　{1} 失败(overwrite={2})。注：因为目标文件已经存在。</value>
-  </data>
-  <data name="Deployment.List.Label" xml:space="preserve">
-    <value>部署文件：</value>
-  </data>
-  <data name="Deployment.Options.Label" xml:space="preserve">
-    <value>部署选项：</value>
-  </data>
-  <data name="Environment.Variables.Label" xml:space="preserve">
-    <value>环境变量：</value>
-  </data>
-  <data name="UnspecifiedVariable.Message" xml:space="preserve">
-    <value>“{0}”变量是未定义的。</value>
-  </data>
-  <data name="NoPackageForFramework" xml:space="preserve">
-    <value>指定的“{0}”包没有匹配的 {1} 框架版本。</value>
-  </data>
-  <data name="Elapsed.Label" xml:space="preserve">
-    <value>耗时：</value>
+  <data name="Review.UnknownResolver" xml:space="preserve">
+    <value>解析器未定义：{0}</value>
   </data>
 </root>

@@ -1,4 +1,4 @@
-/*
+﻿/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -48,15 +48,16 @@ partial class MigrationLoader
 		private readonly MigrationPlan.Step _task;
 		private readonly string _directory;
 		private readonly Dictionary<string, int> _indexes;
-		private readonly HashSet<string> _selected = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+		private readonly HashSet<string> _selected;
 		#endregion
 
 		#region 构造函数
-		public Database(MigrationPlan.Step task, string directory, Dictionary<string, int> indexes)
+		public Database(MigrationPlan.Step task, string directory, Dictionary<string, int> indexes, HashSet<string> selected)
 		{
 			_task = task;
 			_directory = directory;
 			_indexes = indexes;
+			_selected = selected;
 		}
 		#endregion
 
@@ -93,7 +94,7 @@ partial class MigrationLoader
 		private static IEnumerable<string> GetFiles(string directory, string pattern)
 		{
 			var path = Path.GetFullPath(Path.Combine(directory, pattern));
-			var files = FileMatcher.GetFiles(path);
+			var files = Utility.Search(path, files: true, sourceDirectory: directory).Select(match => match.Path).ToArray();
 
 			if(files.Length == 0)
 				throw new FileNotFoundException(string.Format(Properties.Resources.MigrationScriptsMissing, path));

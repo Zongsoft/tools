@@ -385,7 +385,7 @@ Entry rules:
 - Absolute paths outside `--source` are allowed; when no alias is supplied, only the file name is used.
 - Directories are included recursively. A directory alias of `:~`, as used by hosting, places its contents directly under the installation root.
 - `*` and `?` match within any path segment; a standalone `**` matches zero or more directory levels. Each argument expands in ordinal path order relative to its fixed prefix, preserving argument order. Matching is case insensitive on Windows and case sensitive on Unix.
-- Directories are entries, including empty directories and source modes (0755 on Windows). Generated parents use 0755. File/directory conflicts and symbolic links/reparse points are rejected.
+- Directories are entries, including empty directories and source modes (0755 on Windows). Generated parents use 0755. File/directory conflicts are rejected. Source links retain logical names and contribute target content; nested directory links inside a payload are skipped.
 - `--exclude` skips matching files while loading entries. Patterns are relative to `--source`, use `/` as the normalized separator, support `*`, `?`, and `**`, and may be separated by commas or semicolons.
 - Duplicate destination paths are reported as conflicts and skipped.
 - Aliases beginning with `/` or `\` are root-level entries. In `.deb` and `.rpm`, they are installed at that root path. In `.tar.gz`, they are stored under `.root/` and copied by `install.sh`.
@@ -507,11 +507,13 @@ Package-manager upgrades do not run the uninstall lifecycle. Debian `prerm`/`pos
 
 ## Installation Migrations
 
+Migration INIs and `.env` files use Core Reader built-in `#@import`, with ProfileOptions for import notifications and no directive registration. SQL paths and parameter searches start from each entry's declaring file. Different sources form separate tasks; same-named entries follow read-order overrides. See [configuration imports](docs/migrations.md#importing-configuration-files).
+
 Publish both Native AOT RIDs with the Cake `migrator` task first, then run `dotnet pack src/Zongsoft.Tools.Packager.csproj` to create the tool package. The main project has no migrator project reference; see the [build instructions](docs/migrations.md#building-the-tool-package).
 
 The intermediate file is `<install-directory>/.migration/migration.json`; prepared SQL batches are stored in `.migration/.artifacts/`. The standalone migrator is published with **Native AOT** for glibc Linux and needs no target .NET runtime. TDengine connects directly to taosAdapter using WebSocket without `TDengine.Connector`. Migration messages support English and Simplified Chinese. See the [collaboration guide](docs/migrations.md#collaboration-between-the-packager-and-migrator) for file exchange, execution order and startup checks.
 
-SQL batches are grouped by canonical provider, for example `.migration/.artifacts/mysql/0001.sql` and `.migration/.artifacts/postgres/0001.sql`. Each plan load starts a separate counter at 0001 for each provider; tasks using the same provider share consecutive numbers. PostgreSQL aliases share the postgres directory. Each nonempty section remains an independent task with its own parameters and script list; task IDs identify logs and status, not directories. Overlapping SQL matches are deduplicated within a section, but sections, files and repeated INI arguments remain independent. S3 configuration stays in the plan without an empty artifact directory.
+SQL batches are grouped by canonical provider, for example `.migration/.artifacts/mysql/0001.sql` and `.migration/.artifacts/postgres/0001.sql`. Each plan load starts a separate counter at 0001 for each provider; tasks using the same provider share consecutive numbers. PostgreSQL aliases share the postgres directory. Without imports, each nonempty section creates one task; merged sections split at each change of declaration source, with parameters found from that source INI and a separate script list; task IDs identify logs and status, not directories. Overlapping SQL matches from the same source section are deduplicated across task splits; different sources and independent command-line inputs are not deduplicated. Imported same-named entries follow Core override rules. S3 configuration stays in the plan without an empty artifact directory.
 
 Migration INI paths are parsed in argument order, expanding wildcard matches in ordinal relative-path order at the current position. Order across migration tasks is not guaranteed; SQL within each database task follows its plan list.
 
@@ -719,3 +721,5 @@ See [docs/implementation.md](docs/implementation.md) for the internal design, pa
 ## License
 
 This project is licensed under the [MIT](https://github.com/Zongsoft/tools/blob/main/LICENSE) license.
+
+Local source searches and links follow [the implementation contract](docs/implementation.md#local-search-and-source-links).

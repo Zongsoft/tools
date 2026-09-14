@@ -1,4 +1,4 @@
-﻿/*
+/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -10,7 +10,7 @@
  *   钟峰(Popeye Zhong) <zongsoft@gmail.com>
  *
  * The MIT License (MIT)
- * 
+ *
  * Copyright (C) 2015-2026 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -34,113 +34,165 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Collections.Generic;
 
 namespace Zongsoft.Tools.Deployer;
 
+/// <summary>提供本地部署源展开、NuGet 缓存路径适配及文件覆盖操作。</summary>
+/// <remarks>搜索复用 Core Searcher，部署适配层保留逻辑源名称与目标目录后缀。</remarks>
 public static class DeploymentUtility
 {
-	public static IEnumerable<PathToken> GetFiles(string filePath, IDictionary<string, string> variables)
+	#region 文件操作
+	public static IEnumerable<PathToken> GetFiles(string filePath, IDictionary<string, string> variables, bool resolveLibrary = true, CancellationToken cancellation = default) => GetFiles(filePath, variables, resolveLibrary, cancellation, null);
+	internal static IEnumerable<PathToken> GetFiles(string filePath, IDictionary<string, string> variables, bool resolveLibrary, CancellationToken cancellation, string sourceDirectory)
 	{
 		if(string.IsNullOrEmpty(filePath))
 			yield break;
 
-		var directoryName = Path.GetDirectoryName(filePath);
-		var fileName = Path.GetFileName(filePath);
+		filePath = Path.GetFullPath(filePath);
+		if(Directory.Exists(filePath))
+		{
+			// 显式目录是选中的载荷根；Core 从该根递归，但不进入内部目录链接。
+			foreach(var match in Zongsoft.IO.Searcher.Search(new DirectoryInfo(filePath), "**/*", Zongsoft.IO.Searcher.Target.Files, cancellation))
+			{
+				var suffix = Path.GetDirectoryName(Path.GetRelativePath(filePath, match.Path));
+				yield return new PathToken(match.Path, suffix);
+			}
 
+			yield break;
+		}
+
+		var fileName = Path.GetFileName(filePath);
 		if(string.IsNullOrEmpty(fileName))
 			yield break;
 
-		foreach(var directory in GetDirectories(directoryName, variables.ContainsKey(Deployer.EXPANSION_OPTION)))
-		{
-			//对当前目录路径进行修正和调整
-			if(DirectoryRegulator.Regulate(directory.Path, variables, out var result))
-				directory.Path = result;
+		var directoryName = Path.GetDirectoryName(filePath);
+		var expansion = variables.ContainsKey(Deployer.EXPANSION_OPTION);
+		var selected = new HashSet<string>(DeploymentPath.Comparer);
+		var expanded = new List<string>();
 
-			if(fileName.Contains('*') || fileName.Contains('?'))
+		// 先定位包目录，再调整框架，避免原框架不存在时通配搜索提前返回空集。
+		foreach(var candidate in GetLibraryDirectories(directoryName, variables, resolveLibrary, expansion, cancellation))
+		{
+			foreach(var directory in GetDirectories(candidate.Path, expansion, cancellation, sourceDirectory))
 			{
-				//如果指定目录不存在则跳过，否则后面的代码会引发系统IO异常
-				if(!Directory.Exists(directory.Path))
+				cancellation.ThrowIfCancellationRequested();
+				if(expanded.Any(parent => IsWithin(parent, directory.Path)))
 					continue;
 
-				foreach(var file in Directory.GetFiles(directory.Path, fileName))
-					yield return new PathToken(file, directory.Suffix);
-			}
-			else
-			{
-				directory.Combine(fileName);
-				yield return directory;
+				if(filePath.IndexOfAny(['*', '?']) >= 0 && HasDirectoryLink(directory.Path, sourceDirectory))
+					continue;
+
+				var suffix = CombineSuffix(candidate.Suffix, directory.Suffix);
+				if(fileName.IndexOfAny(['*', '?']) < 0)
+				{
+					// 精确请求保留缺失项，由计划阶段给出文件不存在诊断。
+					var token = new PathToken(Path.Combine(directory.Path, fileName), suffix);
+					if(selected.Add(token.ToString()))
+						yield return token;
+					continue;
+				}
+
+				foreach(var match in Zongsoft.IO.Searcher.Search(new DirectoryInfo(directory.Path), fileName, cancellation: cancellation))
+				{
+					if(expanded.Any(parent => IsWithin(parent, match.Path)))
+						continue;
+
+					if(match.IsDirectory(out _))
+					{
+						expanded.Add(match.Path);
+						var prefix = CombineSuffix(suffix, Path.GetFileName(match.Path));
+						foreach(var child in Zongsoft.IO.Searcher.Search(new DirectoryInfo(match.Path), "**/*", Zongsoft.IO.Searcher.Target.Files, cancellation))
+						{
+							var relative = Path.GetDirectoryName(Path.GetRelativePath(match.Path, child.Path));
+							var token = new PathToken(child.Path, CombineSuffix(prefix, relative));
+							if(selected.Add(token.ToString()))
+								yield return token;
+						}
+					}
+					else
+					{
+						var token = new PathToken(match.Path, suffix);
+						if(selected.Add(token.ToString()))
+							yield return token;
+					}
+				}
 			}
 		}
 	}
 
-	public static IEnumerable<PathToken> GetDirectories(string directory, bool expansion)
+	public static IEnumerable<PathToken> GetDirectories(string directory, bool expansion, CancellationToken cancellation = default) => GetDirectories(directory, expansion, cancellation, null);
+	private static IEnumerable<PathToken> GetDirectories(string directory, bool expansion, CancellationToken cancellation, string sourceDirectory)
 	{
-		const int Asterisk1 = 1;
-		const int Asterisk2 = 2;
-
 		if(string.IsNullOrEmpty(directory))
 			return [];
 
 		directory = Path.GetFullPath(directory);
-		var parts = Common.StringExtension.Slice(directory, Utility.PATH_SEPARATORS).ToArray();
-		List<PathToken> directories = null;
-		var flags = 0;
-
-		for(int i = 0; i < parts.Length; i++)
-		{
-			if(parts[i] == "**")
-			{
-				directories ??= [];
-				flags |= Asterisk2;
-				var origin = Path.Combine([.. parts.Take(i)]);
-
-				//如果指定目录不存在则跳过，否则后面的代码会引发系统IO异常
-				if(!Directory.Exists(origin))
-					continue;
-
-				directories.AddRange(Directory.GetDirectories(origin, "*", SearchOption.AllDirectories).Select(p => PathToken.Create(p, origin)));
-			}
-			else if(parts[i].Contains('*') || parts.Contains("?"))
-			{
-				directories ??= [];
-				flags |= Asterisk1;
-				var origin = Path.Combine([.. parts.Take(i)]);
-
-				//如果指定目录不存在则跳过，否则后面的代码会引发系统IO异常
-				if(!Directory.Exists(origin))
-					continue;
-
-				directories.AddRange(Directory.GetDirectories(origin, parts[i], SearchOption.TopDirectoryOnly).Select(p => PathToken.Create(p, origin)));
-			}
-			else if(directories != null && directories.Count > 0)
-			{
-				if((flags & Asterisk2) == Asterisk2)
-				{
-					for(int j = 0; j < directories.Count; j++)
-					{
-						if(!directories[j].Suffix.EndsWith("/" + parts[i]))
-							directories[j].Deprecate();
-					}
-				}
-				else
-				{
-					for(int j = 0; j < directories.Count; j++)
-					{
-						directories[j].Combine(parts[i]);
-
-						if(expansion)
-							directories[j].AppendSuffix(parts[i]);
-					}
-				}
-			}
-		}
-
-		if(directories == null || directories.Count == 0)
+		if(directory.IndexOfAny(['*', '?']) < 0)
 			return [new PathToken(directory)];
 
-		return directories.Where(token => !string.IsNullOrEmpty(token.Path));
+		var root = sourceDirectory ?? Path.GetPathRoot(directory);
+		return Zongsoft.IO.Searcher.Search(new DirectoryInfo(root), Path.GetRelativePath(root, directory), Zongsoft.IO.Searcher.Target.Directories, cancellation)
+			.Select(match => new PathToken(match.Path, expansion ? Path.GetRelativePath(match.Origin.FullName, match.Path) : Path.Combine(match.Captures.ToArray())));
 	}
+
+	private static IEnumerable<PathToken> GetLibraryDirectories(string directory, IDictionary<string, string> variables, bool resolveLibrary, bool expansion, CancellationToken cancellation)
+	{
+		if(!resolveLibrary)
+			return [new PathToken(directory)];
+
+		var cache = Path.GetFullPath(NugetUtility.GetPackagesDirectory(variables));
+		var relative = Path.GetRelativePath(cache, directory);
+		if(Path.IsPathRooted(relative) || relative == ".." || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+			return [new PathToken(directory)];
+
+		var parts = relative.Split(Utility.PATH_SEPARATORS, StringSplitOptions.RemoveEmptyEntries);
+		var index = Array.IndexOf(parts, "lib");
+		if(index < 0)
+			return [new PathToken(directory)];
+
+		// 框架段本身含通配时先按名称展开，不能把 net* 当作框架标识交给 NuGet。
+		var prefixLength = index + 1 < parts.Length && parts[index + 1].IndexOfAny(['*', '?']) >= 0 ? index + 2 : index;
+		var package = Path.Combine([cache, .. parts.Take(prefixLength)]);
+		return GetDirectories(package, expansion, cancellation).Select(item =>
+		{
+			var requested = Path.Combine([item.Path, .. parts.Skip(prefixLength)]);
+			var resolved = NugetAssets.ResolveLibraryPath(requested, variables);
+			var suffix = item.Suffix;
+
+			// 包目录已消耗通配捕获；expansion 还需保留其后的固定段。
+			if(expansion && package.IndexOfAny(['*', '?']) >= 0)
+			{
+				var tail = parts.Skip(prefixLength).TakeWhile(part => part.IndexOfAny(['*', '?']) < 0).ToArray();
+				suffix = CombineSuffix(suffix, Path.Combine(tail));
+			}
+
+			return new PathToken(resolved, suffix);
+		});
+	}
+
+	private static bool IsWithin(string directory, string path)
+	{
+		var relative = Path.GetRelativePath(directory, path);
+		return !Path.IsPathRooted(relative) && relative != ".." && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal);
+	}
+
+	private static bool HasDirectoryLink(string path, string origin)
+	{
+		for(var directory = new DirectoryInfo(path); directory != null; directory = directory.Parent)
+		{
+			if(origin != null && DeploymentPath.Comparer.Equals(directory.FullName, Path.GetFullPath(origin)))
+				break;
+
+			if(directory.LinkTarget != null)
+				return true;
+		}
+
+		return false;
+	}
+
+	private static string CombineSuffix(string first, string second) => string.IsNullOrEmpty(first) ? second : string.IsNullOrEmpty(second) ? first : Path.Combine(first, second);
 
 	public static bool CopyFile(string source, string destination, Overwrite overwrite)
 	{
@@ -163,6 +215,7 @@ public static class DeploymentUtility
 		if(copyRequired)
 		{
 			var directory = Path.GetDirectoryName(destination);
+
 			if(!Directory.Exists(directory))
 				Directory.CreateDirectory(directory);
 
@@ -171,41 +224,23 @@ public static class DeploymentUtility
 
 		return copyRequired;
 	}
+	#endregion
 
 	#region 嵌套子类
+	/// <summary>保存逻辑源文件路径、部署目标的相对目录后缀及可选包来源。</summary>
 	public class PathToken
 	{
 		public PathToken(string path, string suffix = null)
 		{
 			this.Path = path;
-			this.Suffix = string.IsNullOrEmpty(suffix) ? null : suffix.Trim(Utility.PATH_SEPARATORS);
+			this.Suffix = string.IsNullOrEmpty(suffix) || suffix == "." ? null : suffix.Trim(Utility.PATH_SEPARATORS);
 		}
 
+		public string Package;
 		public string Path;
 		public string Suffix;
 
 		public bool Exists() => !string.IsNullOrEmpty(this.Path) && File.Exists(this.Path);
-		public void Deprecate() => this.Path = null;
-		public void Combine(string path) => this.Path = System.IO.Path.Combine(this.Path, path);
-		public void AppendSuffix(string value)
-		{
-			if(string.IsNullOrEmpty(value) || Utility.IsDirectory(value))
-				return;
-
-			if(string.IsNullOrEmpty(this.Suffix))
-				this.Suffix = value;
-			else
-				this.Suffix = $"{this.Suffix}/{value}";
-		}
-
-		public static PathToken Create(string fullPath, string prefix)
-		{
-			if(prefix != null && prefix.Length > 0 && fullPath.StartsWith(prefix))
-				return new PathToken(fullPath, fullPath.Substring(prefix.Length));
-
-			return new PathToken(fullPath);
-		}
-
 		public override string ToString() => string.IsNullOrEmpty(this.Suffix) ? this.Path : $"{this.Path}?{this.Suffix}";
 	}
 	#endregion

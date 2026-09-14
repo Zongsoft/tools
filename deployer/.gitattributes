@@ -1,0 +1,3 @@
+# Preserve vendored upstream bytes without line-ending conversion.
+src/Resources/PortableRuntimeIdentifierGraph.json -text
+src/Resources/dotnet-runtime-LICENSE.txt -text

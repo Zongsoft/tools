@@ -1,4 +1,4 @@
-/*
+﻿/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -281,21 +281,22 @@ public abstract partial class Package
 
 			if(path.Contains('*') || path.Contains('?'))
 			{
-				var working = FileMatcher.GetBaseDirectory(path);
-				var matches = FileMatcher.GetEntries(path);
+				var matches = Utility.Search(path, sourceDirectory: source).ToArray();
 				if(matches.Length == 0)
 				{
 					Dumper.PathNotExist(path);
 					return;
 				}
 
+				var working = matches[0].Origin.FullName;
 				alias ??= Path.GetRelativePath(source, working);
 				if(alias == "." || alias.StartsWith(".."))
 					alias = string.Empty;
 
 				var directories = new List<string>();
-				foreach(var item in matches)
+				foreach(var match in matches)
 				{
+					var item = match.Path;
 					if(directories.Any(directory => !Utility.IsExternal(directory, item)))
 						continue;
 
@@ -316,9 +317,10 @@ public abstract partial class Package
 				if(alias == "." || alias.StartsWith(".."))
 					alias = string.Empty;
 
-				if(File.Exists(path))
+				var match = Utility.Search(path).SingleOrDefault();
+				if(match.IsFile(out _))
 					this.AddFile(path, alias, rooted ? null : prefix, rooted, exclusion);
-				else if(Directory.Exists(path))
+				else if(match.IsDirectory(out _))
 					this.AddDirectory(source, path, alias, rooted ? null : prefix, rooted, exclusion);
 				else
 					Dumper.PathNotExist(path);
@@ -329,23 +331,28 @@ public abstract partial class Package
 
 		void AddDirectory(string source, string path, string alias, string prefix, bool rooted, EntryExclusion exclusion)
 		{
-			FileMatcher.CheckLink(path);
+			var resolved = Utility.Resolve(path);
 			var name = Utility.NormalizePath(Path.Combine(prefix ?? string.Empty, alias));
 			if(exclusion != null && exclusion.IsMatch(path, name))
 				return;
 
-			if(string.IsNullOrEmpty(name)) name = ".";
+			if(string.IsNullOrEmpty(name))
+				name = ".";
 			ValidatePath(name);
 			var key = rooted ? "/" + name : name;
 			if(_entries.TryGetValue(key, out var existing) && !existing.IsDirectory)
 				throw new InvalidOperationException(string.Format(Properties.Resources.PackageEntryTypeConflict, name));
 
-			var directory = new DirectoryInfo(path);
-			_entries[key] = new(path, name, 0, Utility.Unix.GetTimestamp(directory.LastWriteTimeUtc), Utility.Unix.GetDirectoryMode(path), rooted, true);
+			var directory = (DirectoryInfo)resolved;
+			_entries[key] = new(directory.FullName, name, 0, Utility.Unix.GetTimestamp(directory.LastWriteTimeUtc), Utility.Unix.GetDirectoryMode(directory.FullName), rooted, true);
 
 			foreach(var item in Directory.EnumerateFileSystemEntries(path).OrderBy(Path.GetFileName, StringComparer.Ordinal))
 			{
-				FileMatcher.CheckLink(item);
+				// 只有顶层选中的目录链接允许展开；载荷内部的目录链接一律跳过。
+				var attributes = File.GetAttributes(item);
+				if((attributes & (FileAttributes.Directory | FileAttributes.ReparsePoint)) == (FileAttributes.Directory | FileAttributes.ReparsePoint))
+					continue;
+
 				var target = Path.Combine(alias, Path.GetFileName(item));
 
 				if(Directory.Exists(item))
@@ -375,7 +382,7 @@ public abstract partial class Package
 
 			entryName = Utility.NormalizePath(Path.Combine(prefix ?? string.Empty, entryName));
 			ValidatePath(entryName);
-			FileMatcher.CheckLink(source);
+			var resolved = (FileInfo)Utility.Resolve(source);
 
 			if(exclusion != null && exclusion.IsMatch(source, entryName))
 				return;
@@ -391,8 +398,8 @@ public abstract partial class Package
 				return;
 			}
 
-			var file = new FileInfo(source);
-			_entries.Add(key, new(source, entryName, file.Length, Utility.Unix.GetTimestamp(file.LastWriteTimeUtc), Utility.Unix.GetFileMode(source), rooted));
+			var file = resolved;
+			_entries.Add(key, new(file.FullName, entryName, file.Length, Utility.Unix.GetTimestamp(file.LastWriteTimeUtc), Utility.Unix.GetFileMode(file.FullName), rooted));
 		}
 
 		IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();

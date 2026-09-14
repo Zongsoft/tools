@@ -29,14 +29,26 @@
 
 	<ItemGroup>
 		<None Include="..\..\zongsoft-logo.png" Pack="true" PackagePath="\" Visible="true" />
-		<Content Include=".migrator/**/*" Exclude=".migrator/**/*.pdb;.migrator/**/*.dbg;.migrator/**/*.dwo;.migrator/**/*.xml" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Pack="false" />
+		<None Include="..\docs\**\*" Pack="true" PackagePath="docs/%(RecursiveDir)" />
 		<None Include="..\README.md" Pack="true" PackagePath="\" />
 		<None Include="..\README.zh-Hans.md" Pack="true" PackagePath="\" />
+		<Content Include=".migrator/**/*" Exclude=".migrator/**/*.pdb;.migrator/**/*.dbg;.migrator/**/*.dwo;.migrator/**/*.xml" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Pack="false" />
 	</ItemGroup>
 
-	<ItemGroup>
-		<PackageReference Include="Zongsoft.Core" Version="7.59.0" />
-	</ItemGroup>
+	<Choose>
+		<When Condition="$(Configuration)=='Debug'">
+			<ItemGroup>
+				<Reference Include="Zongsoft.Core">
+					<HintPath>..\..\..\framework\Zongsoft.Core\src\bin\$(Configuration)\$(TargetFramework)\Zongsoft.Core.dll</HintPath>
+				</Reference>
+			</ItemGroup>
+		</When>
+		<Otherwise>
+			<ItemGroup>
+				<PackageReference Include="Zongsoft.Core" Version="7.59.0" />
+			</ItemGroup>
+		</Otherwise>
+	</Choose>
 
 	<ItemGroup>
 		<Compile Update="Properties\Resources.Designer.cs">

@@ -28,6 +28,7 @@
 			<DesignTime>True</DesignTime>
 			<DependentUpon>Resources.resx</DependentUpon>
 		</Compile>
+
 		<EmbeddedResource Update="Properties\Resources*.resx">
 			<ManifestResourceName>Zongsoft.Tools.Packager.Migration.Properties.%(Filename)</ManifestResourceName>
 		</EmbeddedResource>
@@ -37,5 +38,6 @@
 			<CustomToolNamespace>Zongsoft.Tools.Packager.Migration.Properties</CustomToolNamespace>
 		</EmbeddedResource>
 	</ItemGroup>
+
 	<Import Project="..\..\.shared\Migration.props" />
 </Project>

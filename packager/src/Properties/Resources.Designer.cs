@@ -412,15 +412,6 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Migration wildcards are supported only in the file name. 的本地化字符串。
-        /// </summary>
-        internal static string MigrationWildcardInvalid {
-            get {
-                return ResourceManager.GetString("MigrationWildcardInvalid", resourceCulture);
-            }
-        }
-
-        /// <summary>
         ///   查找类似 Invalid MySQL DELIMITER. 的本地化字符串。
         /// </summary>
         internal static string MySqlDelimiterInvalid {
@@ -462,15 +453,6 @@ namespace Zongsoft.Tools.Packager.Properties {
         internal static string PackageGeneratedSuccessfully_Message {
             get {
                 return ResourceManager.GetString("PackageGeneratedSuccessfully.Message", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   查找类似 Symbolic links are not supported in package inputs: &quot;{0}&quot;. 的本地化字符串。
-        /// </summary>
-        internal static string PackageLinkUnsupported {
-            get {
-                return ResourceManager.GetString("PackageLinkUnsupported", resourceCulture);
             }
         }
 

@@ -9,7 +9,7 @@ using Xunit;
 
 namespace Zongsoft.Tools.Packager.Migration.Tests;
 
-public sealed class MigrationRuntimeTests
+public sealed class MigrationRuntimeTest
 {
 	#region 测试方法
 	[Theory]

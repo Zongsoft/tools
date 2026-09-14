@@ -39,7 +39,7 @@
 | `Generator.Rpm.cs` | 写入 RPM lead、signature/header、metadata header、gzip cpio payload。 |
 | `Scriptor.Systemd.cs` | 生成或收集 systemd 单元文件，生成安装/卸载脚本。 |
 | `Normalizer.cs` / `TextSource.cs` | 按需展开变量；统一解析源目录文件与直接文本。 |
-| `FileMatcher.cs` / `Generator.Entries.cs` | 路径段匹配、目录元数据、受控临时载荷流。 |
+| `Utility.Search` / `Generator.Entries.cs` | 路径段匹配、目录元数据、受控临时载荷流。 |
 | `Variables.cs` | 变量集合和常用变量的强类型访问器。 |
 | `Utility.cs` | RID、安装路径、路径规范化、Unix 时间戳、文件权限等辅助逻辑。 |
 | `Dumper.cs` | 控制台输出启动画面、错误和警告消息。 |
@@ -328,7 +328,7 @@ path:alias
 - 相对路径基于 `source`。
 - 绝对路径可以位于 `source` 外部；如果没有别名，最终只使用文件名。
 - 目录递归展开，目录自身也是条目，保留空目录与源目录模式（Windows 默认 0755）。目录别名 `:~` 被归一化为空路径，将目录内容直接放到安装根目录，hosting 的载荷参数采用此写法。
-- `FileMatcher` 统一支持任一路径段中的 `*`、`?`，独立段 `**` 匹配零层或多层目录。每个参数位置按相对于固定前缀的路径（`/` 分隔）Ordinal 排序，不重排全部输入；Windows 匹配忽略大小写，Unix 区分大小写。
+- Core `Searcher` 统一支持任一路径段中的 `*`、`?`，独立段 `**` 匹配零层或多层目录。每个参数位置按相对于固定前缀的路径（`/` 分隔）Ordinal 排序，不重排全部输入；Windows 匹配忽略大小写，Unix 区分大小写。
 - 重复的目标路径会触发冲突警告并跳过。
 
 ### 排除规则
@@ -968,7 +968,7 @@ RPM header 同时保存一份文件元数据，供包管理器查询和校验。
 
 ## 载荷流与目录条目
 
-`Package.Entry.IsDirectory` 区分目录与文件。目录没有内容流、大小为零；生成器统一补齐父目录，文件与目录目标冲突时失败。符号链接和 Windows reparse point 输入明确拒绝，不递归跟随；目标路径不能包含 `..`、换行或 NUL。tar 根别名目录使用 `install -d` 按模式创建，卸载仅对显式目录执行 `rmdir`，非空目录保留，合成的共享父目录不主动删除。
+`Package.Entry.IsDirectory` 区分目录与文件。目录没有内容流、大小为零；生成器统一补齐父目录，文件与目录目标冲突时失败。链接源使用逻辑名称及目标内容，选中的目录链接可作为载荷根，内部目录链接跳过；目标路径不能包含 `..`、换行或 NUL。tar 根别名目录使用 `install -d` 按模式创建，卸载仅对显式目录执行 `rmdir`，非空目录保留，合成的共享父目录不主动删除。
 
 Debian 的 control/data gzip tar 分别写入受控临时文件，ar 依据实际长度流式复制。RPM 原始 cpio 与 gzip payload 使用临时文件，压缩载荷 SHA-256、主 Header + payload MD5 均通过流计算，最后顺序写入各 Header 与载荷，避免完整包体数组。小版本内容和 Header 元数据仍保留内存处理；元数据内存随条目数增长，载荷不随文件字节数增加托管分配。临时文件使用独占 CreateNew、DeleteOnClose，Unix 模式 0600；正常结束及异常均释放。需要足够临时磁盘空间，RPM 峰值包括原始及压缩载荷；未改变 RPM 既有整数大小上限。
 
@@ -995,11 +995,15 @@ Debian 的 control/data gzip tar 分别写入受控临时文件，ar 依据实�
 
 `MigrationLoader` 的公共 Load 组织输入流程；私有嵌套 Database 负责脚本路径、通配符、排序、去重、批次与校验和，AmazonS3 负责 Bucket 文本及重名检查。运行器的 Database 基类只共用 ADO.NET 连接执行、建库竞争和有序脚本辅助，不要求 TDengine 使用 DbConnection。
 
-SQL 批次按规范升迁器名称组织，例如 `.migration/.artifacts/mysql/0001.sql` 和 `.migration/.artifacts/postgres/0001.sql`。每次加载计划时各升迁器从 0001 独立计数，同类任务共享连续编号；PostgreSQL 别名统一归入 postgres。每个非空段落仍是独立任务，保留自己的连接参数及脚本列表；任务 Id 用于日志和状态，不作为目录名。同段落内 SQL 重叠匹配去重，跨段落、跨文件和重复指定 INI 不合并或去重。S3 配置直接保存在计划中，不生成空中间目录。
+SQL 批次按规范升迁器名称组织，例如 `.migration/.artifacts/mysql/0001.sql` 和 `.migration/.artifacts/postgres/0001.sql`。每次加载计划时各升迁器从 0001 独立计数，同类任务共享连续编号；PostgreSQL 别名统一归入 postgres。没有导入时每个非空段落生成一个任务；合并后的段落按连续声明来源拆分任务，各自从来源 INI 查找连接参数并保留脚本列表；任务 Id 用于日志和状态，不作为目录名。同一来源段落内 SQL 重叠匹配跨任务去重，不同来源和独立命令行输入不去重；导入的同名条目按 Core 读取顺序覆盖。S3 配置直接保存在计划中，不生成空中间目录。
 
 `MigrationLoader.Load` 的局部计数字典传给 `MigrationLoader.Database`，避免多次加载或失败重试继承编号。解析顺序保留；运行器当前串行，但不承诺跨任务执行顺序，数据库任务内部的脚本顺序继续保证。
 
-INI 直接调用 `Zongsoft.Configuration.Profiles.Profile.Load(path, options)`，与 deployer 保持一致。依赖 Core 7.59.0，`ProfileSection` 原生接受 `[amazon.s3]`，不改写段名或条目。重复段落在加载前检查，重复条目由 Profile 检查；关闭 Profile import 指令，避免导入破坏参数文件的明确查找边界。
+INI 与 ENV 使用 Core 7.59.0 的 `Profile.Load` 内置导入及 `ProfileOptions` 的 `Action<ProfileContext>` 成对通知；`ProfileSection` 原生接受 `[amazon.s3]`，不改写段名或条目。`MigrationProfile` 为每次根读取配置导入前后回调：解析前通过 context.FilePath 校验各文件的链接、段落语法及重复段落，合并成功后通过 context.Profile 校验迁移内容；重复键由 Core 检查。局部来源栈只用于错误定位，不实现递归加载或循环保护。文件打开、相对导入、循环及 MaximumDepth 深度限制均由 Core Reader 执行（默认 64，根文件计为第一层，packager 沿用默认值），加载完成后不保留 Reader。
+
+`MigrationLoader` 从 `entry.Profile.FilePath` 取得每个有效条目的声明来源，用于 SQL 相对路径、ENV 搜索起点和错误位置。有效段落按连续来源拆分为任务，不按来源重新排序；同一来源的 SQL 选择集合在该段落的任务间共享，保留重叠匹配去重。不同来源的连接参数彼此独立。ENV 的显式导入参与当前候选文件合并，不改变候选顺序或引入隐式回退。导入中的同名键按 Core 覆盖规则决定有效条目，不是追加执行清单。原始 INI/ENV 来源路径不进入运行器协议。
+
+导入语法及示例见 [中文指南](migrations.zh-Hans.md#导入配置文件) / [English](migrations.md#importing-configuration-files)，实施与验证见 [任务清单](migration-import-tasks.md)。
 
 采用主项目与独立 `migrator` 两个生产项目。命名空间统一为 `Zongsoft.Tools.Packager.Migration`，`.shared` 的计划模型、`MigrationProvider` 名称及参数规则、`MigrationUtility` 通用参数方法及对应本地化资源分别编译进两端。`MigrationPlan.Step/Script/Bucket` 为嵌套模型，`Script.Source/Content` 只在主项目 partial 扩展中定义，不进入 JSON。主项目处理 INI、变量和 Bucket 选项文本，打包过程中不连接数据库或 S3。migrator 包含抽象 partial `Migrator`、抽象 `Migrator.Database` 及其六种嵌套数据库实现、`Migrator.AmazonS3` 实现、执行上下文和调度，独占数据库驱动及 AWS SDK 依赖；TDengine 使用 BCL `ClientWebSocket`，无需连接器包。
 
@@ -1026,7 +1030,7 @@ INI 直接调用 `Zongsoft.Configuration.Profiles.Profile.Load(path, options)`�
 
 ### 可选升迁输入缺失
 
-`MigrationLoader` 按参数顺序通过 FileMatcher 展开 INI 路径通配符，对不存在的指定文件或无匹配模式通过本地化警告回调提示并继续。全部输入缺失时返回空计划引用，`PackCommand` 按普通包生成脚本，不调用 `MigrationBundle.Attach`，因此不要求运行器产物，也不生成升迁启动门禁。只保留 `.migration/` 为生成内容保留目录，普通载荷可以使用安装根的 `migration/`。已经找到的 INI 仍进行完整格式和内容校验，`.env` 与 SQL 缺失不属于可跳过输入。有效空 INI 不增加任务；若找到过 INI 而最终任务总数为零，则失败。
+`MigrationLoader` 按参数顺序通过 Core Searcher 展开 INI 路径通配符，对不存在的指定文件或无匹配模式通过本地化警告回调提示并继续。全部输入缺失时返回空计划引用，`PackCommand` 按普通包生成脚本，不调用 `MigrationBundle.Attach`，因此不要求运行器产物，也不生成升迁启动门禁。只保留 `.migration/` 为生成内容保留目录，普通载荷可以使用安装根的 `migration/`。已经找到的 INI 仍进行完整格式和内容校验，`.env` 与 SQL 缺失不属于可跳过输入。有效空 INI 不增加任务；若找到过 INI 而最终任务总数为零，则失败。
 
 
 ### S3 桶初始化选项
@@ -1077,3 +1081,11 @@ rpm2cpio ./packages/zongsoft.web@1.0.0_linux-x64.rpm | cpio -t
 - rpm.org: [RPM Package Format](https://rpm.org/docs/4.19.x/manual/format.html)
 - Linux Standard Base: [RPM Package File Format](https://refspecs.linuxfoundation.org/LSB_3.1.1/LSB-Core-generic/LSB-Core-generic/pkgformat.html)
 - GNU tar manual: [GNU tar](https://www.gnu.org/software/tar/manual/)
+
+## Local search and source links
+
+Local patterns use Core Searcher; the tool no longer maintains a recursive glob matcher. Results preserve the logical source name while reading the resolved target. A selected directory link may be expanded as a payload root; nested directory links are skipped and file links contribute target bytes under their logical names. Recursive patterns do not cross directory links to match further segments. Selected broken/cyclic links fail before output writes. Destination boundaries and output path validation still apply.
+
+Linked INI and .deploy relative references use the logical configuration directory. Pattern results are sorted by logical relative path using Ordinal order; input argument order remains significant. See [Core local searching](../../../framework/Zongsoft.Core/docs/searcher.md) and [task checklist](../LOCAL-SEARCHER-TASKS.md).
+
+`Searcher.Search` selects files, directories, or both through `Searcher.Target` (default: `Both`); `Match.Origin` provides the logical fixed directory prefix used to form relative output paths.

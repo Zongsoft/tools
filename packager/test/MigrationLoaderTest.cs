@@ -11,9 +11,29 @@ using Xunit;
 
 namespace Zongsoft.Tools.Packager.Tests;
 
-public sealed class MigrationLoaderTests
+public sealed class MigrationLoaderTest
 {
 	#region 测试方法
+	[Fact]
+	public void Load_ImportDirectivesLoadIniAndParameters()
+	{
+		using var directory = new MigrationTestDirectory();
+		directory.Write("migration/main.ini", "#@import imported.ini\n[sqlite]\n./schema.sql\n");
+		directory.Write("migration/imported.ini", "[sqlite]\n./imported.sql\n");
+		directory.Write("migration/sqlite.env", "Database=/var/lib/zongsoft/original.db\n#@import imported.env\n");
+		directory.Write("migration/imported.env", "Database=/var/lib/zongsoft/overridden.db\n");
+		var sql = directory.Write("migration/schema.sql", "SELECT 'intended';");
+		var imported = directory.Write("migration/imported.sql", "SELECT 'imported';");
+
+		var plan = Loader().Load("migration/main.ini", directory.Path, "zongsoft.test", "1.0.0");
+
+		Assert.Equal(2, plan.Tasks.Count);
+		Assert.All(plan.Tasks, task => Assert.Equal("sqlite", task.Provider));
+		Assert.All(plan.Tasks, task => Assert.Equal("/var/lib/zongsoft/overridden.db", task.Parameters["Database"]));
+		Assert.Equal(new[] { imported, sql }, plan.Tasks.SelectMany(task => task.Scripts).Select(script => script.Source));
+		Assert.Equal(new[] { "SELECT 'imported';", "SELECT 'intended';" }, plan.Tasks.SelectMany(task => task.Scripts).Select(script => script.Content));
+	}
+
 	[Theory]
 	[InlineData(";")]
 	[InlineData("|")]

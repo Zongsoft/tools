@@ -1,4 +1,4 @@
-﻿/*
+/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -10,7 +10,7 @@
  *   钟峰(Popeye Zhong) <zongsoft@gmail.com>
  *
  * The MIT License (MIT)
- * 
+ *
  * Copyright (C) 2015-2026 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -33,6 +33,7 @@
 
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
@@ -42,6 +43,8 @@ using Zongsoft.Configuration.Profiles;
 
 namespace Zongsoft.Tools.Deployer;
 
+/// <summary>协调描述文件解析、NuGet 依赖求解、计划校验及部署执行。</summary>
+/// <remarks>同一实例支持顺序调用并为每次调用创建独立会话，不允许并发部署。</remarks>
 public partial class Deployer
 {
 	#region 常量定义
@@ -51,169 +54,256 @@ public partial class Deployer
 	internal const string DESTINATION_OPTION = "destination";
 	internal const string IGNOREDEPENDENTPREFIX_OPTION = "ignoreDependentPrefix";
 	internal const string IGNOREDEPLOYMENTFILE_OPTION = "ignoreDeploymentFile";
-
 	internal const string DEFAULT_DEPLOYMENT_FILENAME = ".deploy";
 	#endregion
 
+	#region 私有变量
+	private int _running;
+	#endregion
+
 	#region 构造函数
-	public Deployer(IDictionary<string, string> variables) => this.Variables = variables;
+	public Deployer(IDictionary<string, string> variables) : this(variables, Console.Out)
+	{
+	}
+
+	public Deployer(IDictionary<string, string> variables, TextWriter output)
+	{
+		this.Variables = new Dictionary<string, string>(variables ?? throw new ArgumentNullException(nameof(variables)), StringComparer.OrdinalIgnoreCase);
+		this.Output = output ?? TextWriter.Null;
+		NugetUtility.Initialize(this.Variables);
+	}
 	#endregion
 
 	#region 公共属性
 	public ITerminal Terminal => Terminals.Terminal.Console;
+	public TextWriter Output { get; }
 	public IDictionary<string, string> Variables { get; }
+	public DeploymentPlan Plan { get; private set; }
+	#endregion
+
+	#region 内部属性
+	internal DeploymentSession Session { get; private set; }
+	internal Overwrite Overwrite { get; private set; }
 	#endregion
 
 	#region 公共方法
-	public Task<DeploymentCounter> DeployAsync(string deploymentFilePath, CancellationToken cancellation = default) => DeployAsync(deploymentFilePath, null, cancellation);
-	public async Task<DeploymentCounter> DeployAsync(string deploymentFilePath, string destinationDirectory, CancellationToken cancellation = default)
+	public Task<DeploymentCounter> DeployAsync(string path, CancellationToken cancellation = default) => this.DeployAsync(path, null, cancellation);
+
+	public Task<DeploymentCounter> DeployAsync(string path, string destinationDirectory, CancellationToken cancellation = default) => this.DeployManyAsync([path], destinationDirectory, cancellation);
+
+	public async Task<DeploymentCounter> DeployManyAsync(IEnumerable<string> paths, string destinationDirectory = null, CancellationToken cancellation = default)
 	{
-		if(string.IsNullOrWhiteSpace(deploymentFilePath))
-			throw new ArgumentNullException(nameof(deploymentFilePath));
+		if(Interlocked.Exchange(ref _running, 1) != 0)
+			throw new InvalidOperationException(string.Format(Properties.Resources.Review_Busy, "Deployer"));
 
-		if(!Path.IsPathRooted(deploymentFilePath))
-			deploymentFilePath = Path.Combine(Environment.CurrentDirectory, deploymentFilePath);
+		this.Plan = null;
+		var counter = new DeploymentCounter();
+		NugetUtility.ResetCache(this.Variables);
 
-		//对部署文件路径进行参数规整
-		deploymentFilePath = this.Normalize(Path.GetFullPath(deploymentFilePath), variable => this.Terminal.UndefinedVariable(variable, deploymentFilePath));
-
-		if(!File.Exists(deploymentFilePath))
+		try
 		{
-			//如果指定部署文件路径是个目录，并且该目录下有一个名为.deploy的文件，则将该部署文件路径指向它
-			if(Directory.Exists(deploymentFilePath) && File.Exists(Path.Combine(deploymentFilePath, ".deploy")))
-				deploymentFilePath = Path.Combine(deploymentFilePath, ".deploy");
-			else
+			var files = paths.ToArray();
+			counter = new DeploymentCounter(string.Join(";", files));
+			destinationDirectory ??= this.Variables.TryGetValue(DESTINATION_OPTION, out var target) ? target : Environment.CurrentDirectory;
+
+			var root = Path.GetFullPath(this.Normalize(destinationDirectory));
+			this.Session = new DeploymentSession(root, counter);
+			this.Plan = this.Session.Plan;
+			this.Overwrite = GetOverwrite(this.Variables);
+
+			foreach(var key in new[] { "dry-run", "offline", "prerelease", "locked", "prune", "explain" })
+				_ = Flag(this.Variables, key);
+
+			this.Session.Validate(root);
+
+			if(Flag(this.Variables, "locked"))
 			{
-				//打印部署文件不存在的消息
-				this.Terminal.FileNotExists(deploymentFilePath);
-				//返回部署计数器
-				return new DeploymentCounter(deploymentFilePath, 1, 0);
+				if(!this.Variables.TryGetValue("lockFile", out var lockFile))
+					throw new InvalidOperationException(string.Format(Properties.Resources.Review_Locked, "lockFile"));
+
+				this.Session.LockedPlan = DeploymentPlan.Load(this.Normalize(lockFile));
 			}
+
+			foreach(var file in files.Distinct(DeploymentPath.Comparer))
+				await this.PlanManifestAsync(file, root, cancellation);
+
+			if(counter.Failures == 0)
+			{
+				this.Session.Packages = await NugetGraph.ResolveAsync(this.Variables, this.Session.Roots, cancellation, this.Session.LockedPlan?.Packages);
+
+				foreach(var placeholder in this.Plan.Operations.Where(item => item.Expand != null).ToArray())
+				{
+					var index = this.Plan.Operations.IndexOf(placeholder);
+					this.Session.Output = [];
+					await placeholder.Expand(cancellation);
+					this.Plan.Operations.RemoveAt(index);
+					this.Plan.Operations.InsertRange(index, this.Session.Output);
+					this.Session.Output = null;
+				}
+
+				this.ValidatePlan();
+			}
+
+			if(counter.Failures == 0)
+				await this.ExecutePlanAsync(cancellation);
+
+			this.Plan.Succeeded = counter.Failures == 0;
+		}
+		catch(OperationCanceledException)
+		{
+			throw;
+		}
+		catch(Exception exception)
+		{
+			counter.Fail();
+			this.Plan?.Succeeded = false;
+			this.Error(exception.Message);
+		}
+		finally
+		{
+			if(this.Session != null && this.Variables.TryGetValue("report", out var report) && !string.IsNullOrWhiteSpace(report))
+			{
+				try
+				{
+					var path = Path.GetFullPath(this.Normalize(report));
+					this.ValidateOutput(path, true);
+					this.Plan.Save(path);
+				}
+				catch(Exception exception)
+				{
+					counter.Fail();
+					this.Plan.Succeeded = false;
+					this.Error(exception.Message);
+				}
+			}
+
+			this.Session = null;
+			Volatile.Write(ref _running, 0);
 		}
 
-		if(string.IsNullOrWhiteSpace(destinationDirectory))
-		{
-			if(this.Variables.TryGetValue(DESTINATION_OPTION, out destinationDirectory))
-			{
-				if(!Path.IsPathRooted(destinationDirectory))
-					destinationDirectory = Path.Combine(Environment.CurrentDirectory, destinationDirectory);
-			}
-			else
-			{
-				destinationDirectory = Environment.CurrentDirectory;
-			}
-		}
-
-		//对目标目录路径进行参数规整
-		destinationDirectory = this.Normalize(destinationDirectory, variable => this.Terminal.UndefinedVariable(variable, destinationDirectory));
-
-		if(!Directory.Exists(destinationDirectory))
-			Directory.CreateDirectory(destinationDirectory);
-
-		//创建部署上下文对象
-		var context = this.CreateContext(deploymentFilePath, destinationDirectory);
-
-		foreach(var item in context.Profile)
-		{
-			await this.DeployItemAsync(context, item, cancellation);
-		}
-
-		return context.Counter;
+		return counter;
 	}
 	#endregion
 
 	#region 虚拟方法
-	protected virtual DeploymentContext CreateContext(string deploymentFilePath, string destinationDirectory)
+	protected virtual DeploymentContext CreateContext(string path, string destination)
 	{
-		if(string.IsNullOrWhiteSpace(deploymentFilePath))
-			throw new ArgumentNullException(nameof(deploymentFilePath));
+		var options = new ProfileOptions
+		{
+			Importing = context => this.Plan.Manifests[context.FilePath] = DeploymentSession.Hash(context.FilePath),
+		};
 
-		return new DeploymentContext(this, Profile.Load(deploymentFilePath), destinationDirectory);
+		return new(this, Profile.Load(path, options), destination);
 	}
 	#endregion
 
-	#region 私有方法
-	private async Task DeployItemAsync(DeploymentContext context, ProfileItem item, CancellationToken cancellation)
+	#region 清单解析
+	internal async Task PlanManifestAsync(string path, string destination, CancellationToken cancellation)
 	{
-		switch(item.ItemType)
+		cancellation.ThrowIfCancellationRequested();
+		path = Path.GetFullPath(this.Normalize(path));
+
+		if(Directory.Exists(path))
+			path = Path.Combine(path, DEFAULT_DEPLOYMENT_FILENAME);
+
+		var identity = DeploymentPath.Identity(path);
+
+		if(this.Session.Active.Count >= 64 || !this.Session.Active.Add(identity))
+			throw new InvalidOperationException(string.Format(Properties.Resources.Review_Cycle, string.Join(" -> ", this.Session.Stack.Append(path))));
+
+		this.Session.Stack.Add(path);
+
+		try
 		{
-			case ProfileItemType.Section:
-				var section = (ProfileSection)item;
+			if(!File.Exists(path))
+				throw new FileNotFoundException(string.Format(Properties.Resources.Review_Missing, path));
 
-				//确保部署的目标目录已经存在，如不存在则创建它
-				Utility.EnsureDirectory(context.DestinationDirectory,
-					this.Normalize(
-						section.FullName.Replace(' ', '/'),
-						variable => this.Terminal.UndefinedVariable(variable, $"[{section.FullName}]", section.Profile.FilePath, section.LineNumber)
-					)
-				);
+			this.Plan.Manifests[path] = DeploymentSession.Hash(path);
 
-				foreach(var child in section)
-					await this.DeployItemAsync(context, child, cancellation);
+			var context = this.CreateContext(path, this.Session.Validate(destination));
 
-				break;
-			case ProfileItemType.Entry:
-				await this.DeployEntryAsync(context, (ProfileEntry)item, cancellation);
-				break;
+			foreach(var item in context.Profile)
+				await this.PlanItemAsync(context, item, cancellation);
+		}
+		finally
+		{
+			this.Session.Active.Remove(identity);
+			this.Session.Stack.RemoveAt(this.Session.Stack.Count - 1);
 		}
 	}
 
-	private async Task DeployEntryAsync(DeploymentContext context, ProfileEntry entry, CancellationToken cancellation)
+	private async Task PlanItemAsync(DeploymentContext context, ProfileItem item, CancellationToken cancellation)
 	{
-		//获取部署项
-		var deployment = DeploymentEntry.Get(context, entry);
+		cancellation.ThrowIfCancellationRequested();
 
-		//如果当前部署项不满足条件则忽略它
-		if(deployment.Ignored(this.Variables))
-			return;
+		if(item is ProfileSection section)
+		{
+			foreach(var child in section)
+				await this.PlanItemAsync(context, child, cancellation);
+		}
+		else if(item is ProfileEntry entry)
+		{
+			try
+			{
+				//Evaluate filters before expanding optional branch variables.
+				Utility.Requisition.GetRequisites(entry.Name, out var sourceFilter);
+				Utility.Requisition.GetRequisites(entry.Value, out var targetFilter);
 
-		//获取部署项的解析器
-		var resolver = DeploymentResolverManager.GetResolver(deployment.Name);
+				if(!Utility.Requisition.IsRequisites(this.Variables, sourceFilter) || !Utility.Requisition.IsRequisites(this.Variables, targetFilter))
+				{
+					context.Counter.Skip();
 
-		if(resolver != null)
-			await resolver.ResolveAsync(context, deployment, cancellation);
-		else
-			this.Terminal.UndefinedResolver(deployment.Name, entry.Name, entry.Profile.FilePath, entry.LineNumber);
+					return;
+				}
+
+				var deployment = DeploymentEntry.Get(context, entry);
+				var resolver = DeploymentResolverManager.GetResolver(deployment.Name) ?? throw new FormatException(string.Format(Properties.Resources.Review_UnknownResolver, deployment.Name));
+				await resolver.ResolveAsync(context, deployment, cancellation);
+			}
+			catch(OperationCanceledException)
+			{
+				throw;
+			}
+			catch(Exception exception)
+			{
+				context.Counter.Fail();
+				this.Error(string.Format(Properties.Resources.Review_Failure, $"{entry.Profile.FilePath}:{entry.LineNumber}", exception.Message));
+			}
+		}
 	}
-
-	private string Normalize(string text, Action<string> failure) => Normalizer.Normalize(text, this.Variables, failure);
 	#endregion
 
-	#region 嵌套子类
-	private class PathToken
+	#region 辅助方法
+	internal void Error(string text)
 	{
-		public PathToken(string path, string suffix = null)
-		{
-			this.Path = path;
-			this.Suffix = string.IsNullOrEmpty(suffix) ? null : suffix.Trim(Utility.PATH_SEPARATORS);
-		}
+		this.Plan?.Diagnostics.Add(text);
+		this.Output.WriteLine(text);
+	}
 
-		public string Path;
-		public string Suffix;
+	internal string Normalize(string text) => Normalizer.Normalize(text, this.Variables, name => throw new FormatException(string.Format(Properties.Resources.Review_UndefinedVariable, name)));
+	internal static bool Flag(IDictionary<string, string> variables, string key)
+	{
+		if(!variables.TryGetValue(key, out var value))
+			return false;
 
-		public bool Exists() => !string.IsNullOrEmpty(this.Path) && File.Exists(this.Path);
-		public void Deprecate() => this.Path = null;
-		public void Combine(string path) => this.Path = System.IO.Path.Combine(this.Path, path);
-		public void AppendSuffix(string value)
-		{
-			if(string.IsNullOrEmpty(value) || Utility.IsDirectory(value))
-				return;
+		if(string.IsNullOrEmpty(value))
+			return true;
 
-			if(string.IsNullOrEmpty(this.Suffix))
-				this.Suffix = value;
-			else
-				this.Suffix = $"{this.Suffix}/{value}";
-		}
+		if(bool.TryParse(value, out var result))
+			return result;
 
-		public static PathToken Create(string fullPath, string prefix)
-		{
-			if(prefix != null && prefix.Length > 0 && fullPath.StartsWith(prefix))
-				return new PathToken(fullPath, fullPath.Substring(prefix.Length));
+		throw new ArgumentException(string.Format(Properties.Resources.Review_InvalidOption, key, "boolean"));
+	}
 
-			return new PathToken(fullPath);
-		}
+	internal static Overwrite GetOverwrite(IDictionary<string, string> variables)
+	{
+		if(!variables.TryGetValue(OVERWRITE_OPTION, out var text))
+			return Overwrite.Newest;
 
-		public override string ToString() => string.IsNullOrEmpty(this.Suffix) ? this.Path : $"{this.Path}?{this.Suffix}";
+		if(Enum.TryParse<Overwrite>(text, true, out var result) && Enum.IsDefined(result) && !int.TryParse(text, out _))
+			return result;
+
+		throw new ArgumentException(string.Format(Properties.Resources.Review_InvalidOption, OVERWRITE_OPTION, text));
 	}
 	#endregion
 }

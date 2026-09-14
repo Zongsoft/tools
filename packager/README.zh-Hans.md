@@ -385,7 +385,7 @@ dotnet-pack deb \
 - 允许指定 `--source` 之外的绝对路径；未指定别名时，只使用文件名。
 - 目录会递归包含。
 - 任一路径段支持 `*`、`?`；独立段 `**` 匹配零层或多层目录。每个参数在当前位置按相对固定前缀的路径 Ordinal 排序，保留全部参数顺序。Windows 匹配忽略大小写，Unix 区分大小写。
-- 目录自身入包，保留空目录与源模式（Windows 默认为 0755）；合成父目录为 0755。拒绝文件/目录冲突及符号链接、reparse point 输入。
+- 目录自身入包，保留空目录与源模式（Windows 默认为 0755）；合成父目录为 0755。拒绝文件/目录冲突；源链接保留逻辑名称并读取目标，目录载荷中的嵌套目录链接跳过。
 - `--exclude` 会在加载打包项时跳过匹配文件。模式相对 `--source`，统一使用 `/` 作为路径分隔符，支持 `*`、`?`、`**`，多个模式用逗号或分号分隔。
 - 重复的目标路径会报告为冲突并跳过。
 - 以 `/` 或 `\` 开头的别名是根路径条目。在 `.deb` 和 `.rpm` 中，它们会安装到对应根路径；在 `.tar.gz` 中，它们存放在 `.root/` 下，并由 `install.sh` 复制。
@@ -506,11 +506,13 @@ dotnet-pack deb \
 
 ## 安装升迁
 
+升迁 INI 与 `.env` 使用 Core Reader 内置的 `#@import`，通过 ProfileOptions 配置导入通知，无需指令注册。导入条目的 SQL 相对路径和参数查找以其声明所属文件为准；不同来源自动拆分任务，同名条目按读取顺序覆盖。示例见[配置导入](docs/migrations.zh-Hans.md#导入配置文件)。
+
 从源码制作工具包时，先通过 Cake `migrator` 任务 Native AOT 发布两个 RID，再执行 `dotnet pack src/Zongsoft.Tools.Packager.csproj`。主项目不引用升迁器项目，详见[构建说明](docs/migrations.zh-Hans.md#构建与工具包生成)。
 
 中间文件为 `<安装目录>/.migration/migration.json`，预处理 SQL 批次保存在 `.migration/.artifacts/` 中。独立升迁运行器使用 **Native AOT** 发布到 glibc Linux，目标机无需安装 .NET 运行时。TDengine 直接使用 WebSocket 连接 taosAdapter，不依赖 `TDengine.Connector`；升迁提示提供英文和简体中文。两程序的文件交接、执行顺序与启动门禁见[协作说明](docs/migrations.zh-Hans.md#打包器与-migrator-的协作)。
 
-SQL 批次按规范升迁器名称组织，例如 `.migration/.artifacts/mysql/0001.sql` 和 `.migration/.artifacts/postgres/0001.sql`。每次加载计划时各升迁器从 0001 独立计数，同类任务共享连续编号；PostgreSQL 别名统一归入 postgres。每个非空段落仍是独立任务，保留自己的连接参数及脚本列表；任务 Id 用于日志和状态，不作为目录名。同段落内 SQL 重叠匹配去重，跨段落、跨文件和重复指定 INI 不合并或去重。S3 配置直接保存在计划中，不生成空中间目录。
+SQL 批次按规范升迁器名称组织，例如 `.migration/.artifacts/mysql/0001.sql` 和 `.migration/.artifacts/postgres/0001.sql`。每次加载计划时各升迁器从 0001 独立计数，同类任务共享连续编号；PostgreSQL 别名统一归入 postgres。没有导入时每个非空段落生成一个任务；合并后的段落按连续声明来源拆分任务，各自从来源 INI 查找连接参数并保留脚本列表；任务 Id 用于日志和状态，不作为目录名。同一来源段落内 SQL 重叠匹配跨任务去重，不同来源和独立命令行输入不去重；导入的同名条目按 Core 读取顺序覆盖。S3 配置直接保存在计划中，不生成空中间目录。
 
 升迁 INI 按选项路径顺序解析，通配符匹配在当前参数位置按相对路径 Ordinal 排序展开。不同任务之间不保证执行顺序，各数据库任务内部的 SQL 按计划列表执行。
 
@@ -718,3 +720,5 @@ dotnet cake --target=test --edition=Release
 ## 许可证
 
 本项目采用 [MIT](https://github.com/Zongsoft/tools/blob/main/LICENSE) 许可证。
+
+本地源搜索及链接规则见[实现文档](docs/implementation.zh-Hans.md#本地搜索与源链接)。

@@ -8,19 +8,19 @@
 --migration:../../.deploy/$(scheme)/migration/$(version)/*.ini
 ```
 
-Paths on the command line are relative to `--source`. Migration INI paths support `*` and `?` in any path segment and a standalone `**` for zero or more directory levels, for example `../../.deploy/$(scheme)/migration/$(version)/*.ini`. Matches are processed in ordinal relative-path order within each argument; argument order is preserved. A missing INI file or a pattern without matches produces a warning and is skipped. Remaining files keep their order. If no input files are found, packaging proceeds without migration files, a migrator or migration startup checks; invalid existing INIs, missing `.env` parameters and missing SQL scripts remain errors. A valid empty INI adds no task; if any INIs were found but none contains a nonempty section, packaging fails with no migration tasks. Paths inside an INI file are relative to that INI file, not the host directory. Both INI files and `.env` parameter files use Zongsoft.Core's `Profile` parser, as does the deployment tool. Full-line `#`/`;` comments and bare entries are supported. Entry names are case insensitive under `Profile`; duplicate keys are rejected. Repeated migrator sections within one INI, including both PostgreSQL aliases, are rejected; separate files and repeated file arguments are parsed independently.
+Paths on the command line are relative to `--source`. Migration INI paths support `*` and `?` in any path segment and a standalone `**` for zero or more directory levels, for example `../../.deploy/$(scheme)/migration/$(version)/*.ini`. Matches are processed in ordinal relative-path order within each argument; argument order is preserved. A missing INI file or a pattern without matches produces a warning and is skipped. Remaining files keep their order. If no input files are found, packaging proceeds without migration files, a migrator or migration startup checks; invalid existing INIs, missing `.env` parameters and missing SQL scripts remain errors. A valid empty INI adds no task; if any INIs were found but none contains a nonempty section, packaging fails with no migration tasks. Paths inside an INI file are relative to that INI file, not the host directory. Both INI files and `.env` parameter files use Zongsoft.Core's `Profile` parser, as does the deployment tool. Full-line `#`/`;` comments and bare entries are supported. Entry names are case insensitive under `Profile`; duplicate keys within one file are rejected. Repeated migrator sections within one INI, including both PostgreSQL aliases, are rejected; separate files and repeated file arguments are parsed independently.
 
 Migration files, SQL path expressions, bucket names/options and parameter values support the existing `$(name)` and `%name%` variables. They are resolved when packaging. SQL contents are not expanded; client delimiters are processed during packaging. Undefined variables, unmatched SQL patterns, unsupported providers/options, missing parameters and conflicting generated paths fail packaging with a nonzero exit code. Do not store shell expressions in parameter values; these files are INI, not shell scripts.
 
 The intermediate file is named **`migration.json`**, installed at `<install-directory>/.migration/migration.json`.
 
-SQL batches are grouped by canonical provider, for example `.migration/.artifacts/mysql/0001.sql` and `.migration/.artifacts/postgres/0001.sql`. Each plan load starts a separate counter at 0001 for each provider; tasks using the same provider share consecutive numbers. PostgreSQL aliases share the postgres directory. Each nonempty section remains an independent task with its own parameters and script list; task IDs identify logs and status, not directories. Overlapping SQL matches are deduplicated within a section, but sections, files and repeated INI arguments remain independent. S3 configuration stays in the plan without an empty artifact directory.
+SQL batches are grouped by canonical provider, for example `.migration/.artifacts/mysql/0001.sql` and `.migration/.artifacts/postgres/0001.sql`. Each plan load starts a separate counter at 0001 for each provider; tasks using the same provider share consecutive numbers. PostgreSQL aliases share the postgres directory. Without imports, each nonempty section creates one task; merged sections split at each change of declaration source, with parameters found from that source INI and a separate script list; task IDs identify logs and status, not directories. Overlapping SQL matches from the same source section are deduplicated across task splits; different sources and independent command-line inputs are not deduplicated. Imported same-named entries follow Core override rules. S3 configuration stays in the plan without an empty artifact directory.
 
 ## Migrators and order
 
 Section names are case insensitive: `mssql`, `mysql`, `sqlite`, `duckdb`, `postgres`/`postgresql`, `tdengine`, and `amazon.s3`. Empty sections add no task. If any INIs are found, their combined contents must produce at least one task. Unknown sections are rejected even when empty.
 
-Inputs are parsed in command-line order, then section order, then entry order. Wildcard matches are sorted by ordinal relative path and expanded at that argument position, without sorting the combined input list. Execution order across tasks is not guaranteed and must not express dependencies; SQL within each database task runs in script-list order. SQL paths also support `*`, `?` and standalone `**` path segments. Each pattern's matches are sorted by ordinal relative path; overlapping matches run once within the section. Use zero-padded names to control ordering. Every installation and retry executes all SQL files. Script authors must ensure repeatability, including after partial failure; see the retry rules below. There is no automatic rollback across scripts or resources.
+Inputs are parsed in command-line order, then section order, then entry order. Wildcard matches are sorted by ordinal relative path and expanded at that argument position, without sorting the combined input list. Execution order across tasks is not guaranteed and must not express dependencies; SQL within each database task runs in script-list order. SQL paths also support `*`, `?` and standalone `**` path segments. Each pattern's matches are sorted by ordinal relative path; overlapping matches from the same source section run once. Use zero-padded names to control ordering. Every installation and retry executes all SQL files. Script authors must ensure repeatability, including after partial failure; see the retry rules below. There is no automatic rollback across scripts or resources.
 
 Database entries contain SQL paths with no value. Most drivers receive a complete file; SQL Server and TDengine require batch boundaries, and MySQL client `DELIMITER` directives are adapted before submission. The runner does not emulate interactive database clients.
 
@@ -49,14 +49,50 @@ The runner authenticates with `conn`, then sends `query` requests for `CREATE DA
 
 `Timeout` covers the WebSocket handshake and authentication. `CommandTimeout` covers each SQL request, response and result release. Authentication errors, SQL errors, invalid responses, disconnects, timeouts and cancellation stop the migration. Messages do not echo SQL or credentials returned by the server; status records the exception type. Consult server logs for SQL error details.
 
+## Importing configuration files
+
+Migration INIs and `.env` files support Core's `#@import` directive:
+
+```ini
+# migration/main.ini
+#@import shared/schema.ini
+[sqlite]
+./main.sql
+```
+
+```ini
+# migration/shared/schema.ini
+[sqlite]
+./schema.sql
+```
+
+`schema.sql` resolves against `migration/shared/`. Its parameter search starts there with `schema.env`, then `sqlite.env`, before moving to parent directories. `main.sql` starts in `migration/` with `main.env` and `sqlite.env`. They produce separate tasks with their own connection parameters. S3 entries also find parameters from their declaring INI.
+
+Parameter files can explicitly import common settings and override values:
+
+```ini
+# migration/sqlite.env
+#@import common.env
+Database=/var/lib/example/application.db
+```
+
+`common.env` may declare root parameters or complete provider sections. Existing selection rules apply: root parameters do not fill a selected section. Only the selected candidate and its explicit imports are merged; missing required parameters still fail without filling values from another candidate.
+
+- Import paths are relative to the file containing the directive, or absolute. Separate paths with spaces, tabs or `|`. Quoted escaping, globs and variable expansion are not supported in import arguments. Imports merge the complete Profile; placing the directive inside a section does not move imported root entries into that section.
+- Missing imports are skipped under Core's optional import rules. Cycles and depths above 64 files, including the root, fail. Diamond and repeated imports are allowed and read again each time. Linked configuration files retain logical paths, so imports, SQL, and adjacent parameters resolve relative to the link location.
+- Each file is checked for duplicate sections, duplicate keys and syntax. Root entries, unknown providers and conflicting provider aliases in an effective migration INI remain errors, including in imported files.
+- Across files, the last declaration read wins for the same section/key, case insensitively. The effective collection retains the key's first position. Overridden SQL/bucket entries do not produce tasks. Use separate command-line INI inputs when same-named entries must execute independently.
+- Effective sections are split into tasks at each change of declaration source, preserving effective entry order. Overlapping SQL selections from the same source within that section are deduplicated across task splits; different sources and independent inputs are not deduplicated. Each source retains its own parameters. Cross-task execution order remains unsuitable for dependencies.
+- Imported parse and parameter-expansion errors identify the actual source without exposing parameter secrets. Imports are resolved during packaging and do not execute SQL or contact S3.
+
 ## Finding `.env` parameters
 
-There is no parameter-file command option. For each migrator, start in the migration INI's directory, then walk through its parents to the filesystem root. At **each directory**, try:
+There is no parameter-file command option. For each migrator, start in the declaring INI's directory for the entry, then walk through its parents to the filesystem root. At **each directory**, try:
 
 1. The migration filename with its extension changed to `.env`, reading the matching section.
 2. `<migrator>.env`; `postgres.env` precedes `postgresql.env`. A matching section takes precedence over root entries. A provider-named file may omit its section.
 
-A file without the applicable section is skipped unless it is provider-named and has root entries. Once an applicable configuration is found, it must be complete: values are not merged with another file or a parent. A shared file must separate providers into sections. Missing files/configuration fail packaging and identify the searched paths. Filename case follows the build filesystem; use the lower-case names above for portability.
+A file without the applicable section is skipped unless it is provider-named and has root entries. Once an applicable configuration, including its explicit imports, is found, it must be complete: values are not filled automatically from another candidate or a parent. A shared file must separate providers into sections. Missing files/configuration fail packaging and identify the searched paths. Filename case follows the build filesystem; use the lower-case names above for portability.
 
 | Migrator | Required parameters | Optional parameters |
 | --- | --- | --- |
@@ -298,4 +334,4 @@ The `.migration/migration.json` file contains **expanded connection parameters, 
 
 The packager, shared validation and migrator use separate `.resx` resources with English defaults and Simplified Chinese (`zh-Hans`) translations. `ResXFileCodeGenerator` generates strongly typed accessors; shared resources are embedded in each program. Native publication retains English and Chinese resources and globalization support. The runner selects messages through `CurrentUICulture`; generated shell scripts select Chinese or English using `LC_ALL`, `LC_MESSAGES`, then `LANG`. Shell `check` does not launch .NET. JSON fields, status values, action names and fingerprint data do not depend on display language.
 
-The packager uses FileMatcher for all path expansion. Each pattern sorts paths relative to its fixed prefix. Matching is case insensitive on Windows and case sensitive on Unix. Symbolic links/reparse points are rejected rather than followed. Plan structure, SQL repeatability, task-order guarantees and the native runner are unchanged.
+The packager uses Core Searcher for local path expansion. Each pattern sorts paths relative to its fixed prefix. Matching is case insensitive on Windows and case sensitive on Unix. Selected file links retain logical names and use target content. Selected directory payloads may resolve a root link; nested directory links are skipped. Plan structure, SQL repeatability, task-order guarantees and the native runner are unchanged.

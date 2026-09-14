@@ -23,7 +23,9 @@ internal sealed class MigrationTestDirectory : IDisposable
 	public string Write(string relative, string content)
 	{
 		var path = System.IO.Path.GetFullPath(System.IO.Path.Combine(this.Path, relative));
-		if(!path.StartsWith(this.Path + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Fixture path escapes its owned directory.");
+		if(!path.StartsWith(this.Path + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+			throw new InvalidOperationException("Fixture path escapes its owned directory.");
+
 		Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path));
 		File.WriteAllText(path, content.Replace("\r\n", "\n").Replace("\n", "\r\n"), new UTF8Encoding(false));
 		return path;
@@ -32,12 +34,17 @@ internal sealed class MigrationTestDirectory : IDisposable
 	public MigrationPlan.Script Script(string relative, string sql)
 	{
 		var source = this.Write(relative, sql);
-		return new() { Path = relative, Checksum = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source))) };
+		return new()
+		{
+			Path = relative,
+			Checksum = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source))),
+		};
 	}
 
 	public void Dispose()
 	{
-		if(Directory.Exists(this.Path)) Directory.Delete(this.Path, true);
+		if(Directory.Exists(this.Path))
+			Directory.Delete(this.Path, true);
 	}
 	#endregion
 }

@@ -24,7 +24,7 @@ The **Section** and **Entry** values both support variable references in the for
 Each entry consists of **KEY** and **VALUE** parts separated by an equal sign _(`=`)_, and the **VALUE** part is optional.
 
 - The **KEY** part consists of _Parser-Name_ and _Parser-Argument_, separated by a colon _(`:`)_;
-	- **_Parser-Name_**: If missing, the default path parser is used, except for `nuget` and `delete` parsers.
+	- **_Parser-Name_**: Omit it, leave it empty, or specify `path` to use the default path parser. Other parsers are `nuget` and `delete`/`remove`. Parser names are case-insensitive.
 	- **_Parser-Argument_**: Parsed by the specified parser, please refer to _**P**arser **A**rgument_ below for details.
 
 - The **VALUE** part consists of _Destination_ and _Filtering_.
@@ -35,21 +35,21 @@ Each entry consists of **KEY** and **VALUE** parts separated by an equal sign _(
 
 #### Path Parser
 
-Default parser(_**U**nnamed_), which means copy the source file indicated by the _Parser-Argument_ to the destination location.
+The default parser is named `path`, and its name can be omitted. It copies the source file indicated by the _Parser-Argument_ to the destination location.
 
 The _Parser-Argument_ represents the path of the source file to be deployed, the source file path supports `*`, `?` and `**` wildcards, the `**` means multi-level directory matching.
 
-For an absolute Windows source path containing a drive-letter colon, explicitly use the empty resolver prefix. Otherwise, `D` in `D:/...` is interpreted as a resolver name. Alternatively, use a path relative to the deployment file or expand the absolute path from a variable.
+For an absolute Windows source path containing a drive-letter colon, use the `path:` prefix, for example `path:D:\dir\files.ext` or `path:D:/dir/files.ext`. Otherwise, `D` in `D:/...` is interpreted as a resolver name. Alternatively, use a path relative to the deployment file or expand the absolute path from a variable.
 
 ```ini
 [plugins zongsoft data]
-:D:/Zongsoft/framework/Zongsoft.Data/src/Zongsoft.Data.plugin
+path:D:/Zongsoft/framework/Zongsoft.Data/src/Zongsoft.Data.plugin
 
 [plugins zongsoft data mysql]
 drivers/mysql/src/Zongsoft.Data.MySql.plugin
 ```
 
-The leading `:` selects the default path resolver; it is not part of the destination path. This example references existing plugin files in [framework](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Data) and assumes the deployment file is located in `D:/Zongsoft/framework/Zongsoft.Data`. Adjust the checkout path for your environment.
+The `path:` prefix selects the default path resolver; the source path starts after its colon. Relative paths can also use this prefix, such as `path:drivers/mysql/src/Zongsoft.Data.MySql.plugin`. This example references existing plugin files in [framework](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Data) and assumes the deployment file is located in `D:/Zongsoft/framework/Zongsoft.Data`. Adjust the checkout path for your environment.
 
 > 💡 **Tip:** You should generally avoid absolute paths in `.deploy` files. Source paths are resolved relative to the directory containing the deployment file, while destination paths are resolved relative to the host directory or the target directory specified by the deployment options. See the deployment files in [framework](https://github.com/Zongsoft/framework), such as [Zongsoft.Data.deploy](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Data/src/Zongsoft.Data.deploy), for examples.
 
@@ -78,10 +78,10 @@ delete:Zongsoft.Messaging.Mqtt.option
 The parser name is: `nuget`, which means download the NuGet package and perform the deployment, and that the dependencies of the specified package are also downloaded.
 
 The format of _Parser-Argument_: `package@version/path`, where `@version` and `/{path}` parts are optional.
-- If the version part is unspecified or it is `latest`, it means the latest version.
+- An unspecified version or `latest` selects the latest stable release. Use `--prerelease:true` to include preview releases. An explicitly requested prerelease version is still accepted.
 - If the path part is unspecified:
-	- If the root directory of the package contains a `.deploy` file, the deployment file is deployed first;
-	- Deploy all files in the `lib/{framework}` library files directory of the package.
+	- If the root directory contains a `.deploy` file, execute that manifest without additionally selecting default assets or downloading unused dependencies;
+	- Otherwise resolve the dependency closure and select the nearest assets: use a compatible RID managed runtime group in preference to `lib/{framework}`, plus native and eligible content assets.
 		> The `{framework}` indicates the version of the *target framework* nearest to the one declared by the `$(Framework)` variable.
 
 > 💡 **Tip:** _**Z**ongsoft_'s NuGet package usually has a deployment file named `.deploy` in it's root directory, and the `artifacts` directory in the package includes its plugin files(`*.plugin`)_(required, one or more)_, configuration files(`*.option`), the mapping files(`*.mapping`) for [_**Z**ongsoft.**D**ata_ ORM](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Data), and other ancillary files.
@@ -92,7 +92,7 @@ The format of _Parser-Argument_: `package@version/path`, where `@version` and `/
 ##### Dependency Packages
 
 _**N**uget_ by default ignores dependency packages whose names begin with `System.`, `Microsoft.Extensions.`, or `Zongsoft.`;
-You can also specify the prefixes of dependency packages to ignore using the `--ignoreDependentPrefix` command-line option, multiple prefixes are separated by a comma(`,`), a semicolon(`;`), or a pipe(`|`).
+You can also specify the prefixes of dependency packages to ignore using the `--ignoreDependentPrefix` command-line option, multiple prefixes are separated by a comma(`,`), a semicolon(`;`), or a pipe(`|`). Matching is case insensitive and affects dependency edges, not explicitly requested root packages.
 
 ##### Examples
 
@@ -236,9 +236,7 @@ dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:
 
 ### Command options
 
-💡 On Windows, this tool uses a console terminal. Run it with valid console handles; automation tools should allocate a PTY/ConPTY. Redirected or hidden pipe execution without those handles can fail during `ConsoleTerminal` initialization with an invalid-handle error, before any deployment entries run.
-
-🚨 An undefined resolver currently prints an error but can still result in exit code `0`; the final copy-failure count does not include that entry. Automated verification must also inspect error output, expected files, and final assembly versions instead of relying only on exit codes or the completion message.
+The command supports redirected or piped output without a PTY. Exit codes are 0 for success, 1 for validation/dependency/I/O failure, and 130 for cancellation. The complete plan is validated before target writes; skipped copies and deletions have separate counts.
 
 - `verbosity` option
 	- `quiet` Displays only the necessary output information, usually only error messages.
@@ -253,9 +251,11 @@ dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:
 
 ### NuGet Packages
 
-NuGet entries run sequentially, unlike the whole-application dependency resolution performed by `dotnet restore`. Multiple packages can write different versions of the same DLL into one directory. Overwrite policies use timestamps or explicit options, not assembly semantic versions. Check shared dependency versions after deployment and, with the host stopped, use a separate supplemental manifest for a verified compatible version. See the verified [Redis plugin dependency conflict](https://github.com/Zongsoft/framework/blob/main/externals/redis/README.md).
+Ordinary NuGet roots in one command share a dependency graph. Explicit root versions stay fixed; dependencies use the lowest available version satisfying all constraints. Unsatisfiable ranges, cycles, downgrade constraints, and conflicting package assets at the same target fail before writes. This strict deployment resolver does not execute MSBuild/buildTransitive and is not a full substitute for dotnet restore. Separate directories do not imply separate assembly load contexts; use separate calls only for genuinely isolated hosts. Package manifests and explicit package paths expand as file requests.
 
-If the deployment entry is library files in the NuGet package directory, it will preferentially match the library files of the *TargetFramework* version specified by the `Framework` variable.
+Identical package assets at the same destination are copied once; duplicate origins remain in the plan and are counted as skipped. An explicit delete ends the prior deduplication interval. DLLs are not moved or merged across plugin directories.
+
+Explicit library paths inside the `NuGet_Packages` cache select the nearest applicable framework directory; `nuget:package@version/lib/framework/file` follows the same rule. A framework specified in the path takes precedence, such as `lib/net9.0/*.dll`; `lib/*.dll` uses the `Framework` variable. Matching preserves subsequent subpaths and the directory structure produced by wildcard expansion. Paths outside the cache root are not adjusted.
 
 #### Nearest Matching
 
@@ -291,3 +291,47 @@ However, the above package library directory does not contains the `net9.0` fram
 	- [`daemon.deploy`](https://github.com/Zongsoft/hosting/blob/main/daemon/.deploy)
 	- [`terminal.deploy`](https://github.com/Zongsoft/hosting/blob/main/terminal/.deploy)
 	- [`web.deploy`](https://github.com/Zongsoft/hosting/blob/main/web/default/.deploy)
+
+### Plans, locks, and cleanup
+
+Source refactor compatibility changes: the default overwrite policy now follows the documented `newest` behavior; invalid overwrite values, filters, and undefined path variables fail. Writes must stay within `destination`, and linked write paths are rejected. Both nested manifests and `#@import` detect cycles. Combined filters retain left-to-right evaluation. `**` matches zero or more directory levels; directory copies preserve their internal relative structure.
+
+| Option | Behavior |
+| --- | --- |
+| `--dry-run:true` | Builds a plan without target writes or directory creation. Explicit reports still write; online resolution can populate the NuGet cache. |
+| `--offline:true` | Uses only unpacked local packages with valid nuspec metadata; missing packages fail without network requests. |
+| `--explain:true` | Prints operation results and package/file origins, preserving original messages and paths. |
+| `--report:./deployment.json` | Saves success or failure, manifest origins, package versions/parents, hashes, duplicate/skipped operations and diagnostics. |
+| `--lockFile:./deployment.lock.json` | Writes selected versions, package content and manifest/source hashes after a successful non-preview deployment. |
+| `--locked:true` | Uses package versions from lockFile and validates the plan/content without updating the lock. Locks retain source manifest paths. |
+| `--prerelease:true` | Includes prereleases for unpinned requests; dependencies explicitly requiring a preview lower bound can also select previews. |
+| `--previous:./previous.json` | Compares a successful prior report for the same target root and lists obsolete files as Stale; keeps them by default. |
+| `--prune:true` | Requires previous. Deletes only files whose last effective prior operation copied them, whose hashes are unchanged, and which are no longer selected. Modified, unowned and outside-root files are not automatically removed. |
+
+Boolean options accept a bare name or `true/false`. Locks, reports, and cleanup are opt-in. Give reports/locks independent paths: they cannot overwrite known source manifests, source files, or planned targets. An execution-time I/O error stops subsequent operations; completed writes are not rolled back.
+
+```powershell
+dotnet deploy --framework:net10.0 --platform:win --architecture:x64 --offline:true --dry-run:true --report:./preview.json .deploy
+dotnet deploy --framework:net10.0 --platform:win --architecture:x64 --lockFile:./deployment.lock.json --report:./completed.json .deploy
+dotnet deploy --framework:net10.0 --platform:win --architecture:x64 --lockFile:./deployment.lock.json --locked:true .deploy
+```
+
+RID fallback uses the repository-pinned dotnet/runtime v10.0.0 graph through NuGet.RuntimeModel (see [implementation details](docs/implementation.md)), with aliases `windows→win`, `mac/macos→osx`, and `x32→x86`. `contentFiles/any/{tfm}` honors nuspec include/exclude, copyToOutput, and flatten; content without an output-copy rule is not deployed. Legacy `content` is copied recursively. XML documentation in lib groups is still copied under the existing contract; not every XML file is disposable.
+
+Package access, dependency resolution, asset selection, and RID fallback have separate implementations; framework and version models reuse NuGet/.NET types. See [implementation details](docs/implementation.md) for responsibilities and behavior. This refactor adds no package dependencies.
+
+Variables load from the environment, the destination application's appsettings.json, and finally command options. Nested keys support `$(Database.Name)` and `%Items[0].Name%`; substitution preserves URL slashes.
+
+Run regression tests without publishing:
+
+```powershell
+dotnet test test/Zongsoft.Tools.Deployer.Tests.csproj -f net10.0 -p:GeneratePackageOnBuild=false
+```
+
+See [REFACTOR-TASKS.md](REFACTOR-TASKS.md) for task status and real-package validation.
+
+Profile imports use Core 7.59.0: ProfileReader handles imports and recursion directly; ProfileOptions.Importing records imported manifest hashes without directive registration. See [implementation details](docs/implementation.md#profile-import-callbacks) and the [import refactor checklist](PROFILE-IMPORT-TASKS.md).
+
+See [implementation details](docs/implementation.md#core-profile-declarations-and-saving) for Core Profile source/override rules and read/write responsibilities. Deployment does not save its manifests.
+
+Local source searches and links follow [the implementation contract](docs/implementation.md#local-search-and-source-links).

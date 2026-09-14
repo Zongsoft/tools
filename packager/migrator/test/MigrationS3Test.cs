@@ -15,7 +15,7 @@ using Xunit;
 
 namespace Zongsoft.Tools.Packager.Migration.Tests;
 
-public sealed class MigrationS3Tests
+public sealed class MigrationS3Test
 {
 	#region 测试方法
 	[Theory]

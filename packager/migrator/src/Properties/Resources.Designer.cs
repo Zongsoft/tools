@@ -97,15 +97,6 @@ namespace Zongsoft.Tools.Packager.Migration.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Unknown database provider. 的本地化字符串。
-        /// </summary>
-        internal static string DatabaseProviderUnknown {
-            get {
-                return ResourceManager.GetString("DatabaseProviderUnknown", resourceCulture);
-            }
-        }
-
-        /// <summary>
         ///   查找类似 Migration &apos;{0}&apos; failed ({1}). See migration status; check the provider/server logs for details. 的本地化字符串。
         /// </summary>
         internal static string MigrationFailed {

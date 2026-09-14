@@ -1,4 +1,4 @@
-﻿/*
+/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -10,8 +10,8 @@
  *   钟峰(Popeye Zhong) <zongsoft@gmail.com>
  *
  * The MIT License (MIT)
- * 
- * Copyright (C) 2015-2025 Zongsoft Corporation <http://www.zongsoft.com>
+ *
+ * Copyright (C) 2015-2026 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -19,10 +19,10 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -32,19 +32,34 @@
  */
 
 using System;
-using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Zongsoft.Tools.Deployer;
 
-/// <summary>
-/// 提供路径修正和调节功能的接口。
-/// </summary>
-public interface IDirectoryRegulator
+/// <summary>描述一项部署操作的源、目标、来源和执行状态，或等待依赖求解的包占位操作。</summary>
+public sealed class DeploymentOperation
 {
-	/// <summary>修正指定的目录路径。</summary>
-	/// <param name="directory">指定的待修正的目录路径。</param>
-	/// <param name="variables">指定的参数和环境变量集。</param>
-	/// <param name="result">输出参数，表示修正成功后的路径。</param>
-	/// <returns>如果为真则表示修正成功，否则表示未修正。</returns>
-	bool Regulate(string directory, IDictionary<string, string> variables, out string result);
+	#region 公共属性
+	public string Kind { get; set; }
+	public string Source { get; set; }
+	public string ResolvedSource { get; set; }
+	public string Destination { get; set; }
+	public string Manifest { get; set; }
+	public string Package { get; set; }
+	public string Framework { get; set; }
+	public string Runtime { get; set; }
+	public string Hash { get; set; }
+	public string SourceHash { get; set; }
+	public string Status { get; set; } = "Planned";
+	public string Reason { get; set; }
+	#endregion
+
+	#region 内部属性
+	/// <summary>
+	/// 获取或设置包占位操作的延迟展开回调；只在本次部署会话中使用，不写入报告。
+	/// </summary>
+	[System.Text.Json.Serialization.JsonIgnore]
+	internal Func<CancellationToken, Task> Expand { get; set; }
+	#endregion
 }

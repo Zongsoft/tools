@@ -6,7 +6,7 @@ using Xunit;
 
 namespace Zongsoft.Tools.Packager.Migration.Tests;
 
-public sealed class MigrationPlanTests
+public sealed class MigrationPlanTest
 {
 	#region 常量定义
 	private const string CANONICAL_JSON = "{\"FormatVersion\":1,\"Package\":\"zongsoft.web\",\"Version\":\"1.1.0\",\"Tasks\":[{\"Id\":\"0001-sqlite\",\"Provider\":\"sqlite\",\"Parameters\":{\"Database\":\"/var/lib/zongsoft/hosting.db\"},\"Scripts\":[{\"Path\":\".migration/.artifacts/schema.sql\",\"Checksum\":\"17DB4FD369EDB9244B9F91D9AEED145C3D04AD8BA6E95D06247F07A63527D11A\"}],\"Buckets\":[]}]}";

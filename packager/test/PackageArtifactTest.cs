@@ -14,7 +14,7 @@ using Xunit;
 
 namespace Zongsoft.Tools.Packager.Tests;
 
-public sealed class PackageArtifactTests
+public sealed class PackageArtifactTest
 {
 	#region 目录与归档
 	[Theory]
@@ -62,6 +62,100 @@ public sealed class PackageArtifactTests
 			var conffiles = ReadControl(archivePath, "conffiles");
 			Assert.Equal("/etc/zongsoft-artifact/settings.conf\n", conffiles);
 		}
+	}
+
+	[Theory]
+	[InlineData("tar")]
+	[InlineData("deb")]
+	[InlineData("rpm")]
+	public void Package_SelectedLinks_PreserveLogicalNamesAndTargetContents(string format)
+	{
+		using var directory = new MigrationTestDirectory();
+		var targetFile = directory.Write("targets/actual-name.dat", "linked file content");
+		File.SetLastWriteTimeUtc(targetFile, DateTimeOffset.FromUnixTimeSeconds(1700000000).UtcDateTime);
+		if(!OperatingSystem.IsWindows())
+			File.SetUnixFileMode(targetFile, (UnixFileMode)416);
+		directory.Write("targets/resources/ordinary/data.txt", "directory target content");
+		directory.Write("targets/hidden/secret.txt", "must not be included");
+		Directory.CreateDirectory(Path.Combine(directory.Path, "targets/resources/empty"));
+		var source = Directory.CreateDirectory(Path.Combine(directory.Path, "source")).FullName;
+		File.CreateSymbolicLink(Path.Combine(source, "visible.txt"), targetFile);
+		Directory.CreateSymbolicLink(Path.Combine(source, "assets"), Path.Combine(directory.Path, "targets/resources"));
+		Directory.CreateSymbolicLink(Path.Combine(directory.Path, "targets/resources/nested-link"), Path.Combine(directory.Path, "targets/hidden"));
+		File.CreateSymbolicLink(Path.Combine(directory.Path, "targets/resources/alias.txt"), targetFile);
+		var package = CreatePackage(format, source);
+		package.Entries.Load(source, ["visible.txt", "assets"]);
+		var selected = Assert.Single(package.Entries, item => item.EntryName.EndsWith("visible.txt", StringComparison.Ordinal));
+		Assert.Equal(targetFile, selected.Source);
+		Assert.Equal(1700000000, selected.ModifiedTime);
+		Assert.Equal(19, selected.Size);
+		Assert.Equal((UnixFileMode)(OperatingSystem.IsWindows() ? 420 : 416), selected.Mode);
+		var output = Directory.CreateDirectory(Path.Combine(directory.Path, "output")).FullName;
+
+		package.Pack(output, true);
+
+		var entries = ReadArchive(Path.Combine(output, package.FileName), format);
+		var prefix = format == "tar" ? "" : "opt/zongsoft/web/";
+		Assert.Equal("linked file content", Encoding.UTF8.GetString(Assert.Single(entries, item => item.Name == prefix + "visible.txt").Content));
+		Assert.Equal("linked file content", Encoding.UTF8.GetString(Assert.Single(entries, item => item.Name == prefix + "assets/alias.txt").Content));
+		Assert.Equal("directory target content", Encoding.UTF8.GetString(Assert.Single(entries, item => item.Name == prefix + "assets/ordinary/data.txt").Content));
+		Assert.True(Assert.Single(entries, item => item.Name == prefix + "assets/empty").IsDirectory);
+		Assert.DoesNotContain(entries, item => item.Name.Contains("nested-link", StringComparison.Ordinal) || item.Name.EndsWith("actual-name.dat", StringComparison.Ordinal));
+		Assert.Equal("linked file content", File.ReadAllText(targetFile));
+	}
+
+	[Theory]
+	[InlineData("missing.txt")]
+	[InlineData("*.txt")]
+	public void Entries_SelectedDanglingLink_RejectsBeforePackaging(string pattern)
+	{
+		using var directory = new MigrationTestDirectory();
+		var source = Directory.CreateDirectory(Path.Combine(directory.Path, "source")).FullName;
+		File.CreateSymbolicLink(Path.Combine(source, "missing.txt"), Path.Combine(directory.Path, "absent.dat"));
+		var package = CreatePackage("tar", source);
+
+		Assert.ThrowsAny<IOException>(() => package.Entries.Load(source, [pattern]));
+
+		Assert.Empty(package.Entries);
+	}
+
+	[Fact]
+	public void Entries_RecursiveFilePattern_DoesNotTraverseDirectoryLinks()
+	{
+		using var directory = new MigrationTestDirectory();
+		var target = directory.Write("targets/actual.dat", "target data");
+		directory.Write("source/ordinary/nested.txt", "ordinary data");
+		directory.Write("targets/hidden/ignored.txt", "not selected");
+		var source = Path.Combine(directory.Path, "source");
+		File.CreateSymbolicLink(Path.Combine(source, "visible.txt"), target);
+		Directory.CreateSymbolicLink(Path.Combine(source, "linked"), Path.Combine(directory.Path, "targets/hidden"));
+		var package = CreatePackage("tar", source);
+
+		package.Entries.Load(source, ["**/*.txt"]);
+
+		Assert.Equal(new[] { "ordinary/nested.txt", "visible.txt" }, package.Entries.Where(entry => !entry.IsDirectory).Select(entry => entry.EntryName));
+		using var stream = Assert.Single(package.Entries, entry => entry.EntryName == "visible.txt").OpenRead();
+		using var reader = new StreamReader(stream);
+		Assert.Equal("target data", reader.ReadToEnd());
+		Assert.DoesNotContain(package.Entries, entry => entry.EntryName.Contains("linked", StringComparison.Ordinal));
+	}
+
+	[Fact]
+	public void Entries_DirectoryPattern_SelectsLinkAsTopLevelPayload()
+	{
+		using var directory = new MigrationTestDirectory();
+		directory.Write("targets/resources/item.txt", "selected directory");
+		var source = Directory.CreateDirectory(Path.Combine(directory.Path, "source")).FullName;
+		Directory.CreateSymbolicLink(Path.Combine(source, "assets"), Path.Combine(directory.Path, "targets/resources"));
+		var package = CreatePackage("tar", source);
+
+		package.Entries.Load(source, ["asset*"]);
+
+		Assert.True(Assert.Single(package.Entries, entry => entry.EntryName == "assets").IsDirectory);
+		var file = Assert.Single(package.Entries, entry => entry.EntryName == "assets/item.txt");
+		using var stream = file.OpenRead();
+		using var reader = new StreamReader(stream);
+		Assert.Equal("selected directory", reader.ReadToEnd());
 	}
 
 	[Theory]

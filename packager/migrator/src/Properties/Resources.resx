@@ -100,9 +100,6 @@
   <data name="DatabaseMigratorUnknown" xml:space="preserve">
     <value>Unknown database migrator.</value>
   </data>
-  <data name="DatabaseProviderUnknown" xml:space="preserve">
-    <value>Unknown database provider.</value>
-  </data>
   <data name="ScriptExecuting" xml:space="preserve">
     <value>{0}: {1}</value>
   </data>

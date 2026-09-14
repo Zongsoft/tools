@@ -7,7 +7,7 @@ using Xunit;
 
 namespace Zongsoft.Tools.Packager.Tests;
 
-public sealed class PackageInputTests
+public sealed class PackageInputTest
 {
 	#region 变量展开
 	[Fact]

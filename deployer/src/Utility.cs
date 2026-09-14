@@ -1,4 +1,4 @@
-﻿/*
+/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -10,7 +10,7 @@
  *   钟峰(Popeye Zhong) <zongsoft@gmail.com>
  *
  * The MIT License (MIT)
- * 
+ *
  * Copyright (C) 2015-2025 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -38,6 +38,7 @@ using System.Collections.Generic;
 
 namespace Zongsoft.Tools.Deployer;
 
+/// <summary>提供部署语法所需的路径、框架过滤及条件表达式辅助功能。</summary>
 internal static class Utility
 {
 	internal const string FRAMEWORK_VARIABLE = "Framework";
@@ -47,13 +48,13 @@ internal static class Utility
 
 	public static bool IsDirectory(string path) => !string.IsNullOrEmpty(path) && IsDirectorySeparator(path[^1]);
 	public static bool IsDirectorySeparator(char chr) => chr == Path.DirectorySeparatorChar || chr == Path.AltDirectorySeparatorChar;
-
 	public static string GetTargetFramework(IDictionary<string, string> variables) => TryGetTargetFramework(variables, out var value) ? value : null;
 	public static bool TryGetTargetFramework(IDictionary<string, string> variables, out string value)
 	{
 		if(variables == null || variables.Count == 0)
 		{
 			value = null;
+
 			return false;
 		}
 
@@ -71,27 +72,25 @@ internal static class Utility
 
 	public static bool IsTargetFramework(string value, params string[] targets)
 	{
-		if(string.IsNullOrEmpty(value))
-			return targets == null || targets.Length == 0;
-
 		if(targets == null || targets.Length == 0)
 			return true;
 
-		var framework = TargetFramework.Parse(value);
+		var framework = NuGet.Frameworks.NuGetFramework.Parse(value.ToLowerInvariant());
 
-		for(int i = 0; i < targets.Length; i++)
+		if(framework.IsUnsupported)
+			throw new FormatException(string.Format(Properties.Resources.Review_InvalidOption, "Framework", value));
+
+		foreach(var item in targets)
 		{
-			if(string.IsNullOrEmpty(targets[i]))
-				continue;
+			var uplook = item.EndsWith('^');
+			var target = NuGet.Frameworks.NuGetFramework.Parse((uplook ? item[..^1] : item).ToLowerInvariant());
 
-			var uplook = targets[i][^1] == '^';
-			var target = uplook ? TargetFramework.Parse(targets[i].AsSpan()[..^1]) : TargetFramework.Parse(targets[i]);
+			if(target.IsUnsupported)
+				throw new FormatException(string.Format(Properties.Resources.Review_InvalidFilter, item));
 
-			if(framework.IsFramework(target.Framework) && framework.IsPlatform(target.Platform))
-			{
-				if(uplook ? framework.FrameworkVersion >= target.FrameworkVersion : framework.FrameworkVersion == target.FrameworkVersion)
-					return true;
-			}
+			if(StringComparer.OrdinalIgnoreCase.Equals(framework.Framework, target.Framework) && StringComparer.OrdinalIgnoreCase.Equals(framework.Platform, target.Platform)
+				&& (uplook ? framework.Version >= target.Version && framework.PlatformVersion >= target.PlatformVersion : framework.Version == target.Version && framework.PlatformVersion == target.PlatformVersion))
+				return true;
 		}
 
 		return false;
@@ -106,25 +105,7 @@ internal static class Utility
 		return string.Equals(Path.GetExtension(filePath), ".deploy", StringComparison.OrdinalIgnoreCase);
 	}
 
-	public static string EnsureDirectory(params string[] paths)
-	{
-		if(paths == null)
-			throw new ArgumentNullException(nameof(paths));
-
-		if(paths.Length == 0)
-			return string.Empty;
-
-		var fullPath = Path.Combine(paths);
-
-		if(!Directory.Exists(fullPath))
-			Directory.CreateDirectory(fullPath);
-
-		return fullPath;
-	}
-
-	/// <summary>
-	/// 提供部署项必须条件处理的工具类。
-	/// </summary>
+	/// <summary>提供部署项必须条件处理的工具类。</summary>
 	public static class Requisition
 	{
 		public static ReadOnlySpan<char> GetRequisites(ReadOnlySpan<char> text, out ReadOnlySpan<char> requisites)
@@ -135,14 +116,21 @@ internal static class Utility
 				return text;
 
 			var index = text.IndexOf("<");
-			if(index > 0)
+
+			if(index >= 0)
 			{
+				if(text.TrimEnd()[^1] != '>' || text[(index + 1)..^1].IndexOfAny(['<', '>']) >= 0)
+					throw new FormatException(string.Format(Properties.Resources.Review_InvalidFilter, text.ToString()));
+
 				requisites = text[(index + 1)..].Trim();
 				text = text[..index].Trim();
 
 				index = requisites.IndexOf('>');
+
 				if(index > 0)
 					requisites = requisites[..index].Trim();
+				else
+					throw new FormatException(string.Format(Properties.Resources.Review_InvalidFilter, text.ToString()));
 			}
 
 			return text.Trim();
@@ -157,7 +145,7 @@ internal static class Utility
 			var position = 0;
 			bool? result = null;
 
-			for(int i = 1; i < requisites.Length; i++)
+			for(int i = 0; i < requisites.Length; i++)
 			{
 				if(requisites[i] == '|' || requisites[i] == '&')
 				{
@@ -170,13 +158,14 @@ internal static class Utility
 				}
 			}
 
-			if(position < requisites.Length - 1)
+			if(position < requisites.Length)
 			{
 				var matched = IsRequisite(variables, requisites[position..].Trim());
+
 				return GetResult(result, matched, combiner);
 			}
 
-			return result ?? true;
+			throw new FormatException(string.Format(Properties.Resources.Review_InvalidFilter, requisites.ToString()));
 
 			static bool GetResult(bool? result, bool value, char combiner)
 			{
@@ -192,8 +181,8 @@ internal static class Utility
 
 		private static bool IsRequisite(IDictionary<string, string> variables, ReadOnlySpan<char> requisite)
 		{
-			if(requisite.IsEmpty)
-				return true;
+			if(requisite.IsEmpty || requisite.SequenceEqual("!"))
+				throw new FormatException(string.Format(Properties.Resources.Review_InvalidFilter, requisite.ToString()));
 
 			bool result;
 			ReadOnlySpan<char> name, value;
@@ -214,12 +203,14 @@ internal static class Utility
 					if(value.IsEmpty)
 					{
 						result = variables.ContainsKey(name.ToString());
+
 						return requisite[0] == '!' ? !result : result;
 					}
 
 					if(name.Equals(FRAMEWORK_VARIABLE, StringComparison.OrdinalIgnoreCase))
 					{
 						result = IsTargetFramework(variables, value.ToString());
+
 						return requisite[0] == '!' ? !result : result;
 					}
 
@@ -227,6 +218,7 @@ internal static class Utility
 					{
 						var parts = value.ToString().Split(',', StringSplitOptions.TrimEntries);
 						result = parts.Contains(variable.Trim(), StringComparer.OrdinalIgnoreCase);
+
 						return requisite[0] == '!' ? !result : result;
 					}
 

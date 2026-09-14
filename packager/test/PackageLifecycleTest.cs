@@ -14,7 +14,7 @@ using Xunit;
 
 namespace Zongsoft.Tools.Packager.Tests;
 
-public sealed class PackageLifecycleTests
+public sealed class PackageLifecycleTest
 {
 	private const string INSTALL_PATH = "/opt/zongsoft/lifecycle-test";
 	private const string UNINSTALLING_MARKER = "echo uninstalling-lifecycle-marker";
@@ -261,7 +261,7 @@ public sealed class PackageLifecycleTests
 	{
 		public TemporaryDirectory()
 		{
-			this.Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), nameof(PackageLifecycleTests), Guid.NewGuid().ToString("N"));
+			this.Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), nameof(PackageLifecycleTest), Guid.NewGuid().ToString("N"));
 			Directory.CreateDirectory(this.Path);
 		}
 

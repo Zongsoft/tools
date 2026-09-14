@@ -25,20 +25,38 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<None Remove="Resources/dotnet-runtime-LICENSE.txt" />
+		<None Include="Resources/dotnet-runtime-LICENSE.txt" Pack="true" PackagePath="licenses/" />
 		<None Include="..\..\zongsoft-logo.png" Pack="true" PackagePath="\" Visible="true" />
 		<None Include="..\README.md" Pack="true" PackagePath="\" />
 		<None Include="..\README.zh-Hans.md" Pack="true" PackagePath="\" />
+		<None Include="..\docs\**\*" Link="docs/%(Filename)%(Extension)" Pack="true" PackagePath="docs/%(RecursiveDir)" />
+		<EmbeddedResource Include="Resources/PortableRuntimeIdentifierGraph.json" LogicalName="Deployer.RuntimeGraph.json" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="NuGet.Common" Version="7.3.1" />
-		<PackageReference Include="NuGet.Configuration" Version="7.3.1" />
-		<PackageReference Include="NuGet.Frameworks" Version="7.3.1" />
-		<PackageReference Include="NuGet.Packaging" Version="7.3.1" />
-		<PackageReference Include="NuGet.Protocol" Version="7.3.1" />
-		<PackageReference Include="NuGet.Versioning" Version="7.3.1" />
-		<PackageReference Include="Zongsoft.Core" Version="7.48.0" />
+		<PackageReference Include="NuGet.Common" Version="7.9.0" />
+		<PackageReference Include="NuGet.Configuration" Version="7.9.0" />
+		<PackageReference Include="NuGet.Frameworks" Version="7.9.0" />
+		<PackageReference Include="NuGet.Packaging" Version="7.9.0" />
+		<PackageReference Include="NuGet.Protocol" Version="7.9.0" />
+		<PackageReference Include="NuGet.Versioning" Version="7.9.0" />
 	</ItemGroup>
+
+	<Choose>
+		<When Condition="$(Configuration)=='Debug'">
+			<ItemGroup>
+				<Reference Include="Zongsoft.Core">
+					<HintPath>..\..\..\framework\Zongsoft.Core\src\bin\$(Configuration)\$(TargetFramework)\Zongsoft.Core.dll</HintPath>
+				</Reference>
+			</ItemGroup>
+		</When>
+		<Otherwise>
+			<ItemGroup>
+				<PackageReference Include="Zongsoft.Core" Version="7.59.0" />
+			</ItemGroup>
+		</Otherwise>
+	</Choose>
 
 	<ItemGroup>
 		<Compile Update="Properties\Resources.Designer.cs">

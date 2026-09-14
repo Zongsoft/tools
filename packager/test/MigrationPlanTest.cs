@@ -13,7 +13,7 @@ using Xunit;
 
 namespace Zongsoft.Tools.Packager.Tests;
 
-public sealed class MigrationPlanTests
+public sealed class MigrationPlanTest
 {
 	#region 常量定义
 	// This literal is the portable wire representation, independent of serializer options and platform newlines.

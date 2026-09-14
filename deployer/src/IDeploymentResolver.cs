@@ -1,4 +1,4 @@
-﻿/*
+/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -37,6 +37,7 @@ using System.Threading.Tasks;
 
 namespace Zongsoft.Tools.Deployer;
 
+/// <summary>定义将描述文件条目解析为部署操作的契约。</summary>
 public interface IDeploymentResolver
 {
 	string Name { get; }

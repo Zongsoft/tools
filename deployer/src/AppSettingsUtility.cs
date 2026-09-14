@@ -1,4 +1,4 @@
-﻿/*
+/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -10,7 +10,7 @@
  *   钟峰(Popeye Zhong) <zongsoft@gmail.com>
  *
  * The MIT License (MIT)
- * 
+ *
  * Copyright (C) 2015-2025 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -36,99 +36,59 @@ using System.IO;
 using System.Text.Json;
 using System.Collections.Generic;
 
-using Zongsoft.Serialization;
-
 namespace Zongsoft.Tools.Deployer;
 
+/// <summary>读取目标应用的 appsettings.json，将嵌套对象和数组展开为部署变量。</summary>
 internal static class AppSettingsUtility
 {
-	public static void Load(IDictionary<string, string> variables)
+	#region 公共方法
+	public static void Load(IDictionary<string, string> variables) => Load(variables, Environment.CurrentDirectory);
+	public static void Load(IDictionary<string, string> variables, string directory)
 	{
 		if(variables == null)
 			return;
 
-		var filePath = Path.Combine(Environment.CurrentDirectory, "appsettings.json");
-		if(!File.Exists(filePath))
+		var path = Path.Combine(directory, "appsettings.json");
+
+		if(!File.Exists(path))
 			return;
 
-		var settings = Serializer.Json.Deserialize<IDictionary<string, object>>(File.OpenRead(filePath));
-		if(settings == null || settings.Count == 0)
-			return;
-
-		//为“应用程序名称”添加一个别名变量
-		if(settings.TryGetValue("ApplicationName", out var applicationName) && applicationName != null)
-			variables["Application"] = applicationName.ToString();
-
-		foreach(var setting in settings)
+		using var stream = File.OpenRead(path);
+		using var document = JsonDocument.Parse(stream, new JsonDocumentOptions
 		{
-			if(setting.Value == null)
-				continue;
+			AllowTrailingCommas = true,
+			CommentHandling = JsonCommentHandling.Skip,
+		});
 
-			if(setting.Value is JsonElement element)
-				Populate(variables, setting.Key, element);
-		}
+		foreach(var property in document.RootElement.EnumerateObject())
+			Populate(variables, property.Name, property.Value);
+
+		if(variables.TryGetValue("ApplicationName", out var application))
+			variables["Application"] = application;
 	}
+	#endregion
 
+	#region 私有方法
 	private static void Populate(IDictionary<string, string> variables, string path, JsonElement element)
 	{
 		switch(element.ValueKind)
 		{
-			case JsonValueKind.Null:
-			case JsonValueKind.Undefined:
-				break;
-			case JsonValueKind.True:
-			case JsonValueKind.False:
-			case JsonValueKind.Number:
-				variables[path] = element.ToString();
-				break;
-			case JsonValueKind.String:
-				variables[path] = element.GetString();
-				break;
 			case JsonValueKind.Object:
-				Populate(variables, path, element.EnumerateObject());
+				foreach(var property in element.EnumerateObject())
+					Populate(variables, $"{path}.{property.Name}", property.Value);
 				break;
 			case JsonValueKind.Array:
 				var index = 0;
-				var array = element.EnumerateArray();
-				while(array.MoveNext())
-				{
-					Populate(variables, $"{path}[{index++}]", array.Current);
-				}
+				foreach(var item in element.EnumerateArray())
+					Populate(variables, $"{path}[{index++}]", item);
+				break;
+			case JsonValueKind.Null:
+			case JsonValueKind.Undefined:
+				break;
+			default:
+				variables[path] = element.ToString();
 				break;
 		}
 	}
-
-	private static void Populate(IDictionary<string, string> variables, string path, JsonElement.ObjectEnumerator iterator)
-	{
-		while(iterator.MoveNext())
-		{
-			var property = iterator.Current;
-
-			switch(property.Value.ValueKind)
-			{
-				case JsonValueKind.Null:
-				case JsonValueKind.Undefined:
-					break;
-				case JsonValueKind.True:
-				case JsonValueKind.False:
-				case JsonValueKind.Number:
-					variables[$"{path}.{property.Name}"] = property.Value.ToString();
-					break;
-				case JsonValueKind.String:
-					variables[$"{path}.{property.Name}"] = property.Value.GetString();
-					break;
-				case JsonValueKind.Object:
-					Populate(variables, $"{path}.{property.Name}", property.Value.EnumerateObject());
-					break;
-				case JsonValueKind.Array:
-					var index = 0;
-					var array = property.Value.EnumerateArray();
-					while(array.MoveNext())
-					{
-						Populate(variables, $"{path}[{index++}]", array.Current);
-					}
-					break;
-			}
-		}
-	}
+	#endregion
 }

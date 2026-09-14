@@ -1,4 +1,4 @@
-﻿/*
+/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -10,7 +10,7 @@
  *   钟峰(Popeye Zhong) <zongsoft@gmail.com>
  *
  * The MIT License (MIT)
- * 
+ *
  * Copyright (C) 2015-2025 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -39,6 +39,7 @@ using System.Collections.Generic;
 
 namespace Zongsoft.Tools.Deployer;
 
+/// <summary>为文件源解析器提供源展开、嵌套描述文件处理和部署操作登记的公共流程。</summary>
 public abstract class DeploymentResolverBase : IDeploymentResolver
 {
 	#region 构造函数
@@ -53,69 +54,54 @@ public abstract class DeploymentResolverBase : IDeploymentResolver
 	public async Task ResolveAsync(DeploymentContext context, DeploymentEntry deployment, CancellationToken cancellation)
 	{
 		var sources = await this.GetSourcesAsync(context, deployment, cancellation);
+		await PlanSourcesAsync(context, deployment, sources, cancellation);
+	}
+	#endregion
 
-		//由于源路径中可能含有通配符，因此必须查找匹配的文件集
-		foreach(var sourceFile in sources)
+	#region 内部方法
+	internal static async Task PlanSourcesAsync(DeploymentContext context, DeploymentEntry deployment, IEnumerable<DeploymentUtility.PathToken> sources, CancellationToken cancellation)
+	{
+		foreach(var source in sources)
 		{
-			var destinationFile = Path.Combine(GetDestinationDirectory(deployment.Destination.Path, sourceFile.Suffix), string.IsNullOrEmpty(deployment.Destination.Name) ? Path.GetFileName(sourceFile.Path) : deployment.Destination.Name);
+			cancellation.ThrowIfCancellationRequested();
 
-			if(!sourceFile.Exists())
+			if(!source.Exists())
+				throw new FileNotFoundException(string.Format(Properties.Resources.Review_Missing, source.Path));
+
+			var directory = string.IsNullOrEmpty(source.Suffix) ? deployment.Destination.Path : Path.Combine(deployment.Destination.Path, source.Suffix);
+			context.Deployer.Session.Validate(directory);
+
+			if(Utility.IsDeploymentFile(source.Path) && !Deployer.Flag(context.Variables, Deployer.IGNOREDEPLOYMENTFILE_OPTION))
 			{
-				//累加文件复制失败计数器
-				context.Counter.Fail();
-
-				//打印文件不存在的消息（如果是静默模式则不打印提示消息）
-				if(!context.IsVerbosity(Verbosity.Quiet))
-					context.Deployer.Terminal.FileNotExists(sourceFile.Path);
-
+				await context.Deployer.PlanManifestAsync(source.Path, directory, cancellation);
 				continue;
 			}
 
-			//如果指定要拷贝的源文件是一个部署文件
-			if(Utility.IsDeploymentFile(sourceFile.Path))
+			if(Path.GetFileName(source.Path) == "_._" && new FileInfo(source.Path).Length == 0)
+				continue;
+
+			var name = string.IsNullOrEmpty(deployment.Destination.Name) ? Path.GetFileName(source.Path) : deployment.Destination.Name;
+
+			if(Utility.IsDirectory(name))
+				name = Path.Combine(name, Path.GetFileName(source.Path));
+
+			var destination = context.Deployer.Session.Validate(Path.Combine(directory, name));
+			context.Deployer.Session.Add(new DeploymentOperation
+
 			{
-				//如果没有指定忽略处理子部署文件，则进行子部署文件的递归处理
-				if(!context.Variables.ContainsKey(Deployer.IGNOREDEPLOYMENTFILE_OPTION))
-				{
-					var counter = await context.Deployer.DeployAsync(sourceFile.Path, GetDestinationDirectory(deployment.Destination.Path, sourceFile.Suffix), cancellation);
-					context.Count(counter);
-					continue;
-				}
-			}
-
-			//如果文件是Nuget包中的空文件则直接忽略
-			if(Path.GetFileName(sourceFile.Path) == "_._")
-			{
-				var info = new FileInfo(sourceFile.Path);
-				if(info.Length == 0)
-					continue;
-			}
-
-			//获取覆盖选项
-			var overwrite = context.Variables.TryGetValue(Deployer.OVERWRITE_OPTION, out var variable) && Enum.TryParse<Overwrite>(variable, true, out var value) ? value : Overwrite.Alway;
-
-			//执行文件复制
-			if(DeploymentUtility.CopyFile(sourceFile.Path, destinationFile, overwrite))
-			{
-				context.Counter.Success();
-
-				if(context.IsVerbosity(Verbosity.Detail))
-					context.Deployer.Terminal.FileDeploySucceed(sourceFile.Path, destinationFile);
-			}
-			else
-			{
-				context.Counter.Fail();
-
-				if(!context.IsVerbosity(Verbosity.Quiet))
-					context.Deployer.Terminal.FileDeployFailed(sourceFile.Path, destinationFile, overwrite);
-			}
+				Kind = "Copy",
+				Source = source.Path,
+				Destination = destination,
+				Manifest = deployment.Profile.FilePath,
+				Package = source.Package,
+				Framework = Utility.GetTargetFramework(context.Variables),
+				Runtime = context.Variables.TryGetValue("platform", out var platform) && context.Variables.TryGetValue("architecture", out var architecture) ? $"{platform}-{architecture}" : null,
+			});
 		}
-
-		static string GetDestinationDirectory(string root, string suffix) => string.IsNullOrEmpty(suffix) ? root : Path.Combine(root, suffix);
 	}
 	#endregion
 
 	#region 虚拟方法
-	protected virtual Task<IEnumerable<DeploymentUtility.PathToken>> GetSourcesAsync(DeploymentContext context, DeploymentEntry deployment, CancellationToken cancellation) => Task.FromResult(DeploymentUtility.GetFiles(deployment.Source.FullPath, context.Variables));
+	protected virtual Task<IEnumerable<DeploymentUtility.PathToken>> GetSourcesAsync(DeploymentContext context, DeploymentEntry deployment, CancellationToken cancellation) => Task.FromResult(DeploymentUtility.GetFiles(deployment.Source.FullPath, context.Variables, true, cancellation, Path.GetDirectoryName(deployment.Profile.FilePath)));
 	#endregion
 }

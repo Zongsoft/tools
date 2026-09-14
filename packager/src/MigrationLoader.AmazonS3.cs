@@ -45,11 +45,15 @@ partial class MigrationLoader
 	{
 		#region 成员字段
 		private readonly MigrationPlan.Step _task;
-		private readonly HashSet<string> _names = new(StringComparer.Ordinal);
+		private readonly HashSet<string> _names;
 		#endregion
 
 		#region 构造函数
-		public AmazonS3(MigrationPlan.Step task) => _task = task;
+		public AmazonS3(MigrationPlan.Step task, HashSet<string> names)
+		{
+			_task = task;
+			_names = names;
+		}
 		#endregion
 
 		#region 公共方法

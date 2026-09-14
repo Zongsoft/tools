@@ -19,6 +19,8 @@
 
 ## 高风险契约
 
+- INI/ENV 导入复用 Core Reader 内置导入，每个根文件及导入文件均需校验；不自行实现导入递归。SQL 路径、参数查找和条目错误使用 `entry.Profile.FilePath`，不能回退到命令行根 INI。段落按连续声明来源拆分任务，保持有效顺序和同来源去重；导入覆盖与独立 INI 输入的执行语义不同，见双语升迁指南。
+
 - tar、deb、rpm 必须对相同输入保持一致的目标路径、根路径别名、排除、权限和生命周期意图，同时尊重各格式的元数据规范。
 - 安装、升级、覆盖安装和最终卸载的脚本阶段不同；修改卸载保护时保留 Debian 动作参数和 RPM 剩余实例语义。
 - 根路径条目、安装目录、符号链接和 systemd 服务可写系统位置或删除文件；生成测试只检查隔离产物，不执行安装脚本。
@@ -40,7 +42,7 @@
 
 S3 桶初始化支持 public/private、默认加密（sse-s3/sse-kms及可选KMS密钥标识）、版本控制（enabled/suspended）和 tag.* 桶标签。省略 Encryption 时不写入 JSON、不调用加密 API，采用服务端默认；显式对象必须包含有效 Mode。已有桶通常跳过，带本地 pending 的未完成初始化会重试；新建桶的指定配置全部完成才清除 pending；选项文本仅在打包端解析，共享 Bucket 模型校验结构，运行器使用标准 S3 API。
 
-SQL 批次按规范升迁器名称组织，例如 `.migration/.artifacts/mysql/0001.sql` 和 `.migration/.artifacts/postgres/0001.sql`。每次加载计划时各升迁器从 0001 独立计数，同类任务共享连续编号；PostgreSQL 别名统一归入 postgres。每个非空段落仍是独立任务，保留自己的连接参数及脚本列表；任务 Id 用于日志和状态，不作为目录名。同段落内 SQL 重叠匹配去重，跨段落、跨文件和重复指定 INI 不合并或去重。S3 配置直接保存在计划中，不生成空中间目录。
+SQL 批次按规范升迁器名称组织，例如 `.migration/.artifacts/mysql/0001.sql` 和 `.migration/.artifacts/postgres/0001.sql`。每次加载计划时各升迁器从 0001 独立计数，同类任务共享连续编号；PostgreSQL 别名统一归入 postgres。没有导入时每个非空段落生成一个任务；合并后的段落按连续声明来源拆分任务，各自从来源 INI 查找连接参数并保留脚本列表；任务 Id 用于日志和状态，不作为目录名。同一来源段落内 SQL 重叠匹配跨任务去重，不同来源和独立命令行输入不去重；导入的同名条目按 Core 读取顺序覆盖。S3 配置直接保存在计划中，不生成空中间目录。
 
 `MigrationLoader.Load` 的局部计数字典传给 `MigrationLoader.Database`，避免多次加载或失败重试继承编号。解析顺序保留；运行器当前串行，但不承诺跨任务执行顺序，数据库任务内部的脚本顺序继续保证。
 
@@ -62,9 +64,13 @@ SQL 批次按规范升迁器名称组织，例如 `.migration/.artifacts/mysql/0
 
 - 变量优先级为显式选项 > 环境 > 描述符默认值；身份由源版本规则决定。按使用展开，不预读文件，未知/循环引用失败。
 - TextSource 统一源目录文件与文本：file: 强制文件，text: 原样文本，文件内容不展开或二次解释；pre/post 为严格文件列表。
-- FileMatcher 统一载荷、INI、SQL 的 *、?、独立段 **；每个参数位置按固定前缀下相对路径 Ordinal 展开，保留任务与段落内去重规则。拒绝符号链接/reparse point。
+- Core Searcher 统一载荷、INI、SQL 的 *、?、独立段 **；每个参数位置按固定前缀下相对路径 Ordinal 展开，保留任务与段落内去重规则。文件链接按逻辑名称读取目标，独立选中的目录链接可展开，内部目录链接跳过。
 - Entry.IsDirectory 保留空目录、源模式及时间；Generator.Entries 补齐 0755 父目录。目录不调用 OpenRead，不列入 Debian conffiles。tar 根目录别名卸载仅 rmdir 显式空目录。
 - Debian/RPM 大载荷用 DeleteOnClose 独占临时流及增量摘要，不分配完整载荷/包体数组；Unix 临时文件 0600，异常也释放。Debian 六种关系字段由 Package.Deb 独立校验，不复用 RPM 语法。
 - 实施清单及验收证据见 [docs/improvements.md](docs/improvements.md)，输入与归档回归位于 PackageInputTests、PackageArtifactTests。
 
 监听地址选项为 `--listen`，对应 Variables.Listen；生成 systemd 服务时写入宿主 `--urls`。纯端口转为 `http://127.0.0.1:<port>`，完整地址保留；省略时不追加 `--urls`，已有 service 文件的 ExecStart 不改写。
+
+## Searcher 接入
+
+本地通配搜索统一复用 Core Searcher，链接以逻辑名称匹配，内容取实际目标。独立选中的目录链接可展开，载荷内部目录链接跳过，文件链接保留名称并读取目标。INI/.deploy 按逻辑来源解析相对路径。进度见 [LOCAL-SEARCHER-TASKS.md](LOCAL-SEARCHER-TASKS.md)。

@@ -1,4 +1,4 @@
-﻿/*
+/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -10,7 +10,7 @@
  *   钟峰(Popeye Zhong) <zongsoft@gmail.com>
  *
  * The MIT License (MIT)
- * 
+ *
  * Copyright (C) 2015-2025 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -33,10 +33,10 @@
 
 using System;
 using System.IO;
-using System.Collections.Generic;
 
 namespace Zongsoft.Tools.Deployer;
 
+/// <summary>表示描述文件中的部署条目，保留解析器、源与目标、过滤条件及声明来源。</summary>
 public sealed class DeploymentEntry
 {
 	#region 私有构造
@@ -58,10 +58,6 @@ public sealed class DeploymentEntry
 	public Configuration.Profiles.Profile Profile { get; }
 	#endregion
 
-	#region 公共方法
-	public bool Ignored(IDictionary<string, string> variables) => !Utility.Requisition.IsRequisites(variables, this.Requisition);
-	#endregion
-
 	#region 静态方法
 	public static DeploymentEntry Get(DeploymentContext context, Configuration.Profiles.ProfileEntry entry)
 	{
@@ -75,7 +71,7 @@ public sealed class DeploymentEntry
 
 		var name = index switch
 		{
-			< 1 => string.Empty,
+			< 0 => "path",
 			_ => source[0..index],
 		};
 
@@ -85,12 +81,12 @@ public sealed class DeploymentEntry
 			_ => source[(index + 1)..],
 		};
 
-		var sourceName = context.Normalize(source, variable => context.Deployer.Terminal.UndefinedVariable(variable, source, entry.Profile.FilePath, entry.LineNumber));
+		var sourceName = context.Deployer.Normalize(source);
 		var sourcePath = Path.IsPathRooted(sourceName) ? Path.GetDirectoryName(sourceName) : Path.GetDirectoryName(entry.Profile.FilePath);
 
-		var destinationName = string.IsNullOrWhiteSpace(destination) ? string.Empty : context.Normalize(destination, variable => context.Deployer.Terminal.UndefinedVariable(variable, destination, entry.Profile.FilePath, entry.LineNumber));
+		var destinationName = string.IsNullOrWhiteSpace(destination) ? string.Empty : context.Deployer.Normalize(destination);
 		var destinationPath = entry.Section == null ? context.DestinationDirectory : Path.Combine(context.DestinationDirectory,
-				context.Normalize(entry.Section.FullName.Replace(' ', Path.DirectorySeparatorChar), variable => context.Deployer.Terminal.UndefinedVariable(variable, $"[{entry.Section.FullName}]", entry.Profile.FilePath, entry.LineNumber)));
+				context.Deployer.Normalize(entry.Section.FullName.Replace(' ', Path.DirectorySeparatorChar)));
 
 		return new(entry.Profile, name, new Target(sourceName, sourcePath), new Target(destinationName, destinationPath), requisition);
 	}

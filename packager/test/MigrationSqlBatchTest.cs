@@ -9,7 +9,7 @@ using Xunit;
 
 namespace Zongsoft.Tools.Packager.Tests;
 
-public sealed class MigrationSqlBatchTests
+public sealed class MigrationSqlBatchTest
 {
 	#region 测试方法
 	[Theory]

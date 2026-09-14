@@ -14,7 +14,7 @@ using Xunit;
 
 namespace Zongsoft.Tools.Packager.Tests;
 
-public sealed class PackageVersionTests
+public sealed class PackageVersionTest
 {
 	#region 条目测试
 	[Fact]

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -117,113 +117,52 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
-  <data name="DeploymentComplete.CountBegin" xml:space="preserve">
-    <value>(</value>
+  <data name="Review.Busy" xml:space="preserve">
+    <value>A deployment is already running on this instance: {0}</value>
   </data>
-  <data name="DeploymentComplete.CountEnd" xml:space="preserve">
-    <value>)</value>
+  <data name="Review.Conflict" xml:space="preserve">
+    <value>Conflicting deployment assets: {0}</value>
   </data>
-  <data name="DeploymentComplete.CountSparator" xml:space="preserve">
-    <value>, </value>
+  <data name="Review.Cycle" xml:space="preserve">
+    <value>Deployment cycle or depth limit: {0}</value>
   </data>
-  <data name="DeploymentComplete.FailedCount" xml:space="preserve">
-    <value>Failure: {0}</value>
+  <data name="Review.DependencyConflict" xml:space="preserve">
+    <value>Dependency constraints cannot be satisfied: {0}</value>
   </data>
-  <data name="DeploymentComplete.Message" xml:space="preserve">
-    <value>Deploy the {0} file is complete and a total of {1} file copy operations have been performed.</value>
+  <data name="Review.Failure" xml:space="preserve">
+    <value>{0}: {1}</value>
   </data>
-  <data name="DeploymentComplete.SucceedCount" xml:space="preserve">
-    <value>Success: {0}</value>
+  <data name="Review.InvalidFilter" xml:space="preserve">
+    <value>Invalid filter: {0}</value>
   </data>
-  <data name="DeploymentFileNotExists.Message" xml:space="preserve">
-    <value>The specified {0} deployment file does not exist.</value>
+  <data name="Review.InvalidOption" xml:space="preserve">
+    <value>Invalid option {0}: {1}</value>
   </data>
-  <data name="DirectoryNotExists.Message" xml:space="preserve">
-    <value>The specified {0} directory does not exist.</value>
+  <data name="Review.LinkedPath" xml:space="preserve">
+    <value>Linked path is not allowed: {0}</value>
   </data>
-  <data name="Error.Prompt" xml:space="preserve">
-    <value>Error: </value>
+  <data name="Review.Locked" xml:space="preserve">
+    <value>Locked deployment differs: {0}</value>
   </data>
-  <data name="FileDeleteFailed.Message" xml:space="preserve">
-    <value>The specified {0} file failed to be deleted.</value>
+  <data name="Review.Missing" xml:space="preserve">
+    <value>File or package not found: {0}</value>
   </data>
-  <data name="FileDeleteSucceed.Message" xml:space="preserve">
-    <value>The specified {0} file was deleted successfully.</value>
+  <data name="Review.Offline" xml:space="preserve">
+    <value>Package is not available in offline cache: {0}</value>
   </data>
-  <data name="FileNotExists.Message" xml:space="preserve">
-    <value>The specified {0} file does not exist.</value>
+  <data name="Review.OutsideRoot" xml:space="preserve">
+    <value>Target {0} is outside deployment root {1}.</value>
   </data>
-  <data name="InvalidArgumentFormat.Message" xml:space="preserve">
-    <value>The input "{0}" is an invalid parameter format.</value>
+  <data name="Review.Planned" xml:space="preserve">
+    <value>{0}: {1} -&gt; {2}</value>
   </data>
-  <data name="MissingArguments.Message" xml:space="preserve">
-    <value>The deployment file parameter is not specified and there is no default deployment file(.deploy) in the current directory.</value>
+  <data name="Review.Summary" xml:space="preserve">
+    <value>Copied {0}, skipped {1}, deleted {2}, failed {3}.</value>
   </data>
-  <data name="Tips.Prompt" xml:space="preserve">
-    <value>Tips: </value>
+  <data name="Review.UndefinedVariable" xml:space="preserve">
+    <value>Undefined variable: {0}</value>
   </data>
-  <data name="VariableUndefined.Message" xml:space="preserve">
-    <value>The {0} variable in the {1} expression is undefined.</value>
-  </data>
-  <data name="ResolverUndefined.Message" xml:space="preserve">
-    <value>The {0} resolver in the {1} expression is undefined.</value>
-  </data>
-  <data name="VariableUndefinedInFile.Message" xml:space="preserve">
-    <value>The {0} variable in the {1} expression is undefined and located in the {2} file.</value>
-  </data>
-  <data name="ResolverUndefinedInFile.Message" xml:space="preserve">
-    <value>The {0} resolver in the {1} expression is undefined and located in the {2} file.</value>
-  </data>
-  <data name="VariableUndefinedInOption.Message" xml:space="preserve">
-    <value>The specified {1} command option value contains an undefined {0} variable.</value>
-  </data>
-  <data name="Warn.Prompt" xml:space="preserve">
-    <value>Warn: </value>
-  </data>
-  <data name="NuGet:IllegalArgument.Message" xml:space="preserve">
-    <value>[NuGet] The specified {0} argument is invalid and is located in the {1} file.</value>
-  </data>
-  <data name="NuGet:NotFound.Message" xml:space="preserve">
-    <value>[NuGet] The {1} version of the {0} package was not found.</value>
-  </data>
-  <data name="NuGet:DownloadFailed.Message" xml:space="preserve">
-    <value>[NuGet] The download of the specified {0}@{1} package failed, please try again later or change the download source.</value>
-  </data>
-  <data name="Latest" xml:space="preserve">
-    <value>Latest</value>
-  </data>
-  <data name="FileDeploySucceed.Message" xml:space="preserve">
-    <value>The {0} File deployment to
-      {1} was successful.</value>
-  </data>
-  <data name="FileDeployFailed.Message" xml:space="preserve">
-    <value>The {0} File deployment to
-      {1} failed.</value>
-  </data>
-  <data name="FileDeployFailed.Newer.Message" xml:space="preserve">
-    <value>The {0} File deployment to
-      {1} failed(overwrite={2}). Note: Because the destination file is newer than the source file.</value>
-  </data>
-  <data name="FileDeployFailed.Never.Message" xml:space="preserve">
-    <value>The {0} File deployment to
-      {1} failed(overwrite={2}). Note: Because the destination file already exists.</value>
-  </data>
-  <data name="Deployment.List.Label" xml:space="preserve">
-    <value>Deployment List:</value>
-  </data>
-  <data name="Deployment.Options.Label" xml:space="preserve">
-    <value>Deployment Options:</value>
-  </data>
-  <data name="Environment.Variables.Label" xml:space="preserve">
-    <value>Environment Variables:</value>
-  </data>
-  <data name="UnspecifiedVariable.Message" xml:space="preserve">
-    <value>The ‘{0}’ variable is not specified.</value>
-  </data>
-  <data name="NoPackageForFramework" xml:space="preserve">
-    <value>The specified '{0}' package does not have a '{1}' framework version.</value>
-  </data>
-  <data name="Elapsed.Label" xml:space="preserve">
-    <value>Elapsed: </value>
+  <data name="Review.UnknownResolver" xml:space="preserve">
+    <value>Unknown resolver: {0}</value>
   </data>
 </root>

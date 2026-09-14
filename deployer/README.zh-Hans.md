@@ -24,7 +24,7 @@
 每个条目由 **键** 和 **值** 两部分组成，以等于号 _(`=`)_ 分隔，其中 **值** 可省略。
 
 - **键** 由 _解析器名_ 和 _解析参数_ 两部分组成，以冒号 _(`:`)_ 分隔；
-	- 解析器名：如果缺失则表示采用默认的路径解析器，除此还支持 `nuget` 和 `delete` 这两种解析器。
+	- 解析器名：省略、留空或指定为 `path` 时采用默认的路径解析器，此外还支持 `nuget` 和 `delete`/`remove` 解析器。解析器名不区分大小写。
 	- 解析参数：由指定的解析器进行解析，详情参考下面的 _解析参数_。
 
 - **值** 由 _目标路径_ 和 _过滤条件_ 两部分组成。
@@ -35,21 +35,21 @@
 
 #### 路径解析器
 
-默认解析器(**无名称**)，表示将解析参数表示的源文件 _(支持通配符匹配)_ 复制到目标位置。
+默认解析器名称为 `path`，名称可以省略，表示将解析参数表示的源文件 _(支持通配符匹配)_ 复制到目标位置。
 
 解析参数表示待部署的源文件路径，源文件路径支持 `*`、`?` 以及 `**` 三种通配符，其中 `**` 表示多级目录匹配。
 
-Windows 绝对源路径含有盘符冒号时，应显式使用空解析器前缀；否则 `D:/...` 中的 `D` 会被当成解析器名。也可使用相对于部署文件的路径，或通过变量展开绝对路径。
+Windows 绝对源路径含有盘符冒号时，使用 `path:` 前缀，例如 `path:D:\dir\files.ext` 或 `path:D:/dir/files.ext`；否则 `D:/...` 中的 `D` 会被当成解析器名。也可使用相对于部署文件的路径，或通过变量展开绝对路径。
 
 ```ini
 [plugins zongsoft data]
-:D:/Zongsoft/framework/Zongsoft.Data/src/Zongsoft.Data.plugin
+path:D:/Zongsoft/framework/Zongsoft.Data/src/Zongsoft.Data.plugin
 
 [plugins zongsoft data mysql]
 drivers/mysql/src/Zongsoft.Data.MySql.plugin
 ```
 
-这里开头的 `:` 表示默认路径解析器，不是目标路径的一部分。此示例引用 [framework](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Data) 中实际存在的插件文件，并假定部署文件位于 `D:/Zongsoft/framework/Zongsoft.Data` 目录；请根据本地仓库位置调整路径。
+`path:` 前缀选择默认路径解析器，冒号之后才是源路径。相对路径也可显式指定该前缀，例如 `path:drivers/mysql/src/Zongsoft.Data.MySql.plugin`。此示例引用 [framework](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Data) 中实际存在的插件文件，并假定部署文件位于 `D:/Zongsoft/framework/Zongsoft.Data` 目录；请根据本地仓库位置调整路径。
 
 > 💡 提示：通常不应该在 `.deploy` 文件中指定绝对路径，因为源路径默认基于所在 `.deploy` 文件的路径，而目标路径则基于部署宿主程序或部署参数指定的目标路径的相对位置，参考 [framework](https://github.com/Zongsoft/framework) 中的相关项目的部署文件。
 
@@ -78,10 +78,10 @@ delete:Zongsoft.Messaging.Mqtt.option
 解析器名称为：`nuget`，表示下载 NuGet 包并执行相应部署，同时还会下载指定包的相关依赖包。
 
 解析参数格式：`package@version/path`，其中 `@version` 和 `/{path}` 可选。
-- 如果未指定版本或版本为 `latest` 则表示最新版本；
+- 如果未指定版本或版本为 `latest`，选择最新稳定版本；显式设置 `--prerelease:true` 才把预发布版本纳入该选择。明确指定的预发布版本仍可使用。
 - 如果未指定路径则：
-	- 若该包的根目录包含 `.deploy` 文件，则优先部署该部署文件；
-	- 部署该包的 `lib/{framework}` 库文件目录下的所有文件。
+	- 若该包的根目录包含 `.deploy` 文件，则执行该部署文件，不额外复制默认资产或下载未使用的依赖；
+	- 否则解析依赖闭包并部署最适用的资产：优先使用目标 RID 的托管运行时组，无适用运行时组才使用 `lib/{framework}`；同时选择目标 RID 的原生资产和符合规则的内容文件。
 		> `{framework}` 表示最接近 `$(Framework)` 变量声明的 *目标框架* 版本。
 
 > 💡 提示：_**Z**ongsoft_ 的 NuGet 包内根目录通常有一个名为 `.deploy` 的部署文件，包内的 `artifacts` 目录则存放着它的插件文件(`*.plugin`)_(至少一个)_、配置文件(`*.option`)、[数据映射文件](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Data)(`*.mapping`)等附属文件。
@@ -91,7 +91,7 @@ delete:Zongsoft.Messaging.Mqtt.option
 ##### 依赖包
 
 _**N**uget_ 包下载器默认会忽略以 `System.`、`Microsoft.Extensions.`、`Zongsoft.` 打头的依赖包；
-还可以通过 `--ignoreDependentPrefix` 命令选项指定需要忽略的依赖包前缀，多个前缀使用 `,` 或 `;` 或 `|` 符进行分隔。
+还可以通过 `--ignoreDependentPrefix` 命令选项指定需要忽略的依赖包前缀，多个前缀使用 `,` 或 `;` 或 `|` 符进行分隔。前缀匹配不区分大小写；忽略规则只作用于依赖边，不屏蔽清单明确请求的根包。
 
 ##### 示例
 
@@ -232,9 +232,7 @@ dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:
 
 ### 命令选项
 
-💡 在 Windows 上，本工具使用控制台终端。应从具有有效控制台句柄的终端运行；自动化工具需分配 PTY/ConPTY。没有控制台句柄的重定向/隐藏管道执行可能在 `ConsoleTerminal` 初始化时出现“句柄无效”，此时尚未执行部署内容。
-
-🚨 当前命令遇到未定义解析器时会打印错误，但仍可能返回退出码 `0`，且最终复制失败计数不包含该条目。自动化验证必须同时检查错误输出、预期文件清单及最终程序集版本，不能仅依赖退出码或“复制完成”。
+命令支持普通终端和重定向/管道执行，无需 PTY。成功返回 `0`，解析、依赖或文件操作失败返回 `1`，取消返回 `130`。默认先生成完整计划，预检查失败时不写入目标；正常覆盖跳过和删除有独立统计。
 
 - `verbosity` 选项
 	- `quiet` 只显示必要的输出信息，通常只显示错误信息。
@@ -249,9 +247,11 @@ dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:
 
 ### NuGet 包
 
-NuGet 条目按顺序执行，不等同于 `dotnet restore` 对整个应用依赖图的统一版本选择。多个包可能将不同版本的同名 DLL 写入同一目录；覆盖策略又按文件时间或显式选项处理，不按程序集语义版本比较。部署后应检查共享依赖版本，并在停止宿主后用独立补充清单部署已确认兼容的版本。一个已验证的例子是 [Redis 插件依赖冲突](https://github.com/Zongsoft/framework/blob/main/externals/redis/README.zh-Hans.md)。
+同一次命令的普通 NuGet 根包共同解析依赖图，固定明确的根版本，选择满足全部范围的最低可用依赖版本。无解、循环、降级约束或同目标不同内容的包资产冲突会在写入前报错。这是面向部署资产的严格求解，不执行 MSBuild/buildTransitive，也不等同于完整的 dotnet restore。不同插件目录不自动代表加载隔离；确有独立加载环境时可以分开调用。包内 .deploy 和显式包内路径按清单展开，其中本地缓存路径仍是明确指定的文件请求。
 
-如果部署项为 NuGet 包目录下中的库文件，会优先匹配 `Framework` 变量指定的 *目标框架* 版本的库文件。
+同目标同内容的包资产仅复制一次，计划保留重复来源并计为跳过；显式删除会结束该目标此前的去重范围。不会跨插件目录自动移动或合并 DLL。
+
+显式引用 `NuGet_Packages` 缓存内的库路径时，会选择最适用的框架目录；`nuget:包名@版本/lib/框架/文件` 也遵循此规则。路径中已指定框架时以该框架为匹配基准，例如 `lib/net9.0/*.dll`；`lib/*.dll` 使用 `Framework` 变量。匹配后保留后续子路径和通配符展开的目录结构，缓存根外的路径不调整。
 
 #### 最近适配
 
@@ -287,3 +287,47 @@ NuGet 条目按顺序执行，不等同于 `dotnet restore` 对整个应用依�
 	- [`daemon.deploy`](https://github.com/Zongsoft/hosting/blob/main/daemon/.deploy)
 	- [`terminal.deploy`](https://github.com/Zongsoft/hosting/blob/main/terminal/.deploy)
 	- [`web.deploy`](https://github.com/Zongsoft/hosting/blob/main/web/default/.deploy)
+
+### 计划、锁定与清理
+
+重构源码的兼容性变化：默认覆盖现在落实为 `newest`；非法覆盖值报错；无效过滤不再默认为真；未知变量在实际路径展开时失败；目标写入限制在 `destination` 内且拒绝链接路径；清单及 `#@import` 都检测循环。过滤组合保留从左到右求值，不引入新的运算符优先级。`**` 匹配零层或多层目录，复制目录会保留其内部相对结构。
+
+| 选项 | 行为 |
+| --- | --- |
+| `--dry-run:true` | 生成计划，不复制、删除或创建目标目录；显式 `report` 仍会写出。在线求解可能写 NuGet 缓存。 |
+| `--offline:true` | 仅使用已解压且含有效 nuspec 的本地包缓存；缺包失败，不访问包源。 |
+| `--explain:true` | 显示计划执行结果和包/文件来源，消息及路径按原文输出。 |
+| `--report:./deployment.json` | 保存成功或失败报告，含来源清单、包版本/引入者、文件哈希、重复/跳过/失败原因。 |
+| `--lockFile:./deployment.lock.json` | 非预演且成功执行后写锁文件，记录选中版本、包内容与清单/源文件哈希。 |
+| `--locked:true` | 使用 `lockFile` 中的包版本并校验计划与内容，不修改锁文件。锁与源清单路径绑定。 |
+| `--prerelease:true` | 未固定版本时允许选择预发布包；依赖显式要求预发布下限时也允许匹配该范围。 |
+| `--previous:./previous.json` | 对照同一目标根的前次成功报告，将不再选中的旧文件列为 Stale，默认保留。 |
+| `--prune:true` | 必须同时指定 previous；仅删除其末次有效操作确认为已复制、内容哈希未变且本次不再选中的文件。用户修改、未拥有文件和跨根路径不会被自动清理。 |
+
+布尔选项可以只写名称，也可显式使用 `true/false`。未设置锁定/清理/报告选项时不会隐式创建这些文件或清理旧内容。报告/锁文件不能覆盖已知源清单、源文件或计划目标文件；应为它们指定独立路径。执行中发生 I/O 错误会停止后续操作；已完成的写入不自动回滚。
+
+```powershell
+dotnet deploy --framework:net10.0 --platform:win --architecture:x64 --offline:true --dry-run:true --report:./preview.json .deploy
+dotnet deploy --framework:net10.0 --platform:win --architecture:x64 --lockFile:./deployment.lock.json --report:./completed.json .deploy
+dotnet deploy --framework:net10.0 --platform:win --architecture:x64 --lockFile:./deployment.lock.json --locked:true .deploy
+```
+
+RID 回退通过 NuGet.RuntimeModel 使用仓库内固定的 dotnet/runtime v10.0.0 图谱，见[实现细节](docs/implementation.zh-Hans.md)；兼容 `windows→win`、`mac/macos→osx`、`x32→x86` 别名。`contentFiles/any/{tfm}` 读取 nuspec 的 include/exclude、copyToOutput、flatten；未声明复制的内容不部署。旧 `content` 目录继续作为部署内容递归复制。lib 组中的 XML 文档仍按原契约复制，不能把所有 XML 都视为可删除的无用文件。
+
+包访问、依赖求解、资产选择和 RID 回退分别由独立类型负责，框架与版本模型复用 NuGet/.NET 类型，职责与行为见[实现细节](docs/implementation.zh-Hans.md)。此次重构没有增加包依赖。
+
+目标应用配置按环境变量、目标目录 appsettings.json、命令选项的顺序加载；嵌套键可用 `$(Database.Name)`、`%Items[0].Name%` 引用。变量替换保留 URL 的斜线。
+
+回归命令（不会推送工具包）：
+
+```powershell
+dotnet test test/Zongsoft.Tools.Deployer.Tests.csproj -f net10.0 -p:GeneratePackageOnBuild=false
+```
+
+任务状态及真实样例验证见 [REFACTOR-TASKS.md](REFACTOR-TASKS.md)。
+
+Profile 导入复用 Core 7.59.0：Reader 内置导入及递归保护，通过 ProfileOptions.Importing 登记导入文件哈希，无需注册指令。详见[实现细节](docs/implementation.zh-Hans.md#profile-导入回调)和[导入重构清单](PROFILE-IMPORT-TASKS.md)。
+
+Core Profile 的来源与覆盖规则，以及读取和保存职责，见[实现说明](docs/implementation.zh-Hans.md#core-profile-声明与保存)。部署过程不保存描述文件。
+
+本地源搜索及链接规则见[实现文档](docs/implementation.zh-Hans.md#本地搜索与源链接)。

@@ -169,9 +169,6 @@
   <data name="MigrationBucketOptionsInvalid" xml:space="preserve">
     <value>Bucket '{0}' has invalid or duplicate options. Use public/private, encryption:sse-s3/sse-kms with optional encryption.key for KMS, versioning:enabled/suspended, and tag.&lt;name&gt;:&lt;value&gt; (up to 50 tags; key/value limits: 128/256 characters; aws: keys are reserved).</value>
   </data>
-  <data name="MigrationWildcardInvalid" xml:space="preserve">
-    <value>Migration wildcards are supported only in the file name.</value>
-  </data>
   <data name="MigrationScriptsMissing" xml:space="preserve">
     <value>Migration script pattern has no matches: {0}</value>
   </data>
@@ -276,9 +273,6 @@
   </data>
   <data name="PackagePathInvalid" xml:space="preserve">
     <value>Invalid package entry path "{0}".</value>
-  </data>
-  <data name="PackageLinkUnsupported" xml:space="preserve">
-    <value>Symbolic links are not supported in package inputs: "{0}".</value>
   </data>
   <data name="DebianRelationshipInvalid" xml:space="preserve">
     <value>Invalid Debian relationship in field "{0}".</value>

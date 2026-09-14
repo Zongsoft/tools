@@ -1,4 +1,4 @@
-﻿/*
+/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -10,7 +10,7 @@
  *   钟峰(Popeye Zhong) <zongsoft@gmail.com>
  *
  * The MIT License (MIT)
- * 
+ *
  * Copyright (C) 2015-2025 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -38,21 +38,26 @@ using System.Threading.Tasks;
 
 namespace Zongsoft.Tools.Deployer;
 
+/// <summary>按名称选择本地路径、NuGet 或删除解析器；空名称使用默认路径解析器。</summary>
 public static class DeploymentResolverManager
 {
 	public static IDeploymentResolver GetResolver(string name)
 	{
-		if(string.IsNullOrEmpty(name))
+		if(string.IsNullOrWhiteSpace(name))
 			return DefaultResolver.Instance;
 
-		return name.ToLowerInvariant() switch
+		return name?.ToLowerInvariant() switch
 		{
 			"nuget" => NugetResolver.Instance,
+			"path" => DefaultResolver.Instance,
 			"delete" or "remove" => DeleteResolver.Instance,
 			_ => null,
 		};
 	}
 
+	/// <summary>
+	/// 将删除条目登记为待执行操作，实际删除由部署执行阶段完成。
+	/// </summary>
 	public class DeleteResolver : IDeploymentResolver
 	{
 		#region 单例字段
@@ -70,41 +75,27 @@ public static class DeploymentResolverManager
 		#region 公共方法
 		public Task ResolveAsync(DeploymentContext context, DeploymentEntry deployment, CancellationToken cancellation)
 		{
-			var filePath = Path.Combine(deployment.Destination.Path, deployment.Source.Name);
+			cancellation.ThrowIfCancellationRequested();
 
-			if(DeleteFile(filePath))
+			if(!string.IsNullOrEmpty(deployment.Destination.Name))
+				throw new FormatException(string.Format(Properties.Resources.Review_InvalidOption, "delete", "destination"));
+
+			var path = context.Deployer.Session.Validate(Path.Combine(deployment.Destination.Path, deployment.Source.Name));
+			context.Deployer.Session.Add(new DeploymentOperation
 			{
-				if(context.IsVerbosity(Verbosity.Detail))
-					context.Deployer.Terminal.FileDeletedSucceed(filePath);
-			}
-			else
-			{
-				if(!context.IsVerbosity(Verbosity.Quiet))
-					context.Deployer.Terminal.FileDeletedFailed(filePath);
-			}
+				Kind = "Delete",
+				Destination = path,
+				Manifest = deployment.Profile.FilePath,
+			});
 
 			return Task.CompletedTask;
 		}
 		#endregion
-
-		#region 私有方法
-		private static bool DeleteFile(string filePath)
-		{
-			try
-			{
-				if(!string.IsNullOrEmpty(filePath))
-					File.Delete(filePath);
-
-				return true;
-			}
-			catch
-			{
-				return false;
-			}
-		}
-		#endregion
 	}
 
+	/// <summary>
+	/// 使用本地文件和目录作为部署源的默认解析器。
+	/// </summary>
 	public class DefaultResolver : DeploymentResolverBase
 	{
 		#region 单例字段

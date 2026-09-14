@@ -100,9 +100,6 @@
   <data name="DatabaseMigratorUnknown" xml:space="preserve">
     <value>未知的数据库升迁器。</value>
   </data>
-  <data name="DatabaseProviderUnknown" xml:space="preserve">
-    <value>未知的数据库提供程序。</value>
-  </data>
   <data name="ScriptExecuting" xml:space="preserve">
     <value>{0}：{1}</value>
   </data>

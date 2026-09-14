@@ -8,7 +8,7 @@ using Xunit;
 
 namespace Zongsoft.Tools.Packager.Tests;
 
-public sealed class VersionFileTests
+public sealed class VersionFileTest
 {
 	#region 加载测试
 	[Theory]
