@@ -83,6 +83,8 @@ dotnet tool uninstall -g Zongsoft.Tools.Packager
 
 ### Installing a local source build for testing
 
+Run the regression suites with `dotnet cake --edition Release` (the default target is `test`). Cake uses the same configuration for restore, build, and tests. Debug references the local framework Core build; Release uses the Core NuGet package declared by the main project, which also supplies that dependency to the tests.
+
 Install the generated `.nupkg` directly without publishing it to NuGet.org. The following commands use the .NET 10 SDK and run from `D:/Zongsoft/tools/packager`; use the corresponding directory for another checkout location.
 
 Before testing migrations, follow the [build instructions](docs/migrations.md#building-the-tool-package) to prepare complete Native AOT artifacts in `src/.migrator/linux-x64/` and `src/.migrator/linux-arm64/`. Existing unchanged artifacts can be reused; ordinary `dotnet build` does not produce them. Then generate the local tool package:

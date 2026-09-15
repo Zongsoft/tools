@@ -190,6 +190,8 @@ dotnet tool uninstall -g zongsoft.tools.deployer
 
 ### 从本地源码安装（用于测试）
 
+运行 `dotnet cake --edition Release` 可完成 Release 构建及 .NET 8/9/10 回归测试，并生成本地工具包，不会推送 NuGet。还原、编译和测试使用同一配置；Debug 引用本地 Core DLL，Release 使用项目声明的 Core NuGet 包。
+
 源码编译后无需发布到 NuGet.org，即可从生成的 `.nupkg` 安装。以下命令使用 .NET 10 SDK，在 `D:/Zongsoft/tools/deployer` 目录执行；其他检出位置使用对应目录。
 
 部署器已启用 `GeneratePackageOnBuild`，Release 构建会同时生成工具包：

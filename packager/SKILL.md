@@ -9,7 +9,7 @@ description: 修改或审查 Zongsoft tools/packager 的 dotnet-pack 命令、�
 
 ## 定位变更
 
-- 构建与产物：`build.cake` 编排构建/制包，`.shared/Migration.props` 共享编译声明，独立 `migrator` 任务准备 `src/.migrator/linux-x64/` 和 `src/.migrator/linux-arm64/` 的完整 Native AOT 发布目录，主项目普通 Content 收入工具输出；主项目不建立 migrator 项目引用。
+- 构建与产物：`build.cake` 编排构建/制包，`.shared/Migration.props` 共享编译声明，独立 `migrator` 任务准备 `src/.migrator/linux-x64/` 和 `src/.migrator/linux-arm64/` 的完整 Native AOT 发布目录，主项目普通 Content 收入工具输出；主项目不建立 migrator 项目引用。Cake 创建 Pod 时使用相对 YAML 路径，避免 Windows 盘符被 Podman 识别为 URL 协议。
 
 - 命令选项、默认值、输出路径：`PackCommand.cs` 及 `PackCommand.Tar.cs`、`.Deb.cs`、`.Rpm.cs`。
 - 变量来源、`$(name)`/`%name%`、路径规范化：`Variables.cs`、`Normalizer.cs`。
@@ -42,6 +42,10 @@ description: 修改或审查 Zongsoft tools/packager 的 dotnet-pack 命令、�
 - 升迁只增加 `--migration` 选项；INI 解析复用 Core Profile。异常及提示使用带 ResXFileCodeGenerator 的双语资源，原生发布保留中英文资源和全球化能力。检查别名、参数逐级查找、无匹配脚本、完整原生目录的 RID/ELF 架构和执行权限、SQL 校验和、每次安装及失败重试均从头执行 SQL、失败 ready 标记、升迁先于启动、`DESTDIR` 不执行钩子，以及保留数据库/Bucket/状态。
 
 ## 安全验证
+
+AOT 仓库下载报 `Could not resolve host` 时先检查构建容器 DNS；专用 Pod 通过 YAML 的 `dnsConfig.nameservers` 配置可达 DNS。修改后需在无构建运行时重建该 Pod，保留缓存卷与工作区；不要修改宿主、WSL 或参考 framework Pod 的 DNS。
+
+Cake 只从 `test/*.csproj` 与 `migrator/test/*.csproj` 收集测试项目，避免构建输出中的副本被执行。检查 Cake 的 `restore` 显式传递 `--edition` 对应的 `Configuration`。Debug 使用本地 Core DLL；Release 测试使用主项目的传递 Core NuGet 依赖，避免混入另一份本地 DLL。
 
 测试代码不添加文件头版权注释，不为本地化编写单元测试；不引入文化切换辅助类或翻译文案断言，保留异常类型、错误定位和敏感值不泄漏检查。
 

@@ -19,6 +19,8 @@
 
 ## 验证
 
+- Cake 的 `restore` 显式传递 `--edition` 对应的 `Configuration`，与编译和测试一致；测试项目只从 `test/*.csproj` 收集，不递归扫描构建输出中的副本。测试通过主项目获得 Core 依赖，不单独添加本地 Release DLL 引用。
+
 - 最小构建：`dotnet build Zongsoft.Tools.Deployer.slnx -f net10.0`。
 - 解析行为使用临时 `.deploy`、临时源/目标和本地 NuGet 缓存覆盖路径、变量、过滤、覆盖、删除和失败分支。
 - 目标框架或依赖解析变化再覆盖 net8.0、net9.0、net10.0 代表性包。

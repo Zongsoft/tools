@@ -241,7 +241,11 @@ attachments
 
 ### 原生构建环境
 
+构建 Pod 的 `dnsConfig.nameservers` 配置为 `223.5.5.5` 和 `119.29.29.29`，避免继承不可用的 WSL DNS 转发；受限网络应改为容器可访问的 DNS。修改 YAML 不会更新已有 Pod 的配置：在没有构建运行时，从 packager 目录执行 `podman kube play --replace migrator/build/packager.linux-x64.yaml` 重建专用构建 Pod，再运行 `migrator` 任务。重建保留工作区与持久卷，但容器内安装的工具链需由 `setup.sh` 重新安装。`Curl error (6)` / `Could not resolve host` 表示 DNS 故障，应先确认容器能解析仓库域名，而不是重复尝试所有镜像站。
+
 [`migrator/build/packager.linux-x64.yaml`](../migrator/build/packager.linux-x64.yaml) 定义独立 Rocky Linux 9 Pod 和持久化工具链缓存；工作区默认经 `/mnt/d/` 挂载 `D:\Zongsoft\tools\packager`，其他检出位置需要调整挂载路径。参考用的 framework Pod 不受影响。显式执行 Cake `migrator` 任务前需要启动 Podman。
+
+Cake 从 packager 目录向 `podman kube play` 传入相对路径 `migrator/build/packager.linux-x64.yaml`；不传入带 Windows 盘符的正斜杠绝对路径，以免盘符被识别成 URL 协议而出现 `unsupported protocol scheme "d"`。
 
 `setup.sh` 安装 .NET 10 SDK、clang/lld，并从同一 Rocky 基线提取 ARM64 RPM 到目标 sysroot；`publish.sh` 原生编译 x64，使用 sysroot 和交叉链接器编译 ARM64。完整发布包含必要 `.so` 和语言资源；符号、完整警告和 ELF 检查记录位于 `migrator/src/bin/aot/<RID>/`。项目中的依赖版本保持固定。原生执行验证与编译分别记录，没有原生或仿真环境时可以省略 ARM64 执行验证；实际结果见[验证记录](migration-verification.md)。
 

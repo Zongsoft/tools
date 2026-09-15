@@ -111,6 +111,8 @@ Execution-time I/O failures stop subsequent operations but do not roll back comp
 
 ## Development conventions and validation
 
+Cake passes the selected `--edition` as MSBuild `Configuration` during restore, build, and tests, so conditional Core references resolve consistently: a local DLL in Debug and the declared NuGet package in Release. The test project references the main project; Cake only selects `test/*.csproj` and does not scan build-output copies. `dotnet cake --edition Release` runs clean, restore, build, and tests for all three frameworks. Build generates the local tool package; only the explicit `pack` target pushes to NuGet.
+
 Handwritten non-test C# files use the tool's existing `/* */` MIT header, Tab indentation, and CRLF. Regions group constants, fields, constructors, properties, methods, or concrete responsibilities. Separate method phases with blank lines, avoid multiple statements on one line, and do not introduce using type aliases. Do not leave a blank line before `#endregion`. Designer files remain generator-managed.
 
 ```powershell

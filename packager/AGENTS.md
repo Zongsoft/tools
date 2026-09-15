@@ -14,7 +14,7 @@
 - `Scriptor.Systemd` 解析/生成服务单元与安装卸载脚本。
 - `MigrationProfile`/`MigrationLoader` 使用 Zongsoft.Core Profile 解析升迁 INI/参数；`MigrationBundle` 收集安装时运行器；`.shared` 提供链接到两端的协议源码、MigrationProvider 参数规则、MigrationUtility 通用参数方法及其本地化资源；独立 `migrator/src` 执行建库、SQL、S3 初始化及状态检查。主项目不引用或构建 migrator；Cake 构建流程先独立发布运行器再制作工具包。`.shared/Migration.props` 共享源码和资源声明，Cake 独立 Native AOT 发布到 `src/.migrator/linux-x64/` 和 `src/.migrator/linux-arm64/`，主项目将其作为普通 Content 复制到输出和 NuGet 工具包，运行时按 `.migrator/<RID>/` 约定收集完整目录，不分析程序集依赖。migrator 目标为 net10.0，TDengine 使用 ClientWebSocket 直接访问 taosAdapter；升迁资源配置 ResXFileCodeGenerator 并保留中英文资源与全球化支持。
 - `MigrationLoader.Database` 的私有批次实现仅在主项目预处理 SQL，生成安装根 `.migration/.artifacts/` 下的有序 UTF-8 批次；`.migration/` 保留计划、运行器与入口，执行器逐文件提交不再分段。计划使用源码生成 JSON，连接工厂不使用反射。
-- `Migrator.Database` 为抽象 partial 基类，嵌套六种数据库实现；共用 ADO.NET 执行辅助，TDengine 独占 WebSocket 会话。`Migrator.Create` 显式选择类型。AOT 环境为独立 Rocky Linux 9/glibc 2.34 容器，不修改参考 framework Pod；普通 `dotnet build/test` 不启动容器。
+- `Migrator.Database` 为抽象 partial 基类，嵌套六种数据库实现；共用 ADO.NET 执行辅助，TDengine 独占 WebSocket 会话。`Migrator.Create` 显式选择类型。AOT 环境为独立 Rocky Linux 9/glibc 2.34 容器，不修改参考 framework Pod；普通 `dotnet build/test` 不启动容器。Cake 创建 Pod 时向 `podman kube play` 传入相对 YAML 路径，避免 Windows 盘符被识别为 URL 协议。
 - `Normalizer`、`Variables` 和 `Utility` 负责变量、路径、Runtime Identifier 与 Unix 权限等共享语义。
 
 ## 高风险契约
@@ -29,6 +29,10 @@
 - 升迁失败必须阻止服务启动；每次安装和重试均执行全部 SQL，幂等性由脚本作者保证，不维护逐文件成功历史或跳过逻辑。不自动删库删桶、不记录凭据日志。`migration.json` 含参数值，模式保持 `0600`，真实凭据不用于测试。
 
 ## 验证
+
+- AOT 构建 Pod 的 DNS 在 YAML 的 `dnsConfig.nameservers` 中配置；修改后需在无构建运行时显式重建专用 Pod，普通 `podman start` 不更新配置。保留工作区和缓存卷，不修改 WSL、宿主或其他 Pod 的 DNS。
+
+- Cake 只从 `test/*.csproj` 与 `migrator/test/*.csproj` 收集测试项目，不能递归扫描构建输出。Cake 还原必须传递与编译、测试相同的 `Configuration`（来自 `--edition`）。Core 本地 DLL 引用仅用于 Debug；Release 测试通过主项目获得 Core NuGet 依赖，不能混用本地 Release DLL。
 
 - 本地化不编写单元测试；不切换测试文化、不匹配翻译文案。错误测试验证异常类型、文件/段落/参数标识和敏感值不泄漏。
 

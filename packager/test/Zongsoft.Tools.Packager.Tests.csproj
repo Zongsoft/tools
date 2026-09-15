@@ -10,7 +10,7 @@
 		<ProjectReference Include="..\src\Zongsoft.Tools.Packager.csproj" />
 		<ProjectReference Include="..\migrator\src\Zongsoft.Tools.Packager.Migrator.csproj" ReferenceOutputAssembly="false" />
 
-		<Reference Include="Zongsoft.Core">
+		<Reference Include="Zongsoft.Core" Condition="$(Configuration)=='Debug'">
 			<HintPath>..\..\..\framework\Zongsoft.Core\src\bin\$(Configuration)\$(TargetFramework)\Zongsoft.Core.dll</HintPath>
 		</Reference>
 	</ItemGroup>

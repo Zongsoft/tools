@@ -194,6 +194,8 @@ dotnet tool uninstall -g zongsoft.tools.deployer
 
 ### Installing a local source build for testing
 
+Run `dotnet cake --edition Release` to build Release, run the .NET 8/9/10 regression suites, and generate the local tool package without pushing to NuGet. Restore, build, and tests use the same configuration; Debug references the local Core DLL and Release uses the declared Core NuGet package.
+
 Install the generated `.nupkg` directly without publishing it to NuGet.org. The following commands use the .NET 10 SDK and run from `D:/Zongsoft/tools/deployer`; use the corresponding directory for another checkout location.
 
 The deployer enables `GeneratePackageOnBuild`, so a Release build also creates the tool package:

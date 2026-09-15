@@ -15,7 +15,10 @@ Task("restore")
 	.Description("还原项目依赖")
 	.Does(() =>
 {
-	DotNetRestore(solutionFile);
+	DotNetRestore(solutionFile, new DotNetRestoreSettings
+	{
+		MSBuildSettings = new DotNetMSBuildSettings().WithProperty("Configuration", edition),
+	});
 });
 
 Task("migrator")
@@ -25,8 +28,9 @@ Task("migrator")
 	const string container = "zongsoft-packager-aot-builder";
 	if(StartProcess("podman", $"container exists {container}") != 0)
 	{
+		//使用相对路径，避免 Windows 盘符被 Podman 识别为 URL 协议。
 		var arguments = new ProcessArgumentBuilder().Append("kube play")
-			.AppendQuoted(MakeAbsolute(File("migrator/build/packager.linux-x64.yaml")).FullPath);
+			.AppendQuoted("migrator/build/packager.linux-x64.yaml");
 		if(StartProcess("podman", new ProcessSettings { Arguments = arguments }) != 0)
 			throw new Exception("Unable to create the migrator Native AOT build environment.");
 	}
@@ -78,7 +82,7 @@ Task("test")
 		Configuration = edition,
 	};
 
-	var projects = GetFiles("**/test/*.csproj");
+	var projects = GetFiles("test/*.csproj").Concat(GetFiles("migrator/test/*.csproj"));
 
 	foreach(var project in projects)
 	{

@@ -15,7 +15,10 @@ Task("restore")
 	.Description("还原项目依赖")
 	.Does(() =>
 {
-	DotNetRestore(solutionFile);
+	DotNetRestore(solutionFile, new DotNetRestoreSettings
+	{
+		MSBuildSettings = new DotNetMSBuildSettings().WithProperty("Configuration", edition),
+	});
 });
 
 Task("build")
@@ -44,7 +47,7 @@ Task("test")
 		Configuration = edition,
 	};
 
-	var projects = GetFiles("**/test/*.csproj");
+	var projects = GetFiles("test/*.csproj");
 
 	foreach(var project in projects)
 	{

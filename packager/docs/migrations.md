@@ -241,7 +241,11 @@ For the Web host, the plan is `/opt/zongsoft/web/.migration/migration.json` and 
 
 ### Native build environment
 
+The build Pod sets `dnsConfig.nameservers` to `223.5.5.5` and `119.29.29.29` to avoid an unavailable inherited WSL DNS forwarder. On restricted networks, use DNS servers reachable from the container. YAML changes do not update an existing Pod: with no build running, execute `podman kube play --replace migrator/build/packager.linux-x64.yaml` from the packager directory, then run the `migrator` task. Recreating this dedicated Pod preserves the workspace and persistent volume, but `setup.sh` must reinstall tools in the container filesystem. `Curl error (6)` / `Could not resolve host` indicates a DNS failure; verify repository-name resolution inside the container before retrying all mirrors.
+
 [`migrator/build/packager.linux-x64.yaml`](../migrator/build/packager.linux-x64.yaml) defines an independent Rocky Linux 9 Pod and a persistent toolchain cache. Its workspace mount defaults to `D:\Zongsoft\tools\packager` through `/mnt/d/`; adjust that mount when the checkout is elsewhere. The framework reference Pod is not changed. Podman must be running before the explicit Cake `migrator` task.
+
+Cake passes `migrator/build/packager.linux-x64.yaml` to `podman kube play` relative to the packager directory. It avoids a forward-slash Windows absolute path whose drive letter can be interpreted as a URL scheme, producing `unsupported protocol scheme "d"`.
 
 `setup.sh` installs the .NET 10 SDK and clang/lld, then extracts ARM64 RPMs from the same Rocky baseline into a sysroot. `publish.sh` publishes x64 natively and ARM64 with the target sysroot and cross linker. Publications include necessary `.so` and language resources; symbols and full warning/ELF evidence stay under `migrator/src/bin/aot/<RID>/`. Dependency versions remain fixed in the migrator project. Native execution validation is separate from compilation; ARM64 execution may be omitted when no native or emulated environment is available. See the [verification record](migration-verification.md) for actual results.
 

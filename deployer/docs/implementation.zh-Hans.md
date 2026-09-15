@@ -111,6 +111,8 @@ previous 只接受同一目标根的成功报告。按目标路径取最后有�
 
 ## 开发约定与验证
 
+Cake 的 `--edition` 同时控制还原、编译和测试，`restore` 显式传递 MSBuild 的 `Configuration`，确保 Debug 本地 Core DLL 与 Release Core NuGet 包的条件依赖正确。测试项目只引用主项目；Cake 仅收集 `test/*.csproj`，不扫描构建输出中的副本。`dotnet cake --edition Release` 执行清理、还原、构建及三个框架的测试；构建生成本地工具包，只有显式 `pack` 目标会推送 NuGet。
+
 非测试手写 C# 文件使用工具现有 `/* */` MIT 版权头；使用 Tab、CRLF，并以常量、字段、构造、属性、公共/内部/私有方法或实际职责组织 `#region`。方法按处理阶段留空行，不合并多条语句到一行，不使用 using 类型别名。`#endregion` 紧接分区内容，前面不留空行。自动生成 Designer 保持生成器管理。
 
 ```powershell

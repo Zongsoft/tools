@@ -29,6 +29,8 @@ description: 修改或审查 Zongsoft tools/deployer 的 .deploy 描述语法、
 
 ## 安全验证
 
+检查 Cake 还原、编译和测试使用同一 `Configuration`（来自 `--edition`）；测试项目只从 `test/*.csproj` 收集，避免执行构建输出中的副本。测试项目通过主项目获得 Core 依赖，不单独引用本地 Release DLL。
+
 创建独立临时源目录和目标目录，确保目标解析后的绝对路径仍位于临时根下，再覆盖：
 
 - 普通文件、目录和通配符复制；

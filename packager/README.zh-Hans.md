@@ -83,6 +83,8 @@ dotnet tool uninstall -g Zongsoft.Tools.Packager
 
 ### 从本地源码安装（用于测试）
 
+从源码运行回归测试可使用 `dotnet cake --edition Release`（默认目标为 `test`）。Cake 会将同一配置传给依赖还原、编译和测试。Debug 引用本地 framework 的 Core 编译产物；Release 使用项目声明的 Core NuGet 包，测试项目跟随主项目使用该依赖。
+
 源码编译后无需发布到 NuGet.org，即可从生成的 `.nupkg` 安装。以下命令使用 .NET 10 SDK，在 `D:/Zongsoft/tools/packager` 目录执行；其他检出位置使用对应目录。
 
 测试升迁功能前，先按[构建说明](docs/migrations.zh-Hans.md#构建与工具包生成)准备 `src/.migrator/linux-x64/` 和 `src/.migrator/linux-arm64/` 的完整 Native AOT 产物。已准备且未改动的产物可以复用；普通 `dotnet build` 不会生成这些产物。然后生成本地工具包：
