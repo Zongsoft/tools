@@ -246,19 +246,21 @@ identity-edition
 
 其中 `identity` 默认等于 `name`；如果指定了未禁用的 `--daemon`，则取 daemon 标识的文件名部分，并去掉可选 `.service` 后缀。
 
-输出文件名规则：
+输出文件名由 `Package.GetFileName` 统一生成，三种格式使用以下规则；这里的 `name` 为包标识 `identity`，仍遵循上述 daemon 优先规则：
 
 ```text
-identity@version_runtime.ext
-identity-edition@version_runtime.ext
+<name>@<version>-<architecture>.<extension>
+<name>-<edition>@<version>-<architecture>.<extension>
 ```
 
 示例：
 
 ```text
-zongsoft.web@1.0.0_linux-x64.deb
-zongsoft.web-enterprise@1.0.0_linux-x64.rpm
+zongsoft.web@1.0.0-x64.deb
+zongsoft.web-enterprise@1.0.0-x64.rpm
 ```
+
+文件名中的架构取 `Architecture.ToString().ToLowerInvariant()`，例如 `x64`、`arm64`；扩展名为 `tar.gz`、`deb`、`rpm`，不再拼入平台或完整 RID。tar 的 `.sh` 入口采用同一文件主名。Runtime Identifier 仍用于选择升迁运行器等资源，不参与包文件名。
 
 ### Runtime Identifier
 
@@ -521,8 +523,8 @@ new TarWriter(gzip, TarEntryFormat.Pax, false)
 生成 `.tar.gz` 的同时，会在输出目录生成一个同名 `.sh` 安装脚本，例如：
 
 ```text
-zongsoft.web@1.0.0_linux-x64.tar.gz
-zongsoft.web@1.0.0_linux-x64.sh
+zongsoft.web@1.0.0-x64.tar.gz
+zongsoft.web@1.0.0-x64.sh
 ```
 
 该脚本定位同目录下的 `.tar.gz`，解压到临时目录，并调用解压后的 `install.sh` 完成安装。
@@ -974,7 +976,7 @@ Debian 的 control/data gzip tar 分别写入受控临时文件，ar 依据实�
 
 ## Debian 关系字段
 
-`DebCommand` 提供 `--provides`、`--replaces`、`--breaks`、`--conflicts`、`--recommends`、`--suggests`，分别写入同名首字母大写的 control 字段；`--dependencies` 写 Depends。`Package.Deb` 独占规则，不复用 RPM 解析器。列表以逗号或分号分隔；关系写为 `name (>= version)` 等括号语法，支持 `<< <= = >= >>`。Depends/Recommends/Suggests 可用 `|` 表达替代项，Provides 的版本关系仅允许 `=`。无值不写字段，拒绝非法包名、关系、换行和 NUL；二进制 control 不接受源包的架构限制及构建 profile 表达式。规则依据 [Debian Policy 关系字段](https://www.debian.org/doc/debian-policy/ch-relationships.html)。
+`DebCommand` 提供 `--provides`、`--replaces`、`--breaks`、`--conflicts`、`--recommends`、`--suggests`，分别写入同名首字母大写的 control 字段；`--dependencies` 写 Depends，例如 `--dependencies:"aspnetcore-runtime-10.0 (>= 10.0)"` 写出 `Depends: aspnetcore-runtime-10.0 (>= 10.0)`；RPM 示例中不带括号的版本关系不能直接用于 Debian。`Package.Deb` 独占规则，不复用 RPM 解析器。列表以逗号或分号分隔；关系写为 `name (>= version)` 等括号语法，支持 `<< <= = >= >>`。Depends/Recommends/Suggests 可用 `|` 表达替代项，Provides 的版本关系仅允许 `=`。无值不写字段，拒绝非法包名、关系、换行和 NUL；二进制 control 不接受源包的架构限制及构建 profile 表达式。规则依据 [Debian Policy 关系字段](https://www.debian.org/doc/debian-policy/ch-relationships.html)。
 
 ## 当前实现边界
 
@@ -1052,27 +1054,27 @@ Cake 的 `--edition` 同时用于依赖还原、编译、测试和制包；`rest
 ### tar.gz
 
 ```bash
-tar -tzf ./packages/zongsoft.web@1.0.0_linux-x64.tar.gz
-tar -xOf ./packages/zongsoft.web@1.0.0_linux-x64.tar.gz install.sh
-tar -xOf ./packages/zongsoft.web@1.0.0_linux-x64.tar.gz uninstall.sh
+tar -tzf ./packages/zongsoft.web@1.0.0-x64.tar.gz
+tar -xOf ./packages/zongsoft.web@1.0.0-x64.tar.gz install.sh
+tar -xOf ./packages/zongsoft.web@1.0.0-x64.tar.gz uninstall.sh
 ```
 
 ### deb
 
 ```bash
-ar t ./packages/zongsoft.web@1.0.0_linux-x64.deb
-dpkg-deb --info ./packages/zongsoft.web@1.0.0_linux-x64.deb
-dpkg-deb --contents ./packages/zongsoft.web@1.0.0_linux-x64.deb
+ar t ./packages/zongsoft.web@1.0.0-x64.deb
+dpkg-deb --info ./packages/zongsoft.web@1.0.0-x64.deb
+dpkg-deb --contents ./packages/zongsoft.web@1.0.0-x64.deb
 ```
 
 ### rpm
 
 ```bash
-rpm -qip ./packages/zongsoft.web@1.0.0_linux-x64.rpm
-rpm -qlp ./packages/zongsoft.web@1.0.0_linux-x64.rpm
-rpm -qp --scripts ./packages/zongsoft.web@1.0.0_linux-x64.rpm
-rpm -qpc ./packages/zongsoft.web@1.0.0_linux-x64.rpm
-rpm2cpio ./packages/zongsoft.web@1.0.0_linux-x64.rpm | cpio -t
+rpm -qip ./packages/zongsoft.web@1.0.0-x64.rpm
+rpm -qlp ./packages/zongsoft.web@1.0.0-x64.rpm
+rpm -qp --scripts ./packages/zongsoft.web@1.0.0-x64.rpm
+rpm -qpc ./packages/zongsoft.web@1.0.0-x64.rpm
+rpm2cpio ./packages/zongsoft.web@1.0.0-x64.rpm | cpio -t
 ```
 
 ## 参考资料

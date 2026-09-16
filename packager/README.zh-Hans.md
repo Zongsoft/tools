@@ -152,21 +152,23 @@ dotnet-pack deb \
 生成的包文件名遵循以下规则：
 
 ```text
-<name>@<version>_<runtime>.<extension>
-<name>-<edition>@<version>_<runtime>.<extension>
+<name>@<version>-<architecture>.<extension>
+<name>-<edition>@<version>-<architecture>.<extension>
 ```
+
+`<architecture>` 使用小写架构名，例如 `x64`、`arm64`，文件名不再包含平台前缀；`<extension>` 为 `tar.gz`、`deb` 或 `rpm`。tar 包配套的 `.sh` 入口使用相同文件主名。
 
 如果指定了未禁用的 `--daemon:<name>`，则优先使用 daemon 标识生成包文件名：
 
 ```text
-<daemon>@<version>_<runtime>.<extension>
-<daemon>-<edition>@<version>_<runtime>.<extension>
+<daemon>@<version>-<architecture>.<extension>
+<daemon>-<edition>@<version>-<architecture>.<extension>
 ```
 
 示例：
 
 ```text
-zongsoft.web@1.0.0_linux-x64.deb
+zongsoft.web@1.0.0-x64.deb
 ```
 
 ## 命令
@@ -298,9 +300,17 @@ hosting 的 `web/default` 宿主不区分 Edition 时可写为 `Zongsoft.Hosting
 | `--license:<text>` | 空 | 许可证表达式或许可证名称。 |
 | `--category:<text>` | 格式默认值 | Debian `Section` 或 RPM `Group`；Debian 默认 `utils`，RPM 默认 `Applications/System`。 |
 | `--maintainer:<text>` | `Zongsoft Studio <zongsoft@gmail.com>` | 软件包维护者/厂商文本。 |
-| `--dependencies:<list>` | 空 | 以逗号或分号分隔的依赖列表。写入 Debian `Depends` 或 RPM `Requires`。 |
+| `--dependencies:<list>` | 空 | 以逗号或分号分隔的依赖列表。Debian 写入 `Depends`，版本关系使用 `name (>= version)`；RPM 写入 `Requires`，可使用 `name >= version`。 |
 
 ### Debian 选项
+
+Debian 同样支持带版本约束的 `--dependencies`。例如为 hosting 的 `web/default` 包声明 ASP.NET Core 10 运行时要求：
+
+```bash
+--dependencies:"aspnetcore-runtime-10.0 (>= 10.0)"
+```
+
+生成的 `control` 文件包含 `Depends: aspnetcore-runtime-10.0 (>= 10.0)`。Debian 的版本关系必须放在括号内，不能直接照抄 RPM 的 `aspnetcore-runtime-10.0 >= 10.0`；支持的运算符为 `<<`、`<=`、`=`、`>=`、`>>`。多个依赖用逗号或分号分隔，`|` 表示满足其中一个即可，整个选项应加引号。打包器只写入依赖声明，不会下载或内嵌这些软件包，安装环境需有可用的软件源。
 
 | 选项 | control 字段 |
 | --- | --- |
@@ -597,13 +607,13 @@ tar 命令会生成 `.tar.gz` 包及同名 `.sh` 安装脚本。tar 包包含应
 一键安装：
 
 ```bash
-sudo sh ./packages/zongsoft.web@1.0.0_linux-x64.sh
+sudo sh ./packages/zongsoft.web@1.0.0-x64.sh
 ```
 
 安装：
 
 ```bash
-tar -xzf ./packages/zongsoft.web@1.0.0_linux-x64.tar.gz
+tar -xzf ./packages/zongsoft.web@1.0.0-x64.tar.gz
 sudo ./install.sh
 ```
 
@@ -639,9 +649,9 @@ data.tar.gz
 检查并安装：
 
 ```bash
-dpkg-deb --info ./packages/zongsoft.web@1.0.0_linux-x64.deb
-dpkg-deb --contents ./packages/zongsoft.web@1.0.0_linux-x64.deb
-sudo dpkg -i ./packages/zongsoft.web@1.0.0_linux-x64.deb
+dpkg-deb --info ./packages/zongsoft.web@1.0.0-x64.deb
+dpkg-deb --contents ./packages/zongsoft.web@1.0.0-x64.deb
+sudo dpkg -i ./packages/zongsoft.web@1.0.0-x64.deb
 ```
 
 `/etc/` 下的根路径条目也会写入 Debian `conffiles` 元数据。
@@ -653,10 +663,10 @@ RPM 包包含 RPM lead/signature/header 元数据，以及 gzip 压缩的 `newc`
 检查并安装：
 
 ```bash
-rpm -qip ./packages/zongsoft.web@1.0.0_linux-x64.rpm
-rpm -qlp ./packages/zongsoft.web@1.0.0_linux-x64.rpm
-rpm -qp --scripts ./packages/zongsoft.web@1.0.0_linux-x64.rpm
-sudo rpm -Uvh ./packages/zongsoft.web@1.0.0_linux-x64.rpm
+rpm -qip ./packages/zongsoft.web@1.0.0-x64.rpm
+rpm -qlp ./packages/zongsoft.web@1.0.0-x64.rpm
+rpm -qp --scripts ./packages/zongsoft.web@1.0.0-x64.rpm
+sudo rpm -Uvh ./packages/zongsoft.web@1.0.0-x64.rpm
 ```
 
 `/etc/` 下的根路径条目会被标记为 RPM 配置文件。

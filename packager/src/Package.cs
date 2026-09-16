@@ -111,7 +111,7 @@ public abstract partial class Package
 	#region 保护方法
 	protected string GetFileName(string extension)
 	{
-		var name = $"{this.PackageName}@{this.Version}_{this.Runtime}";
+		var name = $"{this.PackageName}@{this.Version}-{this.Architecture.ToString().ToLowerInvariant()}";
 
 		if(string.IsNullOrEmpty(extension) || extension == ".")
 			return name;

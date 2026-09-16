@@ -1,5 +1,7 @@
 # 升迁功能验证
 
+当前包名使用 `<name>@<version>-<architecture>.<extension>` 或带 Edition 的形式，例如 `zongsoft.web@1.0.0-x64.rpm`。下文旧包名是与当时哈希对应的历史产物名称，不作为当前制包示例；现行规则见 [README](../README.zh-Hans.md#快速开始)。
+
 本文按实施阶段记录当时的验证结果；测试计数、产物路径、哈希和容器/全局工具状态不代表当前实时状态。旧路径与旧行为保留为历史证据，当前功能契约见[双语 README](../README.zh-Hans.md)、[升迁指南](migrations.zh-Hans.md)和[实现说明](implementation.md)。
 
 2026-09-10：职责拆分、Native AOT 发布和文件交接验证。契约见 [升迁指南](migrations.zh-Hans.md)，第三方警告逐条说明见 [AOT 警告审查](aot-warning-review.md)。

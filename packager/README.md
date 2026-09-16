@@ -152,21 +152,23 @@ dotnet-pack deb \
 The generated package name follows this pattern:
 
 ```text
-<name>@<version>_<runtime>.<extension>
-<name>-<edition>@<version>_<runtime>.<extension>
+<name>@<version>-<architecture>.<extension>
+<name>-<edition>@<version>-<architecture>.<extension>
 ```
+
+`<architecture>` is the lowercase architecture, such as `x64` or `arm64`; filenames no longer include the platform prefix. `<extension>` is `tar.gz`, `deb`, or `rpm`. The companion tar `.sh` entry uses the same filename stem.
 
 When `--daemon:<name>` is supplied and is not disabled, the daemon identifier is preferred for the generated package name:
 
 ```text
-<daemon>@<version>_<runtime>.<extension>
-<daemon>-<edition>@<version>_<runtime>.<extension>
+<daemon>@<version>-<architecture>.<extension>
+<daemon>-<edition>@<version>-<architecture>.<extension>
 ```
 
 Example:
 
 ```text
-zongsoft.web@1.0.0_linux-x64.deb
+zongsoft.web@1.0.0-x64.deb
 ```
 
 ## Commands
@@ -298,9 +300,17 @@ After all package output is successfully generated, the source file is saved usi
 | `--license:<text>` | Empty | License expression or license name. |
 | `--category:<text>` | Format default | Debian `Section` or RPM `Group`; defaults to `utils` for Debian and `Applications/System` for RPM. |
 | `--maintainer:<text>` | `Zongsoft Studio <zongsoft@gmail.com>` | Package maintainer/vendor text. |
-| `--dependencies:<list>` | Empty | Comma- or semicolon-separated dependency list. Written to Debian `Depends` or RPM `Requires`. |
+| `--dependencies:<list>` | Empty | Comma- or semicolon-separated dependency list. Debian `Depends` uses `name (>= version)`; RPM `Requires` accepts `name >= version`. |
 
 ### Debian Options
+
+Debian also supports version constraints in `--dependencies`. For example, declare the ASP.NET Core 10 runtime requirement for a hosting `web/default` package:
+
+```bash
+--dependencies:"aspnetcore-runtime-10.0 (>= 10.0)"
+```
+
+The generated `control` file contains `Depends: aspnetcore-runtime-10.0 (>= 10.0)`. Debian requires parentheses around version relations; the RPM form `aspnetcore-runtime-10.0 >= 10.0` cannot be copied directly. Supported operators are `<<`, `<=`, `=`, `>=`, and `>>`. Separate dependencies with commas or semicolons; `|` means any one alternative satisfies the group. Quote the entire option. The packager records dependency metadata without downloading or embedding those packages; the installation environment needs suitable package sources.
 
 | Option | Control field |
 | --- | --- |
@@ -598,13 +608,13 @@ The tar command generates a `.tar.gz` archive and a same-named `.sh` installer s
 One-step install:
 
 ```bash
-sudo sh ./packages/zongsoft.web@1.0.0_linux-x64.sh
+sudo sh ./packages/zongsoft.web@1.0.0-x64.sh
 ```
 
 Install:
 
 ```bash
-tar -xzf ./packages/zongsoft.web@1.0.0_linux-x64.tar.gz
+tar -xzf ./packages/zongsoft.web@1.0.0-x64.tar.gz
 sudo ./install.sh
 ```
 
@@ -640,9 +650,9 @@ data.tar.gz
 Inspect and install:
 
 ```bash
-dpkg-deb --info ./packages/zongsoft.web@1.0.0_linux-x64.deb
-dpkg-deb --contents ./packages/zongsoft.web@1.0.0_linux-x64.deb
-sudo dpkg -i ./packages/zongsoft.web@1.0.0_linux-x64.deb
+dpkg-deb --info ./packages/zongsoft.web@1.0.0-x64.deb
+dpkg-deb --contents ./packages/zongsoft.web@1.0.0-x64.deb
+sudo dpkg -i ./packages/zongsoft.web@1.0.0-x64.deb
 ```
 
 Root-level entries under `/etc/` are also written to Debian `conffiles` metadata.
@@ -654,10 +664,10 @@ The RPM package contains RPM lead/signature/header metadata plus a gzip-compress
 Inspect and install:
 
 ```bash
-rpm -qip ./packages/zongsoft.web@1.0.0_linux-x64.rpm
-rpm -qlp ./packages/zongsoft.web@1.0.0_linux-x64.rpm
-rpm -qp --scripts ./packages/zongsoft.web@1.0.0_linux-x64.rpm
-sudo rpm -Uvh ./packages/zongsoft.web@1.0.0_linux-x64.rpm
+rpm -qip ./packages/zongsoft.web@1.0.0-x64.rpm
+rpm -qlp ./packages/zongsoft.web@1.0.0-x64.rpm
+rpm -qp --scripts ./packages/zongsoft.web@1.0.0-x64.rpm
+sudo rpm -Uvh ./packages/zongsoft.web@1.0.0-x64.rpm
 ```
 
 Root-level entries under `/etc/` are marked as RPM configuration files.
