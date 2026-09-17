@@ -1,0 +1,81 @@
+name: Publish NuGet Packages
+
+run-name: Publish ${{ inputs.project }} to nuget.org
+
+on:
+  workflow_dispatch:
+    inputs:
+      project:
+        description: Project directory to publish
+        required: true
+        type: choice
+        options:
+          - deployer
+          - packager
+
+concurrency:
+  group: nuget-publishing
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: release
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      id-token: write
+
+    defaults:
+      run:
+        working-directory: ${{ inputs.project }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Restore .NET tools
+        run: dotnet tool restore
+
+      - name: Prepare migrator build environment
+        if: inputs.project == 'packager'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes podman
+          # Pre-create the container expected by Cake with the runner's checkout path.
+          podman run --detach --name zongsoft-packager-aot-builder \
+            --volume "$PWD:/workspace" \
+            --volume zongsoft-packager-aot-cache:/aot \
+            --workdir /workspace \
+            docker.io/rockylinux/rockylinux:9.8 sleep infinity
+
+      - name: Build packages
+        run: dotnet cake --edition Release --target build
+
+      - name: NuGet login
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Publish packages
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        # Publish the existing packages without repeating the build after login.
+        run: dotnet cake --edition Release --target pack --exclusive
+
+      - name: Remove migrator build environment
+        if: always() && inputs.project == 'packager'
+        run: |
+          if command -v podman >/dev/null 2>&1 && podman container exists zongsoft-packager-aot-builder; then
+            podman rm --force zongsoft-packager-aot-builder
+          fi
