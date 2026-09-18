@@ -486,7 +486,7 @@ http://127.0.0.1:<port>
 
 ## 打包器版本元数据
 
-每个安装包自动记录当前生成工具的身份，逻辑内容为 `Packager:Zongsoft.Tools.Packager@0.9.0.0`。值采用 `程序集名@版本号`，从打包器自身程序集读取，独立于宿主应用版本；不需要新增命令选项，也不要求启用升迁。
+每个安装包自动记录当前生成工具的身份，逻辑内容为 `Packager:Zongsoft.Tools.Packager@0.10.0.0`。值采用 `程序集名@版本号`，从打包器自身程序集读取，独立于宿主应用版本；不需要新增命令选项，也不要求启用升迁。
 
 | 格式 | 存放位置 | 查看方式 |
 | --- | --- | --- |
@@ -496,7 +496,7 @@ http://127.0.0.1:<port>
 
 RPM 用生成工具版本标签保存本工具身份；其 `PACKAGER` 标签（1015）仍保存 `--maintainer` 的维护者信息。元数据位于格式头中，不增加安装目录文件，也不改变 `.version` 或 `migration.json`。
 
-`Generator.GetIdentity` 通过 `Assembly.GetName()` 读取自身程序集的简单名称和 `Version`，保留版本对象的完整文本，例如 `0.9.0.0`。三个生成器调用同一方法读取身份，不取调用进程或宿主程序集版本。原始主 Header 的 RPM 摘要生成流程覆盖新增标签。
+`Generator.GetIdentity` 通过 `Assembly.GetName()` 读取自身程序集的简单名称和 `Version`，保留版本对象的完整文本，例如 `0.10.0.0`。三个生成器调用同一方法读取身份，不取调用进程或宿主程序集版本。原始主 Header 的 RPM 摘要生成流程覆盖新增标签。
 
 tar 通过 `PaxGlobalExtendedAttributesTarEntry` 写入一个全局扩展记录，不将其加入 `Package.Entries`；deb 写入控制字段；RPM 直接写入 1064 标签，不占用已有维护者字段。RPM 原生标签含义参见[官方标签说明](https://rpm-software-management.github.io/rpm/manual/tags.html)，PAX API 参见[官方构造说明](https://learn.microsoft.com/en-us/dotnet/api/system.formats.tar.paxglobalextendedattributestarentry.-ctor)。
 

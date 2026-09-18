@@ -44,7 +44,7 @@ It is designed for .NET services and command-line applications that need repeata
 
 ## Packager version metadata
 
-Every package records the current generator identity, logically `Packager:Zongsoft.Tools.Packager@0.9.0.0`. The value is `assembly-name@version`, read from the packager's own assembly, independently of the host application's version. No additional option or migration configuration is required.
+Every package records the current generator identity, logically `Packager:Zongsoft.Tools.Packager@0.10.0.0`. The value is `assembly-name@version`, read from the packager's own assembly, independently of the host application's version. No additional option or migration configuration is required.
 
 | Format | Location | Inspection |
 | --- | --- | --- |
@@ -93,10 +93,10 @@ Before testing migrations, follow the [build instructions](docs/migrations.md#bu
 dotnet pack src/Zongsoft.Tools.Packager.csproj -c Release
 ```
 
-After the build succeeds and `src/bin/Release/Zongsoft.Tools.Packager.0.9.0.nupkg` exists, install it for the first time:
+After the build succeeds and `src/bin/Release/Zongsoft.Tools.Packager.0.10.0.nupkg` exists, install it for the first time:
 
 ```powershell
-dotnet tool install -g Zongsoft.Tools.Packager --version 0.9.0 --source ./src/bin/Release --no-http-cache
+dotnet tool install -g Zongsoft.Tools.Packager --version 0.10.0 --source ./src/bin/Release --no-http-cache
 ```
 
 If the tool is already installed, especially when rebuilding the same version, uninstall it first, then repeat the local installation command above:
@@ -105,7 +105,7 @@ If the tool is already installed, especially when rebuilding the same version, u
 dotnet tool uninstall -g Zongsoft.Tools.Packager
 ```
 
-The example version `0.9.0` matches the current project; adjust it to the actual `.nupkg`. `--source` restricts installation to the local directory, avoiding a same-named package from NuGet.org; `--no-http-cache` disables the download cache. See the [.NET tool installation reference](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-tool-install). Check the installed version with `dotnet tool list -g`. Here, “local” describes the package source; `-g` still replaces the current user’s global tool. Do not run the Cake `pack` task for local testing: it pushes packages to NuGet.org.
+The example version `0.10.0` matches the current project; adjust it to the actual `.nupkg`. `--source` restricts installation to the local directory, avoiding a same-named package from NuGet.org; `--no-http-cache` disables the download cache. See the [.NET tool installation reference](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-tool-install). Check the installed version with `dotnet tool list -g`. Here, “local” describes the package source; `-g` still replaces the current user’s global tool. Do not run the Cake `pack` task for local testing: it pushes packages to NuGet.org.
 
 ## Quick Start
 

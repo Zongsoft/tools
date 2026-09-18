@@ -44,7 +44,7 @@
 
 ## 打包器版本元数据
 
-每个安装包自动记录当前生成工具的身份，逻辑内容为 `Packager:Zongsoft.Tools.Packager@0.9.0.0`。值采用 `程序集名@版本号`，从打包器自身程序集读取，独立于宿主应用版本；不需要新增命令选项，也不要求启用升迁。
+每个安装包自动记录当前生成工具的身份，逻辑内容为 `Packager:Zongsoft.Tools.Packager@0.10.0.0`。值采用 `程序集名@版本号`，从打包器自身程序集读取，独立于宿主应用版本；不需要新增命令选项，也不要求启用升迁。
 
 | 格式 | 存放位置 | 查看方式 |
 | --- | --- | --- |
@@ -93,10 +93,10 @@ dotnet tool uninstall -g Zongsoft.Tools.Packager
 dotnet pack src/Zongsoft.Tools.Packager.csproj -c Release
 ```
 
-确认构建成功且 `src/bin/Release/Zongsoft.Tools.Packager.0.9.0.nupkg` 已生成后，首次安装执行：
+确认构建成功且 `src/bin/Release/Zongsoft.Tools.Packager.0.10.0.nupkg` 已生成后，首次安装执行：
 
 ```powershell
-dotnet tool install -g Zongsoft.Tools.Packager --version 0.9.0 --source ./src/bin/Release --no-http-cache
+dotnet tool install -g Zongsoft.Tools.Packager --version 0.10.0 --source ./src/bin/Release --no-http-cache
 ```
 
 若已安装该工具，尤其是重新编译了同一版本，先卸载，再执行上面的本地安装命令：
@@ -105,7 +105,7 @@ dotnet tool install -g Zongsoft.Tools.Packager --version 0.9.0 --source ./src/bi
 dotnet tool uninstall -g Zongsoft.Tools.Packager
 ```
 
-示例版本 `0.9.0` 对应当前项目版本，请随实际 `.nupkg` 调整。`--source` 限定本次安装只使用本地目录，避免选中 NuGet.org 的同名包；`--no-http-cache` 禁用下载缓存，选项说明见 [.NET 工具安装文档](https://learn.microsoft.com/zh-cn/dotnet/core/tools/dotnet-tool-install)。安装后使用 `dotnet tool list -g` 核对版本。这里的“本地”指包来源，`-g` 仍会替换当前用户的全局工具。只做本地测试不要运行 Cake 的 `pack` 任务，它会推送到 NuGet.org。
+示例版本 `0.10.0` 对应当前项目版本，请随实际 `.nupkg` 调整。`--source` 限定本次安装只使用本地目录，避免选中 NuGet.org 的同名包；`--no-http-cache` 禁用下载缓存，选项说明见 [.NET 工具安装文档](https://learn.microsoft.com/zh-cn/dotnet/core/tools/dotnet-tool-install)。安装后使用 `dotnet tool list -g` 核对版本。这里的“本地”指包来源，`-g` 仍会替换当前用户的全局工具。只做本地测试不要运行 Cake 的 `pack` 任务，它会推送到 NuGet.org。
 
 ## 快速开始
 
