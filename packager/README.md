@@ -52,7 +52,7 @@ Every package records the current generator identity, logically `Packager:Zongso
 | deb | `Packager` field in `control.tar.gz` → `control` | `dpkg-deb -f <package.deb> Packager` |
 | rpm | Main header string tag `RPMVERSION` (1064) | `rpm -qp --queryformat '%{RPMVERSION}\n' <package.rpm>` |
 
-RPM's generator-version tag stores this tool's identity; its `PACKAGER` tag (1015) continues to contain the maintainer from `--maintainer`. Metadata resides in format headers, adds no installed file, and does not change `.version` or `migration.json`.
+RPM's generator-version tag stores this tool's identity; its `PACKAGER` tag (1015) contains the maintainer from `--maintainer`. Metadata resides in format headers, adds no installed file, and does not change `.version` or `migration.json`.
 
 ## Installation
 
@@ -514,7 +514,7 @@ Multiple pre/post script paths can be separated with `;` or `|`.
 
 If no scripts are supplied, defaults are generated. For systemd packages they stop the service before install/removal, create or remove the `/etc/systemd/system/<service>` symlink, reload systemd, enable the service after installation, and remove the install directory after uninstallation.
 
-Package-manager upgrades do not run the uninstall lifecycle. Debian `prerm`/`postrm` scripts are guarded by their action argument, and RPM `%preun`/`%postun` scripts run only when the final installed package instance is removed. This prevents an old package's removal scripts from deleting the newly installed payload during an upgrade or same-version reinstall. Tar packages keep the explicit `install.sh`/`uninstall.sh` lifecycle, and their generated uninstaller removes only the resolved `TARGET` path.
+Debian `prerm` runs the uninstall lifecycle only for `remove` or `deconfigure`, and `postrm` only for `remove` or `purge`. RPM `%preun`/`%postun` scripts run only when the final installed package instance is removed (`$1=0`), preserving the payload while an installed instance remains. Tar packages use the explicit `install.sh`/`uninstall.sh` lifecycle, and their generated uninstaller removes only the resolved `TARGET` path.
 
 ## Migrator artifact integration
 
@@ -721,12 +721,12 @@ See [docs/implementation.md](docs/implementation.md) for the internal design, pa
 
 This project is licensed under the [MIT](https://github.com/Zongsoft/tools/blob/main/LICENSE) license.
 
-Local source searches and links follow [the implementation contract](docs/implementation.md#local-search-and-source-links).
+Local source searches and links follow [the implementation contract](docs/implementation.md#本地搜索与源链接).
 
 
 ## Development checks
 
-Production and test projects use `Zongsoft.CodeAnalysis` 1.1.0. Use .NET SDK 10.0.401 or a compatible newer compiler. The analyzer is a private build dependency, not a runtime dependency of the tool.
+Production and test projects use `Zongsoft.CodeAnalysis` with its version defined in the repository root `Directory.Packages.props`. Use .NET SDK 10.0.401 or a toolchain with Roslyn 5.9 or later. The analyzer is a private build dependency, not a runtime dependency of the tool.
 
 ```powershell
 dotnet build src/Zongsoft.Tools.Packager.csproj -p:ZongsoftCodeStyleStrict=true

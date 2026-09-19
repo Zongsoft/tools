@@ -2,7 +2,7 @@
 
 [English](implementation.md) | [简体中文](implementation.zh-Hans.md)
 
-本文说明当前源码的职责、处理顺序和维护约束。使用语法与选项见 [README](../README.zh-Hans.md)；重构验收和真实业务样本的未完成事项在源码仓库的 `REFACTOR-TASKS.md` 中记录。
+本文说明源码的职责、处理顺序和维护约束。使用语法与选项见 [README](../README.zh-Hans.md)。
 
 ## 入口与职责
 
@@ -26,17 +26,17 @@
 
 ## 复用现有库
 
-Release 引用 Zongsoft.Core 7.59.0，当前 Debug 配置引用本地 Core 程序集；NuGet.* 保持 7.9.0，在本工具项目中通过 VersionOverride 维护；Core、测试和分析器版本由仓库根 Directory.Packages.props 统一管理。
+Release 引用 Zongsoft.Core 7.59.0，Debug 配置引用本地 Core 程序集；NuGet.* 使用 7.9.0，在本工具项目中通过 VersionOverride 维护；Core、测试和分析器版本由仓库根 Directory.Packages.props 统一管理。
 
 | 能力 | 复用接口与本工具保留部分 |
 | --- | --- |
 | 命令行 | Core `CommandLine.Parse/Get`；工具只组织选项、退出码和取消。 |
 | 环境字典 | Core `DictionaryExtension.ToDictionary`，指定不区分大小写的比较器。 |
-| INI 清单 | Core `Profile`、`ProfileOptions`、`ProfileContext` 及章节/条目集合；工具不再实现 INI 解析器。 |
+| INI 清单 | Core `Profile`、`ProfileOptions`、`ProfileContext` 及章节/条目集合负责 INI 解析。 |
 | 本地化 | `ResXFileCodeGenerator` 生成 `Properties.Resources` 强类型属性；调用处直接取属性并使用 `string.Format` 格式化；日志和报告保留原始消息。 |
-| 包元数据和内容规则 | NuGet `NuspecReader`、`PackageIdentity`、`VersionRange`；`GetContentFiles` 每个包资产展开读取一次，取代逐文件重新解析 XML。 |
-| TFM | NuGetFramework 表达框架身份，其框架/平台版本使用 System.Version；NuGetVersion 和 VersionRange 表达包版本与约束。无调用的 TargetFramework/TargetVersion 已删除。工具保留包括 ^ 在内的显式框架过滤规则，与资产的最近兼容组选择分别处理。 |
-| RID | NuGet `JsonRuntimeFormat.ReadRuntimeGraph`、`RuntimeGraph.ExpandRuntime`；删除手写 JSON 图谱解析与队列遍历。 |
+| 包元数据和内容规则 | NuGet `NuspecReader`、`PackageIdentity`、`VersionRange`；`GetContentFiles` 在每次包资产展开时读取一次规则。 |
+| TFM | NuGetFramework 表达框架身份，其框架/平台版本使用 System.Version；NuGetVersion 和 VersionRange 表达包版本与约束。包括 ^ 在内的显式框架过滤规则与资产的最近兼容组选择分别处理。 |
+| RID | NuGet `JsonRuntimeFormat.ReadRuntimeGraph` 加载图谱，`RuntimeGraph.ExpandRuntime` 提供回退候选。 |
 
 Core 7.59.0 由 ProfileReader 内置处理导入，提供循环/深度保护；ProfileOptions 提供两个 Action<ProfileContext> 导入回调。deployer 使用 Importing 登记导入文件哈希，根描述文件单独登记。appsettings 点号键、目标边界、链接拒绝和文件所有权仍由部署工具处理。
 
@@ -59,7 +59,7 @@ Core 7.59.0 由 ProfileReader 内置处理导入，提供循环/深度保护；P
 
 `Normalizer` 处理 `$(name)` 和 `%name%`，保留 URL 中的斜线。部署路径展开发现未定义变量时报错；被过滤掉的分支无需提供变量。过滤组合保持从左到右求值，源过滤与目标过滤都必须满足。
 
-`NugetAssets.ResolveLibraryPath` 集中处理显式缓存路径的框架适配：只解析相对 NuGet_Packages 根的路径，识别 lib 目录；路径内的框架优先于 Framework 变量，通过官方 NuGetFrameworkUtility.GetNearest 选择最近框架并保留后续子路径。根外、未指定目标框架或无适用目录时返回原路径。原 NugetRegulator、DirectoryRegulator 和 IDirectoryRegulator 已移除。
+`NugetAssets.ResolveLibraryPath` 集中处理显式缓存路径的框架适配：只解析相对 NuGet_Packages 根的路径，识别 lib 目录；路径内的框架优先于 Framework 变量，通过官方 NuGetFrameworkUtility.GetNearest 选择最近框架并保留后续子路径。根外、未指定目标框架或无适用目录时返回原路径。
 
 `DeploymentUtility.GetFiles` 先展开包目录并适配框架，再用 Core Searcher 搜索目录及文件，捕获信息用于保留目录后缀。`GetPackageFiles` 的资产目录已完成 RID/TFM 选择，传入 resolveLibrary: false 直接枚举，避免重复框架匹配；content 中名为 lib 的子目录不会被重新解释为框架入口或产生额外文件。
 
@@ -69,11 +69,11 @@ glob 的 `**` 匹配零层或多层目录，`?` 匹配目录名中的单字符�
 
 ## 包版本与资产
 
-各 NuGet 组件是独立类型，不再作为 NugetUtility 的 partial 文件。每次求解创建私有 NugetGraph 实例；回溯分支复制选择表，有序活动链用于循环诊断。NugetResolver 使用显式栈展开已求解的依赖，保留先根后依赖的深度优先顺序，并在资产枚举中检查取消。托管与原生资产共用 RID 遍历，但各自独立选择回退组。
+NugetUtility、NugetGraph、NugetAssets、NugetRuntime 和 NugetResolver 各自承担独立职责。每次求解创建私有 NugetGraph 实例；回溯分支复制选择表，有序活动链用于循环诊断。NugetResolver 使用显式栈展开已求解的依赖，保留先根后依赖的深度优先顺序，并在资产枚举中检查取消。托管与原生资产共用 RID 遍历，但各自独立选择回退组。
 
 类型的 XML 注释说明职责，关键流程注释记录顺序与状态边界。构造、搜索、约束收集、框架匹配及缓存细节保持私有；内部入口仅用于生产组件协作，不为单元测试扩大可见性。测试通过实际部署与包访问入口验证行为。
 
-NugetUtility 只保留以本次变量字典为作用域的包访问缓存；键同时包含包源、绝对缓存根、离线与预发布模式，切换这些配置不会复用其它上下文的结果。重复的 DownloadDependentPackageAsync 入口及无调用的 Output/NugetOutput 已删除。依赖回归通过实际部署入口检查计划和输出文件。
+NugetUtility 管理以本次变量字典为作用域的包访问缓存；键同时包含包源、绝对缓存根、离线与预发布模式，切换这些配置不会复用其它上下文的结果。依赖回归通过实际部署入口检查计划和输出文件。
 
 普通根包版本固定；依赖按所有已知版本范围筛选，优先选最低可用版本，并回溯解决后续冲突。无解、循环或搜索上限触发错误。当前上限为 10,000 次搜索、512 个选中包；不同 TFM 的约束均参与检查。
 
@@ -85,7 +85,7 @@ NugetUtility 只保留以本次变量字典为作用域的包访问缓存；键�
 
 - 托管资产按 RID 回退寻找有兼容 TFM 的 `runtimes/{rid}/lib/{tfm}` 组，选中后替代整个普通 `lib/{tfm}` 组；找不到时使用普通 lib。
 - 原生资产独立选择首个存在的 `runtimes/{rid}/native` 组，不强制与托管资产来自同一层 RID。
-- `contentFiles/any/{tfm}` 应用 nuspec 的 include/exclude、copyToOutput 和 flatten；无复制规则的内容不输出。旧 content 目录继续递归复制。
+- `contentFiles/any/{tfm}` 应用 nuspec 的 include/exclude、copyToOutput 和 flatten；无复制规则的内容不输出。`content` 目录递归复制。
 - 同目标、同内容的包资产保留 Duplicate 来源记录，实际只复制一次；不同内容报冲突。显式 delete 结束此前去重范围。
 - 不跨插件目录移动公共 DLL；lib 中的 XML 文档继续保留。
 
@@ -97,7 +97,7 @@ NugetUtility 只保留以本次变量字典为作用域的包访问缓存；键�
 
 NuGet 的图谱扩展按先近后远的顺序返回候选。工具只在查询前规范化 `windows→win`、`mac/macos→osx`、`x32→x86` 别名；例如 linux-musl-x64 通过图谱回退，而不是用字符串截断猜测。未知 RID 没有自动补造的回退关系。
 
-更新图谱时应选择明确的上游版本，保留图谱及许可证的原始字节，核对并更新本节哈希，并运行竞争候选顺序回归；升级本地 SDK 不会自动升级工具内的 RID 策略。
+内嵌图谱决定 RID 回退规则，与本机安装的 SDK 无关。图谱版本、哈希与许可证共同标识所有目标框架使用的资源。
 
 ## 报告、锁与清理
 
@@ -123,13 +123,13 @@ dotnet test test/Zongsoft.Tools.Deployer.Tests.csproj -f net9.0 --no-restore -p:
 dotnet test test/Zongsoft.Tools.Deployer.Tests.csproj -f net10.0 --no-restore -p:GeneratePackageOnBuild=false
 ```
 
-测试使用临时目标和合成本地包；RID 回退顺序验证最终文件内容，本地化验证 en/zh-Hans 模板与参数。真实业务完整部署和 Linux/macOS 原生首次调用仍应按任务清单单独验收。本页及英文版随工具包放入 docs，README 保留入口。
+测试使用临时目标和合成本地包；RID 回退顺序验证最终文件内容，本地化验证 en/zh-Hans 模板与参数。宿主集成验证检查目标平台上的程序集加载与原生首次调用。本页及英文版随工具包放入 docs，README 提供入口。
 
 ### 资源生成与调用
 
 在 Visual Studio 中，将中性资源 `src/Properties/Resources.resx` 的“自定义工具”设为 `ResXFileCodeGenerator`，运行“运行自定义工具”生成同目录的 `Resources.Designer.cs`。项目已保留 Generator、LastGenOutput、AutoGen 和 DependentUpon 元数据。不要对 zh-Hans 资源生成另一份同名访问类；它是由同一个资源访问类定位的卫星资源。
 
-先同步中英文 resx 的键和格式参数，再生成代码并编译；例如 `Review.Missing` 对应生成属性 `Properties.Resources.Review_Missing`。调用方式为 `string.Format(Properties.Resources.Review_Missing, path)`，不再拼接字符串资源键或调用 ResourceUtility/ResourceManager 查询。生成类按 CurrentUICulture 选择语言，并保留标准 Culture 覆盖属性。新增资源后，仅运行 dotnet build 不等于已执行 Visual Studio 自定义工具。
+中英文 resx 使用一致的键和格式参数，由自定义工具生成代码；例如 `Review.Missing` 对应生成属性 `Properties.Resources.Review_Missing`。调用方式为 `string.Format(Properties.Resources.Review_Missing, path)`。生成类按 CurrentUICulture 选择语言，并提供标准 Culture 覆盖属性。dotnet build 不自动执行 Visual Studio 自定义工具。
 
 Designer 的属性和注释由生成器维护；仅清理生成空白行中的尾随空格和保持 CRLF，不手写资源属性。回归使用现有 en/zh-Hans 完整模板与路径参数测试。
 
@@ -137,7 +137,7 @@ Designer 的属性和注释由生成器维护；仅清理生成空白行中的�
 
 Reader 使用 ProfileOptions.MaximumDepth（默认 64，仅接受正数），根文件计为第一层；deployer 沿用默认值。Importing 在文件打开及递归检查之后、解析之前执行；Imported 在子文件完成并合并之后执行，根文件不通知。可选文件缺失跳过，其他错误传播；子文件沿用相同空行选项与导入配置。
 
-deployer 只订阅 `Importing`；哈希按路径另行读取，并非解析字节的严格快照。验证及独立的快照/合并后续任务见 [PROFILE-IMPORT-TASKS.md](../PROFILE-IMPORT-TASKS.md)。
+deployer 只订阅 `Importing`；哈希按路径另行读取，并非解析字节的严格快照。
 
 Core 将逐行解析、导入路径和递归保护集中在内部 ProfileReader，私有 Context 记录当前 Profile、章节和行号。Profile.Load 保留转发入口；子文件解析成功后由父 Profile.Import 合并有效引用及登记关系，然后通知 Imported，最后清理活动状态。
 
@@ -147,13 +147,13 @@ ProfileOptions 的 Importing/Imported 均为 Action<ProfileContext>。上下文�
 
 Core 7.59.0 将本地有序声明与合并后的有效视图区分，导入覆盖替换引用，条目来源指向实际声明文件；同文件重复键仍报错，本地与导入按读取顺序覆盖。ProfileReader 管理读取，ProfileWriter 管理保存。
 
-Core 的无显式目标 Save() 仅将自身及导入子树中修改的声明写回各自来源；显式路径、Stream、TextWriter 只输出当前文件声明。未修改文件不重写。多文件输出先全部准备、再逐个提交，不是跨文件事务。deployer 只读取描述文件并使用 importing 记录哈希，不调用这些保存入口，也不重新维护导入或写入实现。严格匹配解析字节的哈希快照仍是独立后续任务。
+Core 的无显式目标 Save() 仅将自身及导入子树中修改的声明写回各自来源；显式路径、Stream、TextWriter 只输出当前文件声明。未修改文件不重写。多文件输出先全部准备、再逐个提交，不是跨文件事务。deployer 只读取描述文件并使用 Importing 记录哈希，不调用这些保存入口。
 
 ## 本地搜索与源链接
 
-本地模式由 Core Searcher 处理，工具不再维护通配递归算法。搜索结果保留逻辑名称，读取实际目标。选中目录链接作为载荷根时允许展开，内部目录链接跳过，文件链接按原名称读取目标内容。递归模式不穿过目录链接匹配后续段。选中链接悬空或循环会在输出写入前失败；目标路径校验继续执行。
+Core Searcher 处理本地模式及递归匹配。搜索结果保留逻辑名称，读取实际目标。选中目录链接作为载荷根时允许展开，内部目录链接跳过，文件链接按原名称读取目标内容。递归模式不穿过目录链接匹配后续段。选中链接悬空或循环会在输出写入前失败；每次写入均校验目标路径。
 
-链接 INI 和 .deploy 的相对引用以逻辑配置目录为基准。单模式结果按逻辑相对路径执行 Ordinal 排序，多参数顺序不变。参见 [Core 本地搜索](../../../framework/Zongsoft.Core/docs/searcher.zh-Hans.md)和[任务清单](../LOCAL-SEARCHER-TASKS.md)。
+链接 INI 和 .deploy 的相对引用以逻辑配置目录为基准。单模式结果按逻辑相对路径执行 Ordinal 排序，多参数顺序不变。参见 [Core 本地搜索](../../../framework/Zongsoft.Core/docs/searcher.zh-Hans.md)。
 
 部署操作 Source 保留逻辑路径，链接源另记 ResolvedSource。复制和摘要读取实际目标；锁定比较包含目标路径，执行前重新核对解析结果，因此改指向等内容文件也会失败。NuGet 框架适配及 expansion 后缀由部署适配层负责。
 

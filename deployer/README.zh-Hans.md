@@ -200,10 +200,10 @@ dotnet tool uninstall -g zongsoft.tools.deployer
 dotnet build src/Zongsoft.Tools.Deployer.csproj -c Release
 ```
 
-确认构建成功且 `src/bin/Release/Zongsoft.Tools.Deployer.7.11.0.nupkg` 已生成后，首次安装执行：
+确认构建成功且 `src/bin/Release/Zongsoft.Tools.Deployer.7.12.0.nupkg` 已生成后，首次安装执行：
 
 ```powershell
-dotnet tool install -g Zongsoft.Tools.Deployer --version 7.11.0 --source ./src/bin/Release --no-http-cache
+dotnet tool install -g Zongsoft.Tools.Deployer --version 7.12.0 --source ./src/bin/Release --no-http-cache
 ```
 
 若已安装该工具，尤其是重新编译了同一版本，先卸载，再执行上面的本地安装命令：
@@ -212,7 +212,7 @@ dotnet tool install -g Zongsoft.Tools.Deployer --version 7.11.0 --source ./src/b
 dotnet tool uninstall -g Zongsoft.Tools.Deployer
 ```
 
-示例版本 `7.11.0` 对应当前项目版本，请随实际 `.nupkg` 调整。`--source` 限定本次安装只使用本地目录，避免选中 NuGet.org 的同名包；`--no-http-cache` 禁用下载缓存，选项说明见 [.NET 工具安装文档](https://learn.microsoft.com/zh-cn/dotnet/core/tools/dotnet-tool-install)。安装后使用 `dotnet tool list -g` 核对版本。这里的“本地”指包来源，`-g` 仍会替换当前用户的全局工具。只做本地测试不要运行 Cake 的 `pack` 任务，它会推送到 NuGet.org。
+示例版本 `7.12.0` 对应当前项目版本，请随实际 `.nupkg` 调整。`--source` 限定本次安装只使用本地目录，避免选中 NuGet.org 的同名包；`--no-http-cache` 禁用下载缓存，选项说明见 [.NET 工具安装文档](https://learn.microsoft.com/zh-cn/dotnet/core/tools/dotnet-tool-install)。安装后使用 `dotnet tool list -g` 核对版本。这里的“本地”指包来源，`-g` 仍会替换当前用户的全局工具。只做本地测试不要运行 Cake 的 `pack` 任务，它会推送到 NuGet.org。
 
 ## 执行
 
@@ -292,7 +292,7 @@ dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:
 
 ### 计划、锁定与清理
 
-重构源码的兼容性变化：默认覆盖现在落实为 `newest`；非法覆盖值报错；无效过滤不再默认为真；未知变量在实际路径展开时失败；目标写入限制在 `destination` 内且拒绝链接路径；清单及 `#@import` 都检测循环。过滤组合保留从左到右求值，不引入新的运算符优先级。`**` 匹配零层或多层目录，复制目录会保留其内部相对结构。
+默认覆盖策略为 `newest`；非法覆盖值、无效过滤条件和有效路径中的未定义变量均报错。目标写入限制在 `destination` 内且拒绝链接路径；清单及 `#@import` 都检测循环。过滤组合从左到右求值。`**` 匹配零层或多层目录，复制目录会保留其内部相对结构。
 
 | 选项 | 行为 |
 | --- | --- |
@@ -314,9 +314,9 @@ dotnet deploy --framework:net10.0 --platform:win --architecture:x64 --lockFile:.
 dotnet deploy --framework:net10.0 --platform:win --architecture:x64 --lockFile:./deployment.lock.json --locked:true .deploy
 ```
 
-RID 回退通过 NuGet.RuntimeModel 使用仓库内固定的 dotnet/runtime v10.0.0 图谱，见[实现细节](docs/implementation.zh-Hans.md)；兼容 `windows→win`、`mac/macos→osx`、`x32→x86` 别名。`contentFiles/any/{tfm}` 读取 nuspec 的 include/exclude、copyToOutput、flatten；未声明复制的内容不部署。旧 `content` 目录继续作为部署内容递归复制。lib 组中的 XML 文档仍按原契约复制，不能把所有 XML 都视为可删除的无用文件。
+RID 回退通过 NuGet.RuntimeModel 使用仓库内固定的 dotnet/runtime v10.0.0 图谱，见[实现细节](docs/implementation.zh-Hans.md)；支持 `windows→win`、`mac/macos→osx`、`x32→x86` 别名。`contentFiles/any/{tfm}` 读取 nuspec 的 include/exclude、copyToOutput、flatten；未声明复制的内容不部署。`content` 目录作为部署内容递归复制。选定 lib 组中的 XML 文档包含在部署内容中。
 
-包访问、依赖求解、资产选择和 RID 回退分别由独立类型负责，框架与版本模型复用 NuGet/.NET 类型，职责与行为见[实现细节](docs/implementation.zh-Hans.md)。此次重构没有增加包依赖。
+包访问、依赖求解、资产选择和 RID 回退分别由独立类型负责，框架与版本模型复用 NuGet/.NET 类型，职责与行为见[实现细节](docs/implementation.zh-Hans.md)。
 
 目标应用配置按环境变量、目标目录 appsettings.json、命令选项的顺序加载；嵌套键可用 `$(Database.Name)`、`%Items[0].Name%` 引用。变量替换保留 URL 的斜线。
 
@@ -326,9 +326,7 @@ RID 回退通过 NuGet.RuntimeModel 使用仓库内固定的 dotnet/runtime v10.
 dotnet test test/Zongsoft.Tools.Deployer.Tests.csproj -f net10.0 -p:GeneratePackageOnBuild=false
 ```
 
-任务状态及真实样例验证见 [REFACTOR-TASKS.md](REFACTOR-TASKS.md)。
-
-Profile 导入复用 Core 7.59.0：Reader 内置导入及递归保护，通过 ProfileOptions.Importing 登记导入文件哈希，无需注册指令。详见[实现细节](docs/implementation.zh-Hans.md#profile-导入回调)和[导入重构清单](PROFILE-IMPORT-TASKS.md)。
+Profile 导入复用 Core 7.59.0：Reader 内置导入及递归保护，通过 ProfileOptions.Importing 登记导入文件哈希。详见[实现细节](docs/implementation.zh-Hans.md#profile-导入回调)。
 
 Core Profile 的来源与覆盖规则，以及读取和保存职责，见[实现说明](docs/implementation.zh-Hans.md#core-profile-声明与保存)。部署过程不保存描述文件。
 
@@ -336,7 +334,7 @@ Core Profile 的来源与覆盖规则，以及读取和保存职责，见[实现
 
 ## 开发规范检查
 
-生产和测试项目使用 `Zongsoft.CodeAnalysis` 1.1.0；使用 .NET SDK 10.0.401 或更新的兼容编译器。分析器为私有构建依赖，不随工具作为运行时依赖分发。
+生产和测试项目使用 `Zongsoft.CodeAnalysis`，版本由仓库根 `Directory.Packages.props` 管理；使用 .NET SDK 10.0.401 或具有 Roslyn 5.9 及以上版本编译器的工具链。分析器为私有构建依赖，不随工具作为运行时依赖分发。
 
 ```powershell
 dotnet build src/Zongsoft.Tools.Deployer.csproj -p:ZongsoftCodeStyleStrict=true -p:GeneratePackageOnBuild=false

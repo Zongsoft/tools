@@ -25,7 +25,7 @@ description: 修改或审查 Zongsoft tools/deployer 的 .deploy 描述语法、
 - 变量支持 `$(name)` 与 `%name%`，名称不区分大小写；环境、`appsettings.json`、命令选项按既有覆盖顺序合并。
 - 未指定 NuGet 包内路径时优先处理根 `.deploy`；否则先统一求解普通根包依赖闭包，再选择目标 RID/TFM 的托管、原生和内容资产。默认/自定义依赖忽略前缀不区分大小写，明确根请求不受过滤。
 - 普通 NuGet 根请求在一次命令内统一求解，根版本固定，依赖选择满足全部范围的最低可用版本；无解与循环失败。同目标同内容的包资产去重，不同内容报冲突；显式 delete 保留顺序。该求解不等于完整 MSBuild restore。用最终文件版本和宿主首次调用验证。
-- `overwrite` 的 `alway`、`never`、`newest` 是现有公开拼写和行为，除非明确做兼容性变更，不擅自更名。
+- `overwrite` 支持 `alway`（始终覆盖）、`never`（仅复制目标不存在的文件）、`newest`（源文件修改时间不早于目标时复制），默认值为 `newest`。
 
 ## 安全验证
 
@@ -39,31 +39,29 @@ description: 修改或审查 Zongsoft tools/deployer 的 .deploy 描述语法、
 - 本地可控 NuGet 包、依赖忽略和多目标框架选择；
 - 缺失文件、无效语法、下载失败和路径冲突。
 
-先构建 `Zongsoft.Tools.Deployer.slnx`。没有现成测试项目时，优先增加可重复的隔离测试；不要以真实应用部署代替测试。不要使用真实私有源凭据或运行发布推包。
+先构建 `Zongsoft.Tools.Deployer.slnx`，测试项目为 `test/Zongsoft.Tools.Deployer.Tests.csproj`，覆盖 net8.0/net9.0/net10.0。使用可重复的隔离测试；不要以真实应用部署代替测试。不要使用真实私有源凭据或运行发布推包。
 
-命令支持管道与重定向，不再依赖有效控制台句柄。失败返回非零退出码；预检查失败时不写目标，执行阶段失败停止后续操作。默认覆盖为 newest，正常跳过/删除单独统计；保持 alway 的公开拼写。
-
-变更前读取 [REFACTOR-TASKS.md](REFACTOR-TASKS.md) 的勾选状态和 [.testagent/status.md](.testagent/status.md) 的验证证据。REVIEW 是历史审查基线，不应把已修复行为重新作为当前契约。
+命令支持管道与重定向，输出使用 TextWriter。失败返回非零退出码；预检查失败时不写目标，执行阶段失败停止后续操作。默认覆盖为 newest，正常跳过/删除单独统计。
 
 部署会话持有计划和活动清单栈；包缓存以变量上下文隔离，每次会话重置。目标写入须位于 destination 内，拒绝链接路径；本地读取源可以位于根外。嵌套 .deploy 和 #@import 均检测循环。
 
-新增 dry-run/offline/explain/report、lockFile/locked、previous/prune 的行为见双语 README。只在用户指定 prune 且有前次成功报告时清理未修改的自有文件；Duplicate 是无操作记录，Copy→Delete 的最后有效操作会撤销所有权。dry-run 不写目标，但显式报告可写，在线解析可写缓存。日志、错误原因和报告保留原文，不执行脱敏替换；主命令的 explain/detail 输出操作及其来源。
+dry-run/offline/explain/report、lockFile/locked、previous/prune 的行为见双语 README。只在用户指定 prune 且有前次成功报告时清理未修改的自有文件；Duplicate 是无操作记录，Copy→Delete 的最后有效操作会撤销所有权。dry-run 不写目标，但显式报告可写，在线解析可写缓存。日志、错误原因和报告保留原文，不执行脱敏替换；主命令的 explain/detail 输出操作及其来源。
 
-用户已允许以 D:/Yuanshan/server/hosting/web/business/deploy.cmd 为真实样例。其脚本还包含 Cake 构建及可选打包，验证时区分部署步骤与其他步骤；当前真实完整清单仍有缺失输入，见任务清单。不得把受阻的真实宿主验证勾选为通过。
+真实宿主验证需要用户明确指定样例与操作范围；部署、Cake 构建和打包分别验证，记录实际执行范围与结果。
 
 ## 实现与代码约定
 
 类型的 XML 注释说明主要功能与职责边界；流程注释重点解释回溯、状态隔离、执行顺序和所有权等不直观约定。访问级别遵循最小可见性，类内实现保持 private，跨类型生产协作才使用相应入口，不为测试扩大访问范围。
 
-实现细节见 [中文](docs/implementation.zh-Hans.md) / [English](docs/implementation.md)。优先复用已引用的 Zongsoft.Core 和 NuGet API：CommandLine、Profile/集合、DictionaryExtension，以及 NuspecReader.GetContentFiles、NuGet.Frameworks、JsonRuntimeFormat/RuntimeGraph。Core 7.59.0 的 ProfileReader 内置导入，递归共享读取器并保护循环及 ProfileOptions.MaximumDepth 指定的层数上限（默认 64，正整数，根文件计一层）。ProfileOptions.Importing/Imported 均为 Action<ProfileContext>，上下文提供 FilePath、Depth、Referer、Profile；前置 Profile 为 null，后置为合并后的子文件，前后分别构造。deployer 通过 Importing 的 context.FilePath 记录导入文件哈希，根文件单独记录，不维护 DeploymentImports。回调抛异常终止整个加载，不提供禁用或跳过导入。合并按读取顺序替换有效引用并保留本地声明；ProfileWriter 按来源保存，deployer 不调用保存入口。
+实现细节见 [中文](docs/implementation.zh-Hans.md) / [English](docs/implementation.md)。优先复用已引用的 Zongsoft.Core 和 NuGet API：CommandLine、Profile/集合、DictionaryExtension，以及 NuspecReader.GetContentFiles、NuGet.Frameworks、JsonRuntimeFormat/RuntimeGraph。Core 7.59.0 的 ProfileReader 内置导入，递归共享读取器并保护循环及 ProfileOptions.MaximumDepth 指定的层数上限（默认 64，正整数，根文件计一层）。ProfileOptions.Importing/Imported 均为 Action<ProfileContext>，上下文提供 FilePath、Depth、Referer、Profile；前置 Profile 为 null，后置为合并后的子文件，前后分别构造。deployer 通过 Importing 的 context.FilePath 记录导入文件哈希，根文件单独记录。回调抛异常终止整个加载，不提供禁用或跳过导入。合并按读取顺序替换有效引用并保留本地声明；ProfileWriter 按来源保存，deployer 不调用保存入口。
 
-RID 资源使用 src/Resources/ 中固定的 dotnet/runtime v10.0.0 图谱，禁止从 MSBuildToolsPath 或运行机器 SDK 目录取图谱。图谱及许可证等第三方文件保留上游原始字节，不转换换行、编码或缩进；.gitattributes 的 -text 防止 Git 自动转换。更新快照时同步双语实现文档的版本/哈希及上游许可证，核对上游原件哈希并验证竞争候选顺序。通用包版本在仓库根 Directory.Packages.props 维护，NuGet.* 专用依赖在本项目通过 VersionOverride 维护，保留用户的升级。
+RID 资源使用 src/Resources/ 中固定的 dotnet/runtime v10.0.0 图谱，禁止从 MSBuildToolsPath 或运行机器 SDK 目录取图谱。图谱及许可证等第三方文件保留上游原始字节，不转换换行、编码或缩进；.gitattributes 的 -text 防止 Git 自动转换。更新快照时同步双语实现文档的版本/哈希及上游许可证，核对上游原件哈希并验证竞争候选顺序。通用包版本在仓库根 Directory.Packages.props 维护，NuGet.* 专用依赖在本项目通过 VersionOverride 维护。
 
 非测试手写 C# 文件包含既有 /* */ 版权头，使用 Tab/CRLF。沿用中文 #region 分区，按字段、构造、属性、方法或职责组织；展开一行多语句并在方法阶段之间留空行，不使用 using 类型别名；#endregion 前不留空行。DeploymentPlan、DeploymentOperation、PackageSelection、DeploymentSession 各自独立文件，NugetRuntime 专管 RID 适配。README 引用 docs 的中英文实现文档，文档及图谱许可证随工具包分发。
-资源维护：中性 Resources.resx 使用 ResXFileCodeGenerator 生成 Resources.Designer.cs；修改中性/中文资源后在 Visual Studio 运行自定义工具。调用处直接使用 Properties.Resources 的生成属性，使用 string.Format 格式化模板，不再根据字符串键查资源。卫星资源不生成第二套同名访问类。dotnet build 不自动触发该 IDE 自定义工具，提交生成输出时只允许空白规范化，不手写属性。
+资源维护：中性 Resources.resx 使用 ResXFileCodeGenerator 生成 Resources.Designer.cs；修改中性/中文资源后在 Visual Studio 运行自定义工具。调用处直接使用 Properties.Resources 的生成属性，使用 string.Format 格式化模板。卫星资源不生成第二套同名访问类。dotnet build 不自动触发该 IDE 自定义工具，提交生成输出时只允许空白规范化，不手写属性。
 
-## Searcher 接入
+## 本地搜索
 
-本地通配搜索统一调用 Core Searcher.Search，以 Searcher.Target 指定 Files、Directories 或 Both（默认），链接以逻辑名称匹配，内容取实际目标。独立选中的目录链接可展开，载荷内部目录链接跳过，文件链接保留名称并读取目标。INI/.deploy 按逻辑来源解析相对路径。进度见 [LOCAL-SEARCHER-TASKS.md](LOCAL-SEARCHER-TASKS.md)。
+本地通配搜索统一调用 Core Searcher.Search，以 Searcher.Target 指定 Files、Directories 或 Both（默认），链接以逻辑名称匹配，内容取实际目标。独立选中的目录链接可展开，载荷内部目录链接跳过，文件链接保留名称并读取目标。INI/.deploy 按逻辑来源解析相对路径。详细规则见[本地搜索与源链接](docs/implementation.zh-Hans.md#本地搜索与源链接)。
 
-代码规范采用 `Zongsoft.CodeAnalysis` 1.1.0，检查方法与 SDK 要求见 [仓库规范](../AGENTS.md#代码规范检查)。
+代码规范采用 `Zongsoft.CodeAnalysis`，版本由仓库根 `Directory.Packages.props` 管理，检查方法与 SDK 要求见 [仓库规范](../AGENTS.md#代码规范检查)。

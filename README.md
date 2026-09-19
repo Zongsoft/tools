@@ -6,17 +6,17 @@
 
 Provides a suite of tools to assist in development, including:
 
-- [deployer](https://github.com/Zongsoft/tools/tree/main/deployer)
+- [deployer](deployer/README.md)
 	> Deployment Tool: Provides functions for application deployment and release, including file copying and package retrieval.
 
 - [migrator](migrator/README.md)
 	> Migration Tool: migration generation and native database/S3 execution.
 
-- [packager](https://github.com/Zongsoft/tools/tree/main/packager)
+- [packager](packager/README.md)
 	> Packaging Tool: Creates application installation package. _(first use the deployment tool to prepare the content to be packaged)_
 
-- [regular](https://github.com/Zongsoft/tools/tree/main/regular)
-	> Regular Expression Tool: A GUI program offering regular expression matching, replacement, and other features.
+- [regular](regular/README.md)
+	> Regular Expression Tool: A Windows GUI for matching expressions and inspecting matches, groups, and captures.
 
 ## NuGet publishing
 
@@ -32,4 +32,4 @@ Packager builds independently. Migrator builds Linux and Windows native artifact
 
 All tools share the root `.editorconfig`. `Directory.Build.props` sets `ZongsoftGuidelinesSynchronization` to the repository root. During build preparation, `Zongsoft.CodeAnalysis` copies the template from the referenced NuGet package to that file; no separate synchronization command or GitHub access is required.
 
-Synchronization overwrites the root file without merging local edits. Maintain the template in guidelines; Directory.Packages.props defines the shared analyzer version. After updating the package and building, review and commit the configuration changes. Restore, clean, design-time builds and builds skipped by Visual Studio's up-to-date check do not synchronize; use Rebuild when necessary. AOT containers mount the root configuration read-only; the Linux publish script passes `-p:ZongsoftGuidelinesSynchronization=` to disable synchronization.
+Synchronization overwrites the root file without merging local edits. The template is maintained in guidelines; Directory.Packages.props defines the shared analyzer version. Restore, clean, design-time builds and builds skipped by Visual Studio's up-to-date check do not synchronize; use Rebuild when necessary. AOT containers mount the root configuration read-only; the Linux publish script passes `-p:ZongsoftGuidelinesSynchronization=` to disable synchronization.

@@ -204,10 +204,10 @@ The deployer enables `GeneratePackageOnBuild`, so a Release build also creates t
 dotnet build src/Zongsoft.Tools.Deployer.csproj -c Release
 ```
 
-After the build succeeds and `src/bin/Release/Zongsoft.Tools.Deployer.7.11.0.nupkg` exists, install it for the first time:
+After the build succeeds and `src/bin/Release/Zongsoft.Tools.Deployer.7.12.0.nupkg` exists, install it for the first time:
 
 ```powershell
-dotnet tool install -g Zongsoft.Tools.Deployer --version 7.11.0 --source ./src/bin/Release --no-http-cache
+dotnet tool install -g Zongsoft.Tools.Deployer --version 7.12.0 --source ./src/bin/Release --no-http-cache
 ```
 
 If the tool is already installed, especially when rebuilding the same version, uninstall it first, then repeat the local installation command above:
@@ -216,7 +216,7 @@ If the tool is already installed, especially when rebuilding the same version, u
 dotnet tool uninstall -g Zongsoft.Tools.Deployer
 ```
 
-The example version `7.11.0` matches the current project; adjust it to the actual `.nupkg`. `--source` restricts installation to the local directory, avoiding a same-named package from NuGet.org; `--no-http-cache` disables the download cache. See the [.NET tool installation reference](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-tool-install). Check the installed version with `dotnet tool list -g`. Here, “local” describes the package source; `-g` still replaces the current user’s global tool. Do not run the Cake `pack` task for local testing: it pushes packages to NuGet.org.
+The example version `7.12.0` matches the current project; adjust it to the actual `.nupkg`. `--source` restricts installation to the local directory, avoiding a same-named package from NuGet.org; `--no-http-cache` disables the download cache. See the [.NET tool installation reference](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-tool-install). Check the installed version with `dotnet tool list -g`. Here, “local” describes the package source; `-g` still replaces the current user’s global tool. Do not run the Cake `pack` task for local testing: it pushes packages to NuGet.org.
 
 ## Deploy
 
@@ -296,7 +296,7 @@ However, the above package library directory does not contains the `net9.0` fram
 
 ### Plans, locks, and cleanup
 
-Source refactor compatibility changes: the default overwrite policy now follows the documented `newest` behavior; invalid overwrite values, filters, and undefined path variables fail. Writes must stay within `destination`, and linked write paths are rejected. Both nested manifests and `#@import` detect cycles. Combined filters retain left-to-right evaluation. `**` matches zero or more directory levels; directory copies preserve their internal relative structure.
+The default overwrite policy is `newest`. Invalid overwrite values, invalid filters, and undefined variables in active paths cause errors. Writes must stay within `destination`, and linked write paths are rejected. Both nested manifests and `#@import` detect cycles. Combined filters use left-to-right evaluation. `**` matches zero or more directory levels; directory copies preserve their internal relative structure.
 
 | Option | Behavior |
 | --- | --- |
@@ -318,9 +318,9 @@ dotnet deploy --framework:net10.0 --platform:win --architecture:x64 --lockFile:.
 dotnet deploy --framework:net10.0 --platform:win --architecture:x64 --lockFile:./deployment.lock.json --locked:true .deploy
 ```
 
-RID fallback uses the repository-pinned dotnet/runtime v10.0.0 graph through NuGet.RuntimeModel (see [implementation details](docs/implementation.md)), with aliases `windows→win`, `mac/macos→osx`, and `x32→x86`. `contentFiles/any/{tfm}` honors nuspec include/exclude, copyToOutput, and flatten; content without an output-copy rule is not deployed. Legacy `content` is copied recursively. XML documentation in lib groups is still copied under the existing contract; not every XML file is disposable.
+RID fallback uses the repository-pinned dotnet/runtime v10.0.0 graph through NuGet.RuntimeModel (see [implementation details](docs/implementation.md)), with aliases `windows→win`, `mac/macos→osx`, and `x32→x86`. `contentFiles/any/{tfm}` honors nuspec include/exclude, copyToOutput, and flatten; content without an output-copy rule is not deployed. The `content` directory is copied recursively. XML documentation in selected lib groups is included in deployment.
 
-Package access, dependency resolution, asset selection, and RID fallback have separate implementations; framework and version models reuse NuGet/.NET types. See [implementation details](docs/implementation.md) for responsibilities and behavior. This refactor adds no package dependencies.
+Package access, dependency resolution, asset selection, and RID fallback have separate implementations; framework and version models reuse NuGet/.NET types. See [implementation details](docs/implementation.md) for responsibilities and behavior.
 
 Variables load from the environment, the destination application's appsettings.json, and finally command options. Nested keys support `$(Database.Name)` and `%Items[0].Name%`; substitution preserves URL slashes.
 
@@ -330,9 +330,7 @@ Run regression tests without publishing:
 dotnet test test/Zongsoft.Tools.Deployer.Tests.csproj -f net10.0 -p:GeneratePackageOnBuild=false
 ```
 
-See [REFACTOR-TASKS.md](REFACTOR-TASKS.md) for task status and real-package validation.
-
-Profile imports use Core 7.59.0: ProfileReader handles imports and recursion directly; ProfileOptions.Importing records imported manifest hashes without directive registration. See [implementation details](docs/implementation.md#profile-import-callbacks) and the [import refactor checklist](PROFILE-IMPORT-TASKS.md).
+Profile imports use Core 7.59.0: ProfileReader handles imports and recursion directly; ProfileOptions.Importing records imported manifest hashes. See [implementation details](docs/implementation.md#profile-import-callbacks).
 
 See [implementation details](docs/implementation.md#core-profile-declarations-and-saving) for Core Profile source/override rules and read/write responsibilities. Deployment does not save its manifests.
 
@@ -340,7 +338,7 @@ Local source searches and links follow [the implementation contract](docs/implem
 
 ## Development checks
 
-Production and test projects use `Zongsoft.CodeAnalysis` 1.1.0. Use .NET SDK 10.0.401 or a compatible newer compiler. The analyzer is a private build dependency, not a runtime dependency of the tool.
+Production and test projects use `Zongsoft.CodeAnalysis` with its version defined in the repository root `Directory.Packages.props`. Use .NET SDK 10.0.401 or a toolchain with Roslyn 5.9 or later. The analyzer is a private build dependency, not a runtime dependency of the tool.
 
 ```powershell
 dotnet build src/Zongsoft.Tools.Deployer.csproj -p:ZongsoftCodeStyleStrict=true -p:GeneratePackageOnBuild=false

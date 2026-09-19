@@ -2,7 +2,7 @@
 
 [English](implementation.md) | [简体中文](implementation.zh-Hans.md)
 
-This document describes responsibilities, execution order, and maintenance constraints in the current source. See the [README](../README.md) for syntax and options. The source repository's `REFACTOR-TASKS.md` tracks validation and outstanding real-host checks.
+This document describes responsibilities, execution order, and maintenance constraints. See the [README](../README.md) for syntax and options.
 
 ## Entry point and responsibilities
 
@@ -26,7 +26,7 @@ A `Deployer` instance rejects concurrent calls. Sequential calls create fresh se
 
 ## Reusing libraries
 
-Release references Zongsoft.Core 7.59.0; the current Debug configuration references the local Core assembly. NuGet.* remains at 7.9.0. Core and test/analyzer versions are managed in the repository root Directory.Packages.props; NuGet.* versions are declared with VersionOverride in this tool project.
+Release references Zongsoft.Core 7.59.0; Debug references the local Core assembly. NuGet.* uses 7.9.0. Core and test/analyzer versions are managed in the repository root Directory.Packages.props; NuGet.* versions are declared with VersionOverride in this tool project.
 
 | Capability | Reused API and remaining tool responsibility |
 | --- | --- |
@@ -34,9 +34,9 @@ Release references Zongsoft.Core 7.59.0; the current Debug configuration referen
 | Environment dictionary | Core `DictionaryExtension.ToDictionary`, with an explicit case-insensitive comparer. |
 | INI manifests | Core `Profile`, `ProfileOptions`, `ProfileContext`, and profile collections; no independent INI parser. |
 | Localization | `ResXFileCodeGenerator` generates strongly typed `Properties.Resources` properties. Call sites read these properties and use `string.Format`; logs and reports retain the original messages. |
-| Package metadata/content | NuGet `NuspecReader`, `PackageIdentity`, and `VersionRange`; `GetContentFiles` reads rules once per package expansion instead of reparsing XML for each file. |
-| TFM | NuGetFramework represents framework identity and uses System.Version for framework/platform versions. NuGetVersion and VersionRange represent package versions and constraints. Unused TargetFramework/TargetVersion types are removed. The tool retains its explicit framework-filter rules, including ^; these are distinct from nearest-compatible asset selection. |
-| RID | NuGet `JsonRuntimeFormat.ReadRuntimeGraph` and `RuntimeGraph.ExpandRuntime`; no handwritten JSON graph parser or queue traversal. |
+| Package metadata/content | NuGet `NuspecReader`, `PackageIdentity`, and `VersionRange`; `GetContentFiles` reads rules once per package expansion. |
+| TFM | NuGetFramework represents framework identity and uses System.Version for framework/platform versions. NuGetVersion and VersionRange represent package versions and constraints. Explicit framework-filter rules, including ^, are handled separately from nearest-compatible asset selection. |
+| RID | NuGet `JsonRuntimeFormat.ReadRuntimeGraph` loads the graph; `RuntimeGraph.ExpandRuntime` supplies fallback candidates. |
 
 Core 7.59.0 handles imports directly in ProfileReader with cycle/depth checks. ProfileOptions supplies two Action<ProfileContext> import callbacks. Deployer hashes imported files in Importing and records roots separately. Appsettings dotted keys, target containment, link rejection and ownership remain deployment responsibilities.
 
@@ -59,7 +59,7 @@ Variable names are case-insensitive. Environment values are overridden by destin
 
 `Normalizer` expands `$(name)` and `%name%` without changing URL slashes. Undefined variables fail during deployment-path expansion, while filtered-out branches need not provide their variables. Combined filters retain left-to-right evaluation; both source and destination filters must match.
 
-`NugetAssets.ResolveLibraryPath` handles explicit cache-path adaptation in one place. It examines paths relative to the NuGet_Packages root and locates the lib directory. A framework in the path takes precedence over the Framework variable; the official NuGetFrameworkUtility.GetNearest selects the nearest framework while subsequent subpaths are retained. Paths outside the cache, paths without a target framework, or paths with no applicable directory are returned unchanged. NugetRegulator, DirectoryRegulator, and IDirectoryRegulator have been removed.
+`NugetAssets.ResolveLibraryPath` handles explicit cache-path adaptation in one place. It examines paths relative to the NuGet_Packages root and locates the lib directory. A framework in the path takes precedence over the Framework variable; the official NuGetFrameworkUtility.GetNearest selects the nearest framework while subsequent subpaths are retained. Paths outside the cache, paths without a target framework, or paths with no applicable directory are returned unchanged.
 
 `DeploymentUtility.GetFiles` expands package directories and selects the framework before Core Searcher enumerates assets; captures preserve directory suffixes. Asset directories in `GetPackageFiles` have already undergone RID/TFM selection, so enumeration uses resolveLibrary: false to avoid repeated matching. A lib subdirectory in content is treated as ordinary content and does not cause additional files to be selected.
 
@@ -69,11 +69,11 @@ Destination paths are made absolute and checked using their path relative to des
 
 ## Package versions and assets
 
-The NuGet components are separate types, not partial declarations of NugetUtility. Each graph resolution creates a private NugetGraph instance; branch selections are copied for backtracking and the active dependency chain is kept in order for diagnostics. NugetResolver then expands the solved graph with an explicit stack, preserving root-first depth-first order and checking cancellation during asset enumeration. Managed and native assets share the RID traversal but select their fallback groups independently.
+NugetUtility, NugetGraph, NugetAssets, NugetRuntime, and NugetResolver each handle a distinct responsibility. Each graph resolution creates a private NugetGraph instance; branch selections are copied for backtracking and the active dependency chain is kept in order for diagnostics. NugetResolver then expands the solved graph with an explicit stack, preserving root-first depth-first order and checking cancellation during asset enumeration. Managed and native assets share the RID traversal but select their fallback groups independently.
 
 XML type comments describe responsibilities, while flow comments explain ordering and state boundaries. Construction, search, constraint collection, framework matching, and cache details remain private. Internal entry points serve production collaboration; visibility is not widened for unit tests. Tests exercise actual deployment and package-access entry points.
 
-NugetUtility keeps only package-access caches scoped to the invocation variable dictionary. Cache keys also include source, absolute cache root, offline mode, and prerelease mode, so changing those settings cannot reuse a different context. The duplicate DownloadDependentPackageAsync entry and unused Output/NugetOutput classes have been removed. Dependency regression tests exercise the actual deployment plan and output files.
+NugetUtility keeps package-access caches scoped to the invocation variable dictionary. Cache keys also include source, absolute cache root, offline mode, and prerelease mode, so changing those settings cannot reuse a different context. Dependency regression tests exercise the actual deployment plan and output files.
 
 Ordinary roots are pinned to their requested versions. Dependencies are filtered against all known ranges, with the lowest available candidate tried first and backtracking when later constraints conflict. Unsatisfiable constraints, cycles, or search limits fail. Limits are currently 10,000 search attempts and 512 selected packages; constraints from each requested TFM participate.
 
@@ -85,7 +85,7 @@ A package-root `.deploy` takes precedence over ordinary asset expansion. Explici
 
 - Managed assets search RID fallback candidates for a compatible `runtimes/{rid}/lib/{tfm}` group. A selected runtime group replaces the whole ordinary lib group; otherwise ordinary `lib/{tfm}` is used.
 - Native assets independently select the first existing `runtimes/{rid}/native` group. They need not come from the same fallback level as managed assets.
-- `contentFiles/any/{tfm}` applies nuspec include/exclude, copyToOutput, and flatten rules. Content without an output-copy rule is omitted. Legacy content remains recursive.
+- `contentFiles/any/{tfm}` applies nuspec include/exclude, copyToOutput, and flatten rules. Content without an output-copy rule is omitted. The `content` directory is copied recursively.
 - Identical package assets targeting the same file retain Duplicate origin records but copy once. Different content at the same package destination fails. Explicit deletion ends the preceding deduplication scope.
 - Public DLLs are not moved across plugin directories; XML documentation in lib groups remains included.
 
@@ -97,7 +97,7 @@ The snapshot comes from [dotnet/runtime v10.0.0](https://github.com/dotnet/runti
 
 NuGet expands the graph from nearer to farther candidates. The tool normalizes `windows→win`, `mac/macos→osx`, and `x32→x86` before querying it. For example, linux-musl-x64 fallback follows graph edges, not guessed string truncation. Unknown RIDs receive no invented fallback edges.
 
-Graph updates must choose an explicit upstream version, retain the graph and license bytes unchanged, verify and update the hash here, and rerun competing-candidate order tests. Installing a newer SDK does not silently change the tool's RID policy.
+The embedded graph determines RID fallback independently of the locally installed SDK. Its version, hash, and license identify the exact resource used by all target frameworks.
 
 ## Reports, locks, and cleanup
 
@@ -123,7 +123,7 @@ dotnet test test/Zongsoft.Tools.Deployer.Tests.csproj -f net9.0 --no-restore -p:
 dotnet test test/Zongsoft.Tools.Deployer.Tests.csproj -f net10.0 --no-restore -p:GeneratePackageOnBuild=false
 ```
 
-Tests use temporary destinations and synthetic local packages. RID order tests assert final file contents; localization tests assert en/zh-Hans templates and parameters. Full business deployments and Linux/macOS native first-use checks remain separate acceptance items. Both implementation documents ship under docs with README links.
+Tests use temporary destinations and synthetic local packages. RID order tests assert final file contents; localization tests assert en/zh-Hans templates and parameters. Host integration checks validate assembly loading and native first use on the target platform. Both implementation documents ship under docs with README links.
 
 ### Resource generation and access
 
@@ -137,7 +137,7 @@ The generator owns Designer properties and comments. Only normalize CRLF and rem
 
 Reader uses ProfileOptions.MaximumDepth (default 64, positive integers only), counting the root as level one. Deployer uses the default. Importing runs after opening and recursion checks, before parsing; Imported runs after child loading and merging. Roots do not notify. Missing optional imports are skipped; other failures propagate. Child files share the captured blank-line and import settings.
 
-Deployer only subscribes to `Importing`. Hashing reopens the input path and is not a strict snapshot of parsed bytes. See [PROFILE-IMPORT-TASKS.md](../PROFILE-IMPORT-TASKS.md) for validation and separate snapshot/merge follow-ups.
+Deployer only subscribes to `Importing`. Hashing reopens the input path and is not a strict snapshot of parsed bytes.
 
 Core centralizes parsing, import paths and recursion guards in internal ProfileReader, with a private Context for the current Profile, section and line. Profile.Load remains a facade. After parsing a child, parent Profile.Import merges effective references and records relationships, then Imported notifies before activity cleanup.
 
@@ -147,13 +147,13 @@ ProfileOptions exposes Importing/Imported as Action<ProfileContext>. FilePath is
 
 Core 7.59.0 separates ordered local statements from the merged effective view. Imports replace effective references and entries identify their actual source declarations. Duplicate local keys still fail; local/import precedence follows reading order. ProfileReader owns loading and ProfileWriter owns saving.
 
-Core Save() without an explicit destination writes changed declarations in the receiver and import subtree back to their respective sources. Explicit paths, streams and text writers output only the receiver's statements. Unchanged files are not rewritten. Multiple outputs are all prepared before individual commits; this is not a cross-file transaction. Deployer only reads manifests and records hashes through importing. It does not invoke these save entry points or maintain its own import/writer implementation. Strict snapshots matching the parsed bytes remain separate follow-up work.
+Core Save() without an explicit destination writes changed declarations in the receiver and import subtree back to their respective sources. Explicit paths, streams and text writers output only the receiver's statements. Unchanged files are not rewritten. Multiple outputs are all prepared before individual commits; this is not a cross-file transaction. Deployer only reads manifests and records hashes through Importing; it does not invoke these save entry points.
 
 ## Local search and source links
 
-Local patterns use Core Searcher; the tool no longer maintains a recursive glob matcher. Results preserve the logical source name while reading the resolved target. A selected directory link may be expanded as a payload root; nested directory links are skipped and file links contribute target bytes under their logical names. Recursive patterns do not cross directory links to match further segments. Selected broken/cyclic links fail before output writes. Destination boundaries and output path validation still apply.
+Core Searcher handles local patterns and recursive matching. Results preserve the logical source name while reading the resolved target. A selected directory link may be expanded as a payload root; nested directory links are skipped and file links contribute target bytes under their logical names. Recursive patterns do not cross directory links to match further segments. Selected broken/cyclic links fail before output writes. Destination boundaries and output path validation apply to every write.
 
-Linked INI and .deploy relative references use the logical configuration directory. Pattern results are sorted by logical relative path using Ordinal order; input argument order remains significant. See [Core local searching](../../../framework/Zongsoft.Core/docs/searcher.md) and [task checklist](../LOCAL-SEARCHER-TASKS.md).
+Linked INI and .deploy relative references use the logical configuration directory. Pattern results are sorted by logical relative path using Ordinal order; input argument order remains significant. See [Core local searching](../../../framework/Zongsoft.Core/docs/searcher.md).
 
 Deployment operations keep logical Source and optional ResolvedSource for linked inputs. Copying and hashes use the resolved target; locked validation includes the target path and execution rechecks resolution, so an equal-content retarget is rejected. NuGet framework adjustment and expansion suffix mapping remain in the deployment adapter.
 

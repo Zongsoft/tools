@@ -44,7 +44,7 @@
 
 ## 打包器版本元数据
 
-每个安装包自动记录当前生成工具的身份，逻辑内容为 `Packager:Zongsoft.Tools.Packager@0.11.0.0`。值采用 `程序集名@版本号`，从打包器自身程序集读取，独立于宿主应用版本；不需要新增命令选项，也不要求启用升迁。
+每个安装包自动记录当前生成工具的身份，逻辑内容为 `Packager:Zongsoft.Tools.Packager@0.11.0.0`。值采用 `程序集名@版本号`，从打包器自身程序集读取，独立于宿主应用版本；无需指定额外选项或启用升迁。
 
 | 格式 | 存放位置 | 查看方式 |
 | --- | --- | --- |
@@ -52,7 +52,7 @@
 | deb | `control.tar.gz` 内 `control` 的 `Packager` 字段 | `dpkg-deb -f <安装包.deb> Packager` |
 | rpm | 主 Header 的 `RPMVERSION` 字符串标签（1064） | `rpm -qp --queryformat '%{RPMVERSION}\n' <安装包.rpm>` |
 
-RPM 用生成工具版本标签保存本工具身份；其 `PACKAGER` 标签（1015）仍保存 `--maintainer` 的维护者信息。元数据位于格式头中，不增加安装目录文件，也不改变 `.version` 或 `migration.json`。
+RPM 用生成工具版本标签保存本工具身份；其 `PACKAGER` 标签（1015）保存 `--maintainer` 的维护者信息。元数据位于格式头中，不增加安装目录文件，也不改变 `.version` 或 `migration.json`。
 
 ## 安装
 
@@ -275,7 +275,7 @@ hosting 的 `web/default` 宿主不区分 Edition 时可写为 `Zongsoft.Hosting
 
 确定身份后才初始化完整变量，使输出、载荷、安装脚本和升迁路径中的 `$(name)`、`$(edition)`、`$(version)` 使用最终值。源目录路径若依赖尚未确定的身份变量，则报变量错误，不循环推导。源文件存在但损坏或无法读取时退出打包。
 
-包内安装根 `.version` 使用 **`ApplicationIdentifier`**，仅以一行表示本次名称、Edition 和版本。内容直接从内存写入，完全采用 `ApplicationIdentifier.Save(Stream)` 的输出，不追加换行；权限为 `0644`。指向该安装位置的旧载荷会被替换，排除规则不影响自动生成的版本条目。
+包内安装根 `.version` 使用 **`ApplicationIdentifier`**，仅以一行表示本次名称、Edition 和版本。内容直接从内存写入，完全采用 `ApplicationIdentifier.Save(Stream)` 的输出，不追加换行；权限为 `0644`。指向该安装位置的载荷会被生成的版本条目替换，排除规则不影响自动生成的版本条目。
 
 所有制包步骤成功后才按 Core 格式保存源文件，只更新所选 Edition，保留其他 Edition 的名称、版本和顺序；注释及原始空白布局不保留。解析、校验或制包失败不更新源文件。保存源文件失败时命令返回错误，明确指出安装包已生成，并保留该包。
 
@@ -514,7 +514,7 @@ dotnet-pack deb \
 
 如果未提供脚本，工具会生成默认脚本。对 systemd 包而言，默认脚本会在安装/移除前停止服务，创建或删除 `/etc/systemd/system/<service>` 符号链接，重载 systemd，安装后启用服务，并在卸载后删除安装目录。
 
-包管理器升级不会进入卸载生命周期。Debian 的 `prerm`/`postrm` 脚本会根据动作参数进行保护，RPM 的 `%preun`/`%postun` 脚本仅在最后一个已安装实例被删除时运行。这可以防止旧包的卸载脚本在升级或同版本覆盖安装期间删除刚安装的新版本负载。Tar 包保持显式的 `install.sh`/`uninstall.sh` 生命周期，其生成的卸载器只删除解析后的 `TARGET` 路径。
+Debian 的 `prerm` 仅在 `remove` 或 `deconfigure` 时进入卸载生命周期，`postrm` 仅在 `remove` 或 `purge` 时执行卸载收尾。RPM 的 `%preun`/`%postun` 脚本仅在最后一个已安装实例被删除（`$1=0`）时运行，仍有已安装实例时保留载荷。Tar 包使用显式的 `install.sh`/`uninstall.sh` 生命周期，其生成的卸载器只删除解析后的 `TARGET` 路径。
 
 ## 升迁产物集成
 
@@ -725,7 +725,7 @@ dotnet cake --target=test --edition=Release
 
 ## 开发规范检查
 
-生产和测试项目使用 `Zongsoft.CodeAnalysis` 1.1.0；使用 .NET SDK 10.0.401 或更新的兼容编译器。分析器为私有构建依赖，不随工具作为运行时依赖分发。
+生产和测试项目使用 `Zongsoft.CodeAnalysis`，版本由仓库根 `Directory.Packages.props` 管理；使用 .NET SDK 10.0.401 或具有 Roslyn 5.9 及以上版本编译器的工具链。分析器为私有构建依赖，不随工具作为运行时依赖分发。
 
 ```powershell
 dotnet build src/Zongsoft.Tools.Packager.csproj -p:ZongsoftCodeStyleStrict=true

@@ -6,17 +6,17 @@
 
 提供了辅助开发的工具集，包括：
 
-- [deployer](https://github.com/Zongsoft/tools/tree/main/deployer)
+- [deployer](deployer/README.zh-Hans.md)
 	> 部署工具：提供应用程序部署发布进行文件拷贝、包获取等功能。
 
 - [migrator](migrator/README.zh-Hans.md)
 	> 升迁工具：制作升迁归档与脚本，初始化数据库和 S3。
 
-- [packager](https://github.com/Zongsoft/tools/tree/main/packager)
+- [packager](packager/README.zh-Hans.md)
 	> 打包工具：提供应用程序安装包的制作 _(先使用部署工具准备好待打包的内容)_。
 
-- [regular](https://github.com/Zongsoft/tools/tree/main/regular)
-	> 正则工具：提供正则表达式匹配、替换等功能的一个 _GUI_ 程序。
+- [regular](regular/README.zh-Hans.md)
+	> 正则工具：用于匹配正则表达式并查看匹配、分组与捕获结果的 Windows 图形程序。
 
 ## NuGet 发布
 
@@ -32,4 +32,4 @@ packager 独立构建。migrator 分别由 Linux 和 Windows 作业准备三种�
 
 各工具共享根目录 `.editorconfig`。`Directory.Build.props` 设置 `ZongsoftGuidelinesSynchronization` 为仓库根目录，`Zongsoft.CodeAnalysis` 在实际构建的准备阶段将所引用 NuGet 包中的模板同步到该文件；无需独立同步命令或访问 GitHub。
 
-同步会覆盖根文件，不合并本地修改。模板在 guidelines 维护，分析器包版本由 Directory.Packages.props 统一定义。升级包并构建后，检查并提交配置差异。仅还原、清理、设计时构建，以及被 Visual Studio 最新检查跳过的构建均不会同步；需要时使用“重新生成”。AOT 容器只读挂载根配置，Linux 发布脚本通过 `-p:ZongsoftGuidelinesSynchronization=` 禁用同步。
+同步会覆盖根文件，不合并本地修改。模板在 guidelines 维护，分析器包版本由 Directory.Packages.props 统一定义。仅还原、清理、设计时构建，以及被 Visual Studio 最新检查跳过的构建均不会同步；需要时使用“重新生成”。AOT 容器只读挂载根配置，Linux 发布脚本通过 `-p:ZongsoftGuidelinesSynchronization=` 禁用同步。
