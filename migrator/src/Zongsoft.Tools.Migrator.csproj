@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
-		<TargetFrameworks>net8.0;net9.0;net10.0;</TargetFrameworks>
+		<TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
 		<Version>0.1.0</Version>
 		<PackAsTool>true</PackAsTool>
 		<ToolCommandName>dotnet-migrate</ToolCommandName>
@@ -21,11 +21,40 @@
 		<None Include="..\docs\**\*" Pack="true" PackagePath="docs/%(RecursiveDir)" />
 		<None Include="..\README.md" Pack="true" PackagePath="\" />
 		<None Include="..\README.zh-Hans.md" Pack="true" PackagePath="\" />
-		<Content Include="../executor/src/bin/$(Configuration)/net10.0/linux-x64/publish/**/*" Link=".migrator/linux-x64/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Pack="false" />
-		<Content Include="../executor/src/bin/$(Configuration)/net10.0/linux-arm64/publish/**/*" Link=".migrator/linux-arm64/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Pack="false" />
-		<Content Include="../executor/src/bin/$(Configuration)/net10.0/win-x64/publish/**/*" Link=".migrator/win-x64/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Pack="false" />
-		<Content Remove="@(Content->WithMetadataValue('Extension', '.pdb'));@(Content->WithMetadataValue('Extension', '.dbg'));@(Content->WithMetadataValue('Extension', '.dwo'));@(Content->WithMetadataValue('Extension', '.xml'));@(Content->WithMetadataValue('Extension', '.lib'));@(Content->WithMetadataValue('Extension', '.exp'))" />
+
+		<Content Include="../executor/src/bin/$(Configuration)/net10.0/linux-x64/publish/**/*"
+			Link=".migrator/linux-x64/%(RecursiveDir)%(Filename)%(Extension)"
+			CopyToOutputDirectory="PreserveNewest"
+			CopyToPublishDirectory="PreserveNewest"
+			Pack="true"
+			PackagePath="tools/%(Link)" />
+		<Content Include="../executor/src/bin/$(Configuration)/net10.0/linux-arm64/publish/**/*"
+			Link=".migrator/linux-arm64/%(RecursiveDir)%(Filename)%(Extension)"
+			CopyToOutputDirectory="PreserveNewest"
+			CopyToPublishDirectory="PreserveNewest"
+			Pack="true"
+			PackagePath="tools/%(Link)" />
+		<Content Include="../executor/src/bin/$(Configuration)/net10.0/win-x64/publish/**/*"
+			Link=".migrator/win-x64/%(RecursiveDir)%(Filename)%(Extension)"
+			CopyToOutputDirectory="PreserveNewest"
+			CopyToPublishDirectory="PreserveNewest"
+			Pack="true"
+			PackagePath="tools/%(Link)" />
+
+		<Content Remove="@(Content->WithMetadataValue('Extension', '.pdb'));
+			@(Content->WithMetadataValue('Extension', '.dbg'));
+			@(Content->WithMetadataValue('Extension', '.dwo'));
+			@(Content->WithMetadataValue('Extension', '.xml'));
+			@(Content->WithMetadataValue('Extension', '.lib'));
+			@(Content->WithMetadataValue('Extension', '.exp'))" />
 	</ItemGroup>
+
+	<!-- 原生文件在 NuGet 包 tools 目录共用一份；构建和独立发布仍保留本地副本。 -->
+	<Target Name="PackSharedMigrationRuntimes" AfterTargets="PackTool">
+		<ItemGroup>
+			<TfmSpecificPackageFile Remove="$(PublishDir).migrator/**/*" />
+		</ItemGroup>
+	</Target>
 
 	<Choose>
 		<When Condition="$(Configuration)=='Debug'">

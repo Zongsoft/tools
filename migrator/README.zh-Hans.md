@@ -65,7 +65,7 @@ apply/status 每次创建独立临时目录，解压后调用原生执行器，�
 
 ## 构建与测试
 
-生成端目标为 .NET 8/9/10，执行器为 .NET 10 Native AOT。普通 build/test 不启动原生发布。显式 `dotnet cake --edition Release --target executor` 使用独立 Rocky Linux 9/glibc 2.34 Pod 构建 Linux 双架构，并在 Windows 本机发布 win-x64；缓存和挂载定义见 executor/build/migrator.linux-x64.yaml。工具使用仓库根 `.editorconfig`，Pod 与 CI 将该文件只读挂载到 `/.editorconfig`，并将根 `Directory.Build.props` 和 `Directory.Packages.props` 只读挂载到容器根目录。Linux 发布使用 `-p:ZongsoftGuidelinesSynchronization=` 禁用配置同步。Cake 使用相对 YAML 路径，修改 DNS 或挂载配置后需在无构建运行时重建专用 Pod，不能只 start。原生产物统一位于 `executor/src/bin/<配置>/net10.0/<RID>/publish/`；完整工具包要求同一配置下三个 RID 均已发布。生成端通过文件链接将它们收录到工具发行目录的 `.migrator/<RID>/`。CI 分别在 Linux、Windows 准备发布目录后汇集制包。日志和符号分别保存在各 RID 目录的 logs/ 与 symbols/，不收录到工具包。
+生成端目标为 .NET 8/9/10，执行器为 .NET 10 Native AOT。普通 build/test 不启动原生发布。显式 `dotnet cake --edition Release --target executor` 使用独立 Rocky Linux 9/glibc 2.34 Pod 构建 Linux 双架构，并在 Windows 本机发布 win-x64；缓存和挂载定义见 executor/build/migrator.linux-x64.yaml。工具使用仓库根 `.editorconfig`，Pod 与 CI 将该文件只读挂载到 `/.editorconfig`，并将根 `Directory.Build.props` 和 `Directory.Packages.props` 只读挂载到容器根目录。Linux 发布使用 `-p:ZongsoftGuidelinesSynchronization=` 禁用配置同步。Cake 使用相对 YAML 路径，修改 DNS 或挂载配置后需在无构建运行时重建专用 Pod，不能只 start。原生产物统一位于 `executor/src/bin/<配置>/net10.0/<RID>/publish/`；完整工具包要求同一配置下三个 RID 均已发布。普通构建和独立发布通过文件链接将它们收录到程序目录的 `.migrator/<RID>/`。NuGet 工具包在 `tools/.migrator/<RID>/` 仅保存一份，供三个目标框架共用；生成端在本地 `.migrator/` 目录不存在时定位此共享目录。CI 分别在 Linux、Windows 准备发布目录后汇集制包。日志和符号分别保存在各 RID 目录的 logs/ 与 symbols/，不收录到工具包。
 
 ```powershell
 dotnet build Zongsoft.Tools.Migrator.slnx -p:ZongsoftCodeStyleStrict=true

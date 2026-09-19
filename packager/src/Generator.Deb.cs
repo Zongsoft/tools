@@ -44,6 +44,7 @@ namespace Zongsoft.Tools.Packager;
 
 partial class Generator
 {
+	#region 公共方法
 	public static void Deb(this Package package, string output, bool overwrite)
 	{
 		using var stream = new FileStream(
@@ -60,7 +61,9 @@ partial class Generator
 		using var dataStream = CreateDataTarball(package.Entries);
 		WriteArEntry(stream, "data.tar.gz", dataStream);
 	}
+	#endregion
 
+	#region 私有方法
 	static string GetDebControl(Package package)
 	{
 		var builder = new StringBuilder();
@@ -287,4 +290,5 @@ partial class Generator
 		Architecture.Arm => "armhf",
 		_ => "all",
 	};
+	#endregion
 }

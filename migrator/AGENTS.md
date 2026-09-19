@@ -15,8 +15,8 @@
 
 ## 构建与规范
 
-生成端 net8/9/10，执行器 net10 AOT。executor/build 是独立 Rocky Linux 9 环境；普通 build/test 不启动容器。Cake executor 准备 Linux x64/arm64 与 Windows x64，产物统一位于 `executor/src/bin/<配置>/net10.0/<RID>/publish/`，生成端 Content Link 映射为发行目录的 .migrator/<RID>/；logs/ 与 symbols/ 在 publish/ 同级，Linux 编译缓存保留在 /aot。compile 校验当前配置的三个发布目录再制工具包；build 聚合两者，pack 推送公共 NuGet，未授权不执行。
+生成端 net8/9/10，执行器 net10 AOT。executor/build 是独立 Rocky Linux 9 环境；普通 build/test 不启动容器。Cake executor 准备 Linux x64/arm64 与 Windows x64，产物统一位于 `executor/src/bin/<配置>/net10.0/<RID>/publish/`，生成端 Content Link 映射为构建和独立发布目录的 .migrator/<RID>/，NuGet 包在 tools/.migrator/<RID>/ 仅收录一份供全部 TFM 共用；logs/ 与 symbols/ 在 publish/ 同级，Linux 编译缓存保留在 /aot。compile 校验当前配置的三个发布目录再制工具包；build 聚合两者，pack 推送公共 NuGet，未授权不执行。
 
-所有项目继承仓库根 .editorconfig；AOT Pod 与 CI 将其只读挂载到 /.editorconfig，工具目录不保留副本。通用包版本继承根 Directory.Packages.props；数据库驱动与 AWS SDK 版本在 executor 项目以 VersionOverride 定义。公共构建属性与分析器引用继承根 Directory.Build.props；AOT Pod 与 CI 将两个 props 文件只读挂载到容器根目录，Linux 发布传入 -p:ZongsoftGuidelinesSynchronization= 禁止向只读配置同步。所有项目 CodeAnalysis 1.1.0，严格构建和 IDE0049 verify；资源用 ResXFileCodeGenerator。生产代码 MIT 头、Tab/CRLF、方法空行/中文 region，sh LF；测试不加版权、不用别名、不做本地化测试。
+所有项目继承仓库根 .editorconfig；AOT Pod 与 CI 将其只读挂载到 /.editorconfig，工具目录不保留副本。通用包版本继承根 Directory.Packages.props；数据库驱动与 AWS SDK 版本在 executor 项目以 VersionOverride 定义。公共构建属性与分析器引用继承根 Directory.Build.props；AOT Pod 与 CI 将两个 props 文件只读挂载到容器根目录，Linux 发布传入 -p:ZongsoftGuidelinesSynchronization= 禁止向只读配置同步。所有项目 CodeAnalysis 版本继承根 Directory.Packages.props，严格构建和 IDE0049 verify；资源用 ResXFileCodeGenerator。生产代码 MIT 头、Tab/CRLF、方法空行/中文 region，sh LF；测试不加版权、不用别名、不做本地化测试。
 
 测试位于 test 和 executor/test，仅枚举这些目录下项目。生成端测试可对执行器设 ReferenceOutputAssembly=false 作为构建依赖，交接调用独立进程；不得引用两端同名协议类型。真实运行仅在临时目录或隔离 Linux 环境，不能操作用户现有服务、更新全局工具或发布包。ARM64 不要求硬件执行；AOT 第三方警告不得隐藏。

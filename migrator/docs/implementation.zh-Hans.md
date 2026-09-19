@@ -14,9 +14,9 @@ executor 使用显式工厂选择六种数据库或 S3，实现连接、建库�
 
 两个产物先写入输出目录下的私有暂存目录，再备份/替换目标；异常恢复原输出。归档中的 migration.json 权限为 0600，其他数据 0644，入口 0755。Unix 下外部归档 0600，脚本 0755。归档含展开后的凭据，不应上传到公共源。
 
-Linux 运行需要 glibc >=2.34、libgcc、libstdc++、zlib、ICU、OpenSSL、CA 证书，部分认证需要 Kerberos/GSSAPI；Shell 需要 sh、tar/gzip、核心工具和 cmp。Windows 需要系统 PowerShell、tar.exe 和发行目录内的原生 DLL。目标机无需 .NET。AOT 不启用 invariant globalization，保留中英文资源；原生产物位于 `executor/src/bin/<配置>/net10.0/<RID>/publish/`，同级 logs/ 和 symbols/ 分别保存日志/架构检查及符号。生成端通过文件链接收录到发行目录的 .migrator/<RID>/，不向源码目录写入原生产物。第三方 AOT 警告保留并审查，不屏蔽。
+Linux 运行需要 glibc >=2.34、libgcc、libstdc++、zlib、ICU、OpenSSL、CA 证书，部分认证需要 Kerberos/GSSAPI；Shell 需要 sh、tar/gzip、核心工具和 cmp。Windows 需要系统 PowerShell、tar.exe 和发行目录内的原生 DLL。目标机无需 .NET。AOT 不启用 invariant globalization，保留中英文资源；原生产物位于 `executor/src/bin/<配置>/net10.0/<RID>/publish/`，同级 logs/ 和 symbols/ 分别保存日志/架构检查及符号。普通构建和独立发布通过文件链接收录到程序目录的 .migrator/<RID>/；NuGet 制包仅在 tools/.migrator/<RID>/ 保存一份，并移除包内各框架的重复副本。MigrationBundle 先检查程序目录的 .migrator/，该目录不存在时定位 tools/<TFM>/any/ 上两级的共享目录。不向源码目录写入原生产物。第三方 AOT 警告保留并审查，不屏蔽。
 
-通用包版本由仓库根 Directory.Packages.props 管理；数据库驱动与 AWS SDK 在执行器项目通过 VersionOverride 维护。所有项目使用 CodeAnalysis 1.1.0，严格构建之外运行 IDE0049 verify。资源使用 ResXFileCodeGenerator；不编写本地化测试。普通构建不依赖 packager，也不启动容器。
+通用包版本由仓库根 Directory.Packages.props 管理；数据库驱动与 AWS SDK 在执行器项目通过 VersionOverride 维护。所有项目使用根 Directory.Packages.props 指定的 CodeAnalysis 版本，严格构建之外运行 IDE0049 verify。资源使用 ResXFileCodeGenerator；不编写本地化测试。普通构建不依赖 packager，也不启动容器。
 
 ## Native AOT 构建脚本
 

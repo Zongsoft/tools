@@ -41,6 +41,7 @@ namespace Zongsoft.Tools.Packager;
 
 internal static class Utility
 {
+	#region 公共方法
 	/// <summary>将工具的绝对输入适配为 Core 本地搜索，结果保留逻辑名称。</summary>
 	public static IEnumerable<Zongsoft.IO.Searcher.Match> Search(string path, bool files = false, string sourceDirectory = null)
 	{
@@ -89,7 +90,9 @@ internal static class Utility
 			.Replace(Path.AltDirectorySeparatorChar, '/')
 			.TrimStart('/');
 	}
+	#endregion
 
+	#region 嵌套类型
 	public static class Unix
 	{
 		public const UnixFileMode Mode644 = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead;
@@ -129,4 +132,5 @@ internal static class Utility
 			}
 		}
 	}
+	#endregion
 }

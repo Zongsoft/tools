@@ -45,6 +45,7 @@ namespace Zongsoft.Tools.Packager;
 
 partial class Generator
 {
+	#region 常量定义
 	const int RPM_SENSE_LESS = 2;
 	const int RPM_SENSE_GREATER = 4;
 	const int RPM_SENSE_EQUAL = 8;
@@ -52,7 +53,9 @@ partial class Generator
 	const int RPM_FILE_CONFIG = 1;
 	const int RPM_FILE_TYPE_REGULAR = 0x8000;
 	const int RPM_FILE_TYPE_DIRECTORY = 0x4000;
+	#endregion
 
+	#region 公共方法
 	public static void Rpm(this Package.Rpm package, string output, bool overwrite)
 	{
 		using var stream = new FileStream(
@@ -70,7 +73,9 @@ partial class Generator
 		payload.Position = 0;
 		payload.CopyTo(stream);
 	}
+	#endregion
 
+	#region 私有方法
 	static Buffer CreateCpioPayload(IReadOnlyCollection<Package.Entry> entries, out long archiveSize)
 	{
 		var compressed = new Buffer();
@@ -388,7 +393,9 @@ partial class Generator
 		Architecture.Arm => 12,
 		_ => 255,
 	};
+	#endregion
 
+	#region 嵌套类型
 	readonly record struct RpmHeaderIndex(int Tag, int Type, int Offset, int Count);
 	readonly record struct RpmEntry(int Inode, long Size, int FileType, UnixFileMode Mode, long ModifiedTime, string Digest, int Flags, int DirectoryIndex, string BaseName);
 	readonly record struct RpmDependency(string Name, int Flags, string Version);
@@ -624,4 +631,5 @@ partial class Generator
 	{
 		public List<string> Directories { get; } = [];
 	}
+	#endregion
 }

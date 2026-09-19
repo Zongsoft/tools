@@ -43,9 +43,12 @@ namespace Zongsoft.Tools.Packager;
 
 partial class Generator
 {
+	#region 常量定义
 	const string TAR_ROOT_DIRECTORY = ".root";
 	const string TAR_ROOT_PREFIX = TAR_ROOT_DIRECTORY + "/";
+	#endregion
 
+	#region 公共方法
 	public static void Tar(this Package package, string output, bool overwrite)
 	{
 		using var stream = new FileStream(
@@ -77,7 +80,9 @@ partial class Generator
 			package.FileName[..^Package.Tar.EXTENSION.Length] + ".sh" :
 			Path.ChangeExtension(package.FileName, ".sh");
 	}
+	#endregion
 
+	#region 私有方法
 	static void WriteTarEntry(TarWriter writer, Package.Entry item, string name = null)
 	{
 		using var stream = item.IsDirectory ? null : item.OpenRead();
@@ -283,4 +288,5 @@ partial class Generator
 
 	static string Quote(string value) => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\"", "\\\"");
 	static string ShellQuote(string value) => string.IsNullOrEmpty(value) ? "''" : $"'{value.Replace("'", "'\"'\"'")}'";
+	#endregion
 }

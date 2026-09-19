@@ -173,6 +173,7 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 	public IEnumerator<KeyValuePair<string, string>> GetEnumerator() => _variables.GetEnumerator();
 	#endregion
 
+	#region 嵌套类型
 	public readonly struct DaemonVariable
 	{
 		internal const string DAEMON = "daemon";
@@ -250,4 +251,5 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 		public readonly string PreUninstalled;
 		public readonly string PostUninstalled;
 	}
+	#endregion
 }

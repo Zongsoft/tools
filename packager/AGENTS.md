@@ -4,7 +4,7 @@
 
 ## 代码规范
 
-生产代码采用既有 MIT 版权头；测试不加版权头，不使用类型或程序集别名。Tab、CRLF、方法间空行、适当中文 region；sh 使用 LF。CodeAnalysis 1.1.0 严格构建和 IDE0049 验证均需通过。资源经 ResXFileCodeGenerator 生成，不编写本地化测试。
+生产代码采用既有 MIT 版权头；测试不加版权头，不使用类型或程序集别名。Tab、CRLF、方法间空行、适当中文 region；sh 使用 LF。CodeAnalysis 版本继承根 Directory.Packages.props，严格构建和 IDE0049 验证均需通过。资源经 ResXFileCodeGenerator 生成，不编写本地化测试。
 
 ## 职责与契约
 

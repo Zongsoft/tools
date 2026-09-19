@@ -40,6 +40,7 @@ namespace Zongsoft.Tools.Packager;
 
 internal class Dumper
 {
+	#region 公共方法
 	public static void Splash()
 	{
 		const string SPLASH = @"
@@ -66,4 +67,5 @@ internal class Dumper
 	public static void DirectoryNotExist(CommandOutletColor color, string path) => Terminal.WriteLine(color, string.Format(Properties.Resources.DirectoryNotExist_Message, path));
 	public static void PackageEntryConflicted(string path, string entry) => PackageEntryConflicted(CommandOutletColor.DarkYellow, path, entry);
 	public static void PackageEntryConflicted(CommandOutletColor color, string path, string entry) => Terminal.WriteLine(color, string.Format(Properties.Resources.PackageEntryConflicted_Message, path, entry));
+	#endregion
 }

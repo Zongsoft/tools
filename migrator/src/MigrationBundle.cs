@@ -68,7 +68,7 @@ public sealed class MigrationBundle : IDisposable
 	/// <summary>收集目标原生运行器并生成共用文件集，不连接外部服务。</summary>
 	/// <param name="plan">包含已预处理 SQL 内容的执行计划。</param>
 	/// <param name="defaultStateDirectory">安装时的默认状态目录；独立入口为空，必须由外部脚本传入。</param>
-	/// <param name="runtimeDirectory">按 RID 组织的原生产物根目录；为空时使用程序目录下的 .migrator。</param>
+	/// <param name="runtimeDirectory">按 RID 组织的原生产物根目录；为空时使用程序目录或 NuGet 包 tools 目录下的 .migrator。</param>
 	/// <returns>拥有临时文件的文件集，调用方使用完毕后必须释放。</returns>
 	public static MigrationBundle Build(MigrationPlan plan, string defaultStateDirectory, string runtimeDirectory = null)
 	{
@@ -77,7 +77,7 @@ public sealed class MigrationBundle : IDisposable
 
 		try
 		{
-			bundle.AddRuntime(plan.Runtime, runtimeDirectory ?? Path.Combine(AppContext.BaseDirectory, ".migrator"));
+			bundle.AddRuntime(plan.Runtime, runtimeDirectory ?? GetRuntimeDirectory());
 			foreach(var script in plan.Tasks.SelectMany(task => task.Scripts))
 				bundle.AddText(script.Path, script.Content, Utility.Unix.Mode644, false);
 
@@ -93,6 +93,12 @@ public sealed class MigrationBundle : IDisposable
 	#endregion
 
 	#region 私有方法
+	private static string GetRuntimeDirectory()
+	{
+		var directory = Path.Combine(AppContext.BaseDirectory, ".migrator");
+		return Directory.Exists(directory) ? directory : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", ".migrator"));
+	}
+
 	private void AddRuntime(string runtime, string directory)
 	{
 		directory = Path.Combine(directory, runtime);
