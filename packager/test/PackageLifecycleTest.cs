@@ -1,9 +1,9 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Text;
-using System.IO;
-using System.IO.Compression;
 using System.Formats.Tar;
+using System.IO.Compression;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -208,12 +208,12 @@ public sealed class PackageLifecycleTest
 
 	private static string[] GetDebianLifecycleActions(string script)
 	{
-		const string prefix = "case \"${1:-}\" in\n";
-		var guard = script.IndexOf(prefix, StringComparison.Ordinal);
+		const string PREFIX = "case \"${1:-}\" in\n";
+		var guard = script.IndexOf(PREFIX, StringComparison.Ordinal);
 
 		Assert.True(guard >= 0, "The Debian lifecycle script has no action guard.");
 
-		var patternsStart = guard + prefix.Length;
+		var patternsStart = guard + PREFIX.Length;
 		var patternsEnd = script.IndexOf(')', patternsStart);
 		Assert.True(patternsEnd > patternsStart, "The Debian lifecycle guard has no action pattern.");
 
@@ -224,9 +224,9 @@ public sealed class PackageLifecycleTest
 
 	private static bool RpmLifecycleRunsFor(string script, int remainingInstances)
 	{
-		const string guard = "if [ \"${1:-0}\" -eq 0 ]; then";
+		const string GUARD = "if [ \"${1:-0}\" -eq 0 ]; then";
 
-		if(!script.Contains(guard, StringComparison.Ordinal))
+		if(!script.Contains(GUARD, StringComparison.Ordinal))
 			return true;
 
 		return remainingInstances == 0;
@@ -234,13 +234,13 @@ public sealed class PackageLifecycleTest
 
 	private static string GetRpmLifecycleBody(string script)
 	{
-		const string prefix = "#!/bin/sh\nset -e\nif [ \"${1:-0}\" -eq 0 ]; then\n";
-		const string suffix = "\nfi\n";
+		const string PREFIX = "#!/bin/sh\nset -e\nif [ \"${1:-0}\" -eq 0 ]; then\n";
+		const string SUFFIX = "\nfi\n";
 
-		Assert.StartsWith(prefix, script, StringComparison.Ordinal);
-		Assert.EndsWith(suffix, script, StringComparison.Ordinal);
+		Assert.StartsWith(PREFIX, script, StringComparison.Ordinal);
+		Assert.EndsWith(SUFFIX, script, StringComparison.Ordinal);
 
-		return script[prefix.Length..^suffix.Length];
+		return script[PREFIX.Length..^SUFFIX.Length];
 	}
 
 	private static int CountOccurrences(string text, string value)

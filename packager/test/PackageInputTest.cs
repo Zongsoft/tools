@@ -2,8 +2,9 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 
-using Zongsoft.Components;
 using Xunit;
+
+using Zongsoft.Components;
 
 namespace Zongsoft.Tools.Packager.Tests;
 
@@ -119,13 +120,13 @@ public sealed class PackageInputTest
 		var variables = new Variables(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
 		{
 			["version"] = "1.0.0",
-			["migration"] = ".deploy/default/migration/$(version)/*.ini",
+			["migration"] = ".deploy/default/migration/$(version)/*.migration",
 		});
-		Assert.Equal(".deploy/default/migration/1.0.0/*.ini", variables["migration"]);
+		Assert.Equal(".deploy/default/migration/1.0.0/*.migration", variables["migration"]);
 
 		variables["version"] = "1.1.0";
 
-		Assert.Equal(".deploy/default/migration/1.1.0/*.ini", variables["migration"]);
+		Assert.Equal(".deploy/default/migration/1.1.0/*.migration", variables["migration"]);
 		Assert.Equal(new Version(1, 1, 0), variables.Version);
 	}
 	#endregion
@@ -135,17 +136,17 @@ public sealed class PackageInputTest
 	public void Read_SameNameAsWorkingDirectoryFile_UsesOnlySourceFile()
 	{
 		using var directory = new MigrationTestDirectory();
-		const string fileName = "install.sh";
-		directory.Write("working/" + fileName, "working-directory-content");
-		directory.Write("source/" + fileName, "source-only-content");
+		const string FILE_NAME = "install.sh";
+		directory.Write("working/" + FILE_NAME, "working-directory-content");
+		directory.Write("source/" + FILE_NAME, "source-only-content");
 		Normalizer.Initialize(new Dictionary<string, string>());
 		var previous = Environment.CurrentDirectory;
 		try
 		{
 			Environment.CurrentDirectory = Path.Combine(directory.Path, "working");
 
-			Assert.Equal("source-only-content", TextSource.Read(Path.Combine(directory.Path, "source"), fileName));
-			Assert.Equal("working-directory-content", File.ReadAllText(fileName));
+			Assert.Equal("source-only-content", TextSource.Read(Path.Combine(directory.Path, "source"), FILE_NAME));
+			Assert.Equal("working-directory-content", File.ReadAllText(FILE_NAME));
 		}
 		finally
 		{
@@ -170,12 +171,12 @@ public sealed class PackageInputTest
 	public void Read_RelativeFile_UsesSourceDirectory(string value)
 	{
 		using var directory = new MigrationTestDirectory();
-		const string content = "echo source-specific-content";
-		directory.Write("scripts/setup script.sh", content);
+		const string CONTENT = "echo source-specific-content";
+		directory.Write("scripts/setup script.sh", CONTENT);
 		Normalizer.Initialize(new Dictionary<string, string>());
 
 		Assert.NotEqual(Environment.CurrentDirectory, directory.Path);
-		Assert.Equal(content, TextSource.Read(directory.Path, value));
+		Assert.Equal(CONTENT, TextSource.Read(directory.Path, value));
 	}
 
 	[Fact]
@@ -192,10 +193,10 @@ public sealed class PackageInputTest
 	public void Read_ExplicitText_PreservesShellExpressionsAndWhitespace()
 	{
 		using var directory = new MigrationTestDirectory();
-		const string content = "  echo $(name) %name% ${HOME}\n echo /opt/zongsoft/web  ";
+		const string CONTENT = "  echo $(name) %name% ${HOME}\n echo /opt/zongsoft/web  ";
 		Normalizer.Initialize(new Dictionary<string, string> { ["name"] = "zongsoft.web" });
 
-		Assert.Equal(content, TextSource.Read(directory.Path, "text:" + content));
+		Assert.Equal(CONTENT, TextSource.Read(directory.Path, "text:" + CONTENT));
 	}
 
 	[Fact]

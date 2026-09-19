@@ -96,7 +96,7 @@ public class NugetResolver : DeploymentResolverBase
 			Kind = "Package",
 			Package = metadata.Identity.ToString(),
 			Manifest = deployment.Profile.FilePath,
-			Expand = token => ExpandPackageAsync(context, deployment, metadata.Identity.Id, framework, token),
+			Expand = token => this.ExpandPackageAsync(context, deployment, metadata.Identity.Id, framework, token),
 		});
 
 		return [];
@@ -146,7 +146,7 @@ public class NugetResolver : DeploymentResolverBase
 	public readonly struct Argument
 	{
 		#region 静态常量
-		static readonly char[] SEPARATORS = new char[] { '/', '\\'};
+		static readonly char[] SEPARATORS = new char[] { '/', '\\' };
 		#endregion
 
 		#region 构造函数

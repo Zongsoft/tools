@@ -20,3 +20,5 @@
 - 构建：`dotnet build Zongsoft.Tools.Regular.slnx`。
 - 在 Windows 手工验证无匹配、多匹配、命名组、重复捕获、零长度捕获、无效表达式和各 RegexOptions 组合。
 - 布局变化检查常用缩放比例、窗口缩放、键盘导航以及打开/保存流程；本项目当前没有自动化测试。
+
+代码规范采用 `Zongsoft.CodeAnalysis` 1.1.0，检查方法与 SDK 要求见 [仓库规范](../AGENTS.md#代码规范检查)。

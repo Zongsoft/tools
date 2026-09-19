@@ -106,7 +106,7 @@ internal sealed class NugetGraph
 			selected[metadata.Identity.Id] = metadata;
 		}
 
-		return await SearchAsync(selected) ?? throw Conflict(_conflict);
+		return await this.SearchAsync(selected) ?? throw Conflict(_conflict);
 	}
 	#endregion
 
@@ -119,7 +119,7 @@ internal sealed class NugetGraph
 		if(++_attempts > 10000 || selected.Count > 512)
 			throw Conflict("resolution limit");
 
-		if(!TryGetRequirements(selected, out var requirements))
+		if(!this.TryGetRequirements(selected, out var requirements))
 			return null;
 
 		foreach(var pair in requirements)
@@ -135,7 +135,7 @@ internal sealed class NugetGraph
 		if(unresolved.Key == null)
 			return selected;
 
-		var versions = await GetVersionsAsync(unresolved.Key);
+		var versions = await this.GetVersionsAsync(unresolved.Key);
 		var permitPreview = Deployer.Flag(_variables, "prerelease") || unresolved.Value.Any(item => item.Range.MinVersion?.IsPrerelease == true);
 
 		// 按升序尝试满足全部约束的候选；分支拥有自己的选择表，失败后回溯到下一版本。
@@ -152,7 +152,7 @@ internal sealed class NugetGraph
 			{
 				[unresolved.Key] = metadata,
 			};
-			var solved = await SearchAsync(next);
+			var solved = await this.SearchAsync(next);
 			if(solved != null)
 				return solved;
 		}

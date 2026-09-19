@@ -68,7 +68,7 @@ partial class Generator
 		foreach(var path in directories.Keys)
 		{
 			if(files.Contains(path))
-				throw new InvalidOperationException(string.Format(Properties.Resources.PackageEntryTypeConflict, path));
+				throw new InvalidOperationException(string.Format(Properties.Resources.PackageEntryTypeConflict_Message, path));
 		}
 
 		return directories.Values.OrderBy(entry => entry.EntryName.Count(character => character == '/')).ThenBy(entry => entry.EntryName, StringComparer.Ordinal).ToArray();

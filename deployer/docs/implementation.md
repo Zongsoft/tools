@@ -26,7 +26,7 @@ A `Deployer` instance rejects concurrent calls. Sequential calls create fresh se
 
 ## Reusing libraries
 
-Release references Zongsoft.Core 7.59.0; the current Debug configuration references the local Core assembly. NuGet.* remains at 7.9.0. Versions remain local to this tool's project. This revision adds no direct NuGet package dependencies.
+Release references Zongsoft.Core 7.59.0; the current Debug configuration references the local Core assembly. NuGet.* remains at 7.9.0. Core and test/analyzer versions are managed in the repository root Directory.Packages.props; NuGet.* versions are declared with VersionOverride in this tool project.
 
 | Capability | Reused API and remaining tool responsibility |
 | --- | --- |

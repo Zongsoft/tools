@@ -9,6 +9,9 @@
 - [deployer](https://github.com/Zongsoft/tools/tree/main/deployer)
 	> 部署工具：提供应用程序部署发布进行文件拷贝、包获取等功能。
 
+- [migrator](migrator/README.zh-Hans.md)
+	> 升迁工具：制作升迁归档与脚本，初始化数据库和 S3。
+
 - [packager](https://github.com/Zongsoft/tools/tree/main/packager)
 	> 打包工具：提供应用程序安装包的制作 _(先使用部署工具准备好待打包的内容)_。
 
@@ -17,10 +20,16 @@
 
 ## NuGet 发布
 
-[Publish NuGet Packages](.github/workflows/publish-nuget.yml) 提供 `deployer`、`packager` 的手动选择，仅在 `main` 分支执行，并串行运行发布任务。`regular` 是 Windows GUI 应用，目前没有 NuGet 打包配置。
+手动工作流 [Publish NuGet Packages](.github/workflows/publish-nuget.yml) 支持 deployer、packager、migrator，仅 main 分支运行。release 环境配置 NUGET_USER，并为该工作流配置 NuGet Trusted Publishing；取得临时密钥后仅推送已构建的包。
 
-在 GitHub 配置 `release` 环境，并将 nuget.org 用户名（不是邮箱）保存为 `NUGET_USER` 环境机密。在 [NuGet 可信发布策略](https://www.nuget.org/account/trustedpublishing) 中设置所有者 `Zongsoft`、仓库 `tools`、工作流文件 `publish-nuget.yml`（仅文件名）和环境 `release`。工作流通过 `id-token: write` 与 `NuGet/login@v1` 在构建完成后取得临时密钥。
+packager 独立构建。migrator 分别由 Linux 和 Windows 作业准备三种原生产物，汇集后执行 Cake compile 制包。普通构建/回归不发布原生执行器。各工具本地制包方法见其 README；Cake pack 会推送 NuGet，不能用于仅本地测试。
 
-工作流安装 .NET 8/9/10，并从仓库工具清单还原 Cake 6.2.0。发布 `packager` 时，先准备 Rocky Linux 9 Podman 容器，将 GitHub 工作目录挂载到 `/workspace`，复用 Cake 构建流程生成 `linux-x64`、`linux-arm64` 两套 Native AOT 升迁运行器。发布阶段通过 Cake 的 `pack --exclusive` 仅推送已构建的包，并跳过已存在的版本。
+## 包版本管理
 
-首次发布前应验证本地包：在仓库根目录运行 `dotnet tool restore`，进入所选工具目录执行 `dotnet cake --edition Release --target build`，检查 `src/bin/Release/*.nupkg`。packager 构建需要其文档约定的 Podman 环境。需要单独收集包时，可在 deployer 目录执行 `dotnet pack src/Zongsoft.Tools.Deployer.csproj -c Release -o ./artifacts`；packager 则在准备好两套升迁运行器后对对应 Packager 项目执行同样命令。这些验证命令不会推送包。
+[Directory.Packages.props](Directory.Packages.props) 只集中管理通用依赖：Zongsoft.Core、Zongsoft.CodeAnalysis 和测试包。各项目按需引用这些包，不单独填写版本。deployer 的 NuGet SDK、migrator 执行器的数据库驱动和 AWS SDK 等专用依赖，在所属项目使用 `VersionOverride` 指定版本。公共语言版本、作者/公司/版权、NuGet 元数据、工具包图标和分析器引用由 [Directory.Build.props](Directory.Build.props) 统一定义；工具名称、版本号、目标框架、测试属性和发布方式保留在各项目中。解决方案和发布流程仍各自独立。AOT 容器将这两个根 props 文件只读挂载到容器根目录。
+
+## 代码规范同步
+
+各工具共享根目录 `.editorconfig`。`Directory.Build.props` 设置 `ZongsoftGuidelinesSynchronization` 为仓库根目录，`Zongsoft.CodeAnalysis` 在实际构建的准备阶段将所引用 NuGet 包中的模板同步到该文件；无需独立同步命令或访问 GitHub。
+
+同步会覆盖根文件，不合并本地修改。模板在 guidelines 维护，分析器包版本由 Directory.Packages.props 统一定义。升级包并构建后，检查并提交配置差异。仅还原、清理、设计时构建，以及被 Visual Studio 最新检查跳过的构建均不会同步；需要时使用“重新生成”。AOT 容器只读挂载根配置，Linux 发布脚本通过 `-p:ZongsoftGuidelinesSynchronization=` 禁用同步。

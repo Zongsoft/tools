@@ -1,25 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
-		<LangVersion>latest</LangVersion>
 		<TargetFrameworks>net8.0;net9.0;net10.0;</TargetFrameworks>
-		<Version>0.10.0</Version>
-		<Authors>Popeye Zhong(zongsoft@qq.com)</Authors>
+		<Version>0.11.0</Version>
 		<PackAsTool>true</PackAsTool>
 		<ToolCommandName>dotnet-pack</ToolCommandName>
 		<PackageDescription>The Zongsoft Packaging .NET Tool.</PackageDescription>
-		<Company>Zongsoft Studio</Company>
 		<Product>Zongsoft Packaging Tool</Product>
 		<Description>Zongsoft Application Packaging Tool.</Description>
-		<Copyright>Copyright(C) Zongsoft Studio 2020-2026. All rights reserved.</Copyright>
-		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
-		<PackageReadmeFile>README.md</PackageReadmeFile>
-		<PackageLicenseExpression>MIT</PackageLicenseExpression>
-		<PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
 		<PackageProjectUrl>https://github.com/Zongsoft/tools/tree/main/packager</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/Zongsoft/tools/tree/main/packager</RepositoryUrl>
-		<PackageIconUrl>https://github.com/Zongsoft/guidelines/raw/main/zongsoft-logo(48x48).png</PackageIconUrl>
-		<PackageIcon>zongsoft-logo.png</PackageIcon>
 		<ApplicationIcon>..\..\zongsoft-logo.ico</ApplicationIcon>
 	</PropertyGroup>
 
@@ -28,11 +18,9 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<None Include="..\..\zongsoft-logo.png" Pack="true" PackagePath="\" Visible="true" />
 		<None Include="..\docs\**\*" Pack="true" PackagePath="docs/%(RecursiveDir)" />
 		<None Include="..\README.md" Pack="true" PackagePath="\" />
 		<None Include="..\README.zh-Hans.md" Pack="true" PackagePath="\" />
-		<Content Include=".migrator/**/*" Exclude=".migrator/**/*.pdb;.migrator/**/*.dbg;.migrator/**/*.dwo;.migrator/**/*.xml" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Pack="false" />
 	</ItemGroup>
 
 	<Choose>
@@ -45,7 +33,7 @@
 		</When>
 		<Otherwise>
 			<ItemGroup>
-				<PackageReference Include="Zongsoft.Core" Version="7.59.0" />
+				<PackageReference Include="Zongsoft.Core" />
 			</ItemGroup>
 		</Otherwise>
 	</Choose>
@@ -64,6 +52,4 @@
 			<LastGenOutput>Resources.Designer.cs</LastGenOutput>
 		</EmbeddedResource>
 	</ItemGroup>
-
-	<Import Project="..\.shared\Migration.props" />
 </Project>

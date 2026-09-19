@@ -26,7 +26,7 @@
 
 ## 复用现有库
 
-Release 引用 Zongsoft.Core 7.59.0，当前 Debug 配置引用本地 Core 程序集；NuGet.* 保持 7.9.0，版本在本工具项目文件中维护。没有为此次整理增加直接 NuGet 包依赖。
+Release 引用 Zongsoft.Core 7.59.0，当前 Debug 配置引用本地 Core 程序集；NuGet.* 保持 7.9.0，在本工具项目中通过 VersionOverride 维护；Core、测试和分析器版本由仓库根 Directory.Packages.props 统一管理。
 
 | 能力 | 复用接口与本工具保留部分 |
 | --- | --- |

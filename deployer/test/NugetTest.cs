@@ -9,7 +9,7 @@ namespace Zongsoft.Tools.Deployer.Tests;
 public class NugetTest
 {
 	[Fact]
-	public async Task Deploy_SharedDependencyCopiesEachTargetOnlyOnce()
+	public async Task Deploy_SharedDependencyCopiesEachTargetOnlyOnceAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Shared.Left", dependencies: [("Shared.Common", "[1.0.0]")]);
@@ -29,7 +29,7 @@ public class NugetTest
 	}
 
 	[Fact]
-	public async Task Deploy_SamePackageAfterExplicitDeleteIsCopiedAgain()
+	public async Task Deploy_SamePackageAfterExplicitDeleteIsCopiedAgainAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Repeated.Root");
@@ -48,7 +48,7 @@ public class NugetTest
 	[InlineData(false, false, false)]
 	[InlineData(true, false, true)]
 	[InlineData(true, true, true)]
-	public async Task Deploy_ContentFilesHonorCopyToOutputAndFlatten(bool copy, bool flatten, bool exists)
+	public async Task Deploy_ContentFilesHonorCopyToOutputAndFlattenAsync(bool copy, bool flatten, bool exists)
 	{
 		using var fixture = new DeploymentFixture();
 		var root = fixture.Package("Content.Root");
@@ -70,7 +70,7 @@ public class NugetTest
 	}
 
 	[Fact]
-	public async Task Deploy_ContentFilesWithoutCopyRuleAreNotDeployed()
+	public async Task Deploy_ContentFilesWithoutCopyRuleAreNotDeployedAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Content.Default");
@@ -82,7 +82,7 @@ public class NugetTest
 	}
 
 	[Fact]
-	public async Task Deploy_LegacyContentIncludesRootAndNestedFiles()
+	public async Task Deploy_LegacyContentIncludesRootAndNestedFilesAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Content.Legacy");
@@ -98,7 +98,7 @@ public class NugetTest
 	[InlineData("windows", "x32", "win-x86")]
 	[InlineData("mac", "arm64", "osx-arm64")]
 	[InlineData("linux-musl", "x64", "linux-x64")]
-	public async Task Deploy_RuntimeAliasesAndPortableFallbackSelectExpectedGroup(string platform, string architecture, string runtime)
+	public async Task Deploy_RuntimeAliasesAndPortableFallbackSelectExpectedGroupAsync(string platform, string architecture, string runtime)
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Aliases.Root");
@@ -113,7 +113,7 @@ public class NugetTest
 	}
 
 	[Fact]
-	public async Task Metadata_LatestDefaultsToStableAndHonorsChangedPrereleasePolicy()
+	public async Task Metadata_LatestDefaultsToStableAndHonorsChangedPrereleasePolicyAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Preview.Root", "1.0.0");
@@ -129,7 +129,7 @@ public class NugetTest
 	[InlineData("net8.0", "group.eight")]
 	[InlineData("net9.0", "group.eight")]
 	[InlineData("net10.0", "group.ten")]
-	public async Task Dependencies_NearestFrameworkGroupIsSelected(string framework, string expected)
+	public async Task Dependencies_NearestFrameworkGroupIsSelectedAsync(string framework, string expected)
 	{
 		using var fixture = new DeploymentFixture();
 		var root = fixture.Package("Group.Root", framework: "net8.0", dependencies: [("Group.Eight", "[1.0.0]")]);
@@ -153,7 +153,7 @@ public class NugetTest
 	}
 
 	[Fact]
-	public async Task Deploy_ExplicitPackagePathDoesNotPullUnusedDependencies()
+	public async Task Deploy_ExplicitPackagePathDoesNotPullUnusedDependenciesAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Explicit.Root", dependencies: [("Unavailable.Child", "[1.0.0]")]);
@@ -166,7 +166,7 @@ public class NugetTest
 	}
 
 	[Fact]
-	public async Task Deploy_PackageManifestDoesNotPullUnusedDependencies()
+	public async Task Deploy_PackageManifestDoesNotPullUnusedDependenciesAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Manifest.Root", dependencies: [("Unavailable.Child", "[1.0.0]")]);
@@ -179,7 +179,7 @@ public class NugetTest
 	}
 
 	[Fact]
-	public async Task Deploy_MultipleRootsWithIncompatibleDependencyConstraintsFailBeforeCopy()
+	public async Task Deploy_MultipleRootsWithIncompatibleDependencyConstraintsFailBeforeCopyAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Roots.First", dependencies: [("Roots.Shared", "[1.0.0]")]);
@@ -194,7 +194,7 @@ public class NugetTest
 	}
 
 	[Fact]
-	public async Task Dependencies_CustomPrefixesAndDefaultPrefixes_ExcludeMatches()
+	public async Task Dependencies_CustomPrefixesAndDefaultPrefixes_ExcludeMatchesAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Review.Root", dependencies:
@@ -212,7 +212,7 @@ public class NugetTest
 	}
 
 	[Fact]
-	public async Task Dependencies_ExplicitRootIsNotIgnored()
+	public async Task Dependencies_ExplicitRootIsNotIgnoredAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("System.Explicit");
@@ -226,7 +226,7 @@ public class NugetTest
 	[InlineData("net8.0")]
 	[InlineData("net9.0")]
 	[InlineData("net10.0")]
-	public async Task Dependencies_ChainIncludesGrandchild(string framework)
+	public async Task Dependencies_ChainIncludesGrandchildAsync(string framework)
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Chain.Root", framework: framework, dependencies: [("Chain.Child", "[1.0.0]")]);
@@ -248,7 +248,7 @@ public class NugetTest
 	[InlineData("(,2.0.0]", "1.0.0")]
 	[InlineData("[1.1.0,2.0.0)", "1.1.0")]
 	[InlineData("[2.0.0]", "2.0.0")]
-	public async Task Dependencies_VersionRangeSelectsAvailableVersion(string range, string expected)
+	public async Task Dependencies_VersionRangeSelectsAvailableVersionAsync(string range, string expected)
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Range.Root", dependencies: [("Range.Child", range)]);
@@ -264,7 +264,7 @@ public class NugetTest
 	}
 
 	[Fact]
-	public async Task Dependencies_DiamondUnifiesCompatibleRanges()
+	public async Task Dependencies_DiamondUnifiesCompatibleRangesAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Diamond.Root", dependencies: [("Diamond.Left", "[1.0.0]"), ("Diamond.Right", "[1.0.0]")]);
@@ -284,7 +284,7 @@ public class NugetTest
 	}
 
 	[Fact]
-	public async Task Dependencies_UnsatisfiableRangeFails()
+	public async Task Dependencies_UnsatisfiableRangeFailsAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Unsolvable.Root", dependencies: [("Unsolvable.Child", "(1.0.0,2.0.0)")]);
@@ -299,7 +299,7 @@ public class NugetTest
 	}
 
 	[Fact]
-	public async Task Dependencies_IncompatibleDiamondFails()
+	public async Task Dependencies_IncompatibleDiamondFailsAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Conflict.Root", dependencies: [("Conflict.Left", "[1.0.0]"), ("Conflict.Right", "[1.0.0]")]);
@@ -316,7 +316,7 @@ public class NugetTest
 	}
 
 	[Fact]
-	public async Task Dependencies_CycleTerminates()
+	public async Task Dependencies_CycleTerminatesAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Cycle.Root", dependencies: [("Cycle.Child", "[1.0.0]")]);
@@ -342,7 +342,7 @@ public class NugetTest
 	}
 
 	[Fact]
-	public async Task Metadata_SamePackageInDifferentCachesRemainsIsolated()
+	public async Task Metadata_SamePackageInDifferentCachesRemainsIsolatedAsync()
 	{
 		using var first = new DeploymentFixture();
 		using var second = new DeploymentFixture();
@@ -356,7 +356,7 @@ public class NugetTest
 	}
 
 	[Fact]
-	public async Task Dependencies_ChangedIgnorePolicyIsNotCached()
+	public async Task Dependencies_ChangedIgnorePolicyIsNotCachedAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Policy.Root", dependencies: [("Policy.Child", "[1.0.0]")]);
@@ -380,7 +380,7 @@ public class NugetTest
 	[InlineData("net8.0", "net8.0")]
 	[InlineData("net9.0", "net8.0")]
 	[InlineData("net10.0", "net10.0")]
-	public async Task Assets_NearestFrameworkIsSelected(string requested, string expected)
+	public async Task Assets_NearestFrameworkIsSelectedAsync(string requested, string expected)
 	{
 		using var fixture = new DeploymentFixture();
 		var package = fixture.Package("Nearest.Asset", framework: "netstandard2.0");
@@ -401,7 +401,7 @@ public class NugetTest
 	[InlineData("linux", "x64")]
 	[InlineData("linux-musl", "x64")]
 	[InlineData("osx", "arm64")]
-	public async Task Deploy_RuntimeImplementationOverridesSamePackageLibrary(string platform, string architecture)
+	public async Task Deploy_RuntimeImplementationOverridesSamePackageLibraryAsync(string platform, string architecture)
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Runtime.Root");
@@ -418,7 +418,7 @@ public class NugetTest
 	}
 
 	[Fact]
-	public async Task Deploy_CrossPackageConflictingAssetFails()
+	public async Task Deploy_CrossPackageConflictingAssetFailsAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Assets.Root", dependencies: [("Assets.Child", "[1.0.0]")]);
@@ -439,7 +439,7 @@ public class NugetTest
 	[InlineData("net8.0", "net9.0^", false)]
 	[InlineData("net10.0-windows10.0.19041", "net10.0-windows10.0.17763^", true)]
 	[InlineData("net10.0-windows10.0.19041", "net10.0^", false)]
-	public async Task Deploy_FrameworkFiltersSelectOnlyMatchingRoots(string framework, string filter, bool selected)
+	public async Task Deploy_FrameworkFiltersSelectOnlyMatchingRootsAsync(string framework, string filter, bool selected)
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Filter.Root", framework: "net8.0");
@@ -455,7 +455,7 @@ public class NugetTest
 	}
 
 	[Fact]
-	public async Task Deploy_DependencyBacktrackingAndLockedReplayKeepConsistentVersions()
+	public async Task Deploy_DependencyBacktrackingAndLockedReplayKeepConsistentVersionsAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Backtrack.Root", dependencies: [("Backtrack.Choice", "[1.0.0,3.0.0)"), ("Backtrack.Fixed", "[1.0.0]")]);
@@ -490,7 +490,7 @@ public class NugetTest
 	}
 
 	[Fact]
-	public async Task Metadata_ChangingCacheRootOnSameVariablesRefreshesVersionsAndMetadata()
+	public async Task Metadata_ChangingCacheRootOnSameVariablesRefreshesVersionsAndMetadataAsync()
 	{
 		using var first = new DeploymentFixture();
 		using var second = new DeploymentFixture();
@@ -515,7 +515,7 @@ public class NugetTest
 	}
 
 	[Fact]
-	public async Task Deploy_NugetCancellationAllowsSameInstanceRetry()
+	public async Task Deploy_NugetCancellationAllowsSameInstanceRetryAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Cancelled.Root", dependencies: [("Cancelled.Child", "[1.0.0]")]);

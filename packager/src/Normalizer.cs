@@ -10,7 +10,7 @@
  *   钟峰(Popeye Zhong) <zongsoft@gmail.com>
  *
  * The MIT License (MIT)
- * 
+ *
  * Copyright (C) 2020-2026 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -83,7 +83,7 @@ public class Normalizer
 
 		var result = Normalize(text, _variables);
 		if(!result.Succeed)
-			throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed, result.Value));
+			throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed_Message, result.Value));
 
 		return string.IsNullOrWhiteSpace(result.Value) ? fallback : result.Value.Trim();
 	}
@@ -93,7 +93,7 @@ public class Normalizer
 		if(string.IsNullOrWhiteSpace(text))
 			return Result.Success(string.Empty);
 
-		variables ??= _variables ?? throw new InvalidOperationException(Properties.Resources.NormalizerNotInitialized);
+		variables ??= _variables ?? throw new InvalidOperationException(Properties.Resources.NormalizerNotInitialized_Message);
 		if(variables is Variables collection)
 			variables = collection.Raw;
 
@@ -133,7 +133,6 @@ public class Normalizer
 		public readonly bool Succeed;
 
 		public override string ToString() => this.Value;
-
 		public static implicit operator bool(Result result) => result.Succeed;
 		public static implicit operator string(Result result) => result.Value;
 

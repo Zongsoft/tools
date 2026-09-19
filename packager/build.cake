@@ -21,40 +21,10 @@ Task("restore")
 	});
 });
 
-Task("migrator")
-	.Description("在独立 Rocky Linux 9 环境中发布两个架构的原生升迁运行器")
-	.Does(() =>
-{
-	const string container = "zongsoft-packager-aot-builder";
-	if(StartProcess("podman", $"container exists {container}") != 0)
-	{
-		//使用相对路径，避免 Windows 盘符被 Podman 识别为 URL 协议。
-		var arguments = new ProcessArgumentBuilder().Append("kube play")
-			.AppendQuoted("migrator/build/packager.linux-x64.yaml");
-		if(StartProcess("podman", new ProcessSettings { Arguments = arguments }) != 0)
-			throw new Exception("Unable to create the migrator Native AOT build environment.");
-	}
-	else if(StartProcess("podman", $"start {container}") != 0)
-		throw new Exception("Unable to start the migrator Native AOT build environment.");
-
-	if(StartProcess("podman", $"exec {container} bash migrator/build/setup.sh") != 0)
-		throw new Exception("Unable to prepare the migrator Native AOT toolchain.");
-
-	CleanDirectory(Directory("src/.migrator"));
-	foreach(var runtime in new[] { "linux-x64", "linux-arm64" })
-	{
-		var arguments = new ProcessArgumentBuilder().Append($"exec {container} bash migrator/build/publish.sh")
-			.Append(runtime).AppendQuoted(edition);
-		if(StartProcess("podman", new ProcessSettings { Arguments = arguments }) != 0)
-			throw new Exception($"Native AOT publishing failed for {runtime}.");
-	}
-});
-
 Task("build")
 	.Description("编译项目")
 	.IsDependentOn("clean")
 	.IsDependentOn("restore")
-	.IsDependentOn("migrator")
 	.Does(() =>
 {
 	var settings = new DotNetBuildSettings
@@ -82,7 +52,7 @@ Task("test")
 		Configuration = edition,
 	};
 
-	var projects = GetFiles("test/*.csproj").Concat(GetFiles("migrator/test/*.csproj"));
+	var projects = GetFiles("test/*.csproj");
 
 	foreach(var project in projects)
 	{

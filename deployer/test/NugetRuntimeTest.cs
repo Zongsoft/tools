@@ -12,7 +12,7 @@ public class NugetRuntimeTest
 	[InlineData("osx", "arm64", "unix;unix-arm64;osx", "osx")]
 	[InlineData("osx", "arm64", "unix;unix-arm64", "unix-arm64")]
 	[InlineData("win", "x64", "any;win", "win")]
-	public async Task Deploy_RuntimeGraphPrefersNearestCandidateInImportOrder(string platform, string architecture, string candidates, string expected)
+	public async Task Deploy_RuntimeGraphPrefersNearestCandidateInImportOrderAsync(string platform, string architecture, string candidates, string expected)
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Graph.Root");
@@ -36,7 +36,7 @@ public class NugetRuntimeTest
 	}
 
 	[Fact]
-	public async Task Deploy_RuntimeGraphSelectsCompatibleManagedAndNativeAssetsIndependently()
+	public async Task Deploy_RuntimeGraphSelectsCompatibleManagedAndNativeAssetsIndependentlyAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Graph.Independent");
@@ -58,7 +58,7 @@ public class NugetRuntimeTest
 	}
 
 	[Fact]
-	public async Task Deploy_RuntimeGraphSelectsExactManagedAndFallbackNativeAssetsIndependently()
+	public async Task Deploy_RuntimeGraphSelectsExactManagedAndFallbackNativeAssetsIndependentlyAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Graph.Reverse");

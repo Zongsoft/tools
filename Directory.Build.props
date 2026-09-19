@@ -1,0 +1,23 @@
+<Project>
+	<PropertyGroup>
+		<LangVersion>latest</LangVersion>
+		<Authors>Popeye Zhong(zongsoft@qq.com)</Authors>
+		<Company>Zongsoft Studio</Company>
+		<Copyright>Copyright(C) Zongsoft Studio 2020-2026. All rights reserved.</Copyright>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+		<PackageIconUrl>https://github.com/Zongsoft/guidelines/raw/main/zongsoft-logo(48x48).png</PackageIconUrl>
+		<PackageIcon>zongsoft-logo.png</PackageIcon>
+		<ZongsoftGuidelinesSynchronization>$(MSBuildThisFileDirectory)</ZongsoftGuidelinesSynchronization>
+	</PropertyGroup>
+
+	<ItemGroup Condition="'$(MSBuildProjectExtension)' == '.csproj'">
+		<PackageReference Include="Zongsoft.CodeAnalysis" PrivateAssets="all" />
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(PackAsTool)' == 'true'">
+		<None Include="$(MSBuildThisFileDirectory)zongsoft-logo.png" Pack="true" PackagePath="\" Visible="true" />
+	</ItemGroup>
+</Project>

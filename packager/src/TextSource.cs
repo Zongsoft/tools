@@ -47,7 +47,7 @@ internal static class TextSource
 		if(value.StartsWith("text:", StringComparison.OrdinalIgnoreCase))
 		{
 			if(fileOnly)
-				throw new InvalidDataException(Properties.Resources.TextSourceFileRequired);
+				throw new InvalidDataException(Properties.Resources.TextSourceFileRequired_Message);
 
 			return value[5..];
 		}
@@ -58,7 +58,7 @@ internal static class TextSource
 
 		var result = Normalizer.Normalize(value, Normalizer.Variables);
 		if(!result.Succeed)
-			throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed, result.Value));
+			throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed_Message, result.Value));
 
 		value = result.Value;
 		if(!explicitFile && !fileOnly && (value.Contains('\r') || value.Contains('\n')))
@@ -69,7 +69,7 @@ internal static class TextSource
 			return File.ReadAllText(path);
 
 		if(explicitFile || fileOnly || IsPath(value))
-			throw new FileNotFoundException(string.Format(Properties.Resources.TextSourceMissing, path), path);
+			throw new FileNotFoundException(string.Format(Properties.Resources.TextSourceMissing_Message, path), path);
 
 		return value;
 	}

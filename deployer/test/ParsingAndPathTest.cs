@@ -55,7 +55,9 @@ public class ParsingAndPathTest
 	{
 		var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
 		{
-			["Database.Name"] = "business", ["Items[0]"] = "first", ["Items[1].Name"] = "second",
+			["Database.Name"] = "business",
+			["Items[0]"] = "first",
+			["Items[1].Name"] = "second",
 		};
 		var failures = new List<string>();
 		Assert.Equal("business-first-second", Normalizer.Normalize(text, variables, failures.Add));

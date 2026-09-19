@@ -10,7 +10,7 @@
  *   钟峰(Popeye Zhong) <zongsoft@gmail.com>
  *
  * The MIT License (MIT)
- * 
+ *
  * Copyright (C) 2020-2026 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -36,6 +36,8 @@ using System.Linq;
 using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+
+using Zongsoft.Components;
 
 namespace Zongsoft.Tools.Packager;
 
@@ -79,7 +81,7 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 
 			var result = Normalizer.Normalize(value, _variables);
 			if(!result.Succeed)
-				throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed, result.Value));
+				throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed_Message, result.Value));
 
 			return value == null ? null : result.Value;
 		}
@@ -93,8 +95,8 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 	public string License => this[LICENSE];
 	public string Category => this[CATEGORY];
 	public string Maintainer => this[MAINTAINER];
-	public string Summary => TextSource.Read(this.Source, GetRaw(SUMMARY));
-	public string Description => TextSource.Read(this.Source, GetRaw(DESCRIPTION));
+	public string Summary => TextSource.Read(this.Source, this.GetRaw(SUMMARY));
+	public string Description => TextSource.Read(this.Source, this.GetRaw(DESCRIPTION));
 	public string Source => this[SOURCE];
 	public string Output => this[OUTPUT];
 	public string Exclude => this[EXCLUDE];
@@ -104,7 +106,7 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 	public Architecture Architecture => _variables.TryGetValue(ARCHITECTURE, out var value) ? Enum.Parse<Architecture>(this[ARCHITECTURE], true) : Architecture.X64;
 	public string Framework => this[FRAMEWORK];
 	public string Compilation => _variables.TryGetValue(COMPILATION, out var value) ? this[COMPILATION] : "Release";
-	public string RuntimeIdentifier => _variables.TryGetValue(nameof(RuntimeIdentifier), out var value) ? this[nameof(RuntimeIdentifier)] : Utility.GetRuntimeIdentifier(this.Platform, this.Architecture);
+	public string RuntimeIdentifier => _variables.TryGetValue(nameof(this.RuntimeIdentifier), out var value) ? this[nameof(this.RuntimeIdentifier)] : Utility.GetRuntimeIdentifier(this.Platform, this.Architecture);
 	public string[] Dependencies => _variables.TryGetValue(DEPENDENCIES, out var value) && value != null ? this[DEPENDENCIES].Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) : [];
 
 	public DaemonVariable Daemon => new
@@ -115,22 +117,37 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 
 	public ScriptVariable Script => new
 	(
-		GetRaw(ScriptVariable.INSTALLING),
-		GetRaw(ScriptVariable.INSTALLED),
-		GetRaw(ScriptVariable.UNINSTALLING),
-		GetRaw(ScriptVariable.UNINSTALLED),
-		GetRaw(ScriptVariable.PREINSTALLING),
-		GetRaw(ScriptVariable.POSTINSTALLING),
-		GetRaw(ScriptVariable.PREINSTALLED),
-		GetRaw(ScriptVariable.POSTINSTALLED),
-		GetRaw(ScriptVariable.PREUNINSTALLING),
-		GetRaw(ScriptVariable.POSTUNINSTALLING),
-		GetRaw(ScriptVariable.PREUNINSTALLED),
-		GetRaw(ScriptVariable.POSTUNINSTALLED)
+		this.GetRaw(ScriptVariable.INSTALLING),
+		this.GetRaw(ScriptVariable.INSTALLED),
+		this.GetRaw(ScriptVariable.UNINSTALLING),
+		this.GetRaw(ScriptVariable.UNINSTALLED),
+		this.GetRaw(ScriptVariable.PREINSTALLING),
+		this.GetRaw(ScriptVariable.POSTINSTALLING),
+		this.GetRaw(ScriptVariable.PREINSTALLED),
+		this.GetRaw(ScriptVariable.POSTINSTALLED),
+		this.GetRaw(ScriptVariable.PREUNINSTALLING),
+		this.GetRaw(ScriptVariable.POSTUNINSTALLING),
+		this.GetRaw(ScriptVariable.PREUNINSTALLED),
+		this.GetRaw(ScriptVariable.POSTUNINSTALLED)
 	);
 	#endregion
 
 	#region 公共方法
+	internal static Dictionary<string, string> From(CommandContext context)
+	{
+		var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+		foreach(var option in context.Descriptor.Options)
+			variables[option.Name] = option.DefaultValue?.ToString();
+
+		foreach(System.Collections.DictionaryEntry variable in Environment.GetEnvironmentVariables())
+			variables[variable.Key.ToString()] = variable.Value?.ToString();
+
+		foreach(var option in context.Options)
+			variables[option.Key] = option.Value?.ToString();
+
+		return variables;
+	}
+
 	public bool Contains(string name) => name != null && _variables.ContainsKey(name);
 	public bool TryGetValue(string name, out string value)
 	{
@@ -152,7 +169,7 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 	#endregion
 
 	#region 枚举遍历
-	IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+	IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
 	public IEnumerator<KeyValuePair<string, string>> GetEnumerator() => _variables.GetEnumerator();
 	#endregion
 

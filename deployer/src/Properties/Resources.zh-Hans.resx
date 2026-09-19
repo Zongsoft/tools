@@ -165,4 +165,7 @@
   <data name="Review.UnknownResolver" xml:space="preserve">
     <value>解析器未定义：{0}</value>
   </data>
+  <data name="RuntimeGraphMissing.Message" xml:space="preserve">
+    <value>缺少嵌入的运行时关系图：{0}。</value>
+  </data>
 </root>

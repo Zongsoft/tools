@@ -144,157 +144,92 @@
   <data name="DirectoryNotExist.Message" xml:space="preserve">
     <value>指定的 '{0}' 目录不存在。</value>
   </data>
-  <data name="MigrationVariableUndefined.Message" xml:space="preserve">
-    <value>升迁变量“{0}”未定义。</value>
+  <data name="MigrationPlatformInvalid.Message" xml:space="preserve">
+    <value>升迁支持 Linux x64/arm64 和 Windows x64。</value>
   </data>
-  <data name="MigrationFileExtension" xml:space="preserve">
-    <value>升迁文件必须使用 .ini 扩展名：{0}</value>
-  </data>
-  <data name="MigrationSectionRequired" xml:space="preserve">
-    <value>升迁条目必须置于段落中：{0}</value>
-  </data>
-  <data name="MigrationSectionDuplicate" xml:space="preserve">
-    <value>升迁器段落重复。</value>
-  </data>
-  <data name="MigrationDatabaseEntryInvalid" xml:space="preserve">
-    <value>数据库条目必须是没有条目值的 SQL 文件路径。</value>
-  </data>
-  <data name="MigrationSqlExtension" xml:space="preserve">
-    <value>数据库脚本必须使用 .sql 扩展名。</value>
-  </data>
-  <data name="MigrationEntryError" xml:space="preserve">
-    <value>{0}:{1} [{2}]：{3}</value>
-  </data>
-  <data name="MigrationBucketDuplicate" xml:space="preserve">
-    <value>存储桶名称重复。</value>
-  </data>
-  <data name="MigrationTasksMissing" xml:space="preserve">
-    <value>未指定升迁任务。</value>
-  </data>
-  <data name="MigrationAliasesDuplicate" xml:space="preserve">
-    <value>参数文件中的升迁器别名重复：{0}</value>
-  </data>
-  <data name="MigrationParameterUnresolved" xml:space="preserve">
-    <value>参数“{0}”无效或无法解析，位置：{1}:{2}。</value>
-  </data>
-  <data name="MigrationParameterError" xml:space="preserve">
-    <value>{0} [{1}]：{2}</value>
-  </data>
-  <data name="MigrationParametersMissing" xml:space="preserve">
-    <value>未找到升迁器“{0}”的参数文件（{1}）。已查找：{2}</value>
-  </data>
-  <data name="MigrationBucketNameInvalid" xml:space="preserve">
-    <value>存储桶名称“{0}”无效。</value>
-  </data>
-  <data name="MigrationBucketOptionsInvalid" xml:space="preserve">
-    <value>存储桶“{0}”的选项无效或重复。支持 public/private、encryption:sse-s3/sse-kms（KMS 可指定 encryption.key）、versioning:enabled/suspended 和 tag.&lt;名称&gt;:&lt;值&gt;（最多 50 个标签，名称/值限长 128/256 字符，aws: 前缀保留）。</value>
-  </data>
-  <data name="MigrationScriptsMissing" xml:space="preserve">
-    <value>升迁脚本路径没有匹配的文件：{0}</value>
-  </data>
-  <data name="MigrationSectionInvalid" xml:space="preserve">
-    <value>升迁段落无效，位置：{0}:{1}。</value>
-  </data>
-  <data name="MigrationProfileSectionDuplicate" xml:space="preserve">
-    <value>段落“{0}”重复，位置：{1}:{2}。</value>
-  </data>
-  <data name="MigrationProfileInvalid" xml:space="preserve">
-    <value>INI 文件“{0}”中的条目或段落无效或重复。</value>
-  </data>
-  <data name="MigrationPlatformInvalid" xml:space="preserve">
-    <value>升迁安装包支持 linux-x64 和 linux-arm64。</value>
-  </data>
-  <data name="MigrationFrameworkInvalid" xml:space="preserve">
-    <value>升迁安装包要求宿主使用 net8.0、net9.0 或 net10.0。</value>
-  </data>
-  <data name="MigrationIdentityInvalid" xml:space="preserve">
+  <data name="MigrationIdentityInvalid.Message" xml:space="preserve">
     <value>用于升迁状态的包标识无效。</value>
   </data>
-  <data name="MigrationInstallPathInvalid" xml:space="preserve">
+  <data name="MigrationInstallPathInvalid.Message" xml:space="preserve">
     <value>升迁安装路径必须是 Linux 绝对路径，只能包含字母、数字、点、下划线、加号、减号和目录分隔符。</value>
   </data>
-  <data name="MigrationPathReserved" xml:space="preserve">
+  <data name="MigrationPathReserved.Message" xml:space="preserve">
     <value>包条目使用了升迁保留路径：{0}</value>
   </data>
-  <data name="MigrationRuntimeMissing" xml:space="preserve">
-    <value>缺少打包所需的升迁运行器。请重新构建或安装 dotnet-pack。</value>
-  </data>
-  <data name="MigrationProviderUnknown" xml:space="preserve">
-    <value>未知的升迁器。</value>
-  </data>
-  <data name="MigrationRuntimeInvalid" xml:space="preserve">
-    <value>原生升迁运行器 {0} 不是有效的 {1} ELF 可执行文件。</value>
-  </data>
-  <data name="MigrationPathsRequired" xml:space="preserve">
-    <value>--migration 必须指定至少一个 INI 文件路径。</value>
-  </data>
-  <data name="MigrationHostRequired" xml:space="preserve">
+  <data name="MigrationHostRequired.Message" xml:space="preserve">
     <value>升迁安装包必须能够定位服务宿主，或指定 --daemon:none。</value>
   </data>
-  <data name="GeneratedEntryConflicted" xml:space="preserve">
+  <data name="GeneratedEntryConflicted.Message" xml:space="preserve">
     <value>生成的包条目与“{0}”冲突。</value>
-  </data>
-  <data name="MigrationNotCompleted" xml:space="preserve">
-    <value>此安装包的升迁尚未完成。</value>
   </data>
   <data name="MigrationInstallPathFixed" xml:space="preserve">
     <value>升迁安装包使用固定安装路径；请使用 --install-path 重新打包。</value>
   </data>
-  <data name="MySqlDelimiterInvalid" xml:space="preserve">
+  <data name="MySqlDelimiterInvalid.Message" xml:space="preserve">
     <value>MySQL DELIMITER 分隔符无效。</value>
   </data>
-  <data name="SqlServerGoRepeatUnsupported" xml:space="preserve">
+  <data name="SqlServerGoRepeatUnsupported.Message" xml:space="preserve">
     <value>不支持带重复次数的 GO 批次。</value>
   </data>
-  <data name="MigrationFilesMissing" xml:space="preserve">
-    <value>警告：未找到升迁 INI 文件 {0}，已跳过。</value>
-  </data>
-  <data name="SourceVariableUndefined_Message" xml:space="preserve">
+  <data name="SourceVariableUndefined.Message" xml:space="preserve">
     <value>确定应用身份之前无法解析源目录中的变量“{0}”。请指定对应身份选项或使用不包含该变量的源路径。</value>
   </data>
-  <data name="SourceVersionLoadFailed_Message" xml:space="preserve">
+  <data name="SourceVersionLoadFailed.Message" xml:space="preserve">
     <value>无法加载源版本文件“{0}”。</value>
   </data>
-  <data name="SourceVersionNameRequired_Message" xml:space="preserve">
+  <data name="SourceVersionNameRequired.Message" xml:space="preserve">
     <value>没有源版本信息时必须指定非空 --name。源文件：{0}</value>
   </data>
-  <data name="SourceVersionNameMismatch_Message" xml:space="preserve">
+  <data name="SourceVersionNameMismatch.Message" xml:space="preserve">
     <value>--name“{1}”与“{0}”中的应用名称“{2}”不一致。</value>
   </data>
-  <data name="SourceVersionEditionRequired_Message" xml:space="preserve">
+  <data name="SourceVersionEditionRequired.Message" xml:space="preserve">
     <value>源版本文件“{0}”包含多个 Edition，请指定 --edition。</value>
   </data>
-  <data name="SourceVersionEditionMissing_Message" xml:space="preserve">
+  <data name="SourceVersionEditionMissing.Message" xml:space="preserve">
     <value>--edition“{1}”不存在于源版本文件“{0}”中。</value>
   </data>
-  <data name="SourceVersionInvalid_Message" xml:space="preserve">
+  <data name="SourceVersionInvalid.Message" xml:space="preserve">
     <value>必须通过 --version 或所选源版本提供有效的非零版本号。源文件：{0}</value>
   </data>
-  <data name="SourceVersionIdentityInvalid_Message" xml:space="preserve">
+  <data name="SourceVersionIdentityInvalid.Message" xml:space="preserve">
     <value>源版本文件“{0}”的 --name 或 --edition 无效。</value>
   </data>
-  <data name="SourceVersionSaveFailed_Message" xml:space="preserve">
+  <data name="SourceVersionSaveFailed.Message" xml:space="preserve">
     <value>安装包“{0}”已生成，但更新源版本文件“{1}”失败。</value>
   </data>
-  <data name="VariableResolutionFailed" xml:space="preserve">
+  <data name="VariableResolutionFailed.Message" xml:space="preserve">
     <value>变量“{0}”未定义或包含循环引用。</value>
   </data>
-  <data name="NormalizerNotInitialized" xml:space="preserve">
+  <data name="NormalizerNotInitialized.Message" xml:space="preserve">
     <value>变量解析器尚未初始化。</value>
   </data>
-  <data name="TextSourceMissing" xml:space="preserve">
+  <data name="TextSourceMissing.Message" xml:space="preserve">
     <value>文本来源文件“{0}”不存在。</value>
   </data>
-  <data name="TextSourceFileRequired" xml:space="preserve">
+  <data name="TextSourceFileRequired.Message" xml:space="preserve">
     <value>此选项需要指定文件路径，不支持直接填写文本内容。</value>
   </data>
-  <data name="PackageEntryTypeConflict" xml:space="preserve">
+  <data name="PackageEntryTypeConflict.Message" xml:space="preserve">
     <value>文件和目录条目在“{0}”冲突。</value>
   </data>
-  <data name="PackagePathInvalid" xml:space="preserve">
+  <data name="PackagePathInvalid.Message" xml:space="preserve">
     <value>无效的包条目路径“{0}”。</value>
   </data>
-  <data name="DebianRelationshipInvalid" xml:space="preserve">
+  <data name="DebianRelationshipInvalid.Message" xml:space="preserve">
     <value>Debian 关系字段“{0}”格式不正确。</value>
+  </data>
+  <data name="MigratorNameInvalid.Message" xml:space="preserve">
+    <value>请指定升迁器制作时的输入名称（可带目录），不要包含 Edition、版本号、运行平台或文件扩展名。</value>
+  </data>
+  <data name="MigratorArtifactMissing.Message" xml:space="preserve">
+    <value>未找到本次打包所需的升迁产物：{0}</value>
+  </data>
+  <data name="MigratorMetadataInvalid.Message" xml:space="preserve">
+    <value>升迁包 {0} 必须包含 Migrator 元数据，且目标运行平台为 {1}。</value>
+  </data>
+  <data name="MigratorArtifactsNotFound.Message" xml:space="preserve">
+    <value>未找到升迁产物“{0}”和“{1}”。已检查目录：
+{2}</value>
   </data>
 </root>

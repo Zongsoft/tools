@@ -5,7 +5,7 @@ namespace Zongsoft.Tools.Deployer.Tests;
 public class DeploymentPlanTest
 {
 	[Fact]
-	public async Task Deploy_ReportSaveFailureMarksPlanUnsuccessful()
+	public async Task Deploy_ReportSaveFailureMarksPlanUnsuccessfulAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "deployed before report failure");
@@ -25,7 +25,7 @@ public class DeploymentPlanTest
 	[Theory]
 	[InlineData(false)]
 	[InlineData(true)]
-	public async Task Deploy_ReportAndLockSamePathRejectsBeforeCopyAndPreservesLock(bool invalidManifest)
+	public async Task Deploy_ReportAndLockSamePathRejectsBeforeCopyAndPreservesLockAsync(bool invalidManifest)
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "locked content");
@@ -37,6 +37,7 @@ public class DeploymentPlanTest
 		var originalLock = File.ReadAllBytes(lockFile);
 		fixture.Variables["report"] = lockFile;
 		fixture.Variables["locked"] = "true";
+
 		if(invalidManifest)
 			manifest = fixture.Manifest("unknown:input", "source/invalid.deploy");
 		var deployer = fixture.CreateDeployer();
@@ -49,7 +50,7 @@ public class DeploymentPlanTest
 	}
 
 	[Fact]
-	public async Task Deploy_DuplicateRecordDoesNotRevokePruneOwnership()
+	public async Task Deploy_DuplicateRecordDoesNotRevokePruneOwnershipAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Owned.Root");
@@ -71,7 +72,7 @@ public class DeploymentPlanTest
 	}
 
 	[Fact]
-	public async Task Deploy_LockedLatestKeepsRootAndTransitiveVersionsAfterCacheGrows()
+	public async Task Deploy_LockedLatestKeepsRootAndTransitiveVersionsAfterCacheGrowsAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Locked.Root", dependencies: [("Locked.Child", "[1.0.0,)")]);
@@ -95,7 +96,7 @@ public class DeploymentPlanTest
 	}
 
 	[Fact]
-	public async Task Deploy_LockedRunRejectsChangedUndeployedPackageContent()
+	public async Task Deploy_LockedRunRejectsChangedUndeployedPackageContentAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Integrity.Root");
@@ -116,7 +117,7 @@ public class DeploymentPlanTest
 	[Theory]
 	[InlineData(false)]
 	[InlineData(true)]
-	public async Task Deploy_FailedPlanWritesUnsuccessfulReportWithDiagnostics(bool missingManifest)
+	public async Task Deploy_FailedPlanWritesUnsuccessfulReportWithDiagnosticsAsync(bool missingManifest)
 	{
 		using var fixture = new DeploymentFixture();
 		var report = Path.Combine(fixture.Root, "failed.json");
@@ -132,7 +133,7 @@ public class DeploymentPlanTest
 	}
 
 	[Fact]
-	public async Task Deploy_ReportCannotOverwriteManifestEvenWhenPlanFails()
+	public async Task Deploy_ReportCannotOverwriteManifestEvenWhenPlanFailsAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		var manifest = fixture.Manifest("unknown:input");
@@ -144,7 +145,7 @@ public class DeploymentPlanTest
 	}
 
 	[Fact]
-	public async Task Deploy_PruneDoesNotOwnFileDeletedByPreviousDeployment()
+	public async Task Deploy_PruneDoesNotOwnFileDeletedByPreviousDeploymentAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "same content");
@@ -162,7 +163,7 @@ public class DeploymentPlanTest
 	}
 
 	[Fact]
-	public async Task Deploy_PruneDoesNotOwnPreexistingFileSkippedByNever()
+	public async Task Deploy_PruneDoesNotOwnPreexistingFileSkippedByNeverAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "packaged content");
@@ -181,7 +182,7 @@ public class DeploymentPlanTest
 	}
 
 	[Fact]
-	public async Task Deploy_DryRunCanSaveReportWithoutCreatingDestination()
+	public async Task Deploy_DryRunCanSaveReportWithoutCreatingDestinationAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "source");
@@ -201,7 +202,7 @@ public class DeploymentPlanTest
 	}
 
 	[Fact]
-	public async Task Deploy_ReportTracksPackageParentsAndFinalTargetHash()
+	public async Task Deploy_ReportTracksPackageParentsAndFinalTargetHashAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Report.Root", dependencies: [("Report.Child", "[1.0.0]")]);
@@ -223,7 +224,7 @@ public class DeploymentPlanTest
 	}
 
 	[Fact]
-	public async Task Deploy_LockedRunRejectsChangedSourceAndPreservesLock()
+	public async Task Deploy_LockedRunRejectsChangedSourceAndPreservesLockAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		var source = fixture.Write("source/file.txt", "original");
@@ -245,7 +246,7 @@ public class DeploymentPlanTest
 	[InlineData(false, false, true)]
 	[InlineData(true, false, false)]
 	[InlineData(true, true, true)]
-	public async Task Deploy_PreviousReportPrunesOnlyUnchangedOwnedFiles(bool prune, bool modified, bool retained)
+	public async Task Deploy_PreviousReportPrunesOnlyUnchangedOwnedFilesAsync(bool prune, bool modified, bool retained)
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/old.txt", "owned content");
@@ -271,7 +272,7 @@ public class DeploymentPlanTest
 	}
 
 	[Fact]
-	public async Task Deploy_ForgedPreviousReportCannotDeleteOutsideRoot()
+	public async Task Deploy_ForgedPreviousReportCannotDeleteOutsideRootAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		var outside = fixture.Write("outside.txt", "must remain");

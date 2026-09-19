@@ -10,7 +10,7 @@
  *   钟峰(Popeye Zhong) <zongsoft@gmail.com>
  *
  * The MIT License (MIT)
- * 
+ *
  * Copyright (C) 2020-2026 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -42,7 +42,7 @@ internal class Dumper
 {
 	public static void Splash()
 	{
-		const string splash = @"
+		const string SPLASH = @"
      _____                                ___ __
     /_   /  ____  ____  ____  ____ ____  / __/ /_
       / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -51,24 +51,19 @@ internal class Dumper
                      /____/
 ";
 
-		Terminal.WriteLine(splash);
+		Terminal.WriteLine(SPLASH);
 	}
 
 	public static void UndefinedVariable(string variable, string expression) => UndefinedVariable(CommandOutletColor.Red, variable, expression);
 	public static void UndefinedVariable(CommandOutletColor color, string variable, string expression) => Terminal.WriteLine(color, string.Format(Properties.Resources.VariableUndefined_Message, variable, expression));
-
 	public static void HostLocateFailed(CommandOutletColor color = CommandOutletColor.Red) => Terminal.WriteLine(color, Properties.Resources.HostLocateFailed_Message);
 	public static void InvalidVersion(CommandOutletColor color = CommandOutletColor.Red) => Terminal.WriteLine(color, Properties.Resources.InvalidVersion_Message);
-
 	public static void PathNotExist(string path) => PathNotExist(CommandOutletColor.DarkYellow, path);
 	public static void PathNotExist(CommandOutletColor color, string path) => Terminal.WriteLine(color, string.Format(Properties.Resources.PathNotExist_Message, path));
-
 	public static void FileNotExist(string path) => FileNotExist(CommandOutletColor.DarkYellow, path);
 	public static void FileNotExist(CommandOutletColor color, string path) => Terminal.WriteLine(color, string.Format(Properties.Resources.FileNotExist_Message, path));
-
 	public static void DirectoryNotExist(string path) => DirectoryNotExist(CommandOutletColor.DarkYellow, path);
 	public static void DirectoryNotExist(CommandOutletColor color, string path) => Terminal.WriteLine(color, string.Format(Properties.Resources.DirectoryNotExist_Message, path));
-
 	public static void PackageEntryConflicted(string path, string entry) => PackageEntryConflicted(CommandOutletColor.DarkYellow, path, entry);
 	public static void PackageEntryConflicted(CommandOutletColor color, string path, string entry) => Terminal.WriteLine(color, string.Format(Properties.Resources.PackageEntryConflicted_Message, path, entry));
 }

@@ -35,13 +35,13 @@ partial class AboutDialog : Form
 	#region 构造函数
 	public AboutDialog()
 	{
-		InitializeComponent();
+		this.InitializeComponent();
 
-		lblProductName.Text = AssemblyProduct;
-		lblVersion.Text = String.Format("{0}", AssemblyVersion);
-		lblCompanyName.Text = AssemblyCompany;
-		txtCopyright.Text = AssemblyCopyright;
-		txtDescription.Text = AssemblyDescription;
+		lblProductName.Text = this.AssemblyProduct;
+		lblVersion.Text = string.Format("{0}", this.AssemblyVersion);
+		lblCompanyName.Text = this.AssemblyCompany;
+		txtCopyright.Text = this.AssemblyCopyright;
+		txtDescription.Text = this.AssemblyDescription;
 	}
 	#endregion
 

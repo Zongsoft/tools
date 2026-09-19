@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!-- 
+		Microsoft ResX Schema
+
+		Version 1.3
+
+		The primary goals of this format is to allow a simple XML format 
+		that is mostly human readable. The generation and parsing of the 
+		various data types are done through the TypeConverter classes 
+		associated with the data types.
+
+		Example:
+
+		... ado.net/XML headers & schema ...
+		<resheader name="resmimetype">text/microsoft-resx</resheader>
+		<resheader name="version">1.3</resheader>
+		<resheader name="reader">System.Resources.ResXResourceReader, System.Windows.Forms, ...</resheader>
+		<resheader name="writer">System.Resources.ResXResourceWriter, System.Windows.Forms, ...</resheader>
+		<data name="Name1">this is my long string</data>
+		<data name="Color1" type="System.Drawing.Color, System.Drawing">Blue</data>
+		<data name="Bitmap1" mimetype="application/x-microsoft.net.object.binary.base64">
+			[base64 mime encoded serialized .NET Framework object]
+		</data>
+		<data name="Icon1" type="System.Drawing.Icon, System.Drawing" mimetype="application/x-microsoft.net.object.bytearray.base64">
+			[base64 mime encoded string representing a byte array form of the .NET Framework object]
+		</data>
+
+		There are any number of "resheader" rows that contain simple 
+		name/value pairs.
+
+		Each data row contains a name, and value. The row also contains a 
+		type or mimetype. Type corresponds to a .NET class that support 
+		text/value conversion through the TypeConverter architecture. 
+		Classes that don't support this are serialized and stored with the 
+		mimetype set.
+
+		The mimetype is used for serialized objects, and tells the 
+		ResXResourceReader how to depersist the object. This is currently not 
+		extensible. For a given mimetype the value must be set accordingly:
+
+		Note - application/x-microsoft.net.object.binary.base64 is the format 
+		that the ResXResourceWriter will generate, however the reader can 
+		read any of the formats listed below.
+
+		mimetype: application/x-microsoft.net.object.binary.base64
+		value   : The object must be serialized with 
+			: System.Serialization.Formatters.Binary.BinaryFormatter
+			: and then encoded with base64 encoding.
+
+		mimetype: application/x-microsoft.net.object.soap.base64
+		value   : The object must be serialized with 
+			: System.Runtime.Serialization.Formatters.Soap.SoapFormatter
+			: and then encoded with base64 encoding.
+
+		mimetype: application/x-microsoft.net.object.bytearray.base64
+		value   : The object must be serialized into a byte array 
+			: using a System.ComponentModel.TypeConverter
+			: and then encoded with base64 encoding.
+	-->
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>1.3</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=2.0.3500.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=2.0.3500.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="CommandLineEmpty.Message" xml:space="preserve">
+    <value>Specify --name, --version, --platform and at least one migration input path.</value>
+  </data>
+  <data name="MigrationVariableUndefined.Message" xml:space="preserve">
+    <value>The migration variable '{0}' is undefined.</value>
+  </data>
+  <data name="MigrationFileExtension.Message" xml:space="preserve">
+    <value>Migration files must use the .migration extension (INI content): {0}</value>
+  </data>
+  <data name="MigrationSectionRequired.Message" xml:space="preserve">
+    <value>Migration entries require a section: {0}</value>
+  </data>
+  <data name="MigrationSectionDuplicate.Message" xml:space="preserve">
+    <value>Duplicate migrator section.</value>
+  </data>
+  <data name="MigrationDatabaseEntryInvalid.Message" xml:space="preserve">
+    <value>Database entries must be SQL paths without values.</value>
+  </data>
+  <data name="MigrationSqlExtension.Message" xml:space="preserve">
+    <value>Database scripts must use .sql.</value>
+  </data>
+  <data name="MigrationEntryError.Message" xml:space="preserve">
+    <value>{0}:{1} [{2}]: {3}</value>
+  </data>
+  <data name="MigrationBucketDuplicate.Message" xml:space="preserve">
+    <value>Duplicate bucket name.</value>
+  </data>
+  <data name="MigrationTasksMissing.Message" xml:space="preserve">
+    <value>No migration tasks were specified.</value>
+  </data>
+  <data name="MigrationAliasesDuplicate.Message" xml:space="preserve">
+    <value>Duplicate migrator aliases in parameter file: {0}</value>
+  </data>
+  <data name="MigrationParameterUnresolved.Message" xml:space="preserve">
+    <value>Invalid or unresolved parameter '{0}' at {1}:{2}.</value>
+  </data>
+  <data name="MigrationParameterError.Message" xml:space="preserve">
+    <value>{0} [{1}]: {2}</value>
+  </data>
+  <data name="MigrationParametersMissing.Message" xml:space="preserve">
+    <value>No migration parameters found for '{0}' ({1}). Searched: {2}</value>
+  </data>
+  <data name="MigrationBucketNameInvalid.Message" xml:space="preserve">
+    <value>Invalid bucket name '{0}'.</value>
+  </data>
+  <data name="MigrationBucketOptionsInvalid.Message" xml:space="preserve">
+    <value>Bucket '{0}' has invalid or duplicate options. Use public/private, encryption:sse-s3/sse-kms with optional encryption.key for KMS, versioning:enabled/suspended, and tag.&lt;name&gt;:&lt;value&gt; (up to 50 tags; key/value limits: 128/256 characters; aws: keys are reserved).</value>
+  </data>
+  <data name="MigrationScriptsMissing.Message" xml:space="preserve">
+    <value>Migration script pattern has no matches: {0}</value>
+  </data>
+  <data name="MigrationSectionInvalid.Message" xml:space="preserve">
+    <value>Invalid migration section at {0}:{1}.</value>
+  </data>
+  <data name="MigrationProfileSectionDuplicate.Message" xml:space="preserve">
+    <value>Duplicate section '{0}' at {1}:{2}.</value>
+  </data>
+  <data name="MigrationProfileInvalid.Message" xml:space="preserve">
+    <value>Invalid or duplicate INI entry/section in '{0}'.</value>
+  </data>
+  <data name="MigrationPlatformInvalid.Message" xml:space="preserve">
+    <value>Migration supports Linux x64/arm64 and Windows x64.</value>
+  </data>
+  <data name="MigrationIdentityInvalid.Message" xml:space="preserve">
+    <value>Invalid package identity for migration state.</value>
+  </data>
+  <data name="MigrationRuntimeMissing.Message" xml:space="preserve">
+    <value>The packaged migration runtime is missing. Rebuild/reinstall dotnet-pack.</value>
+  </data>
+  <data name="MigrationProviderUnknown.Message" xml:space="preserve">
+    <value>Unknown migration provider.</value>
+  </data>
+  <data name="MigrationRuntimeInvalid.Message" xml:space="preserve">
+    <value>The native migrator {0} is not a valid {1} executable.</value>
+  </data>
+  <data name="MigrationPathsRequired.Message" xml:space="preserve">
+    <value>Specify at least one .migration file path.</value>
+  </data>
+  <data name="MigrationNotCompleted" xml:space="preserve">
+    <value>Migration has not completed for this package.</value>
+  </data>
+  <data name="MySqlDelimiterInvalid.Message" xml:space="preserve">
+    <value>Invalid MySQL DELIMITER.</value>
+  </data>
+  <data name="SqlServerGoRepeatUnsupported.Message" xml:space="preserve">
+    <value>Repeated GO batches are not supported.</value>
+  </data>
+  <data name="MigrationFilesMissing" xml:space="preserve">
+    <value>Warning: no migration file matches {0}; skipped.</value>
+  </data>
+  <data name="VariableResolutionFailed.Message" xml:space="preserve">
+    <value>Variable "{0}" is undefined or contains a cyclic reference.</value>
+  </data>
+  <data name="NormalizerNotInitialized.Message" xml:space="preserve">
+    <value>The variable normalizer has not been initialized.</value>
+  </data>
+  <data name="TextSourceMissing.Message" xml:space="preserve">
+    <value>The text source file "{0}" does not exist.</value>
+  </data>
+  <data name="TextSourceFileRequired.Message" xml:space="preserve">
+    <value>This option requires a file path and does not accept inline text.</value>
+  </data>
+  <data name="MigrateVersionInvalid.Message" xml:space="preserve">
+    <value>Specify a valid nonzero version.</value>
+  </data>
+  <data name="MigrateMacUnavailable.Message" xml:space="preserve">
+    <value>A native migrator for macOS is not available.</value>
+  </data>
+  <data name="MigrateUnixAmbiguous.Message" xml:space="preserve">
+    <value>Choose a specific operating system instead of unix.</value>
+  </data>
+  <data name="MigrateInputsMissing.Message" xml:space="preserve">
+    <value>No migration input files were found; no output was generated.</value>
+  </data>
+  <data name="MigrateGenerated" xml:space="preserve">
+    <value>Migration archive: {0}
+Launcher: {1}</value>
+  </data>
+  <data name="MigrateOutputExists.Message" xml:space="preserve">
+    <value>Migration output already exists or is a directory: {0}. Use --overwrite to replace files.</value>
+  </data>
+  <data name="MigrateCommand.Description" xml:space="preserve">
+    <value>Create a standalone native migration archive and launcher.</value>
+  </data>
+  <data name="MigrateVersionLoadFailed.Message" xml:space="preserve">
+    <value>Unable to read the version file &quot;{0}&quot;, or its contents are invalid.</value>
+  </data>
+  <data name="MigrateVersionEditionRequired.Message" xml:space="preserve">
+    <value>The version file &quot;{0}&quot; contains multiple Editions. Specify --edition.</value>
+  </data>
+  <data name="MigrateVersionEditionMissing.Message" xml:space="preserve">
+    <value>The version file &quot;{0}&quot; does not contain Edition &quot;{1}&quot;.</value>
+  </data>
+  <data name="MigrateVersionFileInvalid.Message" xml:space="preserve">
+    <value>The selected version in &quot;{0}&quot; must be nonzero.</value>
+  </data>
+</root>

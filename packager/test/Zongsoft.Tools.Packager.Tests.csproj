@@ -3,12 +3,10 @@
 		<TargetFramework>net10.0</TargetFramework>
 		<IsPackable>false</IsPackable>
 		<IsTestProject>true</IsTestProject>
-		<LangVersion>latest</LangVersion>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="..\src\Zongsoft.Tools.Packager.csproj" />
-		<ProjectReference Include="..\migrator\src\Zongsoft.Tools.Packager.Migrator.csproj" ReferenceOutputAssembly="false" />
 
 		<Reference Include="Zongsoft.Core" Condition="$(Configuration)=='Debug'">
 			<HintPath>..\..\..\framework\Zongsoft.Core\src\bin\$(Configuration)\$(TargetFramework)\Zongsoft.Core.dll</HintPath>
@@ -16,13 +14,13 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
-		<PackageReference Include="xunit.v3" Version="3.2.2" />
-		<PackageReference Include="xunit.v3.core" Version="3.2.2" />
-		<PackageReference Include="xunit.v3.assert" Version="3.2.2" />
-		<PackageReference Include="xunit.analyzers" Version="1.27.0" />
-		<PackageReference Include="xunit.v3.runner.msbuild" Version="3.2.2" />
-		<PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
+		<PackageReference Include="Microsoft.NET.Test.Sdk" />
+		<PackageReference Include="xunit.v3" />
+		<PackageReference Include="xunit.v3.core" />
+		<PackageReference Include="xunit.v3.assert" />
+		<PackageReference Include="xunit.analyzers" />
+		<PackageReference Include="xunit.v3.runner.msbuild" />
+		<PackageReference Include="xunit.runner.visualstudio">
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 			<PrivateAssets>all</PrivateAssets>
 		</PackageReference>

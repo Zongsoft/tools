@@ -42,7 +42,7 @@ public partial class MainForm : Form
 	#region 构造函数
 	public MainForm()
 	{
-		InitializeComponent();
+		this.InitializeComponent();
 
 		_regexOptions = RegexOptions.IgnoreCase | RegexOptions.IgnorePatternWhitespace | RegexOptions.ExplicitCapture;
 	}
@@ -64,21 +64,21 @@ public partial class MainForm : Form
 			btnMatch.PerformClick();
 	}
 
-	private void btnMatch_Click(object sender, EventArgs e)
+	private void MatchButtonClick(object sender, EventArgs e)
 	{
 		var pattern = txtPattern.SelectionLength > 0 ? txtPattern.SelectedText : txtPattern.Text;
 		var input = txtInput.SelectionLength > 0 ? txtInput.SelectedText : txtInput.Text;
 
 		if(string.IsNullOrEmpty(pattern))
 		{
-			MessageBox.Show("未指定正则表达式，请输入正确的正则表达式。", "系统提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+			MessageBox.Show(Properties.Resources.PatternRequired_Message, Properties.Resources.Information_Title, MessageBoxButtons.OK, MessageBoxIcon.Information);
 			txtPattern.Focus();
 			return;
 		}
 
 		if(string.IsNullOrEmpty(input))
 		{
-			MessageBox.Show("未指定输入文本，请在输入框内指定有效的文本内容。", "系统提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+			MessageBox.Show(Properties.Resources.InputRequired_Message, Properties.Resources.Information_Title, MessageBoxButtons.OK, MessageBoxIcon.Information);
 			txtInput.Focus();
 			return;
 		}
@@ -92,7 +92,7 @@ public partial class MainForm : Form
 			tvwResult.Nodes.Clear();
 			tvwResult.BeginUpdate();
 
-			var regex = GenerateRegex(pattern);
+			var regex = this.GenerateRegex(pattern);
 			var match = regex.Match(input);
 
 			while(match.Success)
@@ -131,7 +131,7 @@ public partial class MainForm : Form
 		}
 		catch(Exception ex)
 		{
-			MessageBox.Show("发生错误：" + Environment.NewLine + ex.Message,
+			MessageBox.Show(string.Format(Properties.Resources.Error_Message, Environment.NewLine, ex.Message),
 							ex.GetType().FullName,
 							MessageBoxButtons.OK, MessageBoxIcon.Error);
 
@@ -144,7 +144,7 @@ public partial class MainForm : Form
 		}
 	}
 
-	private void tvwResult_AfterSelect(object sender, TreeViewEventArgs e)
+	private void ResultAfterSelect(object sender, TreeViewEventArgs e)
 	{
 		lblCaptureIndex.Text = string.Empty;
 		lblCaptureLength.Text = string.Empty;
@@ -163,11 +163,11 @@ public partial class MainForm : Form
 		}
 	}
 
-	private void mnuFileNew_Click(object sender, EventArgs e)
+	private void NewFileClick(object sender, EventArgs e)
 	{
 		if(txtPattern.TextLength > 0)
 		{
-			if(MessageBox.Show("您确认要新建文件么？" + Environment.NewLine + Environment.NewLine + "注意：如果确认新建则当前模式文本的更改将丢失，如果需要保存的话请先执行保存操作。", "新建文件", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != System.Windows.Forms.DialogResult.Yes)
+			if(MessageBox.Show(string.Format(Properties.Resources.NewFile_Confirmation, Environment.NewLine), Properties.Resources.NewFile_Title, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != System.Windows.Forms.DialogResult.Yes)
 				return;
 		}
 
@@ -175,14 +175,14 @@ public partial class MainForm : Form
 		txtPattern.Clear();
 	}
 
-	private void mnuFileOpen_Click(object sender, EventArgs e)
+	private void OpenFileClick(object sender, EventArgs e)
 	{
 		using(var dialog = new OpenFileDialog())
 		{
 			dialog.CheckFileExists = true;
 			dialog.CheckPathExists = true;
 			dialog.DefaultExt = ".txt";
-			dialog.Filter = "文本文件(*.txt)|*.txt";
+			dialog.Filter = Properties.Resources.TextFile_Filter;
 
 			if(dialog.ShowDialog(this) == System.Windows.Forms.DialogResult.OK)
 			{
@@ -192,7 +192,7 @@ public partial class MainForm : Form
 		}
 	}
 
-	private void mnuFileSave_Click(object sender, EventArgs e)
+	private void SaveFileClick(object sender, EventArgs e)
 	{
 		if(string.IsNullOrEmpty(_fileName))
 			mnuFileSaveAs.PerformClick();
@@ -200,7 +200,7 @@ public partial class MainForm : Form
 			File.WriteAllText(_fileName, txtPattern.Text);
 	}
 
-	private void mnuFileSaveAs_Click(object sender, EventArgs e)
+	private void SaveFileAsClick(object sender, EventArgs e)
 	{
 		using(var dialog = new SaveFileDialog())
 		{
@@ -208,7 +208,7 @@ public partial class MainForm : Form
 			dialog.CreatePrompt = true;
 			dialog.CheckPathExists = true;
 			dialog.DefaultExt = ".txt";
-			dialog.Filter = "文本文件(*.txt)|*.txt";
+			dialog.Filter = Properties.Resources.TextFile_Filter;
 			dialog.FileName = Path.GetFileName(_fileName);
 
 			if(dialog.ShowDialog(this) == DialogResult.OK)
@@ -219,42 +219,42 @@ public partial class MainForm : Form
 		}
 	}
 
-	private void mnuFileExit_Click(object sender, EventArgs e)
+	private void ExitClick(object sender, EventArgs e)
 	{
 		this.Close();
 	}
 
-	private void mnuEditUndo_Click(object sender, EventArgs e)
+	private void UndoClick(object sender, EventArgs e)
 	{
 		if(this.GetFocusedControl() is TextBoxBase editor && editor.CanUndo)
 			editor.Undo();
 	}
 
-	private void mnuEditCut_Click(object sender, EventArgs e)
+	private void CutClick(object sender, EventArgs e)
 	{
 		if(this.GetFocusedControl() is TextBoxBase editor && editor.SelectionLength > 0)
 			editor.Cut();
 	}
 
-	private void mnuEditCopy_Click(object sender, EventArgs e)
+	private void CopyClick(object sender, EventArgs e)
 	{
 		if(this.GetFocusedControl() is TextBoxBase editor && editor.SelectionLength > 0)
 			editor.Copy();
 	}
 
-	private void mnuEditPaste_Click(object sender, EventArgs e)
+	private void PasteClick(object sender, EventArgs e)
 	{
 		if(this.GetFocusedControl() is TextBoxBase editor)
 			editor.Paste();
 	}
 
-	private void mnuEditSelectAll_Click(object sender, EventArgs e)
+	private void SelectAllClick(object sender, EventArgs e)
 	{
 		if(this.GetFocusedControl() is TextBoxBase editor)
 			editor.SelectAll();
 	}
 
-	private void mnuHelpAbout_Click(object sender, EventArgs e)
+	private void AboutClick(object sender, EventArgs e)
 	{
 		using(var dialog = new AboutDialog())
 		{
@@ -262,11 +262,10 @@ public partial class MainForm : Form
 		}
 	}
 
-	private void mnuToolsOptions_Click(object sender, EventArgs e)
+	private void OptionsClick(object sender, EventArgs e)
 	{
-		MessageBox.Show("正则选项值：" + Environment.NewLine + _regexOptions.ToString() + Environment.NewLine + Environment.NewLine +
-			"本版本不支持选项设置，敬请关注最新升级版本。",
-			"系统选项",
+		MessageBox.Show(string.Format(Properties.Resources.Options_Message, Environment.NewLine, _regexOptions),
+			Properties.Resources.Options_Title,
 			MessageBoxButtons.OK, MessageBoxIcon.Warning);
 	}
 	#endregion
@@ -275,8 +274,8 @@ public partial class MainForm : Form
 	private Binding GetRegexOptionsBinding()
 	{
 		var binding = new Binding("Checked", _regexOptions, "", true, DataSourceUpdateMode.OnPropertyChanged);
-		binding.Format += new ConvertEventHandler(RegexOptionsBinding_Format);
-		binding.Parse += new ConvertEventHandler(RegexOptionsBinding_Parse);
+		binding.Format += new ConvertEventHandler(this.RegexOptionsBinding_Format);
+		binding.Parse += new ConvertEventHandler(this.RegexOptionsBinding_Parse);
 		return binding;
 	}
 

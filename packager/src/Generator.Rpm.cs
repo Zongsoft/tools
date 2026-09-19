@@ -10,7 +10,7 @@
  *   钟峰(Popeye Zhong) <zongsoft@gmail.com>
  *
  * The MIT License (MIT)
- * 
+ *
  * Copyright (C) 2020-2026 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -74,11 +74,13 @@ partial class Generator
 	static Buffer CreateCpioPayload(IReadOnlyCollection<Package.Entry> entries, out long archiveSize)
 	{
 		var compressed = new Buffer();
+
 		try
 		{
 			using var raw = new Buffer();
 			var inode = 1;
 			var metadata = GetPackageDirectories(entries).ToDictionary(entry => GetRpmPath(entry.EntryName), StringComparer.Ordinal);
+
 			foreach(var directory in GetRpmDirectories(entries))
 			{
 				metadata.TryGetValue(directory, out var entry);
@@ -93,8 +95,10 @@ partial class Generator
 
 			WriteCpioEntry(raw, inode, "TRAILER!!!", 0, UnixFileMode.None, 0, 0, null);
 			Pad(raw, 512);
+
 			archiveSize = raw.Length;
 			raw.Position = 0;
+
 			using(var gzip = new GZipStream(compressed, CompressionLevel.Optimal, true))
 				raw.CopyTo(gzip);
 
@@ -133,6 +137,7 @@ partial class Generator
 		lead[3] = 0xdb;
 		lead[4] = 3;
 		lead[5] = 0;
+
 		WriteInt16(lead.AsSpan(6), 0);
 		WriteInt16(lead.AsSpan(8), GetRpmArchitectureNumber(package.Architecture));
 
@@ -215,7 +220,6 @@ partial class Generator
 	}
 
 	static bool IsRpmConfigurationFile(Package.Entry entry) => entry.Rooted && entry.EntryName.StartsWith("etc/", StringComparison.Ordinal);
-
 	static void Align(Stream stream, int size) => Pad(stream, size);
 	static void Pad(Stream stream, int size)
 	{
@@ -503,16 +507,18 @@ partial class Generator
 		private readonly MemoryStream _store = new();
 		private readonly Dictionary<int, int> _lengths = [];
 
-		public void AddString(int tag, string value) => Add(tag, 6, 1, () => WriteString(value ?? string.Empty));
-		public void AddInternationalString(int tag, string value) => Add(tag, 9, 1, () => WriteString(value ?? string.Empty));
+		public void AddString(int tag, string value) => this.Add(tag, 6, 1, () => this.WriteString(value ?? string.Empty));
+		public void AddInternationalString(int tag, string value) => this.Add(tag, 9, 1, () => this.WriteString(value ?? string.Empty));
+
 		public void AddScript(int tag, string value)
 		{
 			if(!string.IsNullOrWhiteSpace(value))
-				AddString(tag, "#!/bin/sh\nset -e\n" + value.Trim().ReplaceLineEndings("\n") + "\n");
+				this.AddString(tag, "#!/bin/sh\nset -e\n" + value.Trim().ReplaceLineEndings("\n") + "\n");
 		}
-		public void AddBinary(int tag, byte[] value) => Add(tag, 7, value.Length, () => _store.Write(value));
-		public void AddInt32(int tag, int value) => AddInt32Array(tag, [value]);
-		public void AddInt32Array(int tag, IReadOnlyList<int> values) => Add(tag, 4, values.Count, () =>
+
+		public void AddBinary(int tag, byte[] value) => this.Add(tag, 7, value.Length, () => _store.Write(value));
+		public void AddInt32(int tag, int value) => this.AddInt32Array(tag, [value]);
+		public void AddInt32Array(int tag, IReadOnlyList<int> values) => this.Add(tag, 4, values.Count, () =>
 		{
 			Span<byte> buffer = stackalloc byte[4];
 
@@ -522,7 +528,8 @@ partial class Generator
 				_store.Write(buffer);
 			}
 		});
-		public void AddInt16Array(int tag, IReadOnlyList<short> values) => Add(tag, 3, values.Count, () =>
+
+		public void AddInt16Array(int tag, IReadOnlyList<short> values) => this.Add(tag, 3, values.Count, () =>
 		{
 			Span<byte> buffer = stackalloc byte[2];
 
@@ -532,10 +539,11 @@ partial class Generator
 				_store.Write(buffer);
 			}
 		});
-		public void AddStringArray(int tag, IReadOnlyList<string> values) => Add(tag, 8, values.Count, () =>
+
+		public void AddStringArray(int tag, IReadOnlyList<string> values) => this.Add(tag, 8, values.Count, () =>
 		{
 			foreach(var value in values)
-				WriteString(value ?? string.Empty);
+				this.WriteString(value ?? string.Empty);
 		});
 
 		public byte[] Build(bool signature)
@@ -545,6 +553,7 @@ partial class Generator
 			var region = signature ? 62 : 63;
 			var count = _indexes.Count + 1;
 			var indexes = new List<RpmHeaderIndex>(_indexes);
+
 			indexes.Sort((left, right) => left.Tag.CompareTo(right.Tag));
 			using var store = new MemoryStream();
 			var data = _store.ToArray();
@@ -572,7 +581,8 @@ partial class Generator
 			WriteIndex(stream, buffer, new(region, 7, -count * 16, 16));
 
 			// Only the signature header is padded; gzip starts immediately after the main header.
-			if(signature) Pad(stream, 8);
+			if(signature)
+				Pad(stream, 8);
 
 			return stream.ToArray();
 		}

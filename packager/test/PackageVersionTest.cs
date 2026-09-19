@@ -6,11 +6,12 @@ using System.Formats.Tar;
 using System.IO.Compression;
 using System.Buffers.Binary;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
+using System.Runtime.InteropServices;
+
+using Xunit;
 
 using Zongsoft.Services;
-using Xunit;
 
 namespace Zongsoft.Tools.Packager.Tests;
 
@@ -125,7 +126,9 @@ public sealed class PackageVersionTest
 			var nested = Assert.Single(archive, item => item.Name.EndsWith("nested/.version", StringComparison.Ordinal));
 			Assert.Equal("Zongsoft.Nested@9.0.0\r\n", Encoding.UTF8.GetString(nested.Content));
 		}
-		if(format == "rpm") AssertRpmVersionDigest(archivePath, expected);
+
+		if(format == "rpm")
+			AssertRpmVersionDigest(archivePath, expected);
 	}
 	#endregion
 
@@ -133,7 +136,9 @@ public sealed class PackageVersionTest
 	private static List<ArchiveFile> ReadArchive(string path, string format)
 	{
 		var bytes = File.ReadAllBytes(path);
-		if(format == "tar") return ReadTar(bytes);
+		if(format == "tar")
+			return ReadTar(bytes);
+
 		if(format == "deb")
 		{
 			Assert.Equal("!<arch>\n", Encoding.ASCII.GetString(bytes, 0, 8));
@@ -141,7 +146,8 @@ public sealed class PackageVersionTest
 			{
 				var name = Encoding.ASCII.GetString(bytes, offset, 16).Trim().TrimEnd('/');
 				var size = int.Parse(Encoding.ASCII.GetString(bytes, offset + 48, 10).Trim(), System.Globalization.CultureInfo.InvariantCulture);
-				if(name == "data.tar.gz") return ReadTar(bytes[(offset + 60)..(offset + 60 + size)]);
+				if(name == "data.tar.gz")
+					return ReadTar(bytes[(offset + 60)..(offset + 60 + size)]);
 				offset += 60 + size + (size & 1);
 			}
 			throw new InvalidDataException("Missing Debian payload.");
@@ -162,8 +168,11 @@ public sealed class PackageVersionTest
 			var nameSize = Convert.ToInt32(Encoding.ASCII.GetString(bytes, offset + 94, 8), 16);
 			var name = NormalizeName(Encoding.UTF8.GetString(bytes, offset + 110, nameSize - 1));
 			offset = (offset + 110 + nameSize + 3) & ~3;
-			if(name == "TRAILER!!!") break;
-			if((mode & 0xF000) == 0x8000) files.Add(new(name, bytes[offset..(offset + size)], (UnixFileMode)(mode & 0xFFF), size));
+
+			if(name == "TRAILER!!!")
+				break;
+			if((mode & 0xF000) == 0x8000)
+				files.Add(new(name, bytes[offset..(offset + size)], (UnixFileMode)(mode & 0xFFF), size));
 			offset = (offset + size + 3) & ~3;
 		}
 		return files;
@@ -178,7 +187,8 @@ public sealed class PackageVersionTest
 		TarEntry entry;
 		while((entry = reader.GetNextEntry()) != null)
 		{
-			if(entry.DataStream == null) continue;
+			if(entry.DataStream == null)
+				continue;
 			using var copy = new MemoryStream();
 			entry.DataStream.CopyTo(copy);
 			files.Add(new(NormalizeName(entry.Name), copy.ToArray(), entry.Mode, entry.Length));
@@ -204,6 +214,7 @@ public sealed class PackageVersionTest
 		var item = TagOffset(bytes, header, tag);
 		var result = new string[item.Count];
 		var offset = item.Offset;
+
 		for(var index = 0; index < result.Length; index++)
 		{
 			var end = Array.IndexOf(bytes, (byte)0, offset);

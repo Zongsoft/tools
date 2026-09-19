@@ -9,7 +9,7 @@ public class NugetPathTest
 	[InlineData("lib/net9.0/Path.Source.dll", "net10.0")]
 	[InlineData("lib/net9.0/*.dll", "net10.0")]
 	[InlineData("lib/*.dll", "net9.0")]
-	public async Task Deploy_LocalCacheLibraryPathUsesExplicitFrameworkBeforeVariable(string requested, string framework)
+	public async Task Deploy_LocalCacheLibraryPathUsesExplicitFrameworkBeforeVariableAsync(string requested, string framework)
 	{
 		using var fixture = new DeploymentFixture();
 		var package = fixture.Package("Path.Source", framework: "net8.0");
@@ -29,7 +29,7 @@ public class NugetPathTest
 	[Theory]
 	[InlineData("lib/net9.0/Path.Explicit.dll")]
 	[InlineData("lib/net9.0/*.dll")]
-	public async Task Deploy_ExplicitNugetLibraryPathSelectsNearestFramework(string requested)
+	public async Task Deploy_ExplicitNugetLibraryPathSelectsNearestFrameworkAsync(string requested)
 	{
 		using var fixture = new DeploymentFixture();
 		var package = fixture.Package("Path.Explicit", framework: "net8.0");
@@ -141,7 +141,7 @@ public class NugetPathTest
 
 	#region 自包内容
 	[Fact]
-	public async Task Deploy_AutomaticContentEnumerationPreservesAllLibraryNamedDirectories()
+	public async Task Deploy_AutomaticContentEnumerationPreservesAllLibraryNamedDirectoriesAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Content.Paths", framework: "net8.0");

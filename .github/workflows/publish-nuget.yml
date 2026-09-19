@@ -11,6 +11,7 @@ on:
         type: choice
         options:
           - deployer
+          - migrator
           - packager
 
 concurrency:
@@ -18,64 +19,111 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  native-linux:
+    if: github.ref == 'refs/heads/main' && inputs.project == 'migrator'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Prepare Linux executor
+        working-directory: migrator
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes podman
+          podman run --detach --name zongsoft-migrator-aot-builder \
+            --volume "$PWD:/workspace" --volume "$PWD/../.editorconfig:/.editorconfig:ro" \
+            --volume "$PWD/../Directory.Build.props:/Directory.Build.props:ro" \
+            --volume "$PWD/../Directory.Packages.props:/Directory.Packages.props:ro" \
+            --volume zongsoft-migrator-aot-cache:/aot \
+            --workdir /workspace docker.io/rockylinux/rockylinux:9.8 sleep infinity
+          podman exec zongsoft-migrator-aot-builder bash executor/build/setup.sh
+          podman exec zongsoft-migrator-aot-builder bash executor/build/publish.sh linux-x64 Release
+          podman exec zongsoft-migrator-aot-builder bash executor/build/publish.sh linux-arm64 Release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: executor-linux
+          path: |
+            migrator/executor/src/bin/Release/net10.0/linux-x64/publish/
+            migrator/executor/src/bin/Release/net10.0/linux-arm64/publish/
+          include-hidden-files: true
+          if-no-files-found: error
+      - name: Remove build container
+        if: always()
+        run: podman rm --force --ignore zongsoft-migrator-aot-builder
+
+  native-windows:
+    if: github.ref == 'refs/heads/main' && inputs.project == 'migrator'
+    runs-on: windows-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Prepare Windows executor
+        working-directory: migrator
+        shell: pwsh
+        run: ./executor/build/publish.ps1 -Configuration Release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: executor-windows
+          path: migrator/executor/src/bin/Release/net10.0/win-x64/publish/
+          include-hidden-files: true
+          if-no-files-found: error
+
   publish:
-    if: github.ref == 'refs/heads/main'
+    needs: [native-linux, native-windows]
+    if: >-
+      always() && github.ref == 'refs/heads/main' &&
+      (inputs.project != 'migrator' ||
+      (needs.native-linux.result == 'success' && needs.native-windows.result == 'success'))
     runs-on: ubuntu-latest
     environment: release
     timeout-minutes: 120
     permissions:
       contents: read
       id-token: write
-
     defaults:
       run:
         working-directory: ${{ inputs.project }}
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Install .NET
-        uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
             8.0.x
             9.0.x
             10.0.x
-
       - name: Restore .NET tools
         run: dotnet tool restore
-
-      - name: Prepare migrator build environment
-        if: inputs.project == 'packager'
+      - uses: actions/download-artifact@v4
+        if: inputs.project == 'migrator'
+        with:
+          name: executor-linux
+          path: migrator/executor/src/bin/Release/net10.0/
+      - uses: actions/download-artifact@v4
+        if: inputs.project == 'migrator'
+        with:
+          name: executor-windows
+          path: migrator/executor/src/bin/Release/net10.0/win-x64/publish/
+      - name: Build migrator package
+        if: inputs.project == 'migrator'
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes podman
-          # Pre-create the container expected by Cake with the runner's checkout path.
-          podman run --detach --name zongsoft-packager-aot-builder \
-            --volume "$PWD:/workspace" \
-            --volume zongsoft-packager-aot-cache:/aot \
-            --workdir /workspace \
-            docker.io/rockylinux/rockylinux:9.8 sleep infinity
-
-      - name: Build packages
+          chmod 755 executor/src/bin/Release/net10.0/linux-*/publish/Zongsoft.Tools.Migrator.Executor
+          dotnet cake --edition Release --target compile
+      - name: Build other tool package
+        if: inputs.project != 'migrator'
         run: dotnet cake --edition Release --target build
-
       - name: NuGet login
         id: login
         uses: NuGet/login@v1
         with:
           user: ${{ secrets.NUGET_USER }}
-
       - name: Publish packages
         env:
           NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
-        # Publish the existing packages without repeating the build after login.
         run: dotnet cake --edition Release --target pack --exclusive
-
-      - name: Remove migrator build environment
-        if: always() && inputs.project == 'packager'
-        run: |
-          if command -v podman >/dev/null 2>&1 && podman container exists zongsoft-packager-aot-builder; then
-            podman rm --force zongsoft-packager-aot-builder
-          fi

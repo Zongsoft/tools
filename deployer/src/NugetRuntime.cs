@@ -67,7 +67,7 @@ internal static class NugetRuntime
 	private static RuntimeGraph LoadRuntimeGraph()
 	{
 		using var stream = typeof(NugetRuntime).Assembly.GetManifestResourceStream(RUNTIME_GRAPH_RESOURCE)
-			?? throw new InvalidDataException($"Missing embedded runtime graph: {RUNTIME_GRAPH_RESOURCE}.");
+			?? throw new InvalidDataException(string.Format(Properties.Resources.RuntimeGraphMissing_Message, RUNTIME_GRAPH_RESOURCE));
 
 		return JsonRuntimeFormat.ReadRuntimeGraph(stream);
 	}

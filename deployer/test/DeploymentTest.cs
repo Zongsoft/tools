@@ -1,4 +1,5 @@
 using System.Globalization;
+
 using Xunit;
 
 namespace Zongsoft.Tools.Deployer.Tests;
@@ -8,7 +9,7 @@ public class DeploymentTest
 	[Theory]
 	[InlineData(false)]
 	[InlineData(true)]
-	public async Task Deploy_EmptyResolverPrefixCopiesExistingRelativeAndAbsoluteSource(bool absoluteSource)
+	public async Task Deploy_EmptyResolverPrefixCopiesExistingRelativeAndAbsoluteSourceAsync(bool absoluteSource)
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/ordinary.txt", "ordinary source");
@@ -38,7 +39,7 @@ public class DeploymentTest
 	[InlineData("", true, true)]
 	[InlineData("path:", true, true)]
 	[InlineData("PATH:", false, true)]
-	public async Task Deploy_PathResolverSyntaxCopiesRelativeAbsoluteAndExpandedSource(string prefix, bool absoluteSource, bool expandVariable)
+	public async Task Deploy_PathResolverSyntaxCopiesRelativeAbsoluteAndExpandedSourceAsync(string prefix, bool absoluteSource, bool expandVariable)
 	{
 		using var fixture = new DeploymentFixture();
 		var source = fixture.Write("source/file.txt", "path resolver content");
@@ -64,7 +65,7 @@ public class DeploymentTest
 	[Theory]
 	[InlineData("en", "File or package not found: ")]
 	[InlineData("zh-Hans", "文件或包不存在：")]
-	public async Task Deploy_MissingManifestUsesLocalizedTemplateAndPath(string culture, string expectedPrefix)
+	public async Task Deploy_MissingManifestUsesLocalizedTemplateAndPathAsync(string culture, string expectedPrefix)
 	{
 		var originalCulture = CultureInfo.CurrentCulture;
 		var originalUICulture = CultureInfo.CurrentUICulture;
@@ -93,7 +94,7 @@ public class DeploymentTest
 	}
 
 	[Fact]
-	public async Task Deploy_ImportCycleFailsWithoutWriting()
+	public async Task Deploy_ImportCycleFailsWithoutWritingAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		var manifest = fixture.Manifest("#@import child.deploy\nfile.txt");
@@ -109,7 +110,7 @@ public class DeploymentTest
 	}
 
 	[Fact]
-	public async Task Deploy_ImportMergesEntriesAndKeepsOptionalMissingImport()
+	public async Task Deploy_ImportMergesEntriesAndKeepsOptionalMissingImportAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/imported.txt", "imported source");
@@ -124,7 +125,7 @@ public class DeploymentTest
 	}
 
 	[Fact]
-	public async Task Deploy_DryRunPlansCopyAndDeleteWithoutChangingTarget()
+	public async Task Deploy_DryRunPlansCopyAndDeleteWithoutChangingTargetAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "new content");
@@ -143,7 +144,7 @@ public class DeploymentTest
 	}
 
 	[Fact]
-	public async Task Deploy_LaterInvalidEntryPreventsEarlierCopy()
+	public async Task Deploy_LaterInvalidEntryPreventsEarlierCopyAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "source");
@@ -179,7 +180,7 @@ public class DeploymentTest
 	}
 
 	[Fact]
-	public async Task Deploy_DetailLogPreservesDiagnosticTextInWriterPlanAndReport()
+	public async Task Deploy_DetailLogPreservesDiagnosticTextInWriterPlanAndReportAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Variables["verbosity"] = "detail";
@@ -202,7 +203,7 @@ public class DeploymentTest
 	}
 
 	[Fact]
-	public async Task Deploy_DetailLogPreservesSyntheticSourcePath()
+	public async Task Deploy_DetailLogPreservesSyntheticSourcePathAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Variables["verbosity"] = "detail";
@@ -227,7 +228,7 @@ public class DeploymentTest
 	[InlineData("newest", 1, "source", 1, 0)]
 	[InlineData("never", 1, "target", 0, 1)]
 	[InlineData("alway", -1, "source", 1, 0)]
-	public async Task Deploy_OverwritePolicyPreservesOrReplacesContent(string overwrite, int offset, string expected, int copies, int skipped)
+	public async Task Deploy_OverwritePolicyPreservesOrReplacesContentAsync(string overwrite, int offset, string expected, int copies, int skipped)
 	{
 		using var fixture = new DeploymentFixture();
 		var source = fixture.Write("source/file.txt", "source");
@@ -245,7 +246,7 @@ public class DeploymentTest
 	}
 
 	[Fact]
-	public async Task Deploy_InvalidOverwriteFails()
+	public async Task Deploy_InvalidOverwriteFailsAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "source");
@@ -264,7 +265,7 @@ public class DeploymentTest
 	[InlineData("<application & x>", false, false)]
 	[InlineData("<application & x>", true, true)]
 	[InlineData("<preview:a,b & x>", true, true)]
-	public async Task Deploy_FilterOnlyDestinationAndSingleCharacterCondition(string condition, bool hasX, bool copies)
+	public async Task Deploy_FilterOnlyDestinationAndSingleCharacterConditionAsync(string condition, bool hasX, bool copies)
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "filtered source");
@@ -283,7 +284,7 @@ public class DeploymentTest
 	[InlineData("<>")]
 	[InlineData("<application")]
 	[InlineData("<application &>")]
-	public async Task Deploy_InvalidFilterFails(string condition)
+	public async Task Deploy_InvalidFilterFailsAsync(string condition)
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "source");
@@ -295,7 +296,7 @@ public class DeploymentTest
 	[Theory]
 	[InlineData("unknown:input", "unknown")]
 	[InlineData("missing.txt", "missing.txt")]
-	public async Task Deploy_UnknownResolverOrMissingSourceCountsFailure(string entry, string diagnostic)
+	public async Task Deploy_UnknownResolverOrMissingSourceCountsFailureAsync(string entry, string diagnostic)
 	{
 		using var fixture = new DeploymentFixture();
 		var result = await fixture.CreateDeployer().DeployAsync(fixture.Manifest(entry), fixture.Destination, TestContext.Current.CancellationToken);
@@ -306,7 +307,7 @@ public class DeploymentTest
 	}
 
 	[Fact]
-	public async Task Deploy_MissingManifestCountsFailure()
+	public async Task Deploy_MissingManifestCountsFailureAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		var result = await fixture.CreateDeployer().DeployAsync(Path.Combine(fixture.Root, "absent.deploy"), fixture.Destination, TestContext.Current.CancellationToken);
@@ -317,7 +318,7 @@ public class DeploymentTest
 	[Theory]
 	[InlineData("delete:../outside.txt")]
 	[InlineData("file.txt = ../outside.txt")]
-	public async Task Deploy_TargetEscapeDoesNotWriteOrDelete(string entry)
+	public async Task Deploy_TargetEscapeDoesNotWriteOrDeleteAsync(string entry)
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "source");
@@ -329,7 +330,7 @@ public class DeploymentTest
 	}
 
 	[Fact]
-	public async Task Deploy_SectionEscapeDoesNotCreateDirectory()
+	public async Task Deploy_SectionEscapeDoesNotCreateDirectoryAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "source");
@@ -339,7 +340,7 @@ public class DeploymentTest
 	}
 
 	[Fact]
-	public async Task Deploy_CopyThenDeleteCountsDeletion()
+	public async Task Deploy_CopyThenDeleteCountsDeletionAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "source");
@@ -351,7 +352,7 @@ public class DeploymentTest
 	}
 
 	[Fact]
-	public async Task Deploy_RecursiveManifestFails()
+	public async Task Deploy_RecursiveManifestFailsAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		var manifest = fixture.Manifest("second.deploy");
@@ -365,7 +366,7 @@ public class DeploymentTest
 	}
 
 	[Fact]
-	public async Task Deploy_RepeatedManifestToDifferentTargetsSucceeds()
+	public async Task Deploy_RepeatedManifestToDifferentTargetsSucceedsAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "shared");
@@ -378,7 +379,7 @@ public class DeploymentTest
 	}
 
 	[Fact]
-	public async Task Deploy_CancellationDoesNotCopy()
+	public async Task Deploy_CancellationDoesNotCopyAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "source");

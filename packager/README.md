@@ -21,7 +21,7 @@ It is designed for .NET services and command-line applications that need repeata
 - [Package Entries](#package-entries)
 - [systemd Services](#systemd-services)
 - [Lifecycle Scripts](#lifecycle-scripts)
-- [Installation Migrations](#installation-migrations)
+- [Migrator artifact integration](#migrator-artifact-integration)
 - [Variables](#variables)
 - [Package Formats](#package-formats)
 - [Troubleshooting](#troubleshooting)
@@ -44,7 +44,7 @@ It is designed for .NET services and command-line applications that need repeata
 
 ## Packager version metadata
 
-Every package records the current generator identity, logically `Packager:Zongsoft.Tools.Packager@0.10.0.0`. The value is `assembly-name@version`, read from the packager's own assembly, independently of the host application's version. No additional option or migration configuration is required.
+Every package records the current generator identity, logically `Packager:Zongsoft.Tools.Packager@0.11.0.0`. The value is `assembly-name@version`, read from the packager's own assembly, independently of the host application's version. No additional option or migration configuration is required.
 
 | Format | Location | Inspection |
 | --- | --- | --- |
@@ -87,16 +87,15 @@ Run the regression suites with `dotnet cake --edition Release` (the default targ
 
 Install the generated `.nupkg` directly without publishing it to NuGet.org. The following commands use the .NET 10 SDK and run from `D:/Zongsoft/tools/packager`; use the corresponding directory for another checkout location.
 
-Before testing migrations, follow the [build instructions](docs/migrations.md#building-the-tool-package) to prepare complete Native AOT artifacts in `src/.migrator/linux-x64/` and `src/.migrator/linux-arm64/`. Existing unchanged artifacts can be reused; ordinary `dotnet build` does not produce them. Then generate the local tool package:
 
 ```powershell
 dotnet pack src/Zongsoft.Tools.Packager.csproj -c Release
 ```
 
-After the build succeeds and `src/bin/Release/Zongsoft.Tools.Packager.0.10.0.nupkg` exists, install it for the first time:
+After the build succeeds and `src/bin/Release/Zongsoft.Tools.Packager.0.11.0.nupkg` exists, install it for the first time:
 
 ```powershell
-dotnet tool install -g Zongsoft.Tools.Packager --version 0.10.0 --source ./src/bin/Release --no-http-cache
+dotnet tool install -g Zongsoft.Tools.Packager --version 0.11.0 --source ./src/bin/Release --no-http-cache
 ```
 
 If the tool is already installed, especially when rebuilding the same version, uninstall it first, then repeat the local installation command above:
@@ -105,7 +104,7 @@ If the tool is already installed, especially when rebuilding the same version, u
 dotnet tool uninstall -g Zongsoft.Tools.Packager
 ```
 
-The example version `0.10.0` matches the current project; adjust it to the actual `.nupkg`. `--source` restricts installation to the local directory, avoiding a same-named package from NuGet.org; `--no-http-cache` disables the download cache. See the [.NET tool installation reference](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-tool-install). Check the installed version with `dotnet tool list -g`. Here, “local” describes the package source; `-g` still replaces the current user’s global tool. Do not run the Cake `pack` task for local testing: it pushes packages to NuGet.org.
+The example version `0.11.0` matches the current project; adjust it to the actual `.nupkg`. `--source` restricts installation to the local directory, avoiding a same-named package from NuGet.org; `--no-http-cache` disables the download cache. See the [.NET tool installation reference](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-tool-install). Check the installed version with `dotnet tool list -g`. Here, “local” describes the package source; `-g` still replaces the current user’s global tool. Do not run the Cake `pack` task for local testing: it pushes packages to NuGet.org.
 
 ## Quick Start
 
@@ -156,7 +155,7 @@ The generated package name follows this pattern:
 <name>-<edition>@<version>-<architecture>.<extension>
 ```
 
-`<architecture>` is the lowercase architecture, such as `x64` or `arm64`; filenames no longer include the platform prefix. `<extension>` is `tar.gz`, `deb`, or `rpm`. The companion tar `.sh` entry uses the same filename stem.
+`<architecture>` is the lowercase architecture, such as `x64` or `arm64`; filenames contain the name, optional Edition, version and architecture. `<extension>` is `tar.gz`, `deb`, or `rpm`. The companion tar `.sh` entry uses the same filename stem.
 
 When `--daemon:<name>` is supplied and is not disabled, the daemon identifier is preferred for the generated package name:
 
@@ -284,7 +283,7 @@ After all package output is successfully generated, the source file is saved usi
 | Option | Default | Description |
 | --- | --- | --- |
 | `--source:<path>` | Current directory | Source directory whose files are packaged. |
-| `--migration:<paths>` | Empty | Migration INI files separated by `;` or `\|`; see [installation migrations](docs/migrations.md). |
+| `--migrator:<name>` | Empty | Original migration input name with optional directory; bare names search source and ancestors using the final Edition, version and RID. |
 | `--output:<path>` | Source directory | Output directory, with or without a trailing separator. This option does not select a file name. Relative paths are resolved under `--source`. |
 | `--exclude:<patterns>` | Empty | Comma- or semicolon-separated file patterns to skip while loading package entries. |
 | `--edition:<name>` | Empty | Optional edition. Appended to package name; used as RPM release when present. |
@@ -517,36 +516,26 @@ If no scripts are supplied, defaults are generated. For systemd packages they st
 
 Package-manager upgrades do not run the uninstall lifecycle. Debian `prerm`/`postrm` scripts are guarded by their action argument, and RPM `%preun`/`%postun` scripts run only when the final installed package instance is removed. This prevents an old package's removal scripts from deleting the newly installed payload during an upgrade or same-version reinstall. Tar packages keep the explicit `install.sh`/`uninstall.sh` lifecycle, and their generated uninstaller removes only the resolved `TARGET` path.
 
-## Installation Migrations
+## Migrator artifact integration
 
-Migration INIs and `.env` files use Core Reader built-in `#@import`, with ProfileOptions for import notifications and no directive registration. SQL paths and parameter searches start from each entry's declaring file. Different sources form separate tasks; same-named entries follow read-order overrides. See [configuration imports](docs/migrations.md#importing-configuration-files).
+Prepare migrations with the independent [migrator tool](../migrator/README.md). Packager does not parse `.migration`/`.env`, SQL or execution plans, and does not distribute a native executor.
 
-Publish both Native AOT RIDs with the Cake `migrator` task first, then run `dotnet pack src/Zongsoft.Tools.Packager.csproj` to create the tool package. The main project has no migrator project reference; see the [build instructions](docs/migrations.md#building-the-tool-package).
+`--migrator` specifies the original migration input name, optionally with a directory, such as `--migrator:../../packages/zongsoft`.
 
-The intermediate file is `<install-directory>/.migration/migration.json`; prepared SQL batches are stored in `.migration/.artifacts/`. The standalone migrator is published with **Native AOT** for glibc Linux and needs no target .NET runtime. TDengine connects directly to taosAdapter using WebSocket without `TDengine.Connector`. Migration messages support English and Simplified Chinese. See the [collaboration guide](docs/migrations.md#collaboration-between-the-packager-and-migrator) for file exchange, execution order and startup checks.
+Variables are expanded before checking for `/` or `\`. A bare name searches the final package source directory (`--source`), then each parent through the filesystem root, without searching child directories. A value containing either separator uses its explicit directory only: relative paths resolve from the source and absolute paths are used directly. Thus `--migrator:zongsoft` searches ancestors, while `--migrator:./zongsoft` is restricted to the source. The starting point is the package source, not the command working directory.
 
-SQL batches are grouped by canonical provider, for example `.migration/.artifacts/mysql/0001.sql` and `.migration/.artifacts/postgres/0001.sql`. Each plan load starts a separate counter at 0001 for each provider; tasks using the same provider share consecutive numbers. PostgreSQL aliases share the postgres directory. Without imports, each nonempty section creates one task; merged sections split at each change of declaration source, with parameters found from that source INI and a separate script list; task IDs identify logs and status, not directories. Overlapping SQL matches from the same source section are deduplicated across task splits; different sources and independent command-line inputs are not deduplicated. Imported same-named entries follow Core override rules. S3 configuration stays in the plan without an empty artifact directory.
+Existing `-migrate`, `-migration`, `.migrate` or `.migration` suffixes are recognized ignoring case; otherwise `-migrate` is appended. Do not include Edition, version, RID, extension, wildcards or a list.
 
-Migration INI paths are parsed in argument order, expanding wildcard matches in ordinal relative-path order at the current position. Order across migration tasks is not guaranteed; SQL within each database task follows its plan list.
-
-Add `--migration` to create databases/tables and S3/RustFS buckets before the application starts. Supply one or more `.ini` paths separated by `;` or `|`; matching `.env` connection parameters are found by convention in the same directory or its parents.
-
-S3 bucket initialization also supports default encryption (`encryption:sse-s3` / `encryption:sse-kms`), versioning (`versioning:enabled` / `versioning:suspended`) and bucket tags (`tag.<name>:<value>`). Existing buckets remain unchanged; see the [migration guide](docs/migrations.md) for syntax and retry behavior.
-
-Missing migration INI files or unmatched filename patterns produce warnings and are skipped. If all inputs are missing, an ordinary package is generated without migration assets or startup checks. Existing invalid INI, missing parameters and missing SQL remain errors.
-
-For the prepared Zongsoft hosting `./publish` directory described above:
+The final package Edition, version, platform and architecture determine the exact artifacts, including values obtained from the source `.version` and the default x64 architecture. Omit the Edition segment when absent. For enterprise, 1.0.0 and Linux x64:
 
 ```text
---migration:../.deploy/$(scheme)/migration/$(version)/*.ini
+zongsoft-migrate-enterprise@1.0.0_linux-x64.tar.gz
+zongsoft-migrate-enterprise@1.0.0_linux-x64.sh
 ```
 
-Quote the complete option in your shell. Create these deployment files using the [hosting migration guide](docs/migrations.md), which uses the real Zongsoft.Upgrading SQL schema and explains provider parameters, execution order and recovery. Providers: SQL Server, MySQL, SQLite, DuckDB, PostgreSQL (`postgres`/`postgresql`), TDengine and `amazon.s3`.
+The migration name may differ from the host name, but Edition, version and RID must match. Search continues upwards only when both files are absent. Finding just one file fails immediately with the full path of the missing companion. A complete pair is validated immediately; invalid archive metadata or a mismatched RID fails without checking higher directories. Both files must come from the same directory; different versions, Editions or architectures are never substituted. Exhausting the search through the root reports the expected filenames and all checked directories. Omitting the option or supplying a null, empty or whitespace-only value disables migration integration and adds no migration artifacts.
 
-The main project prepares the migration plan; the independent [`migrator/src`](migrator/src/Zongsoft.Tools.Packager.Migrator.csproj) project executes it on Linux. Both link pure protocol source from `.shared`, with no shared DLL. The migrator is a Native AOT executable with its required native libraries.
-
-Migration failure prevents service startup, including later systemd starts until the package is ready. Every installation and retry executes all SQL files; script authors must ensure repeatability, including after partial failure. There is no per-file success history. The package contains expanded connection credentials (`migration.json` mode `0600`); protect the archive accordingly. The native migrator runs on glibc Linux x64/arm64. Tar `DESTDIR` staging skips lifecycle hooks and migrations; live migration installs use the build-time `--install-path`.
-
+Both files are copied unchanged into the installation root's `.migration/`, without unpacking. The launcher has mode 0755; the archive has mode 0600. Payload collisions fail. Installation invokes `apply` with `/var/lib/<package-name>/packager`; failure prevents service startup. The systemd `ExecStartPre` invokes `check`, comparing the completion marker without extraction or service connections. Migration also runs without a daemon; DESTDIR staging skips hooks, and uninstall preserves state and databases/buckets. Targets require POSIX sh, tar/gzip, cmp and the executor's native system libraries; see the migration guide.
 ## Variables
 
 Option values and entry arguments may reference variables in either form:
@@ -558,7 +547,7 @@ $(name)
 
 Variable names are case insensitive. Explicit command options, including extra options, override environment variables, which override descriptor defaults. Values expand on use: unused invalid references do not block packaging; referenced missing or cyclic variables fail.
 
-Source-version rules and explicit identity options determine name, edition and version, independently of same-named environment variables. Final identity and resolved source/output paths override the collection. `--migration` requires explicit activation; `--overwrite` remains an explicit switch.
+Source-version rules and explicit identity options determine name, edition and version, independently of same-named environment variables. Final identity and resolved source/output paths override the collection. `--migrator` requires explicit activation; `--overwrite` remains an explicit switch.
 
 The example below uses Bash to expand the name and version first. `--version` is parsed as `System.Version` before packaging starts, so a literal `%APP_VERSION%` or `$(APP_VERSION)` is not accepted there. Name and Edition also participate in source-version validation as supplied. Packager expressions apply to paths, script text, migration configuration and other subsequently normalized values.
 
@@ -597,7 +586,7 @@ Common variables:
 
 Summary, description and the four main lifecycle hooks share one resolver. `file:` selects a file relative to source; `text:` preserves literal contents. Unprefixed values expand package variables and read existing source-relative files; multiline values are text, obvious missing paths fail, and other values are text. File contents are neither expanded nor interpreted as another path. Keep shell expressions in a file or `text:` value. Pre/post hooks are strict file lists separated by `;` or `|` and reject `text:`.
 
-Debian/RPM payloads use automatically cleaned temporary files and streaming digests. Reserve temporary disk space; the complete package body is not assembled in memory. See the [implementation checklist and evidence](docs/improvements.md).
+Debian/RPM payloads use automatically cleaned temporary files and streaming digests. Reserve temporary disk space; the complete package body is not assembled in memory. See [payload streams](docs/implementation.md#载荷流与目录条目).
 
 ## Package Formats
 
@@ -683,7 +672,7 @@ dotnet restore Zongsoft.Tools.Packager.slnx
 dotnet build Zongsoft.Tools.Packager.slnx -c Release
 ```
 
-The independent `migrator` task prepares runtime artifacts in `src/.migrator/`. The main project copies these as ordinary content; it neither references nor builds migrator. For a complete tool package, run the Cake build below, or run `dotnet cake --target=migrator --edition=Release` before `dotnet pack src/Zongsoft.Tools.Packager.csproj -c Release`. Without prepared artifacts, ordinary packaging remains available. A plan containing migration tasks requires the matching RID artifacts; if every specified INI is missing and skipped, no runner is required.
+Packager builds independently; it consumes completed migrator artifacts at packaging time.
 
 Build with Cake:
 
@@ -691,11 +680,9 @@ Build with Cake:
 dotnet cake --target=build --edition=Release
 ```
 
-[`test`](test/Zongsoft.Tools.Packager.Tests.csproj) covers packager input, SQL batch preparation, package generation and JSON handoff through an independent migrator process; [`migrator/test`](migrator/test/Zongsoft.Tools.Packager.Migrator.Tests.csproj) references only the migrator and covers databases, S3 and TDengine WebSocket. Run the projects separately:
 
 ```powershell
 dotnet test test/Zongsoft.Tools.Packager.Tests.csproj -f net10.0
-dotnet test migrator/test/Zongsoft.Tools.Packager.Migrator.Tests.csproj -f net10.0
 ```
 
 Run tests through the Cake script:
@@ -735,3 +722,15 @@ See [docs/implementation.md](docs/implementation.md) for the internal design, pa
 This project is licensed under the [MIT](https://github.com/Zongsoft/tools/blob/main/LICENSE) license.
 
 Local source searches and links follow [the implementation contract](docs/implementation.md#local-search-and-source-links).
+
+
+## Development checks
+
+Production and test projects use `Zongsoft.CodeAnalysis` 1.1.0. Use .NET SDK 10.0.401 or a compatible newer compiler. The analyzer is a private build dependency, not a runtime dependency of the tool.
+
+```powershell
+dotnet build src/Zongsoft.Tools.Packager.csproj -p:ZongsoftCodeStyleStrict=true
+dotnet format style src/Zongsoft.Tools.Packager.csproj --no-restore --verify-no-changes --diagnostics IDE0049
+```
+
+The build checks every configured target framework. See the [repository instructions](../AGENTS.md#代码规范检查) for editor configuration, resource generation and validation requirements.

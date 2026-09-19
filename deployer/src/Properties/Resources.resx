@@ -165,4 +165,7 @@
   <data name="Review.UnknownResolver" xml:space="preserve">
     <value>Unknown resolver: {0}</value>
   </data>
+  <data name="RuntimeGraphMissing.Message" xml:space="preserve">
+    <value>The embedded runtime graph is missing: {0}.</value>
+  </data>
 </root>

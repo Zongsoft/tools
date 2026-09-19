@@ -1,33 +1,22 @@
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
-		<LangVersion>latest</LangVersion>
 		<TargetFrameworks>net8.0;net9.0;net10.0;</TargetFrameworks>
 		<Version>7.12.0</Version>
-		<Authors>Popeye Zhong(zongsoft@qq.com)</Authors>
 		<PackAsTool>true</PackAsTool>
 		<ToolCommandName>dotnet-deploy</ToolCommandName>
 		<PackageDescription>The Zongsoft Deployment .NET Tool.</PackageDescription>
-		<Company>Zongsoft Studio</Company>
 		<Product>Zongsoft Deployment Tool</Product>
 		<Description>Zongsoft Application Deployment Tool.</Description>
-		<Copyright>Copyright(C) Zongsoft Studio 2020-2026. All rights reserved.</Copyright>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
-		<PackageReadmeFile>README.md</PackageReadmeFile>
-		<PackageLicenseExpression>MIT</PackageLicenseExpression>
-		<PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
 		<PackageProjectUrl>https://github.com/Zongsoft/tools/tree/main/deployer</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/Zongsoft/tools/tree/main/deployer</RepositoryUrl>
-		<PackageIconUrl>https://github.com/Zongsoft/guidelines/raw/main/zongsoft-logo(48x48).png</PackageIconUrl>
-		<PackageIcon>zongsoft-logo.png</PackageIcon>
 		<ApplicationIcon>..\..\zongsoft-logo.ico</ApplicationIcon>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<None Remove="Resources/dotnet-runtime-LICENSE.txt" />
 		<None Include="Resources/dotnet-runtime-LICENSE.txt" Pack="true" PackagePath="licenses/" />
-		<None Include="..\..\zongsoft-logo.png" Pack="true" PackagePath="\" Visible="true" />
 		<None Include="..\README.md" Pack="true" PackagePath="\" />
 		<None Include="..\README.zh-Hans.md" Pack="true" PackagePath="\" />
 		<None Include="..\docs\**\*" Link="docs/%(Filename)%(Extension)" Pack="true" PackagePath="docs/%(RecursiveDir)" />
@@ -35,12 +24,12 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="NuGet.Common" Version="7.9.0" />
-		<PackageReference Include="NuGet.Configuration" Version="7.9.0" />
-		<PackageReference Include="NuGet.Frameworks" Version="7.9.0" />
-		<PackageReference Include="NuGet.Packaging" Version="7.9.0" />
-		<PackageReference Include="NuGet.Protocol" Version="7.9.0" />
-		<PackageReference Include="NuGet.Versioning" Version="7.9.0" />
+		<PackageReference Include="NuGet.Common" VersionOverride="7.9.0" />
+		<PackageReference Include="NuGet.Configuration" VersionOverride="7.9.0" />
+		<PackageReference Include="NuGet.Frameworks" VersionOverride="7.9.0" />
+		<PackageReference Include="NuGet.Packaging" VersionOverride="7.9.0" />
+		<PackageReference Include="NuGet.Protocol" VersionOverride="7.9.0" />
+		<PackageReference Include="NuGet.Versioning" VersionOverride="7.9.0" />
 	</ItemGroup>
 
 	<Choose>
@@ -53,7 +42,7 @@
 		</When>
 		<Otherwise>
 			<ItemGroup>
-				<PackageReference Include="Zongsoft.Core" Version="7.59.0" />
+				<PackageReference Include="Zongsoft.Core" />
 			</ItemGroup>
 		</Otherwise>
 	</Choose>

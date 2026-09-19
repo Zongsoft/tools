@@ -10,7 +10,7 @@
  *   钟峰(Popeye Zhong) <zongsoft@gmail.com>
  *
  * The MIT License (MIT)
- * 
+ *
  * Copyright (C) 2020-2026 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -54,7 +54,7 @@ namespace Zongsoft.Tools.Packager;
 [CommandOption(ARCHITECTURE_OPTION, typeof(Architecture), Architecture.X64)]
 [CommandOption(OUTPUT_OPTION, typeof(string))]
 [CommandOption(EXCLUDE_OPTION, typeof(string))]
-[CommandOption(MIGRATION_OPTION, typeof(string))]
+[CommandOption(MIGRATOR_OPTION, typeof(string))]
 [CommandOption(OVERWRITE_OPTION, typeof(bool), false)]
 [CommandOption(URL_OPTION, typeof(string), DEFAULT_URL)]
 [CommandOption(TITLE_OPTION, typeof(string))]
@@ -101,7 +101,7 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	protected const string MAINTAINER_OPTION = Variables.MAINTAINER;
 	protected const string DEPENDENCIES_OPTION = Variables.DEPENDENCIES;
 	protected const string EXCLUDE_OPTION = Variables.EXCLUDE;
-	protected const string MIGRATION_OPTION = "migration";
+	protected const string MIGRATOR_OPTION = "migrator";
 	protected const string OVERWRITE_OPTION = "overwrite";
 	protected const string INSTALL_PATH_OPTION = "install-path";
 	protected const string LISTEN_OPTION = Variables.LISTEN;
@@ -186,16 +186,9 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		if(package == null)
 			return ValueTask.FromResult<object>(null);
 
-		if(context.Options.Contains(MIGRATION_OPTION) && context.Options.TryGetValue<string>(MIGRATION_OPTION, out var migration))
-		{
-			if(string.IsNullOrWhiteSpace(migration)) throw new InvalidOperationException(Properties.Resources.MigrationPathsRequired);
-			package.Migration = new Migration.MigrationLoader(value =>
-			{
-				var result = Normalizer.Normalize(value, Normalizer.Variables);
-				if(!result.Succeed) throw new InvalidOperationException(string.Format(Properties.Resources.MigrationVariableUndefined_Message, result.Value));
-				return result.Value;
-			}).Load(migration, source, package.PackageName, package.Version.ToString());
-		}
+		var migrator = context.Options.GetValue<string>(MIGRATOR_OPTION);
+		if(!string.IsNullOrWhiteSpace(migrator))
+			package.Migrator = Migrator.Load(package, migrator);
 
 		//生成安装脚本
 		package.Scriptor.Script();
@@ -205,7 +198,7 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 			context.Arguments,
 			[Normalizer.Variables.Exclude]);
 
-		using var migrationBundle = package.Migration == null ? null : MigrationBundle.Attach(package, package.Migration);
+		package.Migrator?.Attach(package);
 
 		//直接添加内存版本条目，替换载荷中的旧版本文件。
 		package.Entries.SetVersion(versionFile.Identifier);
@@ -229,26 +222,13 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	protected static void Configure(Package package, CommandContext context)
 	{
 		var installPath = Normalizer.Variables[INSTALL_PATH_OPTION];
+
 		if(!string.IsNullOrEmpty(installPath))
 			package.InstallPath = Normalizer.Normalize(installPath);
 	}
 	#endregion
 
 	#region 私有方法
-	internal static Dictionary<string, string> GetVariables(CommandContext context)
-	{
-		var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-		foreach(var option in context.Descriptor.Options)
-			variables[option.Name] = option.DefaultValue?.ToString();
-
-		foreach(System.Collections.DictionaryEntry variable in Environment.GetEnvironmentVariables())
-			variables[variable.Key.ToString()] = variable.Value?.ToString();
-
-		foreach(var option in context.Options)
-			variables[option.Key] = option.Value?.ToString();
-
-		return variables;
-	}
-
+	internal static Dictionary<string, string> GetVariables(CommandContext context) => Variables.From(context);
 	#endregion
 }

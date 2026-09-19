@@ -7,7 +7,7 @@ namespace Zongsoft.Tools.Deployer.Tests;
 public class DeploymentImportTest
 {
 	[Fact]
-	public async Task Deploy_ImportsEnterPlanAndCommentsInvalidateLock()
+	public async Task Deploy_ImportsEnterPlanAndCommentsInvalidateLockAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "stable content");

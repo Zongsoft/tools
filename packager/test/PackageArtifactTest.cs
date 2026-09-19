@@ -6,10 +6,9 @@ using System.Formats.Tar;
 using System.IO.Compression;
 using System.Buffers.Binary;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
+using System.Runtime.InteropServices;
 
-using Zongsoft.Tools.Packager.Migration;
 using Xunit;
 
 namespace Zongsoft.Tools.Packager.Tests;
@@ -32,7 +31,8 @@ public sealed class PackageArtifactTest
 		var configuration = directory.Write("source/config/settings.conf", "hosting configuration");
 		Directory.CreateDirectory(Path.Combine(source, "config", "empty"));
 		var mode = OperatingSystem.IsWindows() ? (UnixFileMode)493 : (UnixFileMode)488;
-		if(!OperatingSystem.IsWindows()) File.SetUnixFileMode(empty.FullName, mode);
+		if(!OperatingSystem.IsWindows())
+			File.SetUnixFileMode(empty.FullName, mode);
 		var package = CreatePackage(format, source);
 		package.Entries.Load(source, ["data", "config:/etc/zongsoft-artifact"]);
 		var output = Directory.CreateDirectory(Path.Combine(directory.Path, "output")).FullName;
@@ -56,7 +56,9 @@ public sealed class PackageArtifactTest
 		Assert.True(Assert.Single(entries, item => item.Name == rootPrefix + "etc/zongsoft-artifact/empty").IsDirectory);
 		Assert.Equal(File.ReadAllBytes(configuration), Assert.Single(entries, item => item.Name == rootPrefix + "etc/zongsoft-artifact/settings.conf").Content);
 		Assert.Equal(entries.Count, entries.Select(item => item.Name).Distinct(StringComparer.Ordinal).Count());
-		if(format == "rpm") AssertRpmDigest(archivePath, "/opt/zongsoft/web/data/", "payload.bin", content);
+		if(format == "rpm")
+			AssertRpmDigest(archivePath, "/opt/zongsoft/web/data/", "payload.bin", content);
+
 		if(format == "deb")
 		{
 			var conffiles = ReadControl(archivePath, "conffiles");
@@ -205,7 +207,9 @@ public sealed class PackageArtifactTest
 		using var directory = new MigrationTestDirectory();
 		var empty = Directory.CreateDirectory(Path.Combine(directory.Path, "restricted"));
 		var mode = OperatingSystem.IsWindows() ? (UnixFileMode)493 : (UnixFileMode)448;
-		if(!OperatingSystem.IsWindows()) File.SetUnixFileMode(empty.FullName, mode);
+
+		if(!OperatingSystem.IsWindows())
+			File.SetUnixFileMode(empty.FullName, mode);
 		var package = CreatePackage("tar", directory.Path);
 
 		package.Entries.Load(directory.Path, []);
@@ -259,30 +263,6 @@ public sealed class PackageArtifactTest
 		Assert.DoesNotContain(package.Entries, entry => entry.EntryName.EndsWith("ignored.log", StringComparison.Ordinal));
 	}
 
-	[Fact]
-	public void Migration_RecursiveGlob_PreservesSqlOrderAndIndependentTasks()
-	{
-		using var directory = new MigrationTestDirectory();
-		directory.Write("sqlite.env", "Database=/tmp/zongsoft-artifact-hosting.db\n");
-		directory.Write("first.ini", "[sqlite]\nsql/z.sql\nsql/**/0?.sql\n");
-		directory.Write("parts/b/db.ini", "[sqlite]\n../../sql/z.sql\n");
-		directory.Write("parts/a/db.ini", "[sqlite]\n../../sql/A/01.sql\n");
-		directory.Write("sql/z.sql", "SELECT 'explicit';");
-		directory.Write("sql/B/deep/02.sql", "SELECT 'nested';");
-		directory.Write("sql/A/01.sql", "SELECT 'first';");
-
-		var plan = new MigrationLoader(null).Load("first.ini;parts/*/db.ini;first.ini", directory.Path, "zongsoft.daemon", "1.0.0");
-
-		Assert.Equal(4, plan.Tasks.Count);
-		Assert.Equal(new[] { "SELECT 'explicit';", "SELECT 'first';", "SELECT 'nested';" }, plan.Tasks[0].Scripts.Select(script => script.Content));
-		Assert.Equal("SELECT 'first';", Assert.Single(plan.Tasks[1].Scripts).Content);
-		Assert.Equal("SELECT 'explicit';", Assert.Single(plan.Tasks[2].Scripts).Content);
-		Assert.Equal(plan.Tasks[0].Scripts.Select(script => script.Content), plan.Tasks[3].Scripts.Select(script => script.Content));
-		var scripts = plan.Tasks.SelectMany(task => task.Scripts).ToArray();
-		Assert.Equal(Enumerable.Range(1, 8).Select(index => $".migration/.artifacts/sqlite/{index:D4}.sql"), scripts.Select(script => script.Path));
-		Assert.Equal(4, plan.Tasks.Select(task => task.Id).Distinct(StringComparer.Ordinal).Count());
-		Assert.All(scripts, script => Assert.Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(script.Content))), script.Checksum));
-	}
 	#endregion
 
 	#region 流式载荷
@@ -300,12 +280,12 @@ public sealed class PackageArtifactTest
 		warmup.Entries.Load(source, ["payload.bin"]);
 		warmup.Pack(output, true);
 		Assert.Equal(baseline, GetTemporaryBuffers());
-		const int size = 64 * 1024 * 1024;
+		const int SIZE = 64 * 1024 * 1024;
 		var block = new byte[1024 * 1024];
 		new Random(1751).NextBytes(block);
 		using(var stream = File.Create(file))
 		{
-			for(var offset = 0; offset < size; offset += block.Length)
+			for(var offset = 0; offset < SIZE; offset += block.Length)
 				stream.Write(block);
 		}
 		var package = CreatePackage(format, source);
@@ -315,15 +295,16 @@ public sealed class PackageArtifactTest
 		package.Pack(output, true);
 		var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
-		Assert.True(allocated < 32L * 1024 * 1024, $"Allocated {allocated:N0} managed bytes while packaging {size:N0} payload bytes.");
+		Assert.True(allocated < 32L * 1024 * 1024, $"Allocated {allocated:N0} managed bytes while packaging {SIZE:N0} payload bytes.");
 		Assert.Equal(baseline, GetTemporaryBuffers());
 		var archivePath = Path.Combine(output, package.FileName);
 		var payload = Assert.Single(ReadArchive(archivePath, format), entry => entry.Name == "opt/zongsoft/web/payload.bin");
-		Assert.Equal(size, payload.Size);
-		Assert.Equal(size, payload.Content.Length);
+		Assert.Equal(SIZE, payload.Size);
+		Assert.Equal(SIZE, payload.Content.Length);
 		using var original = File.OpenRead(file);
 		Assert.Equal(SHA256.HashData(original), SHA256.HashData(payload.Content));
-		if(format == "rpm") AssertRpmDigest(archivePath, "/opt/zongsoft/web/", "payload.bin", payload.Content);
+		if(format == "rpm")
+			AssertRpmDigest(archivePath, "/opt/zongsoft/web/", "payload.bin", payload.Content);
 	}
 
 	[Theory]
@@ -386,12 +367,24 @@ public sealed class PackageArtifactTest
 		var package = (Package.Deb)CreatePackage("deb", directory.Path);
 		switch(field)
 		{
-			case "Provides": package.Provides = [value]; break;
-			case "Replaces": package.Replaces = [value]; break;
-			case "Breaks": package.Breaks = [value]; break;
-			case "Conflicts": package.Conflicts = [value]; break;
-			case "Recommends": package.Recommends = [value]; break;
-			case "Suggests": package.Suggests = [value]; break;
+			case "Provides":
+				package.Provides = [value];
+				break;
+			case "Replaces":
+				package.Replaces = [value];
+				break;
+			case "Breaks":
+				package.Breaks = [value];
+				break;
+			case "Conflicts":
+				package.Conflicts = [value];
+				break;
+			case "Recommends":
+				package.Recommends = [value];
+				break;
+			case "Suggests":
+				package.Suggests = [value];
+				break;
 		}
 
 		Assert.Throws<InvalidDataException>(() => package.Pack(directory.Path, true));
@@ -423,8 +416,10 @@ public sealed class PackageArtifactTest
 	private static List<ArchiveEntry> ReadArchive(string path, string format)
 	{
 		var bytes = File.ReadAllBytes(path);
-		if(format == "tar") return ReadTar(bytes);
-		if(format == "deb") return ReadTar(ReadAr(bytes, "data.tar.gz"));
+		if(format == "tar")
+			return ReadTar(bytes);
+		if(format == "deb")
+			return ReadTar(ReadAr(bytes, "data.tar.gz"));
 		var payload = HeaderEnd(bytes, HeaderEnd(bytes, 96, true), false);
 		using var stream = new MemoryStream(bytes, payload, bytes.Length - payload);
 		using var gzip = new GZipStream(stream, CompressionMode.Decompress);
@@ -440,7 +435,9 @@ public sealed class PackageArtifactTest
 			var nameSize = Convert.ToInt32(Encoding.ASCII.GetString(bytes, offset + 94, 8), 16);
 			var name = NormalizeName(Encoding.UTF8.GetString(bytes, offset + 110, nameSize - 1));
 			offset = (offset + 110 + nameSize + 3) & ~3;
-			if(name == "TRAILER!!!") break;
+
+			if(name == "TRAILER!!!")
+				break;
 			entries.Add(new(name, bytes[offset..(offset + size)], (UnixFileMode)(mode & 0xFFF), size, (mode & 0xF000) == 0x4000));
 			offset = (offset + size + 3) & ~3;
 		}
@@ -454,7 +451,8 @@ public sealed class PackageArtifactTest
 		{
 			var name = Encoding.ASCII.GetString(bytes, offset, 16).Trim().TrimEnd('/');
 			var size = int.Parse(Encoding.ASCII.GetString(bytes, offset + 48, 10).Trim(), System.Globalization.CultureInfo.InvariantCulture);
-			if(name == target) return bytes[(offset + 60)..(offset + 60 + size)];
+			if(name == target)
+				return bytes[(offset + 60)..(offset + 60 + size)];
 			offset += 60 + size + (size & 1);
 		}
 		throw new InvalidDataException("Missing Debian member: " + target);
@@ -471,7 +469,8 @@ public sealed class PackageArtifactTest
 		TarEntry entry;
 		while((entry = reader.GetNextEntry()) != null)
 		{
-			if(entry.EntryType == TarEntryType.GlobalExtendedAttributes) continue;
+			if(entry.EntryType == TarEntryType.GlobalExtendedAttributes)
+				continue;
 			using var copy = new MemoryStream();
 			entry.DataStream?.CopyTo(copy);
 			entries.Add(new(NormalizeName(entry.Name), copy.ToArray(), entry.Mode, entry.Length, entry.EntryType == TarEntryType.Directory));
@@ -502,6 +501,7 @@ public sealed class PackageArtifactTest
 		var item = TagOffset(bytes, header, tag);
 		var result = new string[item.Count];
 		var offset = item.Offset;
+
 		for(var index = 0; index < result.Length; index++)
 		{
 			var end = Array.IndexOf(bytes, (byte)0, offset);

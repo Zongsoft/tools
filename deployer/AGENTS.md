@@ -41,3 +41,5 @@
 ## Searcher 接入
 
 本地通配搜索统一复用 Core Searcher，链接以逻辑名称匹配，内容取实际目标。独立选中的目录链接可展开，载荷内部目录链接跳过，文件链接保留名称并读取目标。INI/.deploy 按逻辑来源解析相对路径。进度见 [LOCAL-SEARCHER-TASKS.md](LOCAL-SEARCHER-TASKS.md)。
+
+代码规范采用 `Zongsoft.CodeAnalysis` 1.1.0，检查方法与 SDK 要求见 [仓库规范](../AGENTS.md#代码规范检查)。

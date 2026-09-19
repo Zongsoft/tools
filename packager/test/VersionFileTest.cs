@@ -3,8 +3,9 @@ using System.IO;
 using System.Linq;
 using System.Text;
 
-using Zongsoft.Services;
 using Xunit;
+
+using Zongsoft.Services;
 
 namespace Zongsoft.Tools.Packager.Tests;
 
@@ -154,7 +155,8 @@ public sealed class VersionFileTest
 	public void Load_MissingIdentityOrZeroVersion_Fails(bool existing, string name, string version)
 	{
 		using var directory = new MigrationTestDirectory();
-		if(existing) directory.Write(".version", "Zongsoft.Daemon@1.0.0\n");
+		if(existing)
+			directory.Write(".version", "Zongsoft.Daemon@1.0.0\n");
 
 		Assert.Throws<InvalidOperationException>(() => PackCommand<Package.Tar>.VersionFile.Load(directory.Path, name, null, version == null ? null : Version.Parse(version)));
 	}

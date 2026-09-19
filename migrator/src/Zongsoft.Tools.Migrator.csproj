@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFrameworks>net8.0;net9.0;net10.0;</TargetFrameworks>
+		<Version>0.1.0</Version>
+		<PackAsTool>true</PackAsTool>
+		<ToolCommandName>dotnet-migrate</ToolCommandName>
+		<PackageDescription>The Zongsoft Migration .NET Tool.</PackageDescription>
+		<Product>Zongsoft Migration Tool</Product>
+		<Description>Zongsoft Application Migration Tool.</Description>
+		<PackageProjectUrl>https://github.com/Zongsoft/tools/tree/main/migrator</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/Zongsoft/tools/tree/main/migrator</RepositoryUrl>
+		<ApplicationIcon>..\..\zongsoft-logo.ico</ApplicationIcon>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="Zongsoft.Tools.Migrator.Tests" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="..\docs\**\*" Pack="true" PackagePath="docs/%(RecursiveDir)" />
+		<None Include="..\README.md" Pack="true" PackagePath="\" />
+		<None Include="..\README.zh-Hans.md" Pack="true" PackagePath="\" />
+		<Content Include="../executor/src/bin/$(Configuration)/net10.0/linux-x64/publish/**/*" Link=".migrator/linux-x64/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Pack="false" />
+		<Content Include="../executor/src/bin/$(Configuration)/net10.0/linux-arm64/publish/**/*" Link=".migrator/linux-arm64/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Pack="false" />
+		<Content Include="../executor/src/bin/$(Configuration)/net10.0/win-x64/publish/**/*" Link=".migrator/win-x64/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Pack="false" />
+		<Content Remove="@(Content->WithMetadataValue('Extension', '.pdb'));@(Content->WithMetadataValue('Extension', '.dbg'));@(Content->WithMetadataValue('Extension', '.dwo'));@(Content->WithMetadataValue('Extension', '.xml'));@(Content->WithMetadataValue('Extension', '.lib'));@(Content->WithMetadataValue('Extension', '.exp'))" />
+	</ItemGroup>
+
+	<Choose>
+		<When Condition="$(Configuration)=='Debug'">
+			<ItemGroup>
+				<Reference Include="Zongsoft.Core">
+					<HintPath>..\..\..\framework\Zongsoft.Core\src\bin\$(Configuration)\$(TargetFramework)\Zongsoft.Core.dll</HintPath>
+				</Reference>
+			</ItemGroup>
+		</When>
+		<Otherwise>
+			<ItemGroup>
+				<PackageReference Include="Zongsoft.Core" />
+			</ItemGroup>
+		</Otherwise>
+	</Choose>
+
+	<ItemGroup>
+		<Compile Update="Properties\Resources.Designer.cs">
+			<AutoGen>True</AutoGen>
+			<DesignTime>True</DesignTime>
+			<DependentUpon>Resources.resx</DependentUpon>
+		</Compile>
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Update="Properties\Resources.resx">
+			<Generator>ResXFileCodeGenerator</Generator>
+			<LastGenOutput>Resources.Designer.cs</LastGenOutput>
+		</EmbeddedResource>
+	</ItemGroup>
+
+	<Import Project="..\.shared\Migration.props" />
+</Project>

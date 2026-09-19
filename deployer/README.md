@@ -337,3 +337,14 @@ Profile imports use Core 7.59.0: ProfileReader handles imports and recursion dir
 See [implementation details](docs/implementation.md#core-profile-declarations-and-saving) for Core Profile source/override rules and read/write responsibilities. Deployment does not save its manifests.
 
 Local source searches and links follow [the implementation contract](docs/implementation.md#local-search-and-source-links).
+
+## Development checks
+
+Production and test projects use `Zongsoft.CodeAnalysis` 1.1.0. Use .NET SDK 10.0.401 or a compatible newer compiler. The analyzer is a private build dependency, not a runtime dependency of the tool.
+
+```powershell
+dotnet build src/Zongsoft.Tools.Deployer.csproj -p:ZongsoftCodeStyleStrict=true -p:GeneratePackageOnBuild=false
+dotnet format style src/Zongsoft.Tools.Deployer.csproj --no-restore --verify-no-changes --diagnostics IDE0049
+```
+
+The build checks every configured target framework. See the [repository instructions](../AGENTS.md#代码规范检查) for editor configuration, resource generation and validation requirements.

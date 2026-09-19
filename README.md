@@ -9,6 +9,9 @@ Provides a suite of tools to assist in development, including:
 - [deployer](https://github.com/Zongsoft/tools/tree/main/deployer)
 	> Deployment Tool: Provides functions for application deployment and release, including file copying and package retrieval.
 
+- [migrator](migrator/README.md)
+	> Migration Tool: migration generation and native database/S3 execution.
+
 - [packager](https://github.com/Zongsoft/tools/tree/main/packager)
 	> Packaging Tool: Creates application installation package. _(first use the deployment tool to prepare the content to be packaged)_
 
@@ -17,10 +20,16 @@ Provides a suite of tools to assist in development, including:
 
 ## NuGet publishing
 
-[Publish NuGet Packages](.github/workflows/publish-nuget.yml) provides a manual project selector for `deployer` and `packager`, runs only on `main`, and serializes publishing runs. `regular` is a Windows GUI application without NuGet packaging configuration.
+The manual [Publish NuGet Packages](.github/workflows/publish-nuget.yml) workflow selects deployer, packager or migrator and runs only on main. Configure NUGET_USER in the release environment and a NuGet trusted publishing policy for this workflow; publishing obtains a temporary key after building.
 
-Configure the GitHub `release` environment and its `NUGET_USER` secret with the nuget.org profile name (not an email address). Add a [NuGet trusted publishing policy](https://www.nuget.org/account/trustedpublishing) for owner `Zongsoft`, repository `tools`, workflow file `publish-nuget.yml` (filename only), and environment `release`. The workflow uses `id-token: write` and `NuGet/login@v1` to obtain a temporary key after the build.
+Packager builds independently. Migrator builds Linux and Windows native artifacts in separate jobs, merges all three RIDs, then uses Cake compile to create the tool package. Ordinary build/test does not publish native executors. See each tool README for local packaging; Cake pack pushes packages and is not for local testing.
 
-The workflow installs .NET 8/9/10 and restores Cake 6.2.0 from the repository tool manifest. For `packager`, it prepares the Rocky Linux 9 Podman container with the runner's checkout mounted at `/workspace`; the existing Cake build includes both `linux-x64` and `linux-arm64` Native AOT migrators. Publishing uses Cake's `pack --exclusive` target to push the already built packages and skip duplicate versions.
+## Package versions
 
-Before the first publish, verify local packages: run `dotnet tool restore` at the repository root, then `dotnet cake --edition Release --target build` in the selected tool directory and inspect `src/bin/Release/*.nupkg`. The packager build requires its documented Podman environment. To collect packages separately, use `dotnet pack src/Zongsoft.Tools.Deployer.csproj -c Release -o ./artifacts` in `deployer`, or the corresponding Packager project in `packager` after preparing both migrators. These verification commands do not push packages.
+[Directory.Packages.props](Directory.Packages.props) centrally manages common dependencies: Zongsoft.Core, Zongsoft.CodeAnalysis and test packages. Each project declares its own references without versions for these packages. Specialized dependencies, such as deployer's NuGet SDK and the migrator executor's database drivers and AWS SDK, retain their versions in the owning project using `VersionOverride`. Shared language, author/company/copyright and NuGet metadata, tool package icons and the analyzer reference are defined in [Directory.Build.props](Directory.Build.props). Tool identities, versions, target frameworks, test settings and publishing modes stay in each project. Solutions and release workflows remain independent. AOT containers mount both root props files read-only at the container root.
+
+## Code style synchronization
+
+All tools share the root `.editorconfig`. `Directory.Build.props` sets `ZongsoftGuidelinesSynchronization` to the repository root. During build preparation, `Zongsoft.CodeAnalysis` copies the template from the referenced NuGet package to that file; no separate synchronization command or GitHub access is required.
+
+Synchronization overwrites the root file without merging local edits. Maintain the template in guidelines; Directory.Packages.props defines the shared analyzer version. After updating the package and building, review and commit the configuration changes. Restore, clean, design-time builds and builds skipped by Visual Studio's up-to-date check do not synchronize; use Rebuild when necessary. AOT containers mount the root configuration read-only; the Linux publish script passes `-p:ZongsoftGuidelinesSynchronization=` to disable synchronization.

@@ -57,7 +57,7 @@ description: 修改或审查 Zongsoft tools/deployer 的 .deploy 描述语法、
 
 实现细节见 [中文](docs/implementation.zh-Hans.md) / [English](docs/implementation.md)。优先复用已引用的 Zongsoft.Core 和 NuGet API：CommandLine、Profile/集合、DictionaryExtension，以及 NuspecReader.GetContentFiles、NuGet.Frameworks、JsonRuntimeFormat/RuntimeGraph。Core 7.59.0 的 ProfileReader 内置导入，递归共享读取器并保护循环及 ProfileOptions.MaximumDepth 指定的层数上限（默认 64，正整数，根文件计一层）。ProfileOptions.Importing/Imported 均为 Action<ProfileContext>，上下文提供 FilePath、Depth、Referer、Profile；前置 Profile 为 null，后置为合并后的子文件，前后分别构造。deployer 通过 Importing 的 context.FilePath 记录导入文件哈希，根文件单独记录，不维护 DeploymentImports。回调抛异常终止整个加载，不提供禁用或跳过导入。合并按读取顺序替换有效引用并保留本地声明；ProfileWriter 按来源保存，deployer 不调用保存入口。
 
-RID 资源使用 src/Resources/ 中固定的 dotnet/runtime v10.0.0 图谱，禁止从 MSBuildToolsPath 或运行机器 SDK 目录取图谱。图谱及许可证等第三方文件保留上游原始字节，不转换换行、编码或缩进；.gitattributes 的 -text 防止 Git 自动转换。更新快照时同步双语实现文档的版本/哈希及上游许可证，核对上游原件哈希并验证竞争候选顺序。包引用版本在本项目维护，保留用户的升级。
+RID 资源使用 src/Resources/ 中固定的 dotnet/runtime v10.0.0 图谱，禁止从 MSBuildToolsPath 或运行机器 SDK 目录取图谱。图谱及许可证等第三方文件保留上游原始字节，不转换换行、编码或缩进；.gitattributes 的 -text 防止 Git 自动转换。更新快照时同步双语实现文档的版本/哈希及上游许可证，核对上游原件哈希并验证竞争候选顺序。通用包版本在仓库根 Directory.Packages.props 维护，NuGet.* 专用依赖在本项目通过 VersionOverride 维护，保留用户的升级。
 
 非测试手写 C# 文件包含既有 /* */ 版权头，使用 Tab/CRLF。沿用中文 #region 分区，按字段、构造、属性、方法或职责组织；展开一行多语句并在方法阶段之间留空行，不使用 using 类型别名；#endregion 前不留空行。DeploymentPlan、DeploymentOperation、PackageSelection、DeploymentSession 各自独立文件，NugetRuntime 专管 RID 适配。README 引用 docs 的中英文实现文档，文档及图谱许可证随工具包分发。
 资源维护：中性 Resources.resx 使用 ResXFileCodeGenerator 生成 Resources.Designer.cs；修改中性/中文资源后在 Visual Studio 运行自定义工具。调用处直接使用 Properties.Resources 的生成属性，使用 string.Format 格式化模板，不再根据字符串键查资源。卫星资源不生成第二套同名访问类。dotnet build 不自动触发该 IDE 自定义工具，提交生成输出时只允许空白规范化，不手写属性。
@@ -65,3 +65,5 @@ RID 资源使用 src/Resources/ 中固定的 dotnet/runtime v10.0.0 图谱，禁
 ## Searcher 接入
 
 本地通配搜索统一调用 Core Searcher.Search，以 Searcher.Target 指定 Files、Directories 或 Both（默认），链接以逻辑名称匹配，内容取实际目标。独立选中的目录链接可展开，载荷内部目录链接跳过，文件链接保留名称并读取目标。INI/.deploy 按逻辑来源解析相对路径。进度见 [LOCAL-SEARCHER-TASKS.md](LOCAL-SEARCHER-TASKS.md)。
+
+代码规范采用 `Zongsoft.CodeAnalysis` 1.1.0，检查方法与 SDK 要求见 [仓库规范](../AGENTS.md#代码规范检查)。

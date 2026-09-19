@@ -89,19 +89,19 @@ partial class Package
 
 			var text = string.Join(", ", values);
 			if(text.IndexOfAny(['\r', '\n', '\0']) >= 0)
-				throw new InvalidDataException(string.Format(Properties.Resources.DebianRelationshipInvalid, name));
+				throw new InvalidDataException(string.Format(Properties.Resources.DebianRelationshipInvalid_Message, name));
 
 			foreach(var group in text.Split(','))
 			{
 				var alternatives = group.Split('|');
 				if(alternatives.Length > 1 && name is not ("Depends" or "Recommends" or "Suggests"))
-					throw new InvalidDataException(string.Format(Properties.Resources.DebianRelationshipInvalid, name));
+					throw new InvalidDataException(string.Format(Properties.Resources.DebianRelationshipInvalid_Message, name));
 
 				foreach(var item in alternatives)
 				{
 					var match = Relationship.Pattern.Match(item.Trim());
 					if(!match.Success || (name == "Provides" && match.Groups["operator"].Success && match.Groups["operator"].Value != "="))
-						throw new InvalidDataException(string.Format(Properties.Resources.DebianRelationshipInvalid, name));
+						throw new InvalidDataException(string.Format(Properties.Resources.DebianRelationshipInvalid_Message, name));
 				}
 			}
 

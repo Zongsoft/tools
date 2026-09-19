@@ -1,84 +1,28 @@
 ## 概述
 
-本目录遵循 [../AGENTS.md](../AGENTS.md)。本项目是 `dotnet-pack` 工具，生成 tar.gz、Debian、RPM 包及安装生命周期脚本；详细流程见 [SKILL.md](SKILL.md) 和 [docs/implementation.md](docs/implementation.md)。
+本目录遵循 [../AGENTS.md](../AGENTS.md)。本工具生成 tar.gz、deb、rpm 安装包。开始修改前阅读 [SKILL.md](SKILL.md)、双语 README 和 [实现说明](docs/implementation.md)。
 
-## 代码风格
+## 代码规范
 
-- 不使用 `using 名称 = 类型或命名空间;` 别名语法；两端交接测试调用独立 migrator 进程，不直接引用运行器协议类型，不使用程序集别名。
-- 生产代码使用项目既有的 `/* */` MIT 版权头，单元测试代码不添加文件头版权注释；方法之间留一个空行，按职责用 `#region` / `#endregion` 分组。保持 CRLF 换行和 Tab 缩进。
+生产代码采用既有 MIT 版权头；测试不加版权头，不使用类型或程序集别名。Tab、CRLF、方法间空行、适当中文 region；sh 使用 LF。CodeAnalysis 1.1.0 严格构建和 IDE0049 验证均需通过。资源经 ResXFileCodeGenerator 生成，不编写本地化测试。
 
-## 职责边界
+## 职责与契约
 
-- `PackCommand*` 解析命令、初始化变量、加载打包项并选择包类型。
-- `Package*` 保存跨格式包模型和格式特定元数据；`Generator*` 负责编码具体容器、头部和载荷。
-- `Scriptor.Systemd` 解析/生成服务单元与安装卸载脚本。
-- `MigrationProfile`/`MigrationLoader` 使用 Zongsoft.Core Profile 解析升迁 INI/参数；`MigrationBundle` 收集安装时运行器；`.shared` 提供链接到两端的协议源码、MigrationProvider 参数规则、MigrationUtility 通用参数方法及其本地化资源；独立 `migrator/src` 执行建库、SQL、S3 初始化及状态检查。主项目不引用或构建 migrator；Cake 构建流程先独立发布运行器再制作工具包。`.shared/Migration.props` 共享源码和资源声明，Cake 独立 Native AOT 发布到 `src/.migrator/linux-x64/` 和 `src/.migrator/linux-arm64/`，主项目将其作为普通 Content 复制到输出和 NuGet 工具包，运行时按 `.migrator/<RID>/` 约定收集完整目录，不分析程序集依赖。migrator 目标为 net10.0，TDengine 使用 ClientWebSocket 直接访问 taosAdapter；升迁资源配置 ResXFileCodeGenerator 并保留中英文资源与全球化支持。
-- `MigrationLoader.Database` 的私有批次实现仅在主项目预处理 SQL，生成安装根 `.migration/.artifacts/` 下的有序 UTF-8 批次；`.migration/` 保留计划、运行器与入口，执行器逐文件提交不再分段。计划使用源码生成 JSON，连接工厂不使用反射。
-- `Migrator.Database` 为抽象 partial 基类，嵌套六种数据库实现；共用 ADO.NET 执行辅助，TDengine 独占 WebSocket 会话。`Migrator.Create` 显式选择类型。AOT 环境为独立 Rocky Linux 9/glibc 2.34 容器，不修改参考 framework Pod；普通 `dotnet build/test` 不启动容器。Cake 创建 Pod 时向 `podman kube play` 传入相对 YAML 路径，避免 Windows 盘符被识别为 URL 协议。
-- `Normalizer`、`Variables` 和 `Utility` 负责变量、路径、Runtime Identifier 与 Unix 权限等共享语义。
+- PackCommand 解析源目录，再由 VersionFile 使用 Core ApplicationVersion.Load/Save 管理直属 .version。最终身份确定后初始化变量。成功制包后才保存源文件；失败不改写，保存失败保留包并报错。
+- 包内 .version 通过 ApplicationIdentifier.Save(Stream) 原样写入内存，不额外追加换行，强制替换同目标旧条目。所有编码器经 Entry.OpenRead 读取。
+- Package 是跨格式模型，Generator 编码容器；Scriptor.Systemd 负责宿主、服务和生命周期。tar/deb/rpm 保持路径、排除、权限和阶段意图一致，各自遵循格式规范。
+- Migrator 仅按 --migrator 输入名称、最终 Edition/Version/Runtime 查找并验证既有 tar.gz 与脚本；先展开变量；无 / 或 \ 时从最终 source 逐级查找父目录至根，不查子目录；有分隔符时只定位显式目录，相对目录基于 source。统一补升迁后缀；只有两文件都缺失才继续向上，半套或元数据/RID 错误立即失败，不能跨目录拼配或选择其他身份。全部缺失报告预期文件名和已检查目录。--migrator 空值或全空白视为未指定。升迁输入解析和 Native AOT 发布由独立 migrator 工具负责。
+- packager 不引用独立 migrator 项目或共享协议，不分发原生产物。两个输入文件原样加入安装根 .migration/，脚本 0755、归档 0600，载荷冲突失败。
+- 安装调用外部脚本 apply，systemd 门禁调用 check，均明确传入 /var/lib/<包名>/packager。升迁失败阻止启动；无 daemon 也执行，DESTDIR 不执行钩子；卸载保留状态。
+- 三格式的安装/升级/覆盖/卸载阶段不同，保留 Debian configure 和 RPM 剩余实例语义。根路径别名、符号链接与安装目录必须规范化，避免越界目标。
+- Core Searcher 处理本地通配与链接，按逻辑来源定位相对路径。变量显式选项优先于环境，再取默认；TextSource 的 file:/text: 只解释一次。
+- --listen 生成宿主 --urls，完整地址保留；已有服务 ExecStart 不改写。Debian 依赖使用 name (>= version)，RPM 使用 name >= version。
+- 安装包来源元数据使用 Packager:程序集名@版本，独立于应用 .version。大载荷使用 DeleteOnClose 临时流和增量摘要，不分配完整包体。
 
-## 高风险契约
+## 验证与边界
 
-- INI/ENV 导入复用 Core Reader 内置导入，每个根文件及导入文件均需校验；不自行实现导入递归。SQL 路径、参数查找和条目错误使用 `entry.Profile.FilePath`，不能回退到命令行根 INI。段落按连续声明来源拆分任务，保持有效顺序和同来源去重；导入覆盖与独立 INI 输入的执行语义不同，见双语升迁指南。
+`dotnet test test/Zongsoft.Tools.Packager.Tests.csproj -f net10.0`；`dotnet build Zongsoft.Tools.Packager.slnx -p:ZongsoftCodeStyleStrict=true` 覆盖所有 TFM，另执行 IDE0049 verify。
 
-- tar、deb、rpm 必须对相同输入保持一致的目标路径、根路径别名、排除、权限和生命周期意图，同时尊重各格式的元数据规范。
-- 安装、升级、覆盖安装和最终卸载的脚本阶段不同；修改卸载保护时保留 Debian 动作参数和 RPM 剩余实例语义。
-- 根路径条目、安装目录、符号链接和 systemd 服务可写系统位置或删除文件；生成测试只检查隔离产物，不执行安装脚本。
-- 二进制格式中的长度、偏移、对齐、校验和、字节序、cpio/tar 路径与 RPM 标签属于精确契约，避免无关重构。
-- 公开选项或行为变化应同步 `README.md`、`README.zh-Hans.md`、`docs/implementation.md`、资源文本和测试。
-- 升迁失败必须阻止服务启动；每次安装和重试均执行全部 SQL，幂等性由脚本作者保证，不维护逐文件成功历史或跳过逻辑。不自动删库删桶、不记录凭据日志。`migration.json` 含参数值，模式保持 `0600`，真实凭据不用于测试。
+Cake restore/build/test 使用同一 edition，默认 test；build 只构建本工具并制 NuGet 包，不启动容器。pack 会推送 NuGet，未获明确授权不能运行。Debug 引用本地 Core，Release 使用 NuGet，测试不能混用。
 
-## 验证
-
-- AOT 构建 Pod 的 DNS 在 YAML 的 `dnsConfig.nameservers` 中配置；修改后需在无构建运行时显式重建专用 Pod，普通 `podman start` 不更新配置。保留工作区和缓存卷，不修改 WSL、宿主或其他 Pod 的 DNS。
-
-- Cake 只从 `test/*.csproj` 与 `migrator/test/*.csproj` 收集测试项目，不能递归扫描构建输出。Cake 还原必须传递与编译、测试相同的 `Configuration`（来自 `--edition`）。Core 本地 DLL 引用仅用于 Debug；Release 测试通过主项目获得 Core NuGet 依赖，不能混用本地 Release DLL。
-
-- 本地化不编写单元测试；不切换测试文化、不匹配翻译文案。错误测试验证异常类型、文件/段落/参数标识和敏感值不泄漏。
-
-- 打包器验证：`dotnet test test/Zongsoft.Tools.Packager.Tests.csproj -f net10.0`，保留输入、SQL 批次预处理、制包及 JSON 交接测试。
-- 运行器验证：`dotnet test migrator/test/Zongsoft.Tools.Packager.Migrator.Tests.csproj -f net10.0`，只引用 `migrator/src`，不引用主项目；迁移两端协作逻辑时运行这两个测试项目。
-- 构建：`dotnet build Zongsoft.Tools.Packager.slnx -f net10.0`；全部工具 TFM 使用不带 `-f` 的解决方案构建验证。
-- 使用临时发布目录生成包，检查清单、权限、元数据、脚本和归档路径；格式工具只做只读检查。
-- 未经明确要求，不执行生成的 `install.sh`/`uninstall.sh`，不调用 `dpkg -i`、`rpm -U`、`systemctl`、`sudo`，不运行 Cake `pack`。
-
-- `--migration` 指定 INI 缺失或模式无匹配只警告并跳过，全部缺失按普通包处理；存在的 INI 内容、参数与 SQL 仍严格校验。生成内容仅保留 `.migration/` 目录，SQL 位于 `.migration/.artifacts/`。
-
-S3 桶初始化支持 public/private、默认加密（sse-s3/sse-kms及可选KMS密钥标识）、版本控制（enabled/suspended）和 tag.* 桶标签。省略 Encryption 时不写入 JSON、不调用加密 API，采用服务端默认；显式对象必须包含有效 Mode。已有桶通常跳过，带本地 pending 的未完成初始化会重试；新建桶的指定配置全部完成才清除 pending；选项文本仅在打包端解析，共享 Bucket 模型校验结构，运行器使用标准 S3 API。
-
-SQL 批次按规范升迁器名称组织，例如 `.migration/.artifacts/mysql/0001.sql` 和 `.migration/.artifacts/postgres/0001.sql`。每次加载计划时各升迁器从 0001 独立计数，同类任务共享连续编号；PostgreSQL 别名统一归入 postgres。没有导入时每个非空段落生成一个任务；合并后的段落按连续声明来源拆分任务，各自从来源 INI 查找连接参数并保留脚本列表；任务 Id 用于日志和状态，不作为目录名。同一来源段落内 SQL 重叠匹配跨任务去重，不同来源和独立命令行输入不去重；导入的同名条目按 Core 读取顺序覆盖。S3 配置直接保存在计划中，不生成空中间目录。
-
-`MigrationLoader.Load` 的局部计数字典传给 `MigrationLoader.Database`，避免多次加载或失败重试继承编号。解析顺序保留；运行器当前串行，但不承诺跨任务执行顺序，数据库任务内部的脚本顺序继续保证。
-
-## 打包器来源元数据
-
-`Generator` 从自身程序集计算 `程序集名@版本号`（AssemblyName.Version 的完整文本），写入 tar 的 PAX 全局 `Packager` 属性、deb 的 `Packager` 控制字段、RPM 的 `RPMVERSION`（1064）。RPM 1015 保留维护者；不新增载荷文件，不修改源/包内 `.version` 或升迁计划。格式回归核对生成工具身份与应用版本、维护者彼此独立。
-
-## 文档与验证记录
-
-当前行为以双语 README、升迁指南和实现说明为准；验证记录与 AOT 警告审查保留对应阶段的日期、计数、路径及产物哈希，不应视为当前工具或容器状态。命令示例采用本机 hosting 已有的 `.deploy/default/migration/1.0.0/*.ini`，不得复制真实连接凭据。
-
-## 应用版本管理
-
-- `PackCommand.VersionFile`（`src/PackCommand.Version.cs`）只加载源目录直属 `.version`，使用 Core `ApplicationVersion.Load(Stream)/Save(Stream)`，由打包器显式打开或创建直属文件；损坏或不可读时失败。`--name`、`--version` 为条件必填，空白名称或 Edition 等同省略，版本对象为空则采用源版本，多个 Edition 必须明确选择，名称及 Edition 忽略大小写匹配并保留文件拼写。
-- 身份解析在完整变量初始化之前；无源文件时要求有效名称和非零版本。包内版本通过 `ApplicationIdentifier.Save(Stream)` 原样写入内存，不追加换行，`EntryCollection.SetVersion` 强制替换同安装位置旧条目，内容格式由 Core 决定，权限为 0644；内存条目统一经 `OpenRead()` 供各生成器读取。
-- 全部制包成功后才保存源版本，只更新所选 Edition 并保留其他条目顺序；保存失败保留安装包并返回错误。Core 保存规范化格式，不保留原注释。测试使用临时目录，覆盖三格式内容、唯一性、长度、权限、RPM 摘要和失败时序。
-
-## 输入与归档改进
-
-- 变量优先级为显式选项 > 环境 > 描述符默认值；身份由源版本规则决定。按使用展开，不预读文件，未知/循环引用失败。
-- TextSource 统一源目录文件与文本：file: 强制文件，text: 原样文本，文件内容不展开或二次解释；pre/post 为严格文件列表。
-- Core Searcher 统一载荷、INI、SQL 的 *、?、独立段 **；每个参数位置按固定前缀下相对路径 Ordinal 展开，保留任务与段落内去重规则。文件链接按逻辑名称读取目标，独立选中的目录链接可展开，内部目录链接跳过。
-- Entry.IsDirectory 保留空目录、源模式及时间；Generator.Entries 补齐 0755 父目录。目录不调用 OpenRead，不列入 Debian conffiles。tar 根目录别名卸载仅 rmdir 显式空目录。
-- Debian/RPM 大载荷用 DeleteOnClose 独占临时流及增量摘要，不分配完整载荷/包体数组；Unix 临时文件 0600，异常也释放。Debian 六种关系字段由 Package.Deb 独立校验，不复用 RPM 语法。
-- 实施清单及验收证据见 [docs/improvements.md](docs/improvements.md)，输入与归档回归位于 PackageInputTests、PackageArtifactTests。
-
-监听地址选项为 `--listen`，对应 Variables.Listen；生成 systemd 服务时写入宿主 `--urls`。纯端口转为 `http://127.0.0.1:<port>`，完整地址保留；省略时不追加 `--urls`，已有 service 文件的 ExecStart 不改写。
-
-## Searcher 接入
-
-本地通配搜索统一复用 Core Searcher，链接以逻辑名称匹配，内容取实际目标。独立选中的目录链接可展开，载荷内部目录链接跳过，文件链接保留名称并读取目标。INI/.deploy 按逻辑来源解析相对路径。进度见 [LOCAL-SEARCHER-TASKS.md](LOCAL-SEARCHER-TASKS.md)。
-
-## 安装包命名与依赖声明
-
-包文件名统一为 `<name>@<version>-<architecture>.<extension>` 或 `<name>-<edition>@<version>-<architecture>.<extension>`，架构取小写名称，不含平台前缀；name 仍遵循 daemon 标识优先规则，tar 的 `.sh` 入口使用同一文件主名。Debian `--dependencies` 使用 `name (>= version)` 并写入 Depends，RPM 可使用 `name >= version` 并写入 Requires；Debian 不接受 RPM 示例中省略版本括号的语法。历史验证记录的产物路径与哈希保留原值。
+文件系统测试使用临时目录，包内容检查不等于安装；不得擅自执行安装、systemd、sudo 或真实数据库/存储操作。交接集成通过产物或独立进程，不跨工具引用协议类型。公开行为修改同步双语 README、实现说明、资源和测试。

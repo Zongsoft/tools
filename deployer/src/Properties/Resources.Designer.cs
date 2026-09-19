@@ -203,5 +203,14 @@ namespace Zongsoft.Tools.Deployer.Properties {
                 return ResourceManager.GetString("Review.UnknownResolver", resourceCulture);
             }
         }
+
+        /// <summary>
+        ///   查找类似 The embedded runtime graph is missing: {0}. 的本地化字符串。
+        /// </summary>
+        internal static string RuntimeGraphMissing_Message {
+            get {
+                return ResourceManager.GetString("RuntimeGraphMissing.Message", resourceCulture);
+            }
+        }
     }
 }

@@ -146,7 +146,7 @@ namespace Zongsoft.Regular
 			mnuFileNew.ShortcutKeys = System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.N;
 			mnuFileNew.Size = new System.Drawing.Size(165, 22);
 			mnuFileNew.Text = "新建(&N)";
-			mnuFileNew.Click += mnuFileNew_Click;
+			mnuFileNew.Click += NewFileClick;
 			// 
 			// mnuFileOpen
 			// 
@@ -156,7 +156,7 @@ namespace Zongsoft.Regular
 			mnuFileOpen.ShortcutKeys = System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.O;
 			mnuFileOpen.Size = new System.Drawing.Size(165, 22);
 			mnuFileOpen.Text = "打开(&O)";
-			mnuFileOpen.Click += mnuFileOpen_Click;
+			mnuFileOpen.Click += OpenFileClick;
 			// 
 			// toolStripSeparator2
 			// 
@@ -171,14 +171,14 @@ namespace Zongsoft.Regular
 			mnuFileSave.ShortcutKeys = System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.S;
 			mnuFileSave.Size = new System.Drawing.Size(165, 22);
 			mnuFileSave.Text = "保存(&S)";
-			mnuFileSave.Click += mnuFileSave_Click;
+			mnuFileSave.Click += SaveFileClick;
 			// 
 			// mnuFileSaveAs
 			// 
 			mnuFileSaveAs.Name = "mnuFileSaveAs";
 			mnuFileSaveAs.Size = new System.Drawing.Size(165, 22);
 			mnuFileSaveAs.Text = "另存为(&A)";
-			mnuFileSaveAs.Click += mnuFileSaveAs_Click;
+			mnuFileSaveAs.Click += SaveFileAsClick;
 			// 
 			// toolStripSeparator3
 			// 
@@ -190,7 +190,7 @@ namespace Zongsoft.Regular
 			mnuFileExit.Name = "mnuFileExit";
 			mnuFileExit.Size = new System.Drawing.Size(165, 22);
 			mnuFileExit.Text = "退出(&X)";
-			mnuFileExit.Click += mnuFileExit_Click;
+			mnuFileExit.Click += ExitClick;
 			// 
 			// mnuEdit
 			// 
@@ -205,7 +205,7 @@ namespace Zongsoft.Regular
 			mnuEditUndo.ShortcutKeys = System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.Z;
 			mnuEditUndo.Size = new System.Drawing.Size(185, 22);
 			mnuEditUndo.Text = "撤销(&U)";
-			mnuEditUndo.Click += mnuEditUndo_Click;
+			mnuEditUndo.Click += UndoClick;
 			// 
 			// toolStripSeparator5
 			// 
@@ -220,7 +220,7 @@ namespace Zongsoft.Regular
 			mnuEditCut.ShortcutKeys = System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.X;
 			mnuEditCut.Size = new System.Drawing.Size(185, 22);
 			mnuEditCut.Text = "剪切(&T)";
-			mnuEditCut.Click += mnuEditCut_Click;
+			mnuEditCut.Click += CutClick;
 			// 
 			// mnuEditCopy
 			// 
@@ -230,7 +230,7 @@ namespace Zongsoft.Regular
 			mnuEditCopy.ShortcutKeys = System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.C;
 			mnuEditCopy.Size = new System.Drawing.Size(185, 22);
 			mnuEditCopy.Text = "复制(&C)";
-			mnuEditCopy.Click += mnuEditCopy_Click;
+			mnuEditCopy.Click += CopyClick;
 			// 
 			// mnuEditPaste
 			// 
@@ -240,7 +240,7 @@ namespace Zongsoft.Regular
 			mnuEditPaste.ShortcutKeys = System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.V;
 			mnuEditPaste.Size = new System.Drawing.Size(185, 22);
 			mnuEditPaste.Text = "粘贴(&P)";
-			mnuEditPaste.Click += mnuEditPaste_Click;
+			mnuEditPaste.Click += PasteClick;
 			// 
 			// toolStripSeparator6
 			// 
@@ -253,7 +253,7 @@ namespace Zongsoft.Regular
 			mnuEditSelectAll.ShortcutKeys = System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.A;
 			mnuEditSelectAll.Size = new System.Drawing.Size(185, 22);
 			mnuEditSelectAll.Text = "选取所有(&A)";
-			mnuEditSelectAll.Click += mnuEditSelectAll_Click;
+			mnuEditSelectAll.Click += SelectAllClick;
 			// 
 			// mnuTools
 			// 
@@ -267,7 +267,7 @@ namespace Zongsoft.Regular
 			mnuToolsOptions.Name = "mnuToolsOptions";
 			mnuToolsOptions.Size = new System.Drawing.Size(118, 22);
 			mnuToolsOptions.Text = "选项(&O)";
-			mnuToolsOptions.Click += mnuToolsOptions_Click;
+			mnuToolsOptions.Click += OptionsClick;
 			// 
 			// mnuHelp
 			// 
@@ -281,7 +281,7 @@ namespace Zongsoft.Regular
 			mnuHelpAbout.Name = "mnuHelpAbout";
 			mnuHelpAbout.Size = new System.Drawing.Size(125, 22);
 			mnuHelpAbout.Text = "关于(&A)...";
-			mnuHelpAbout.Click += mnuHelpAbout_Click;
+			mnuHelpAbout.Click += AboutClick;
 			// 
 			// tlsDefault
 			// 
@@ -538,7 +538,7 @@ namespace Zongsoft.Regular
 			btnMatch.TabIndex = 2;
 			btnMatch.Text = "匹配(F5)";
 			btnMatch.UseVisualStyleBackColor = true;
-			btnMatch.Click += btnMatch_Click;
+			btnMatch.Click += MatchButtonClick;
 			// 
 			// lblPattern
 			// 
@@ -610,7 +610,7 @@ namespace Zongsoft.Regular
 			tvwResult.Name = "tvwResult";
 			tvwResult.Size = new System.Drawing.Size(511, 294);
 			tvwResult.TabIndex = 5;
-			tvwResult.AfterSelect += tvwResult_AfterSelect;
+			tvwResult.AfterSelect += ResultAfterSelect;
 			// 
 			// lblResult
 			// 

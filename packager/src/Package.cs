@@ -10,7 +10,7 @@
  *   钟峰(Popeye Zhong) <zongsoft@gmail.com>
  *
  * The MIT License (MIT)
- * 
+ *
  * Copyright (C) 2020-2026 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -95,7 +95,7 @@ public abstract partial class Package
 	public string[] Dependencies { get; set; }
 	public EntryCollection Entries { get; }
 	public InstallScripts Scripts { get; set; }
-	public Migration.MigrationPlan Migration { get; set; }
+	public Migrator Migrator { get; set; }
 	#endregion
 
 	#region 内部属性
@@ -140,6 +140,7 @@ public abstract partial class Package
 
 	#region 私有方法
 	private static string GetPackageName(string name, string edition) => string.IsNullOrEmpty(edition) ? name : $"{name}-{edition}";
+
 	private static string GetPackageIdentity(string name)
 	{
 		var daemon = Normalizer.Variables.Daemon;
@@ -187,7 +188,7 @@ public abstract partial class Package
 		public readonly bool Rooted = rooted;
 		public readonly bool IsDirectory = isDirectory;
 
-		internal Stream OpenRead() => this.IsDirectory ? throw new InvalidOperationException(string.Format(Properties.Resources.PackageEntryTypeConflict, this.EntryName)) : _content == null ? File.OpenRead(this.Source) : new MemoryStream(_content, false);
+		internal Stream OpenRead() => this.IsDirectory ? throw new InvalidOperationException(string.Format(Properties.Resources.PackageEntryTypeConflict_Message, this.EntryName)) : _content == null ? File.OpenRead(this.Source) : new MemoryStream(_content, false);
 
 		public override string ToString() => string.IsNullOrEmpty(this.Source) ?
 			$"{this.EntryName}({this.Size})" :
@@ -200,6 +201,7 @@ public abstract partial class Package
 		private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
 
 		public int Count => _entries.Count;
+
 		public bool Contains(string name) => name != null && _entries.ContainsKey(name);
 
 		internal void SetVersion(ApplicationIdentifier identifier)
@@ -218,7 +220,7 @@ public abstract partial class Package
 			var key = rooted ? "/" + entryName : entryName;
 
 			if(_entries.ContainsKey(key))
-				throw new InvalidOperationException(string.Format(Properties.Resources.GeneratedEntryConflicted, entryName));
+				throw new InvalidOperationException(string.Format(Properties.Resources.GeneratedEntryConflicted_Message, entryName));
 
 			var file = new FileInfo(source);
 			_entries.Add(key, new(source, entryName, file.Length, Utility.Unix.GetTimestamp(file.LastWriteTimeUtc), mode, rooted));
@@ -341,7 +343,7 @@ public abstract partial class Package
 			ValidatePath(name);
 			var key = rooted ? "/" + name : name;
 			if(_entries.TryGetValue(key, out var existing) && !existing.IsDirectory)
-				throw new InvalidOperationException(string.Format(Properties.Resources.PackageEntryTypeConflict, name));
+				throw new InvalidOperationException(string.Format(Properties.Resources.PackageEntryTypeConflict_Message, name));
 
 			var directory = (DirectoryInfo)resolved;
 			_entries[key] = new(directory.FullName, name, 0, Utility.Unix.GetTimestamp(directory.LastWriteTimeUtc), Utility.Unix.GetDirectoryMode(directory.FullName), rooted, true);
@@ -365,7 +367,7 @@ public abstract partial class Package
 		static void ValidatePath(string path)
 		{
 			if(path.Split('/').Any(part => part == "..") || path.IndexOfAny(['\r', '\n', '\0']) >= 0)
-				throw new InvalidDataException(string.Format(Properties.Resources.PackagePathInvalid, path));
+				throw new InvalidDataException(string.Format(Properties.Resources.PackagePathInvalid_Message, path));
 		}
 
 		void AddFile(string source, string entryName, string prefix, bool rooted, EntryExclusion exclusion)
@@ -392,7 +394,7 @@ public abstract partial class Package
 			if(_entries.TryGetValue(key, out var existing))
 			{
 				if(existing.IsDirectory)
-					throw new InvalidOperationException(string.Format(Properties.Resources.PackageEntryTypeConflict, entryName));
+					throw new InvalidOperationException(string.Format(Properties.Resources.PackageEntryTypeConflict_Message, entryName));
 
 				Dumper.PackageEntryConflicted(source, entryName);
 				return;

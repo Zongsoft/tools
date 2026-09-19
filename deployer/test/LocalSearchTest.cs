@@ -5,7 +5,7 @@ namespace Zongsoft.Tools.Deployer.Tests;
 public sealed class LocalSearchTest
 {
 	[Fact]
-	public async Task Deploy_FileLinks_PreserveLogicalNamesAndReportResolvedSources()
+	public async Task Deploy_FileLinks_PreserveLogicalNamesAndReportResolvedSourcesAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		var target = fixture.Write("physical/actual.dat", "linked payload");
@@ -34,7 +34,7 @@ public sealed class LocalSearchTest
 	[Theory]
 	[InlineData(false)]
 	[InlineData(true)]
-	public async Task Deploy_ExplicitPackageFileLink_PreservesLogicalNameAndResolvedSource(bool outsideCache)
+	public async Task Deploy_ExplicitPackageFileLink_PreservesLogicalNameAndResolvedSourceAsync(bool outsideCache)
 	{
 		using var fixture = new DeploymentFixture();
 		var package = fixture.Package("Linked.Source");
@@ -57,7 +57,7 @@ public sealed class LocalSearchTest
 	}
 
 	[Fact]
-	public async Task Deploy_ExplicitPackagePathEscapesLogicalRoot_RejectsBeforeWriting()
+	public async Task Deploy_ExplicitPackagePathEscapesLogicalRoot_RejectsBeforeWritingAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Linked.Source");
@@ -72,7 +72,7 @@ public sealed class LocalSearchTest
 	}
 
 	[Fact]
-	public async Task Deploy_SelectedDirectoryLink_ExpandsContentsAndSkipsNestedDirectoryLinks()
+	public async Task Deploy_SelectedDirectoryLink_ExpandsContentsAndSkipsNestedDirectoryLinksAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("physical/assets/ordinary/data.txt", "ordinary target");
@@ -94,7 +94,7 @@ public sealed class LocalSearchTest
 	}
 
 	[Fact]
-	public async Task Deploy_DirectoryWildcard_SelectsLinkAsTopLevelPayload()
+	public async Task Deploy_DirectoryWildcard_SelectsLinkAsTopLevelPayloadAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("physical/content/item.txt", "selected directory target");
@@ -110,7 +110,7 @@ public sealed class LocalSearchTest
 	}
 
 	[Fact]
-	public async Task Deploy_RecursiveFilePattern_DoesNotTraverseDirectoryLinks()
+	public async Task Deploy_RecursiveFilePattern_DoesNotTraverseDirectoryLinksAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/ordinary/data.txt", "ordinary source");
@@ -126,7 +126,7 @@ public sealed class LocalSearchTest
 	}
 
 	[Fact]
-	public async Task Deploy_LinkedManifest_UsesLogicalDirectoryForImportsAndSources()
+	public async Task Deploy_LinkedManifest_UsesLogicalDirectoryForImportsAndSourcesAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		var physical = fixture.Manifest("#@import child.deploy\nroot.txt", "physical/config.data");
@@ -149,7 +149,7 @@ public sealed class LocalSearchTest
 	}
 
 	[Fact]
-	public async Task Deploy_LockedLinkRetargetedToIdenticalContent_FailsBeforeWriting()
+	public async Task Deploy_LockedLinkRetargetedToIdenticalContent_FailsBeforeWritingAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		var original = fixture.Write("physical/first.dat", "same bytes");
@@ -177,7 +177,7 @@ public sealed class LocalSearchTest
 	}
 
 	[Fact]
-	public async Task Deploy_LinkRetargetedAfterPlanValidation_StopsBeforeCopyingLink()
+	public async Task Deploy_LinkRetargetedAfterPlanValidation_StopsBeforeCopyingLinkAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/first.txt", "first operation");
@@ -211,7 +211,7 @@ public sealed class LocalSearchTest
 	}
 
 	[Fact]
-	public async Task Deploy_SelectedDanglingLink_FailsBeforeAnyCopy()
+	public async Task Deploy_SelectedDanglingLink_FailsBeforeAnyCopyAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/ordinary.txt", "would copy first");
@@ -240,6 +240,7 @@ public sealed class LocalSearchTest
 		Assert.Equal(selected, match.Path);
 		Assert.Equal(suffix, match.Suffix.Replace('\\', '/'));
 	}
+
 	private sealed class CallbackWriter(Action callback) : StringWriter
 	{
 		public override void WriteLine(string value)
