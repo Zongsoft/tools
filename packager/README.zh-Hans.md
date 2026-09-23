@@ -11,9 +11,21 @@
 
 它主要面向 .NET 服务和命令行应用，打包时不依赖外部的 `tar`、`dpkg-deb`、`rpmbuild` 或 `cpio` 命令。
 
+## 基础概念
+
+- **源目录：** `--source` 指向已发布或已暂存的应用文件。打包器只读取该目录直属的 `.version` 文件。
+- **打包项：** 不提供位置参数时，递归包含 `--source` 下的全部文件；提供位置参数时，只包含指定文件和目录。
+- **打包与安装：** `dotnet-pack` 只生成安装包，不会安装。tar 包附带 `.sh` 安装脚本；`.deb` 和 `.rpm` 由系统包管理器安装。
+- **服务与生命周期：** 默认生成 systemd 服务和安装/卸载脚本。只打包文件、不管理服务时，使用 `--daemon:none`。
+- **升迁集成：** `--migrator` 可选地收录由独立工具制作的升迁归档和启动脚本。打包器只匹配并携带这两个文件，制作安装包时不解析或执行升迁计划。
+
+> 💡 提示：可先按[快速开始](#快速开始)走通流程，再查看[打包项](#打包项)和[命令](#命令)调整载荷与元数据。
+
+> 🚨 注意：安装包会执行生命周期脚本，可能修改系统文件、服务和应用目录。安装到生产主机前，先检查包内容并在预发布环境验证。
+
 ## 快速导航
 
-- [打包器版本元数据](#打包器版本元数据)
+- [基础概念](#基础概念)
 - [功能特性](#功能特性)
 - [安装](#安装)
 - [快速开始](#快速开始)
@@ -24,8 +36,10 @@
 - [升迁产物集成](#升迁产物集成)
 - [变量](#变量)
 - [包格式](#包格式)
+- [推荐打包流程](#推荐打包流程)
+- [打包器版本元数据](#打包器版本元数据)
 - [故障排查](#故障排查)
-- [实现说明](docs/implementation.md)
+- [实现说明（简体中文）](docs/implementation.md)
 
 ## 功能特性
 
@@ -285,7 +299,7 @@ hosting 的 `web/default` 宿主不区分 Edition 时可写为 `Zongsoft.Hosting
 | --- | --- | --- |
 | `--source:<path>` | 当前目录 | 待打包的源目录。 |
 | `--migrator:<name>` | 空 | 升迁制作时的输入名称，可带目录；裸名称从源目录向父目录查找，按最终 Edition、版本和 RID 匹配。 |
-| `  output:<path>` | 源目录 | 安装包输出目录，无论是否以目录分隔符结尾都作为目录处理；不支持通过此选项指定文件名。相对路径基于 `  source` 解析。 |
+| `--output:<path>` | 源目录 | 安装包输出目录，无论是否以目录分隔符结尾都作为目录处理；不支持通过此选项指定文件名。相对路径基于 `--source` 解析。 |
 | `--exclude:<patterns>` | 空 | 加载打包项时跳过的文件模式列表，多个模式用逗号或分号分隔。 |
 | `--edition:<name>` | 空 | 可选发行/版本标识。会追加到包名；对 RPM 而言，有值时也作为 release。 |
 | `--compilation:<name>` | `Release` | 查找宿主文件时使用的构建配置目录，例如 `bin/<configuration>/<framework>`。 |
@@ -427,7 +441,7 @@ dotnet-pack deb \
 
 1. 如果 `--source` 下存在 `--daemon:<name>` 指定的文件，则使用该文件。
 2. 否则生成 `<daemon>.service`。
-3. 如果省略 `  daemon`，使用最终应用名称（`Package.Name`）的小写形式作为服务标识，不附加 Edition。
+3. 如果省略 `--daemon`，使用最终应用名称（`Package.Name`）的小写形式作为服务标识，不附加 Edition。
 
 使用以下任一值禁用服务生成：
 
@@ -464,6 +478,8 @@ ExecStart=dotnet /opt/zongsoft/web/Zongsoft.Hosting.Web.dll --urls http://127.0.
 
 完整地址也可显式指定，例如 `--listen:http://0.0.0.0:8069`。省略该选项时不追加 `--urls`；使用已有 service 文件时不改写其中的 ExecStart。
 
+> 💡 提示：纯数字 `--listen` 默认绑定 `127.0.0.1`，适合由本机反向代理转发。需要应用直接接受网络连接时，使用 `http://0.0.0.0:8069` 这样的完整地址。
+
 多个完整地址用分号分隔，并给整个值加引号。例如，Web 宿主需要同时监听 HTTP 与 HTTPS 时，可使用：
 
 ```text
@@ -471,6 +487,8 @@ ExecStart=dotnet /opt/zongsoft/web/Zongsoft.Hosting.Web.dll --urls http://127.0.
 ```
 
 HTTPS 需要在宿主中配置可用的默认服务器证书，打包器不生成或配置证书；具体要求见 [Kestrel 端点说明](https://github.com/dotnet/AspNetCore.Docs/blob/main/aspnetcore/fundamentals/servers/kestrel/endpoints.md)。这表示可选配置，并非 hosting 当前脚本已启用 HTTPS。
+
+> 🚨 注意：宿主没有可用的默认服务器证书时，HTTPS 端点将无法启动。请在应用运行环境中配置并妥善保护证书。
 
 Web 宿主的 `pack.cmd` 将 `Environment` 和 `ASPNETCORE_ENVIRONMENT` 一并写入生成的服务文件，例如：
 
@@ -492,39 +510,35 @@ dotnet-pack deb \
 
 ## 生命周期脚本
 
-生命周期脚本可以是源目录相对文件路径、绝对文件路径，也可以是内联脚本文本。
+生命周期脚本可以是源目录相对文件路径、绝对文件路径，也可以是内联脚本文本。四个主钩子的执行时机如下：
 
-| 选项 | 执行时机 |
-| --- | --- |
-| `--installing:<script>` | 安装前。 |
-| `--installed:<script>` | 安装后。 |
-| `--uninstalling:<script>` | 卸载/移除前。 |
-| `--uninstalled:<script>` | 卸载/移除后。 |
+- **安装：** `--installing:<script>` 在安装前执行，`--installed:<script>` 在安装后执行。
+- **卸载或移除：** `--uninstalling:<script>` 在移除前执行，`--uninstalled:<script>` 在移除后执行。
 
-每个主钩子都可以追加前置或后置脚本片段：
+每个主钩子都可以追加基于文件的前置和后置脚本片段：`pre` 在主钩子前执行，`post` 在主钩子后执行。
 
-| 选项 | 执行时机 |
-| --- | --- |
-| `--preinstalling:<paths>` / `--postinstalling:<paths>` | 围绕 `installing` 执行。 |
-| `--preinstalled:<paths>` / `--postinstalled:<paths>` | 围绕 `installed` 执行。 |
-| `--preuninstalling:<paths>` / `--postuninstalling:<paths>` | 围绕 `uninstalling` 执行。 |
-| `--preuninstalled:<paths>` / `--postuninstalled:<paths>` | 围绕 `uninstalled` 执行。 |
+- `--preinstalling:<paths>` / `--postinstalling:<paths>` 包围 `installing`。
+- `--preinstalled:<paths>` / `--postinstalled:<paths>` 包围 `installed`。
+- `--preuninstalling:<paths>` / `--postuninstalling:<paths>` 包围 `uninstalling`。
+- `--preuninstalled:<paths>` / `--postuninstalled:<paths>` 包围 `uninstalled`。
 
-多个 pre/post 脚本路径可用 `;` 或 `|` 分隔。
+多个 pre/post 脚本路径使用 `;` 或 `|` 分隔。pre/post 选项只接受文件列表，不接受内联文本。
 
 如果未提供脚本，工具会生成默认脚本。对 systemd 包而言，默认脚本会在安装/移除前停止服务，创建或删除 `/etc/systemd/system/<service>` 符号链接，重载 systemd，安装后启用服务，并在卸载后删除安装目录。
 
 Debian 的 `prerm` 仅在 `remove` 或 `deconfigure` 时进入卸载生命周期，`postrm` 仅在 `remove` 或 `purge` 时执行卸载收尾。RPM 的 `%preun`/`%postun` 脚本仅在最后一个已安装实例被删除（`$1=0`）时运行，仍有已安装实例时保留载荷。Tar 包使用显式的 `install.sh`/`uninstall.sh` 生命周期，其生成的卸载器只删除解析后的 `TARGET` 路径。
 
+> 🚨 注意：默认生命周期脚本可能停止或启用服务，并在卸载时删除应用安装目录。请先检查生成的脚本和目标路径，再在主机上执行。
+
 ## 升迁产物集成
 
-升迁由独立的 [migrator 工具](../migrator/README.zh-Hans.md) 预先制作。packager 不解析 `.migration`/`.env`、SQL 或执行计划，也不携带原生执行器。
+升迁由独立的 [migrator 工具](../migrator/README.zh-Hans.md) 预先制作。packager 不解析 `.migration`/`.env`、SQL 或执行计划，也不携带原生执行器。设置 `--migrator:<名称或路径>` 可收录已制作的升迁归档和配套启动脚本，例如 `--migrator:../../packages/zongsoft`。
 
-`--migrator` 指定制作升迁时的输入名称，可带目录，例如 `--migrator:../../packages/zongsoft`。
+查找从最终的 `--source` 目录开始，而不是从运行命令时的工作目录开始：
 
-先展开变量，再判断是否包含目录分隔符 `/` 或 `\`：不包含时，从最终打包源目录（`--source`）逐级向父目录查找，直到文件系统根目录，不遍历子目录；包含时，相对路径基于源目录，绝对路径直接使用，均不向上查找。`--migrator:zongsoft` 启用向上查找，`--migrator:./zongsoft` 仅限定在源目录；查找起点不是运行命令时的工作目录。
-
-既有 `-migrate`、`-migration`、`.migrate`、`.migration` 后缀忽略大小写识别，未带后缀时追加 `-migrate`。不能填写 Edition、版本、RID、扩展名、通配符或路径列表。
+- 只写名称（如 `zongsoft`）时，从源目录向父目录逐级查找，直到文件系统根目录；不会查找子目录。
+- 值中包含 `/` 或 `\` 时按显式路径处理。相对路径基于 `--source`，绝对路径直接使用。例如 `--migrator:./zongsoft` 只查源目录。
+- 已有的 `-migrate`、`-migration`、`.migrate` 或 `.migration` 后缀不区分大小写；未带后缀时追加 `-migrate`。不要在值中包含 Edition、版本、RID、扩展名、通配符或路径列表。
 
 工具使用本次安装包最终确定的 Edition、版本、平台和架构定位产物，包括从源 `.version` 取得的值及默认 x64。无 Edition 时省略对应部分。例如 enterprise、1.0.0、Linux x64 对应：
 
@@ -533,9 +547,12 @@ zongsoft-migrate-enterprise@1.0.0_linux-x64.tar.gz
 zongsoft-migrate-enterprise@1.0.0_linux-x64.sh
 ```
 
-名称可以不同于宿主名称，但 Edition、版本和 RID 必须匹配。每一级目录只有在压缩包和脚本都不存在时才继续向上；只找到其中一份立即报错并指出缺失文件的完整路径。找到完整配套后立即校验归档元数据和 RID，校验失败不再向上查找。两份文件必须来自同一目录，不拼配不同目录、不选择其他版本、Edition 或架构。到根目录仍未找到时，错误列出预期文件名和已检查目录。未指定选项，或选项值为空、空字符串、全空白字符时，均不启用升迁，也不收录升迁产物。
+升迁名称可以不同于宿主名称，但 Edition、版本和 RID 必须匹配。只有压缩包和脚本都不存在时才继续向父目录查找；只找到其中一份就立即报错，并指出缺失配套文件的完整路径。找到完整配套后立即校验归档元数据和 RID，校验失败不会继续向上查找。两份文件必须来自同一目录，不会拼配不同目录，也不会替换成其他版本、Edition 或架构。一直查到根目录仍未找到时，错误会列出预期文件名和已检查目录。不指定选项或提供空值时，不启用升迁集成。
 
-两个文件原样存入安装根 `.migration/`，不展开归档；脚本为 0755，压缩包为 0600。与载荷目标冲突时报错。安装时调用脚本 `apply` 并传入 `/var/lib/<包名>/packager`；失败阻止启动。systemd 的 `ExecStartPre` 调用同一脚本 `check`，只比较完成标记，不解压、不连接服务。无 daemon 时仍执行升迁，DESTDIR 暂存不执行钩子，卸载保留状态与数据库/桶。目标机需要 POSIX sh、tar/gzip、cmp 和运行器所需系统库；详见升迁指南。
+两个文件原样放入安装根目录的 `.migration/`，打包时不展开归档；启动脚本权限为 0755，压缩包为 0600。载荷与目标冲突时制包失败。安装时生成的钩子会以 `/var/lib/<包名>/packager` 作为状态目录运行 `apply`。systemd 的 `ExecStartPre` 会运行 `check`，比较包的计划指纹与本地 `ready` 成功标记；它不会读取数据库或桶的当前状态。无 daemon 时仍会执行升迁；DESTDIR 暂存不会执行生命周期钩子；卸载会保留升迁状态、数据库和桶。目标机需要 POSIX sh、tar/gzip、cmp 和执行器所需系统库，详见升迁指南。
+
+> 🚨 注意：安装包含升迁产物的软件包时会运行 `apply`，可能创建或修改数据库、用户、权限和 Amazon S3 桶。生产安装前请备份数据并在预发布环境验证；升迁失败会阻止服务启动。
+
 ## 变量
 
 选项值和打包项参数可以使用两种变量形式：
@@ -569,18 +586,10 @@ dotnet-pack deb \
 
 常用变量：
 
-| 变量 | 含义 |
-| --- | --- |
-| `name` | 软件包/应用名称。 |
-| `version` | 软件包版本。 |
-| `edition` | 可选发行/版本标识。 |
-| `platform` | 目标平台。 |
-| `architecture` | 目标架构。 |
-| `framework` | 目标框架。 |
-| `compilation` | 构建配置。 |
-| `source` | 规范化后的源目录。 |
-| `output` | 规范化后的输出目录。 |
-| `RuntimeIdentifier` | 根据平台与架构推断的运行时标识。 |
+- `name`、`version` 和 `edition`：软件包身份及可选发行版标识。
+- `platform`、`architecture` 和 `RuntimeIdentifier`：目标操作系统、CPU 架构及组合后的运行时标识。
+- `framework` 和 `compilation`：目标 .NET 框架和构建配置。
+- `source` 和 `output`：规范化后的源目录和安装包输出目录。
 
 ### 文本来源
 
@@ -590,11 +599,15 @@ Debian/RPM 载荷使用自动清理的临时文件和流式摘要，需预留临
 
 ## 包格式
 
+安装前先查看包内容。下面的文件清单和元数据查看命令是只读操作，不会运行生命周期脚本。
+
 ### `.tar.gz`
 
 tar 命令会生成 `.tar.gz` 包及同名 `.sh` 安装脚本。tar 包包含应用文件、`.root/` 下的可选根路径条目，以及可执行的 `install.sh` 和 `uninstall.sh`。生命周期脚本会融合进 `install.sh` 和 `uninstall.sh`。
 
 一键安装：
+
+> 🚨 注意：下面的命令使用 `sudo` 执行生成的安装脚本，可能写入系统目录并管理服务。请先使用 `DESTDIR` 暂存安装，或在预发布主机验证。
 
 ```bash
 sudo sh ./packages/zongsoft.web@1.0.0-x64.sh
@@ -613,11 +626,13 @@ sudo ./install.sh
 DESTDIR=/tmp/stage ./install.sh
 ```
 
-普通包可覆盖安装路径；启用升迁时路径固定，应以 `  install path` 重新打包：
+未集成升迁产物的软件包可在安装时覆盖目标路径：
 
 ```bash
 sudo env INSTALL_PATH=/srv/zongsoft/web ./install.sh
 ```
+
+集成升迁产物时，安装路径在软件包制作时固定。如需调整，请在打包时指定 `--install-path`。
 
 卸载：
 
@@ -636,11 +651,16 @@ control.tar.gz
 data.tar.gz
 ```
 
-检查并安装：
+先检查元数据和载荷：
 
 ```bash
 dpkg-deb --info ./packages/zongsoft.web@1.0.0-x64.deb
 dpkg-deb --contents ./packages/zongsoft.web@1.0.0-x64.deb
+```
+
+> 🚨 注意：`dpkg` 安装会以特权运行软件包生命周期脚本。请先检查脚本并在预发布主机验证。
+
+```bash
 sudo dpkg -i ./packages/zongsoft.web@1.0.0-x64.deb
 ```
 
@@ -650,16 +670,34 @@ sudo dpkg -i ./packages/zongsoft.web@1.0.0-x64.deb
 
 RPM 包包含 RPM lead/signature/header 元数据，以及 gzip 压缩的 `newc` cpio 载荷。
 
-检查并安装：
+先检查元数据、载荷和生命周期脚本：
 
 ```bash
 rpm -qip ./packages/zongsoft.web@1.0.0-x64.rpm
 rpm -qlp ./packages/zongsoft.web@1.0.0-x64.rpm
 rpm -qp --scripts ./packages/zongsoft.web@1.0.0-x64.rpm
+```
+
+> 🚨 注意：`rpm` 安装会以特权运行软件包生命周期脚本。请先检查脚本并在预发布主机验证。
+
+```bash
 sudo rpm -Uvh ./packages/zongsoft.web@1.0.0-x64.rpm
 ```
 
 `/etc/` 下的根路径条目会被标记为 RPM 配置文件。
+
+## 推荐打包流程
+
+1. **准备干净的源目录。** 将应用发布或暂存到 `--source`，再有选择地复制必需的配置、插件、静态文件和其他资源。如果递归打包全部文件，请把输出目录放在源目录之外，避免旧安装包意外进入载荷。
+2. **选择载荷范围。** 不提供位置参数时会递归包含 `--source` 下的全部文件；需要更小或更容易审查的软件包时，明确列出文件和目录，并用 `--exclude` 排除不应入包的文件。
+3. **确认软件包身份。** 检查 `--name`、`--version`、可选 `--edition`、平台和架构。确认生成的服务标识、`--install-path` 与 `--listen` 地址符合目标环境。纯数字监听端口默认绑定本机地址。
+4. **检查生成物。** 使用 `tar -tzf`、`dpkg-deb --info` / `--contents` 或 `rpm -qip` / `-qlp` / `-qp --scripts` 检查文件和元数据。软件包会管理服务时，也要复核生命周期脚本和 systemd 单元。
+5. **在预发布环境安装验证。** 测试安装、服务启动、配置路径和卸载行为；可在 tar 包上使用 `DESTDIR`，或使用一次性主机。记录环境相关配置，不要依赖生产机才有的隐式条件。
+6. **谨慎发布到生产。** 生产安装前备份应用数据并确认恢复步骤。启用 `--migrator` 后，安装会执行升迁并可能修改数据库和 Amazon S3 桶；不同软件包版本之间要保留同一个升迁状态目录。
+
+> 💡 提示：`--overwrite` 只会替换输出目录中已有的安装包文件，不会覆盖或更新已经安装的应用。
+
+> 🚨 注意：制包成功只表示安装包文件已生成，不能证明目标环境可以安装该包或应用能够正常启动。
 
 ## 从源码构建
 
@@ -673,18 +711,19 @@ dotnet build Zongsoft.Tools.Packager.slnx -c Release
 ```
 
 
-使用 Cake 构建：
+Cake 构建包含打包器配置的构建步骤：
 
 ```bash
 dotnet cake --target=build --edition=Release
 ```
 
+直接运行回归测试：
 
-```powershell
+```bash
 dotnet test test/Zongsoft.Tools.Packager.Tests.csproj -f net10.0
 ```
 
-通过 Cake 脚本运行测试：
+也可使用 Cake：
 
 ```bash
 dotnet cake --target=test --edition=Release
@@ -692,25 +731,11 @@ dotnet cake --target=test --edition=Release
 
 ## 故障排查
 
-`The source directory '<path>' does not exist.`
-
-`--source` 的值在变量展开和路径规范化后不存在。
-
-`The daemon host location failed.`
-
-没有找到已有服务文件，工具也无法定位宿主 `.dll` 或可用于推断 `.dll` 名称的唯一 `.exe`。可以提供 `--daemon:<service-file>`，或使用 `--daemon:none` 禁用服务生成。
-
-`A valid nonzero --version or selected source version is required. Source: <path>`
-
-没有可用的命令版本或源文件版本，或版本为零；非版本文本会在命令选项解析阶段报错。
-
-`The source path '<path>' does not exist.`
-
-某个位置参数没有匹配到存在的文件、目录或通配路径。
-
-包文件已存在。
-
-重新执行时加上 `--overwrite`，或选择另一个 `--output` 目录。
+- **`The source directory '<path>' does not exist.`** 变量展开和路径规范化后，`--source` 指向的位置不存在。
+- **`The daemon host location failed.`** 没有找到已有服务文件或可用宿主 `.dll`，也无法从唯一的 `.exe` 推断名称。可指定 `--daemon:<service-file>`，或使用 `--daemon:none` 禁用服务生成。
+- **`A valid nonzero --version or selected source version is required. Source: <path>`** 没有有效的命令版本或源文件版本，或者版本为零；非版本文本会在命令选项解析阶段报错。
+- **`The source path '<path>' does not exist.`** 位置参数没有匹配到现有文件、目录或通配路径。
+- **`Package file already exists.`** 重新执行时使用 `--overwrite`，或选择其他 `--output` 目录。
 
 ## 更多细节
 

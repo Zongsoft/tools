@@ -3,17 +3,17 @@ name: zongsoft-tools-migrator
 description: 修改独立升迁输入、SQL 批次、原生执行、产物命名和 AOT 构建。
 ---
 
-数据库修改同时核对 [完整参数及默认值](docs/databases.zh-Hans.md)：provider/库/用户层级、默认库隐式声明、空段引用、仅引用库入计划、四阶段初始化和授权、既有设置/密码保持、pending恢复。`.shared/MigrationPlan.Database.cs` 存放初始化描述，任务通过 DatabaseIndex 引用其数组位置（从零开始）；SQL去重按声明来源和实际目标。Core仍负责导入及覆盖，声明事件只补充跨库顺序与空段来源。S3保持独立原有路径。
+数据库修改同时核对 [完整参数及默认值](README.zh-Hans.md#database-configuration)：provider/库/用户层级、默认库隐式声明、空段引用、仅引用库入计划、四阶段初始化和授权、既有设置/密码保持、pending恢复。`.shared/MigrationPlan.Database.cs` 存放初始化描述，任务通过 DatabaseIndex 引用其数组位置（从零开始）；SQL去重按声明来源和实际目标。Core仍负责导入及覆盖，声明事件只补充跨库顺序与空段来源。S3保持独立原有路径。
 
 # Migrator 开发流程
 
-协议调整须同步生成端与执行器：计划名称使用 Name，状态文件对应 name；Steps 无独立 Id，Settings 保存连接设置，Database 无 Id，Step.DatabaseIndex 为可空整数，S3 省略；状态使用 phase/step/databaseIndex 定位。数据库索引必须在 Databases 数组范围内且 provider 匹配；索引 0 必须序列化。从 Steps/Scripts 数组顺序执行，SQL 文件名为不补零的序号。序列化与指纹共享全局 WhenWritingNull，不能删掉 Source/Content 等无条件忽略注解。
+协议调整须同步生成端与执行器：计划名称使用 Name，状态文件对应 name；Steps 无独立 Id，Settings 保存连接设置，Database 无 Id，Step.DatabaseIndex 为可空整数，Amazon S3 省略；状态使用 phase/step/databaseIndex 定位。数据库索引必须在 Databases 数组范围内且 provider 匹配；索引 0 必须序列化。从 Steps/Scripts 数组顺序执行，SQL 文件名为不补零的序号。序列化与指纹共享全局 WhenWritingNull，不能删掉 Source/Content 等无条件忽略注解。
 
-先阅读 [AGENTS.md](AGENTS.md)、[README](README.zh-Hans.md)、[升迁指南](docs/migration.zh-Hans.md)和[实现说明](docs/implementation.zh-Hans.md)。
+先阅读 [AGENTS.md](AGENTS.md)、[README](README.zh-Hans.md)、[升迁指南](README.zh-Hans.md#package-phase)和[实现说明](docs/implementation.zh-Hans.md)。
 
 命令身份先由 MigrateCommand.Version.cs 的私有 VersionSource 解析：--version 可为版本号、文件或现有目录，省略/空白只读当前目录直属 .version，不能由环境 version 代替。ApplicationVersion 选择 Edition，保留文件拼写；name 保持独立必填。最终值回填后再初始化变量，源版本文件始终不写入，失败不能修改已有产物。
 
-输入处理在 src/MigrationLoader* 与 MigrationProfile，生成文件集在 MigrationBundle，归档和脚本在 Generator。协议及参数描述在 .shared。数据库/S3/锁/状态在 executor/src。保持这些边界；packager 只消费产物。
+输入处理在 src/MigrationLoader* 与 MigrationProfile，生成文件集在 MigrationBundle，归档和脚本在 Generator。协议及参数描述在 .shared。数据库/Amazon S3/锁/状态在 executor/src。保持这些边界；packager 只消费产物。
 
 核对两端名称契约：缺少既定后缀时补 -migrate，Edition 可省略，版本与 RID 明确。脚本和归档必须同前缀，check 不解压，状态跨版本保留，外部调用可覆盖 state。已有输入无效不能按缺失跳过。
 

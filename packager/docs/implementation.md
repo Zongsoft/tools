@@ -2,6 +2,8 @@
 
 本文档面向维护者，说明 `Zongsoft.Tools.Packager` 的源码结构、命令执行流水线、包模型、文件收集规则、systemd 脚本生成，以及 `.tar.gz`、`.deb`、`.rpm` 三种包格式的当前实现方式。
 
+面向使用者的安装、配置和发布操作说明见[打包器 README](../README.zh-Hans.md)。
+
 本文的应用示例引用 hosting 中真实的 [Zongsoft.Hosting.Web](https://github.com/Zongsoft/hosting/tree/main/web/default) 宿主，暂存目录、Bash 工作目录和版本约定见 [README 快速开始](../README.zh-Hans.md#快速开始)。宿主 DLL 为 `Zongsoft.Hosting.Web.dll`，`--daemon:zongsoft.web` 指定包和服务标识；根路径配置示例引用 hosting 的 `.deploy/default/nginx/zongsoft.web.conf`。
 
 ## 设计目标
