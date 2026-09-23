@@ -30,7 +30,7 @@ dotnet-migrate 制作可移交的升迁归档和启动脚本。制作阶段描�
 dotnet tool install -g Zongsoft.Tools.Migrator
 ```
 
-本地源码测试：在 migrator 目录执行 `dotnet cake --edition Release --target build`，准备三个 RID 并生成工具包。已有原生产物时可执行 `dotnet cake --edition Release --target compile`。首次本地安装使用 `dotnet tool install -g Zongsoft.Tools.Migrator --version 0.1.0 --source ./src/bin/Release --no-http-cache`；替换相同版本前先卸载该全局工具。Cake `pack` 会推送 NuGet，不用于本地测试。
+本地源码测试：在 migrator 目录执行 `dotnet cake --edition Release --target build`，准备三个 RID 并生成工具包。已有原生产物时可执行 `dotnet cake --edition Release --target compile`。首次本地安装使用 `dotnet tool install -g Zongsoft.Tools.Migrator --version 0.3.0 --source ./src/bin/Release --no-http-cache`；替换相同版本前先卸载该全局工具。Cake `pack` 会推送 NuGet，不用于本地测试。
 
 ### 命令选项和示例
 
@@ -66,7 +66,7 @@ dotnet-migrate --name:zongsoft --version:web/default --platform:linux --output:p
 dotnet-migrate --name:zongsoft --platform:linux --output:../../packages '../../.deploy/$(scheme)/migration/$(version)/*.migration'
 ```
 
-版本路径支持变量；数字形式优先作为版本号，文件名为 `1.0.0` 时可用 `./1.0.0` 明确指定文件。最终版本和 Edition 用于 `$(version)`/`$(edition)`、计划身份及产物名称。升迁输入和输出的相对路径始终基于当前目录，不随版本文件目录改变。完整展开规则见[版本来源与变量](README.zh-Hans.md#package-phase)。
+版本路径支持变量；数字形式优先作为版本号，文件名为 `1.0.0` 时可用 `./1.0.0` 明确指定文件。命令选项先保留原始文本，版本来源确定后，`architecture`、`overwrite` 等值按需递归展开，再转换为对应类型；裸 `--overwrite` 仍表示 true。最终版本和 Edition 用于 `$(version)`/`$(edition)`、计划身份及产物名称。升迁输入和输出的相对路径始终基于当前目录，不随版本文件目录改变。完整展开规则见[版本来源与变量](README.zh-Hans.md#package-phase)。
 
 数字版本优先于路径，全零版本无效。指定数字时不会读取 .version。要选择名称类似版本号的文件，请加 ./，例如 ./1.0.0。省略 version 或传入空白时，只读取当前工作目录中的 .version，忽略环境变量 version。目录值读取直属 .version；其他路径展开后以当前目录为基准。未知或循环变量会报错，最终 version 变量不能用于定位自身来源。
 

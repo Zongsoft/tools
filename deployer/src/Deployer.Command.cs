@@ -52,17 +52,23 @@ partial class Deployer
 		if(!arguments.TryGetValue(DESTINATION_OPTION, out var target) && !variables.TryGetValue(DESTINATION_OPTION, out target))
 			target = currentDirectory;
 
-		target = Normalizer.Normalize(target, variables, name => throw new FormatException(string.Format(Properties.Resources.Review_UndefinedVariable, name)));
+		//目标配置尚未加载；启动路径只能依赖环境和本次命令的完整选项集。
+		var bootstrap = new Dictionary<string, string>(variables, StringComparer.OrdinalIgnoreCase);
+		foreach(var option in arguments)
+			bootstrap[option.Key] = option.Value ?? string.Empty;
+
+		target = Normalizer.Normalize(target, bootstrap, name => throw new FormatException(string.Format(Properties.Resources.Review_UndefinedVariable, name)));
 		target = Path.GetFullPath(target, currentDirectory);
 		AppSettingsUtility.Load(variables, target);
-		NugetUtility.Initialize(variables);
 
 		foreach(var option in arguments)
-			variables[option.Key] = Normalizer.Normalize(option.Value ?? "", variables);
+			variables[option.Key] = option.Value ?? string.Empty;
 
 		variables[DESTINATION_OPTION] = target;
+		NugetUtility.Initialize(variables);
 
-		return variables;
+		var raw = new Dictionary<string, string>(variables, StringComparer.OrdinalIgnoreCase);
+		return new VariableMap(raw, text => Normalizer.Normalize(text, raw, name => throw new FormatException(string.Format(Properties.Resources.Review_UndefinedVariable, name))));
 	}
 	#endregion
 }

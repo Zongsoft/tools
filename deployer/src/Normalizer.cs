@@ -41,8 +41,6 @@ namespace Zongsoft.Tools.Deployer;
 public static class Normalizer
 {
 	#region 常量定义
-	//变量解析的正则组名称
-	private const string REGEX_VARIABLE_NAME = "name";
 	//变量解析的正则表达式（变量包括两种语法：$(variable) 或 %variable%）
 	private static readonly Regex _variableRegex = new(@"(?<opt>\$\((?<name>[\w.\[\]-]+)\))|(?<env>\%(?<name>[\w.\[\]-]+)\%)", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.IgnorePatternWhitespace);
 	#endregion
@@ -53,18 +51,20 @@ public static class Normalizer
 		if(string.IsNullOrWhiteSpace(text))
 			return string.Empty;
 
-		return _variableRegex.Replace(text, match =>
+		ArgumentNullException.ThrowIfNull(variables);
+
+		var raw = variables switch
 		{
-			if(match.Success && match.Groups.TryGetValue(REGEX_VARIABLE_NAME, out var group))
-			{
-				if(variables.TryGetValue(group.Value, out var value))
-					return value;
+			VariableMap map => map.Raw,
+			Dictionary<string, string> dictionary when dictionary.Comparer.Equals(StringComparer.OrdinalIgnoreCase) => dictionary,
+			_ => new Dictionary<string, string>(variables, StringComparer.OrdinalIgnoreCase),
+		};
+		var result = VariableExpander.Expand(text, raw, _variableRegex, preserveMissing: true, missing: failure);
 
-				failure?.Invoke(group.Value);
-			}
+		if(!result.Succeed)
+			throw new FormatException(string.Format(Properties.Resources.Review_UndefinedVariable, result.Variable));
 
-			return match.Value;
-		});
+		return result.Value;
 	}
 	#endregion
 }

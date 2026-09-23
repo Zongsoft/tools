@@ -45,17 +45,17 @@ using Zongsoft.Components;
 namespace Zongsoft.Tools.Packager;
 
 [CommandOption(NAME_OPTION, typeof(string))]
-[CommandOption(VERSION_OPTION, typeof(Version))]
-[CommandOption(PLATFORM_OPTION, typeof(Platform), Required = true)]
+[CommandOption(VERSION_OPTION, typeof(string))]
+[CommandOption(PLATFORM_OPTION, typeof(string), Required = true)]
 [CommandOption(FRAMEWORK_OPTION, typeof(string), Required = true)]
 [CommandOption(SOURCE_OPTION, typeof(string))]
 [CommandOption(EDITION_OPTION, typeof(string))]
 [CommandOption(COMPILATION_OPTION, typeof(string), DEFAULT_COMPILATION)]
-[CommandOption(ARCHITECTURE_OPTION, typeof(Architecture), Architecture.X64)]
+[CommandOption(ARCHITECTURE_OPTION, typeof(string), "X64")]
 [CommandOption(OUTPUT_OPTION, typeof(string))]
 [CommandOption(EXCLUDE_OPTION, typeof(string))]
 [CommandOption(MIGRATOR_OPTION, typeof(string))]
-[CommandOption(OVERWRITE_OPTION, typeof(bool), false)]
+[CommandOption(OVERWRITE_OPTION, typeof(string), "False")]
 [CommandOption(URL_OPTION, typeof(string), DEFAULT_URL)]
 [CommandOption(TITLE_OPTION, typeof(string))]
 [CommandOption(LICENSE_OPTION, typeof(string))]
@@ -160,31 +160,46 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 			return ValueTask.FromResult<object>(null);
 		}
 
-		var versionFile = VersionFile.Load(source,
-			context.Options.GetValue<string>(NAME_OPTION),
-			context.Options.GetValue<string>(EDITION_OPTION),
-			context.Options.GetValue<Version>(VERSION_OPTION));
+		var name = ResolveIdentity(NAME_OPTION);
+		var edition = ResolveIdentity(EDITION_OPTION);
+		var versionText = ResolveIdentity(VERSION_OPTION);
+
+		if(!string.IsNullOrWhiteSpace(versionText) && !Version.TryParse(versionText, out _))
+			throw new InvalidOperationException(string.Format(Properties.Resources.SourceVersionInvalid_Message, source));
+
+		var versionFile = VersionFile.Load(source, name, edition,
+			string.IsNullOrWhiteSpace(versionText) ? null : Version.Parse(versionText));
+
+		string ResolveIdentity(string key)
+		{
+			var result = Normalizer.Normalize(variables.GetValueOrDefault(key), variables);
+			if(!result.Succeed)
+				throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed_Message, result.Value));
+			return result.Value;
+		}
 
 		//身份确定后初始化全部变量，输出、载荷与脚本均使用最终值。
 		variables[NAME_OPTION] = versionFile.Identifier.Name;
 		variables[EDITION_OPTION] = versionFile.Identifier.Edition;
 		variables[VERSION_OPTION] = versionFile.Identifier.Version.ToString();
 		variables[SOURCE_OPTION] = Path.GetFullPath(source);
+
 		Normalizer.Initialize(variables);
 
+		var overwrite = GetOverwrite(context);
 		var output = Normalizer.Variables.Output ?? source;
 
 		Normalizer.Variables[SOURCE_OPTION] = source = Path.GetFullPath(source);
 		Normalizer.Variables[OUTPUT_OPTION] = output = Path.GetFullPath(Path.Combine(source, output));
 
-		//确保输出目录存在
-		if(!Directory.Exists(output))
-			Directory.CreateDirectory(output);
-
 		//创建安装包对象
 		var package = this.CreatePackage(context);
 		if(package == null)
 			return ValueTask.FromResult<object>(null);
+
+		//确保输出目录存在
+		if(!Directory.Exists(output))
+			Directory.CreateDirectory(output);
 
 		var migrator = context.Options.GetValue<string>(MIGRATOR_OPTION);
 		if(!string.IsNullOrWhiteSpace(migrator))
@@ -204,7 +219,7 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		package.Entries.SetVersion(versionFile.Identifier);
 
 		//安装包全部生成成功后才更新源版本文件。
-		package.Pack(output, context.Options.Switch(OVERWRITE_OPTION));
+		package.Pack(output, overwrite);
 		versionFile.Save(Path.Combine(output, package.FileName));
 
 		//输出安装包制作成功
@@ -230,5 +245,35 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 
 	#region 私有方法
 	internal static Dictionary<string, string> GetVariables(CommandContext context) => Variables.From(context);
+
+	private static bool GetOverwrite(CommandContext context)
+	{
+		foreach(var option in context.Options)
+		{
+			if(!string.Equals(option.Key, OVERWRITE_OPTION, StringComparison.OrdinalIgnoreCase))
+				continue;
+
+			if(option.Value == null)
+				return true;
+
+			var value = Normalizer.Normalize(option.Value.ToString());
+			if(bool.TryParse(value, out var result))
+				return result;
+
+			if(string.Equals(value, "1", StringComparison.OrdinalIgnoreCase) || string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase) ||
+				string.Equals(value, "on", StringComparison.OrdinalIgnoreCase) || string.Equals(value, "enable", StringComparison.OrdinalIgnoreCase) ||
+				string.Equals(value, "enabled", StringComparison.OrdinalIgnoreCase))
+				return true;
+
+			if(string.Equals(value, "0", StringComparison.OrdinalIgnoreCase) || string.Equals(value, "no", StringComparison.OrdinalIgnoreCase) ||
+				string.Equals(value, "off", StringComparison.OrdinalIgnoreCase) || string.Equals(value, "disable", StringComparison.OrdinalIgnoreCase) ||
+				string.Equals(value, "disabled", StringComparison.OrdinalIgnoreCase))
+				return false;
+
+			throw new ArgumentException(null, OVERWRITE_OPTION);
+		}
+
+		return false;
+	}
 	#endregion
 }

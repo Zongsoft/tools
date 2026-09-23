@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Collections.Generic;
@@ -323,6 +324,56 @@ public sealed partial class MigrateCommandTest
 			Assert.Equal("Other.Application@2.3.4", File.ReadAllText(path));
 		}
 		finally { Environment.SetEnvironmentVariable("zongsoft_version_path", previous); }
+	}
+
+	[Fact]
+	public async Task Execute_VariableTypedOptions_ExpandBeforeConversionAndOverwriteAsync()
+	{
+		using var directory = new MigrationTestDirectory();
+		PrepareMigration(directory, "/data/hosting.db");
+		var archive = directory.Write("out/zongsoft.daemon-migrate@2.3.4_linux-arm64.tar.gz", "previous archive");
+		var launcher = directory.Write("out/zongsoft.daemon-migrate@2.3.4_linux-arm64.sh", "previous launcher");
+		var names = new[] { "zongsoft_migrate_version", "zongsoft_migrate_release", "zongsoft_migrate_platform", "zongsoft_migrate_architecture", "zongsoft_migrate_overwrite" };
+		var previous = names.ToDictionary(name => name, Environment.GetEnvironmentVariable);
+
+		try
+		{
+			Environment.SetEnvironmentVariable("zongsoft_migrate_version", "$(zongsoft_migrate_release)");
+			Environment.SetEnvironmentVariable("zongsoft_migrate_release", "2.3.4");
+			Environment.SetEnvironmentVariable("zongsoft_migrate_platform", "Linux");
+			Environment.SetEnvironmentVariable("zongsoft_migrate_architecture", "Arm64");
+			Environment.SetEnvironmentVariable("zongsoft_migrate_overwrite", "true");
+
+			var arguments = VersionArguments("%zongsoft_migrate_version%");
+			arguments.RemoveAll(argument => argument.StartsWith("--platform:", StringComparison.Ordinal) || argument.StartsWith("--architecture:", StringComparison.Ordinal));
+			arguments.Add("--platform:$(zongsoft_migrate_platform)");
+			arguments.Add("--architecture:$(zongsoft_migrate_architecture)");
+			arguments.Add("--overwrite:$(zongsoft_migrate_overwrite)");
+
+			var result = await RunAsync(directory, arguments);
+
+			Assert.True(result.Code == 0, result.Output);
+			Assert.Equal(2, Directory.GetFiles(Path.Combine(directory.Path, "out")).Length);
+			Assert.True(File.Exists(archive));
+			Assert.True(File.Exists(launcher));
+			Assert.True(File.ReadAllBytes(archive).Length > "previous archive".Length);
+			Assert.Contains(Path.GetFileName(archive), File.ReadAllText(launcher));
+			var entries = ReadArchive(archive);
+			using var plan = JsonDocument.Parse(Assert.Single(entries, entry => entry.Name == ".migration/migration.json").Content);
+			Assert.Equal("linux-arm64", plan.RootElement.GetProperty("Runtime").GetString());
+
+			Environment.SetEnvironmentVariable("zongsoft_migrate_architecture", "invalid-architecture");
+			var invalidArguments = arguments.Select(argument => argument == "--output:out" ? "--output:invalid-out" : argument).ToArray();
+			var invalid = await RunAsync(directory, invalidArguments);
+			Assert.NotEqual(0, invalid.Code);
+			Assert.IsType<ArgumentException>(invalid.Error);
+			Assert.False(Directory.Exists(Path.Combine(directory.Path, "invalid-out")));
+		}
+		finally
+		{
+			foreach(var name in names)
+				Environment.SetEnvironmentVariable(name, previous[name]);
+		}
 	}
 	#endregion
 

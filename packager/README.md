@@ -58,7 +58,7 @@ It is designed for .NET services and command-line applications that need repeata
 
 ## Packager version metadata
 
-Every package records the current generator identity, logically `Packager:Zongsoft.Tools.Packager@0.11.0.0`. The value is `assembly-name@version`, read from the packager's own assembly, independently of the host application's version. No additional option or migration configuration is required.
+Every package records the current generator identity, logically `Packager:Zongsoft.Tools.Packager@0.12.0.0`. The value is `assembly-name@version`, read from the packager's own assembly, independently of the host application's version. No additional option or migration configuration is required.
 
 | Format | Location | Inspection |
 | --- | --- | --- |
@@ -106,10 +106,10 @@ Install the generated `.nupkg` directly without publishing it to NuGet.org. The 
 dotnet pack src/Zongsoft.Tools.Packager.csproj -c Release
 ```
 
-After the build succeeds and `src/bin/Release/Zongsoft.Tools.Packager.0.11.0.nupkg` exists, install it for the first time:
+After the build succeeds and `src/bin/Release/Zongsoft.Tools.Packager.0.12.0.nupkg` exists, install it for the first time:
 
 ```powershell
-dotnet tool install -g Zongsoft.Tools.Packager --version 0.11.0 --source ./src/bin/Release --no-http-cache
+dotnet tool install -g Zongsoft.Tools.Packager --version 0.12.0 --source ./src/bin/Release --no-http-cache
 ```
 
 If the tool is already installed, especially when rebuilding the same version, uninstall it first, then repeat the local installation command above:
@@ -118,7 +118,7 @@ If the tool is already installed, especially when rebuilding the same version, u
 dotnet tool uninstall -g Zongsoft.Tools.Packager
 ```
 
-The example version `0.11.0` matches the current project; adjust it to the actual `.nupkg`. `--source` restricts installation to the local directory, avoiding a same-named package from NuGet.org; `--no-http-cache` disables the download cache. See the [.NET tool installation reference](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-tool-install). Check the installed version with `dotnet tool list -g`. Here, “local” describes the package source; `-g` still replaces the current user’s global tool. Do not run the Cake `pack` task for local testing: it pushes packages to NuGet.org.
+The example version `0.12.0` matches the current project; adjust it to the actual `.nupkg`. `--source` restricts installation to the local directory, avoiding a same-named package from NuGet.org; `--no-http-cache` disables the download cache. See the [.NET tool installation reference](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-tool-install). Check the installed version with `dotnet tool list -g`. Here, “local” describes the package source; `-g` still replaces the current user’s global tool. Do not run the Cake `pack` task for local testing: it pushes packages to NuGet.org.
 
 ## Quick Start
 
@@ -565,7 +565,7 @@ Variable names are case insensitive. Explicit command options, including extra o
 
 Source-version rules and explicit identity options determine name, edition and version, independently of same-named environment variables. Final identity and resolved source/output paths override the collection. `--migrator` requires explicit activation; `--overwrite` remains an explicit switch.
 
-The example below uses Bash to expand the name and version first. `--version` is parsed as `System.Version` before packaging starts, so a literal `%APP_VERSION%` or `$(APP_VERSION)` is not accepted there. Name and Edition also participate in source-version validation as supplied. Packager expressions apply to paths, script text, migration configuration and other subsequently normalized values.
+The command keeps option text until it is used. After locating `source`, explicit `name`, `edition`, and `version` values expand before source-version validation and version conversion; `platform`, `architecture`, and explicit `overwrite` values also expand before conversion. Literal `$(APP_VERSION)` or `%APP_VERSION%` is accepted; quote it in Bash to prevent shell expansion. Identity values available only from the source `.version` cannot locate that source directory.
 
 ```bash
 export APP_NAME=Zongsoft.Hosting.Web
@@ -733,7 +733,7 @@ dotnet cake --target=test --edition=Release
 
 - **`The source directory '<path>' does not exist.`** The `--source` value was not found after variable expansion and path normalization.
 - **`The daemon host location failed.`** No service file or usable host `.dll` was found, and a unique `.exe` could not supply the host name. Provide `--daemon:<service-file>` or disable service generation with `--daemon:none`.
-- **`A valid nonzero --version or selected source version is required. Source: <path>`** No usable command/source version is available, or it is zero. Non-version text fails during command-option parsing.
+- **`A valid nonzero --version or selected source version is required. Source: <path>`** No usable command/source version is available, or it is zero. Non-version text is rejected after variable expansion, before source-version selection.
 - **`The source path '<path>' does not exist.`** A positional entry did not match an existing file, directory or glob.
 - **`Package file already exists.`** Re-run with `--overwrite` or choose another `--output` directory.
 

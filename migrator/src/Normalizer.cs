@@ -40,8 +40,6 @@ namespace Zongsoft.Tools.Migrator;
 public class Normalizer
 {
 	#region 常量定义
-	//变量解析的正则组名称
-	private const string REGEX_VARIABLE_NAME = "name";
 	//变量解析的正则表达式（变量包括两种语法：$(variable) 或 %variable%）
 	private static readonly Regex _variableRegex = new(@"(?<opt>\$\((?<name>\w+)\))|(?<env>\%(?<name>\w+)\%)", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.IgnorePatternWhitespace);
 	#endregion
@@ -82,26 +80,8 @@ public class Normalizer
 		if(variables is Variables collection)
 			variables = collection.Raw;
 
-		var active = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-		try
-		{
-			return Result.Success(Expand(text));
-		}
-		catch(NormalizerException ex)
-		{
-			return Result.Failure(ex.Variable);
-		}
-
-		string Expand(string value) => _variableRegex.Replace(value ?? string.Empty, match =>
-		{
-			var name = match.Groups[REGEX_VARIABLE_NAME].Value;
-			if(!variables.TryGetValue(name, out var replacement) || active.Count >= 64 || !active.Add(name))
-				throw new NormalizerException(name);
-
-			try { return Expand(replacement); }
-			finally { active.Remove(name); }
-		});
+		var result = VariableExpander.Expand(text, variables, _variableRegex);
+		return result.Succeed ? Result.Success(result.Value) : Result.Failure(result.Variable);
 	}
 
 	#endregion
@@ -124,14 +104,6 @@ public class Normalizer
 
 		public static Result Failure(string value) => new(value, false);
 		public static Result Success(string value) => new(value, true);
-	}
-	#endregion
-
-	#region 私有子类
-	private sealed class NormalizerException : Exception
-	{
-		public NormalizerException(string variable) => this.Variable = variable;
-		public string Variable { get; }
 	}
 	#endregion
 }

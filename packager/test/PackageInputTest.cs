@@ -129,6 +129,25 @@ public sealed class PackageInputTest
 		Assert.Equal(".deploy/default/migration/1.1.0/*.migration", variables["migration"]);
 		Assert.Equal(new Version(1, 1, 0), variables.Version);
 	}
+
+	[Fact]
+	public void Normalize_DepthLimit_AllowsSixtyFourReferencesAndRejectsNext()
+	{
+		var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+		for(var index = 0; index < 63; index++)
+			variables["step" + index] = "$(step" + (index + 1) + ")";
+		variables["step63"] = "resolved";
+
+		var withinLimit = Normalizer.Normalize("$(step0)", variables);
+		Assert.True(withinLimit.Succeed);
+		Assert.Equal("resolved", withinLimit.Value);
+
+		variables["step63"] = "$(step64)";
+		variables["step64"] = "resolved";
+		var beyondLimit = Normalizer.Normalize("$(step0)", variables);
+		Assert.False(beyondLimit.Succeed);
+		Assert.Equal("step64", beyondLimit.Value);
+	}
 	#endregion
 
 	#region 文本来源

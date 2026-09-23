@@ -54,6 +54,61 @@ public sealed partial class MigratorPackageTest
 		}
 	}
 
+	[Fact]
+	public async Task Command_VariableTypedOptions_ExpandBeforeConversionAndOverwriteAsync()
+	{
+		using var directory = new MigrationTestDirectory();
+		directory.Write(".version", "zongsoft.daemon@1.0.0");
+		directory.Write("application.txt", "isolated package payload");
+		var existing = directory.Write("out/zongsoft.daemon@2.3.4-arm64.tar.gz", "previous artifact");
+		var names = new[] { "zongsoft_pack_source", "zongsoft_pack_name", "zongsoft_pack_version", "zongsoft_pack_release", "zongsoft_pack_platform", "zongsoft_pack_architecture", "zongsoft_pack_overwrite" };
+		var previousEnvironment = names.ToDictionary(name => name, Environment.GetEnvironmentVariable);
+		var previousVariables = Normalizer.Variables?.Raw;
+		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
+		var previousTerminal = (ITerminal)terminalField.GetValue(null);
+
+		try
+		{
+			Environment.SetEnvironmentVariable("zongsoft_pack_source", directory.Path);
+			Environment.SetEnvironmentVariable("zongsoft_pack_name", "zongsoft.daemon");
+			Environment.SetEnvironmentVariable("zongsoft_pack_version", "$(zongsoft_pack_release)");
+			Environment.SetEnvironmentVariable("zongsoft_pack_release", "2.3.4");
+			Environment.SetEnvironmentVariable("zongsoft_pack_platform", "Linux");
+			Environment.SetEnvironmentVariable("zongsoft_pack_architecture", "Arm64");
+			Environment.SetEnvironmentVariable("zongsoft_pack_overwrite", "true");
+			Terminal.Default = DispatchProxy.Create<ITerminal, RecordingTerminal>();
+
+			var arguments = new[] { "tar", "--source:$(zongsoft_pack_source)", "--name:$(zongsoft_pack_name)", "--version:%zongsoft_pack_version%", "--platform:$(zongsoft_pack_platform)", "--architecture:$(zongsoft_pack_architecture)", "--overwrite:$(zongsoft_pack_overwrite)", "--framework:net10.0", "--daemon:disabled", "--output:out", "application.txt" };
+			var command = new TarCommand();
+			var context = new CommandContext(new CommandExecutor(), CommandLine.Parse(CommandLine.Get(arguments))[0], command, null);
+			var path = Assert.IsType<string>(await ((ICommand)command).ExecuteAsync(context, TestContext.Current.CancellationToken));
+
+			Assert.Equal(existing, path);
+			var bytes = File.ReadAllBytes(path);
+			Assert.True(bytes.Length > 2);
+			Assert.Equal((byte)0x1f, bytes[0]);
+			Assert.Equal((byte)0x8b, bytes[1]);
+			Assert.Contains("2.3.4", File.ReadAllText(Path.Combine(directory.Path, ".version")));
+			Assert.Equal(Platform.Linux, Normalizer.Variables.Platform);
+			Assert.Equal(Architecture.Arm64, Normalizer.Variables.Architecture);
+			Assert.Equal("isolated package payload", Encoding.UTF8.GetString(Assert.Single(ReadPayload(Path.GetDirectoryName(path), "tar"), entry => entry.Key.EndsWith("application.txt", StringComparison.Ordinal)).Value));
+
+			Environment.SetEnvironmentVariable("zongsoft_pack_architecture", "invalid-architecture");
+			var invalidArguments = arguments.Select(argument => argument == "--output:out" ? "--output:invalid-out" : argument).ToArray();
+			var invalidCommand = new TarCommand();
+			var invalidContext = new CommandContext(new CommandExecutor(), CommandLine.Parse(CommandLine.Get(invalidArguments))[0], invalidCommand, null);
+			await Assert.ThrowsAsync<ArgumentException>(async () => await ((ICommand)invalidCommand).ExecuteAsync(invalidContext, TestContext.Current.CancellationToken));
+			Assert.False(Directory.Exists(Path.Combine(directory.Path, "invalid-out")));
+		}
+		finally
+		{
+			Terminal.Default = previousTerminal;
+			Normalizer.Initialize(previousVariables ?? new Dictionary<string, string>());
+			foreach(var name in names)
+				Environment.SetEnvironmentVariable(name, previousEnvironment[name]);
+		}
+	}
+
 	[Theory]
 	[InlineData("tar", null)]
 	[InlineData("tar", "--migrator")]

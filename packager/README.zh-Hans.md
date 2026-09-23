@@ -58,7 +58,7 @@
 
 ## 打包器版本元数据
 
-每个安装包自动记录当前生成工具的身份，逻辑内容为 `Packager:Zongsoft.Tools.Packager@0.11.0.0`。值采用 `程序集名@版本号`，从打包器自身程序集读取，独立于宿主应用版本；无需指定额外选项或启用升迁。
+每个安装包自动记录当前生成工具的身份，逻辑内容为 `Packager:Zongsoft.Tools.Packager@0.12.0.0`。值采用 `程序集名@版本号`，从打包器自身程序集读取，独立于宿主应用版本；无需指定额外选项或启用升迁。
 
 | 格式 | 存放位置 | 查看方式 |
 | --- | --- | --- |
@@ -107,10 +107,10 @@ dotnet tool uninstall -g Zongsoft.Tools.Packager
 dotnet pack src/Zongsoft.Tools.Packager.csproj -c Release
 ```
 
-确认构建成功且 `src/bin/Release/Zongsoft.Tools.Packager.0.11.0.nupkg` 已生成后，首次安装执行：
+确认构建成功且 `src/bin/Release/Zongsoft.Tools.Packager.0.12.0.nupkg` 已生成后，首次安装执行：
 
 ```powershell
-dotnet tool install -g Zongsoft.Tools.Packager --version 0.11.0 --source ./src/bin/Release --no-http-cache
+dotnet tool install -g Zongsoft.Tools.Packager --version 0.12.0 --source ./src/bin/Release --no-http-cache
 ```
 
 若已安装该工具，尤其是重新编译了同一版本，先卸载，再执行上面的本地安装命令：
@@ -119,7 +119,7 @@ dotnet tool install -g Zongsoft.Tools.Packager --version 0.11.0 --source ./src/b
 dotnet tool uninstall -g Zongsoft.Tools.Packager
 ```
 
-示例版本 `0.11.0` 对应当前项目版本，请随实际 `.nupkg` 调整。`--source` 限定本次安装只使用本地目录，避免选中 NuGet.org 的同名包；`--no-http-cache` 禁用下载缓存，选项说明见 [.NET 工具安装文档](https://learn.microsoft.com/zh-cn/dotnet/core/tools/dotnet-tool-install)。安装后使用 `dotnet tool list -g` 核对版本。这里的“本地”指包来源，`-g` 仍会替换当前用户的全局工具。只做本地测试不要运行 Cake 的 `pack` 任务，它会推送到 NuGet.org。
+示例版本 `0.12.0` 对应当前项目版本，请随实际 `.nupkg` 调整。`--source` 限定本次安装只使用本地目录，避免选中 NuGet.org 的同名包；`--no-http-cache` 禁用下载缓存，选项说明见 [.NET 工具安装文档](https://learn.microsoft.com/zh-cn/dotnet/core/tools/dotnet-tool-install)。安装后使用 `dotnet tool list -g` 核对版本。这里的“本地”指包来源，`-g` 仍会替换当前用户的全局工具。只做本地测试不要运行 Cake 的 `pack` 任务，它会推送到 NuGet.org。
 
 ## 快速开始
 
@@ -566,7 +566,7 @@ $(name)
 
 `name`、`edition`、`version` 仍由源版本文件及显式身份选项决定；同名环境变量不替代身份。最终身份与解析后的 source/output 覆盖变量集合。`--migrator` 必须显式启用，`--overwrite` 仍为显式开关。
 
-下面的名称和版本先由 Bash 展开。`version` 在进入打包流程前就按 `System.Version` 解析，不能直接传入字面量 `%APP_VERSION%` 或 `$(APP_VERSION)`；名称和 Edition 也按传入值参与源版本校验。打包器变量表达式用于路径、脚本文本、升迁配置等后续规范化位置。
+命令先保留原始选项文本。定位 `source` 后，显式提供的 `name`、`edition`、`version` 先展开再参与源版本校验和版本类型转换；`platform`、`architecture` 和显式 `overwrite` 也先展开再转换。可传入字面量 `$(APP_VERSION)` 或 `%APP_VERSION%`，在 Bash 中须加引号避免 Shell 抢先解释。尚未从源 `.version` 获得的身份值不能用来定位该源目录。
 
 ```bash
 export APP_NAME=Zongsoft.Hosting.Web
@@ -733,7 +733,7 @@ dotnet cake --target=test --edition=Release
 
 - **`The source directory '<path>' does not exist.`** 变量展开和路径规范化后，`--source` 指向的位置不存在。
 - **`The daemon host location failed.`** 没有找到已有服务文件或可用宿主 `.dll`，也无法从唯一的 `.exe` 推断名称。可指定 `--daemon:<service-file>`，或使用 `--daemon:none` 禁用服务生成。
-- **`A valid nonzero --version or selected source version is required. Source: <path>`** 没有有效的命令版本或源文件版本，或者版本为零；非版本文本会在命令选项解析阶段报错。
+- **`A valid nonzero --version or selected source version is required. Source: <path>`** 没有有效的命令版本或源文件版本，或者版本为零；非版本文本会在变量展开后、选择源版本前报错。
 - **`The source path '<path>' does not exist.`** 位置参数没有匹配到现有文件、目录或通配路径。
 - **`Package file already exists.`** 重新执行时使用 `--overwrite`，或选择其他 `--output` 目录。
 

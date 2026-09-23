@@ -6,7 +6,7 @@
 
 `MigrateCommand.Version.cs` 的私有嵌套类型 `VersionSource` 负责版本来源解析。主流程先从初始变量中移除环境变量 `version`，仅将本次命令选项传入解析器。解析器展开选项值，优先识别版本号，目录追加 `.version`，并使用 `File.OpenRead` 和 `ApplicationVersion.Load(Stream)` 只读加载文件。Edition 通过文件的忽略大小写集合选择并保留原拼写；读取或格式异常补充完整路径，非零版本和 Edition 校验均先于输出处理。
 
-进程入口向 Core CommandLine 传递表达式前，逐项引用选项值和位置参数并转义反斜杠，保留空值与含空格的 Windows 路径，避免相邻参数被合并。命令将解析后的版本号和 Edition 回填变量字典后才调用 `Normalizer.Initialize`。`--name` 独立于版本文件，输入和输出路径始终以当前目录为基准；全过程不保存版本文件。计划协议和原生执行器不参与源版本查找，只接收最终身份。命令测试覆盖版本号、文件、目录及默认来源、Edition 选择、变量展开，以及失败时源文件和已有输出保持不变。
+进程入口向 Core CommandLine 传递表达式前，逐项引用选项值和位置参数并转义反斜杠，保留空值与含空格的 Windows 路径，避免相邻参数被合并。可能含变量的命令选项先作为字符串进入命令；版本来源解析后回填版本号和 Edition，再调用 `Normalizer.Initialize`，按需递归展开其他值并在类型转换之前完成。`--name` 独立于版本文件，输入和输出路径始终以当前目录为基准；全过程不保存版本文件。计划协议和原生执行器不参与源版本查找，只接收最终身份。命令测试覆盖版本号、文件、目录及默认来源、Edition 选择、变量展开，以及失败时源文件和已有输出保持不变。
 
 .shared 通过 Compile Link 分别编译到生成端与 executor，不生成共享 DLL。MigrationPlan 采用 partial 和嵌套 Step/Script/Bucket/Database/User、源码生成 JSON；Source/Content 仅在生成端扩展，参数及计划校验由共享代码负责。源码生成 JSON 的字段和指纹规则见[制作阶段的高级说明](../README.zh-Hans.md#advanced-package-details)。
 

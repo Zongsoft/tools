@@ -180,6 +180,53 @@ public class DeploymentTest
 	}
 
 	[Fact]
+	public void CreateVariables_DestinationForwardMultiHop_UsesTargetAppSettings()
+	{
+		using var fixture = new DeploymentFixture();
+		fixture.Write("source/appsettings.json", "{\"ApplicationName\":\"WrongApplication\"}");
+		fixture.Write("target/appsettings.json", "{\"ApplicationName\":\"TargetApplication\",\"Nested\":\"$(tool_label)\"}");
+		var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+		{
+			["destination"] = "$(tool_root)/$(tool_stage)",
+			["tool_root"] = "$(tool_workspace)",
+			["tool_stage"] = "target",
+			["tool_workspace"] = fixture.Root,
+			["tool_label"] = "%application%-$(tool_stage)",
+		};
+
+		var variables = Deployer.CreateVariables(options, Path.Combine(fixture.Root, "source"));
+
+		Assert.Equal(fixture.Destination, variables["destination"]);
+		Assert.Equal("TargetApplication", variables["application"]);
+		Assert.Equal("TargetApplication-target", variables["Nested"]);
+		Assert.Equal("TargetApplication-target", Normalizer.Normalize("$(Nested)", variables));
+	}
+
+	[Fact]
+	public void CreateVariables_NestedValuesResolveLazilyAndTrackMutations()
+	{
+		using var fixture = new DeploymentFixture();
+		var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+		{
+			["destination"] = fixture.Destination,
+			["tool_value"] = "$(tool_middle)/%tool_suffix%",
+			["tool_middle"] = "$(tool_leaf)",
+			["tool_leaf"] = "first",
+			["tool_suffix"] = "ready",
+			["tool_unused"] = "$(tool_missing)",
+			["tool_cycle"] = "$(tool_cycle)",
+		};
+
+		var variables = Deployer.CreateVariables(options, fixture.Root);
+
+		Assert.Equal("first/ready", variables["tool_value"]);
+		variables["tool_leaf"] = "second";
+		Assert.Equal("second/ready", variables["tool_value"]);
+		Assert.Contains("tool_missing", Assert.Throws<FormatException>(() => variables["tool_unused"]).Message, StringComparison.OrdinalIgnoreCase);
+		Assert.Contains("tool_cycle", Assert.Throws<FormatException>(() => variables["tool_cycle"]).Message, StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Fact]
 	public async Task Deploy_DetailLogPreservesDiagnosticTextInWriterPlanAndReportAsync()
 	{
 		using var fixture = new DeploymentFixture();

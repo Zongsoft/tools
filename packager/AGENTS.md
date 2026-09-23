@@ -12,7 +12,7 @@
 - 包内 .version 通过 ApplicationIdentifier.Save(Stream) 原样写入内存，不额外追加换行，强制替换同目标旧条目。所有编码器经 Entry.OpenRead 读取。
 - Package 是跨格式模型，Generator 编码容器；Scriptor.Systemd 负责宿主、服务和生命周期。tar/deb/rpm 保持路径、排除、权限和阶段意图一致，各自遵循格式规范。
 - Migrator 仅按 --migrator 输入名称、最终 Edition/Version/Runtime 查找并验证既有 tar.gz 与脚本；先展开变量；无 / 或 \ 时从最终 source 逐级查找父目录至根，不查子目录；有分隔符时只定位显式目录，相对目录基于 source。统一补升迁后缀；只有两文件都缺失才继续向上，半套或元数据/RID 错误立即失败，不能跨目录拼配或选择其他身份。全部缺失报告预期文件名和已检查目录。--migrator 空值或全空白视为未指定。升迁输入解析和 Native AOT 发布由独立 migrator 工具负责。
-- packager 不引用独立 migrator 项目或共享协议，不分发原生产物。两个输入文件原样加入安装根 .migration/，脚本 0755、归档 0600，载荷冲突失败。
+- packager 不引用独立 migrator 项目或共享升迁协议，不分发原生产物；通用变量解析源码由 tools/.shared 链接到三个工具。两个输入文件原样加入安装根 .migration/，脚本 0755、归档 0600，载荷冲突失败。
 - 安装调用外部脚本 apply，systemd 门禁调用 check，均明确传入 /var/lib/<包名>/packager。升迁失败阻止启动；无 daemon 也执行，DESTDIR 不执行钩子；卸载保留状态。
 - 三格式的安装/升级/覆盖/卸载阶段不同，保留 Debian configure 和 RPM 剩余实例语义。根路径别名、符号链接与安装目录必须规范化，避免越界目标。
 - Core Searcher 处理本地通配与链接，按逻辑来源定位相对路径。变量显式选项优先于环境，再取默认；TextSource 的 file:/text: 只解释一次。

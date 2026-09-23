@@ -68,9 +68,15 @@ public partial class Deployer
 
 	public Deployer(IDictionary<string, string> variables, TextWriter output)
 	{
-		this.Variables = new Dictionary<string, string>(variables ?? throw new ArgumentNullException(nameof(variables)), StringComparer.OrdinalIgnoreCase);
+		ArgumentNullException.ThrowIfNull(variables);
+
+		var raw = variables is VariableMap map ?
+			new Dictionary<string, string>(map.Raw, StringComparer.OrdinalIgnoreCase) :
+			new Dictionary<string, string>(variables, StringComparer.OrdinalIgnoreCase);
+
+		NugetUtility.Initialize(raw);
+		this.Variables = new VariableMap(raw, text => Normalizer.Normalize(text, raw, name => throw new FormatException(string.Format(Properties.Resources.Review_UndefinedVariable, name))));
 		this.Output = output ?? TextWriter.Null;
-		NugetUtility.Initialize(this.Variables);
 	}
 	#endregion
 
@@ -111,8 +117,7 @@ public partial class Deployer
 			this.Plan = this.Session.Plan;
 			this.Overwrite = GetOverwrite(this.Variables);
 
-			foreach(var key in new[] { "dry-run", "offline", "prerelease", "locked", "prune", "explain" })
-				_ = Flag(this.Variables, key);
+			ValidateBooleanOptions(this.Variables);
 
 			this.Session.Validate(root);
 
@@ -281,6 +286,13 @@ public partial class Deployer
 	}
 
 	internal string Normalize(string text) => Normalizer.Normalize(text, this.Variables, name => throw new FormatException(string.Format(Properties.Resources.Review_UndefinedVariable, name)));
+
+	private static void ValidateBooleanOptions(IDictionary<string, string> variables)
+	{
+		foreach(var key in new[] { "dry-run", "offline", "prerelease", "locked", "prune", "explain" })
+			Flag(variables, key);
+	}
+
 	internal static bool Flag(IDictionary<string, string> variables, string key)
 	{
 		if(!variables.TryGetValue(key, out var value))

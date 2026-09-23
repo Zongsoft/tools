@@ -30,7 +30,7 @@ Package creation prepares inputs without contacting the target. Only execution c
 dotnet tool install -g Zongsoft.Tools.Migrator
 ```
 
-For a local source installation, run `dotnet cake --edition Release --target build` from migrator to prepare all three RIDs and create the NuGet tool package. With native artifacts already prepared, use `--target compile`. Install with `dotnet tool install -g Zongsoft.Tools.Migrator --version 0.1.0 --source ./src/bin/Release --no-http-cache`; uninstall first when replacing the same version. Cake `pack` pushes to NuGet and is not for local testing.
+For a local source installation, run `dotnet cake --edition Release --target build` from migrator to prepare all three RIDs and create the NuGet tool package. With native artifacts already prepared, use `--target compile`. Install with `dotnet tool install -g Zongsoft.Tools.Migrator --version 0.3.0 --source ./src/bin/Release --no-http-cache`; uninstall first when replacing the same version. Cake `pack` pushes to NuGet and is not for local testing.
 
 ### Command options and example
 
@@ -66,7 +66,7 @@ To omit `--version`, run from `D:/Zongsoft/hosting/web/default`:
 dotnet-migrate --name:zongsoft --platform:linux --output:../../packages '../../.deploy/$(scheme)/migration/$(version)/*.migration'
 ```
 
-Version paths support variables. Numeric values take precedence over paths; use `./1.0.0` for a file named `1.0.0`. The resolved version and Edition populate `$(version)`/`$(edition)`, plan identity and artifact names. Migration inputs and output paths stay relative to the working directory, even when the version file is elsewhere. See [version sources](README.md#package-phase) for expansion rules.
+Version paths support variables. Numeric values take precedence over paths; use `./1.0.0` for a file named `1.0.0`. Command options remain raw text until needed; after choosing the version source, values such as `architecture` and `overwrite` expand recursively before type conversion. A bare `--overwrite` still means true. The resolved version and Edition populate `$(version)`/`$(edition)`, plan identity and artifact names. Migration inputs and output paths stay relative to the working directory, even when the version file is elsewhere. See [version sources](README.md#package-phase) for expansion rules.
 
 Numeric versions take precedence over paths; all-zero versions are rejected. Numeric values do not open .version. Prefix a numeric-looking filename with ./, such as ./1.0.0. If version is omitted or blank, only the .version file directly inside the current working directory is read; the version environment variable is ignored. Directories select their own .version. Other paths are expanded and resolved from the working directory. Unknown or cyclic variables fail, and the final version variable cannot locate its own source.
 

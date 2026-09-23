@@ -9,6 +9,7 @@
 - 计划名称使用 Name，状态文件对应 name；计划成员使用 Steps、Step.Settings、Database.Settings；Step 无 Id，执行顺序和日志序号来自数组位置，Database 无 Id，Step.DatabaseIndex 按 Databases 数组位置引用；校验索引范围及 provider 一致性，Amazon S3 不接受索引。SQL 序号不补零；不按文件名排序执行。源码生成 JSON 统一 WhenWritingNull，格式化输出复制其选项，保留 Source/Content 等无条件 JsonIgnore。
 
 - 输入仅支持 .migration（Core Profile INI 格式），参数为 .env。导入复用 Core Reader，所有来源均校验；条目路径与参数定位跟随 entry.Profile.FilePath。参数查找不隐式补齐较近配置。
+- 生成端通用变量解析由 tools/.shared 源码链接；选项值先按需递归展开，再转换为版本、架构或布尔值。此共享源码不属于升迁计划协议，executor 仍只共享 migrator/.shared。
 - 按显式参数位置处理输入，模式内按相对路径 Ordinal 排序，任务按连续声明来源划分，同一来源段落内去重。SQL 分段仅在 MigrationLoader.Database 私有实现，按规范 provider 共用连续编号；每次 Load 重新计数。Amazon S3 不生成空目录。
 - 支持六种数据库和 Amazon S3；MigrationProvider 管参数规则，MigrationPlan 管结构；TDengine 用 WebSocket。执行器每次 apply 执行全部 SQL，脚本负责幂等；无成功文件历史、自动回滚或并发调度。
 - 产物名为 <规范名称>[-edition]@<version>_<runtime>.tar.gz 与同名 .sh/.cmd；不生成描述文件；版本文件只读，不创建或保存。两文件先暂存后发布，覆盖失败恢复原文件。
