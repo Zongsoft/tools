@@ -21,7 +21,7 @@ concurrency:
 jobs:
   native-linux:
     if: github.ref == 'refs/heads/main' && inputs.project == 'migrator'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     permissions:
       contents: read
@@ -41,7 +41,7 @@ jobs:
           podman exec zongsoft-migrator-aot-builder bash executor/build/setup.sh
           podman exec zongsoft-migrator-aot-builder bash executor/build/publish.sh linux-x64 Release
           podman exec zongsoft-migrator-aot-builder bash executor/build/publish.sh linux-arm64 Release
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: executor-linux
           path: |
@@ -68,7 +68,7 @@ jobs:
         working-directory: migrator
         shell: pwsh
         run: ./executor/build/publish.ps1 -Configuration Release
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: executor-windows
           path: migrator/executor/src/bin/Release/net10.0/win-x64/publish/
@@ -81,7 +81,7 @@ jobs:
       always() && github.ref == 'refs/heads/main' &&
       (inputs.project != 'migrator' ||
       (needs.native-linux.result == 'success' && needs.native-windows.result == 'success'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: release
     timeout-minutes: 120
     permissions:
@@ -100,12 +100,12 @@ jobs:
             10.0.x
       - name: Restore .NET tools
         run: dotnet tool restore
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         if: inputs.project == 'migrator'
         with:
           name: executor-linux
           path: migrator/executor/src/bin/Release/net10.0/
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         if: inputs.project == 'migrator'
         with:
           name: executor-windows
