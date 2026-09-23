@@ -30,6 +30,6 @@ packager 独立构建。migrator 分别由 Linux 和 Windows 作业准备三种�
 
 ## 代码规范同步
 
-各工具共享根目录 `.editorconfig`。`Directory.Build.props` 设置 `ZongsoftGuidelinesSynchronization` 为仓库根目录，`Zongsoft.CodeAnalysis` 在实际构建的准备阶段将所引用 NuGet 包中的模板同步到该文件；无需独立同步命令或访问 GitHub。
+各工具共享根目录 `.editorconfig`。`Directory.Build.props` 为所有 C# 构建启用 `ZongsoftCodeStyleStrict=true`，并设置 `ZongsoftGuidelinesSynchronization` 为仓库根目录。Git 检出 C# 源码时使用 CRLF，与编辑器配置一致。`Zongsoft.CodeAnalysis` 在实际构建的准备阶段将所引用 NuGet 包中的模板同步到该文件；无需独立同步命令或访问 GitHub。
 
 同步会覆盖根文件，不合并本地修改。模板在 guidelines 维护，分析器包版本由 Directory.Packages.props 统一定义。仅还原、清理、设计时构建，以及被 Visual Studio 最新检查跳过的构建均不会同步；需要时使用“重新生成”。AOT 容器只读挂载根配置，Linux 发布脚本通过 `-p:ZongsoftGuidelinesSynchronization=` 禁用同步。

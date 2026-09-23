@@ -8,7 +8,7 @@ if([IO.Path]::GetFullPath($output) -ne [IO.Path]::Combine($repository, 'executor
 if(Test-Path -LiteralPath $output) { Remove-Item -LiteralPath $output -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
 
-& dotnet publish (Join-Path $repository 'executor/src/Zongsoft.Tools.Migrator.Executor.csproj') --configuration $Configuration --runtime win-x64 --self-contained -p:ZongsoftCodeStyleStrict=true -p:TrimmerSingleWarn=false -p:IlcSingleWarn=false 2>&1 | Tee-Object -FilePath (Join-Path $logs 'publish.log')
+& dotnet publish (Join-Path $repository 'executor/src/Zongsoft.Tools.Migrator.Executor.csproj') --configuration $Configuration --runtime win-x64 --self-contained -p:TrimmerSingleWarn=false -p:IlcSingleWarn=false 2>&1 | Tee-Object -FilePath (Join-Path $logs 'publish.log')
 if($LASTEXITCODE -ne 0) { throw 'Native AOT publishing failed for win-x64.' }
 
 foreach($name in @('Zongsoft.Tools.Migrator.Executor.exe', 'duckdb.dll', 'e_sqlite3.dll')) {

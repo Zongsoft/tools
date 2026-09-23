@@ -41,13 +41,19 @@ namespace Zongsoft.Tools.Deployer;
 /// <summary>提供部署语法所需的路径、框架过滤及条件表达式辅助功能。</summary>
 internal static class Utility
 {
+	#region 常量定义
 	internal const string FRAMEWORK_VARIABLE = "Framework";
 
 	public static readonly char[] TARGET_SEPARATORS = [',', ';'];
 	public static readonly char[] PATH_SEPARATORS = [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
+	#endregion
 
+	#region 路径处理
 	public static bool IsDirectory(string path) => !string.IsNullOrEmpty(path) && IsDirectorySeparator(path[^1]);
 	public static bool IsDirectorySeparator(char chr) => chr == Path.DirectorySeparatorChar || chr == Path.AltDirectorySeparatorChar;
+	#endregion
+
+	#region 框架匹配
 	public static string GetTargetFramework(IDictionary<string, string> variables) => TryGetTargetFramework(variables, out var value) ? value : null;
 	public static bool TryGetTargetFramework(IDictionary<string, string> variables, out string value)
 	{
@@ -95,7 +101,9 @@ internal static class Utility
 
 		return false;
 	}
+	#endregion
 
+	#region 部署文件
 	public static bool IsDeploymentFile(string filePath)
 	{
 		if(string.IsNullOrWhiteSpace(filePath))
@@ -104,7 +112,9 @@ internal static class Utility
 		//如果指定的文件的扩展名为.deploy，则判断为部署文件
 		return string.Equals(Path.GetExtension(filePath), ".deploy", StringComparison.OrdinalIgnoreCase);
 	}
+	#endregion
 
+	#region 条件解析
 	/// <summary>提供部署项必须条件处理的工具类。</summary>
 	public static class Requisition
 	{
@@ -226,4 +236,5 @@ internal static class Utility
 			}
 		}
 	}
+	#endregion
 }

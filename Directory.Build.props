@@ -10,6 +10,10 @@
 		<PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
 		<PackageIconUrl>https://github.com/Zongsoft/guidelines/raw/main/zongsoft-logo(48x48).png</PackageIconUrl>
 		<PackageIcon>zongsoft-logo.png</PackageIcon>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<ZongsoftCodeStyleStrict>true</ZongsoftCodeStyleStrict>
 		<ZongsoftGuidelinesSynchronization>$(MSBuildThisFileDirectory)</ZongsoftGuidelinesSynchronization>
 	</PropertyGroup>
 

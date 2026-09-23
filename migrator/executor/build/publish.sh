@@ -24,7 +24,7 @@ evidence="$repository/executor/src/bin/$configuration/net10.0/$rid/logs"
 mkdir -p "$evidence"
 log="$evidence/publish-$(date -u +%Y%m%dT%H%M%SZ).log"
 
-properties=(-p:ZongsoftGuidelinesSynchronization= -p:ZongsoftCodeStyleStrict=true -p:LinkerFlavor=lld -p:StripSymbols=true -p:TrimmerSingleWarn=false -p:IlcSingleWarn=false)
+properties=(-p:ZongsoftGuidelinesSynchronization= -p:LinkerFlavor=lld -p:StripSymbols=true -p:TrimmerSingleWarn=false -p:IlcSingleWarn=false)
 if [[ "$rid" = linux-arm64 ]]; then
 	install -m 755 "$repository/executor/build/clang-arm64.sh" /aot/clang-arm64
 	properties+=(-p:SysRoot=/aot/sysroots/linux-arm64 -p:CppCompilerAndLinker=/aot/clang-arm64)
