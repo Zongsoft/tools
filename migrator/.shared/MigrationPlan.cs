@@ -38,20 +38,20 @@ namespace Zongsoft.Tools.Migrator.Migration;
 public sealed partial class MigrationPlan
 {
 	#region 公共属性
-	public int FormatVersion { get; set; } = 1;
-	public string Package { get; set; }
+	/// <summary>获取或设置计划名称。</summary>
+	public string Name { get; set; }
+	/// <summary>获取或设置升迁版本号。</summary>
 	public string Version { get; set; }
 	/// <summary>获取或设置目标 RID，执行前须与运行环境一致。</summary>
 	public string Runtime { get; set; }
-	/// <summary>获取或设置展示标题；空值不写入计划。</summary>
-	[System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+	/// <summary>获取或设置展示标题。</summary>
 	public string Title { get; set; }
-	/// <summary>获取或设置展示摘要；空值不写入计划。</summary>
-	[System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+	/// <summary>获取或设置展示摘要。</summary>
 	public string Summary { get; set; }
-	/// <summary>获取或设置展示说明；空值不写入计划。</summary>
-	[System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+	/// <summary>获取或设置展示说明。</summary>
 	public string Description { get; set; }
-	public List<Step> Tasks { get; set; } = [];
+
+	public List<Step> Steps { get; set; } = [];
+	public List<Database> Databases { get; set; } = [];
 	#endregion
 }

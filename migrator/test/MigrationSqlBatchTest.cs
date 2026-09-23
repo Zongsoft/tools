@@ -97,11 +97,11 @@ public sealed class MigrationSqlBatchTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("db.migration", "[" + provider + "]\n./schema.sql\n");
-		directory.Write(provider + ".env", provider is "sqlite" or "duckdb" ? "Database=/var/lib/zongsoft/hosting.db\n" : "Server=localhost\nDatabase=hosting\nUserName=operator\n");
+		directory.Write(provider + ".env", provider is "sqlite" or "duckdb" ? "[" + provider + "]\nDatabase=/var/lib/zongsoft/hosting.db\n" : "[" + provider + "]\nServer=localhost\nDatabase=hosting\nUserName=operator\nPassword=\n");
 		var source = directory.Write("schema.sql", "");
 		File.WriteAllText(source, sql, new UTF8Encoding(false));
 		var plan = new MigrationLoader(null).Load("db.migration", directory.Path, "zongsoft.daemon", "1.1.0");
-		return Assert.Single(plan.Tasks).Scripts.Select(script => script.Content).ToList();
+		return Assert.Single(plan.Steps).Scripts.Select(script => script.Content).ToList();
 	}
 	#endregion
 }

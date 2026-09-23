@@ -50,8 +50,15 @@ internal static class Program
 		try
 		{
 			var plan = MigrationPlan.Load(args[1]);
-			try { MigrationRuntime.EnsureCurrent(plan.Runtime); }
-			catch(InvalidDataException ex) { throw new MigrationException(ex.Message); }
+			try
+			{
+				MigrationRuntime.EnsureCurrent(plan.Runtime);
+			}
+			catch(InvalidDataException ex)
+			{
+				throw new MigrationException(ex.Message);
+			}
+
 			var state = Path.GetFullPath(args[2]);
 
 			if(args[0] == "status")
@@ -78,6 +85,11 @@ internal static class Program
 			return 0;
 		}
 		catch(MigrationException ex)
+		{
+			Console.Error.WriteLine(ex.Message);
+			return 1;
+		}
+		catch(MigrationPrivilegeException ex)
 		{
 			Console.Error.WriteLine(ex.Message);
 			return 1;

@@ -41,9 +41,9 @@ public sealed partial class MigrationPlan
 	public sealed class Step
 	{
 		#region 公共属性
-		public string Id { get; set; }
 		public string Provider { get; set; }
-		public Dictionary<string, string> Parameters { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+		public int? DatabaseIndex { get; set; }
+		public Dictionary<string, string> Settings { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 		public List<Script> Scripts { get; set; } = [];
 		public List<Bucket> Buckets { get; set; } = [];
 		#endregion

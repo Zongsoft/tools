@@ -51,20 +51,20 @@ partial class Migrator
 		#endregion
 
 		#region 公共方法
-		public override async Task MigrateAsync(MigrationPlan.Step task, MigrationContext context, CancellationToken cancellation = default)
+		public override async Task MigrateAsync(MigrationPlan.Step step, MigrationContext context, CancellationToken cancellation = default)
 		{
-			using var client = _factory(task);
+			using var client = _factory(step);
 			Directory.CreateDirectory(context.StateDirectory);
 
-			foreach(var bucket in task.Buckets)
+			foreach(var bucket in step.Buckets)
 			{
-				var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(task.Parameters.Get("Server") + "\n" + bucket.Name)));
+				var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(step.Settings.Get("Server") + "\n" + bucket.Name)));
 				var journal = Path.Combine(context.StateDirectory, "bucket-" + key + ".pending");
 				var exists = await ExistsAsync(client, bucket.Name, cancellation);
 
 				if(exists && !File.Exists(journal))
 				{
-					context.Log(string.Format(Properties.Resources.BucketExists, task.Id, bucket.Name));
+					context.Log(string.Format(Properties.Resources.BucketExists, context.StepNumber, bucket.Name));
 					continue;
 				}
 
@@ -74,7 +74,7 @@ partial class Migrator
 
 					try
 					{
-						await client.PutBucketAsync(new PutBucketRequest { BucketName = bucket.Name, BucketRegionName = task.Parameters.Get("Region") }, cancellation);
+						await client.PutBucketAsync(new PutBucketRequest { BucketName = bucket.Name, BucketRegionName = step.Settings.Get("Region") }, cancellation);
 					}
 					catch(AmazonS3Exception ex) when(ex.ErrorCode == "BucketAlreadyOwnedByYou")
 					{
@@ -98,7 +98,7 @@ partial class Migrator
 				}
 
 				File.Delete(journal);
-				context.Log(string.Format(Properties.Resources.BucketCreated, task.Id, bucket.Name));
+				context.Log(string.Format(Properties.Resources.BucketCreated, context.StepNumber, bucket.Name));
 			}
 		}
 		#endregion
@@ -185,9 +185,9 @@ partial class Migrator
 			}
 		}
 
-		private static IAmazonS3 CreateClient(MigrationPlan.Step task)
+		private static IAmazonS3 CreateClient(MigrationPlan.Step step)
 		{
-			var p = task.Parameters;
+			var p = step.Settings;
 			return new AmazonS3Client(new BasicAWSCredentials(p.Get("AccessKey"), p.Get("SecretKey")), new AmazonS3Config
 			{
 				MaxErrorRetry = 0,

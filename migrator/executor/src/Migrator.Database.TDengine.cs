@@ -44,41 +44,120 @@ partial class Migrator
 		public sealed class TDengine : Database
 		{
 			#region 升迁方法
-			public override async Task MigrateAsync(MigrationPlan.Step task, MigrationContext context, CancellationToken cancellation = default)
+			public override async Task InitializeAsync(MigrationPlan.Database database, MigrationContext context, CancellationToken cancellation = default)
 			{
-				using var client = new Session();
-				var parameters = task.Parameters;
-				var endpoint = new UriBuilder(bool.Parse(parameters.Get("Secured", "false")) ? "wss" : "ws", parameters.Get("Server"), int.Parse(parameters.Get("Port", "6041")), "/rest/ws").Uri;
+				using var client = await OpenAsync(database, database.Settings.Get("Bootstrap", ""), cancellation);
+				var timeout = database.Options.Seconds("CommandTimeout", 300);
+				var query = "SELECT name FROM information_schema.ins_databases WHERE name = " + Text(database.Name);
 
-				using(var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation))
+				if(await client.ExistsAsync(query, timeout, cancellation))
+					return;
+
+				var options = database.Options;
+
+				try
 				{
-					timeout.CancelAfter(TimeSpan.FromSeconds(parameters.Seconds("Timeout", 30)));
-					await client.ConnectAsync(endpoint, timeout.Token);
-
-					using var response = await client.RequestAsync("conn", writer =>
-					{
-						writer.WriteString("user", parameters.Get("UserName"));
-						writer.WriteString("password", parameters.Get("Password", ""));
-						writer.WriteString("db", parameters.Get("BootstrapDatabase", ""));
-					}, timeout.Token);
+					await client.ExecuteAsync("CREATE DATABASE " + Quote(database.Name) + " PRECISION " + Text(options.Get("Precision")) +
+						" KEEP " + options.Get("Keep") + " DURATION " + options.Get("Duration") + " REPLICA " + options.Get("Replica"), timeout, cancellation);
 				}
-
-				var commandTimeout = parameters.Seconds("CommandTimeout", 300);
-				var database = Quote(parameters.Get("Database"));
-				await client.ExecuteAsync("CREATE DATABASE IF NOT EXISTS " + database, commandTimeout, cancellation);
-				await client.ExecuteAsync("USE " + database, commandTimeout, cancellation);
-
-				foreach(var script in task.Scripts)
+				catch(InvalidOperationException)
 				{
-					context.Log(string.Format(Properties.Resources.ScriptExecuting, task.Id, script.Path));
-					var text = await File.ReadAllTextAsync(context.GetScriptPath(script), cancellation);
-					await client.ExecuteAsync(text, commandTimeout, cancellation);
+					if(!await client.ExistsAsync(query, timeout, cancellation))
+						throw;
+				}
+			}
+
+			public override async Task CreateUsersAsync(MigrationPlan.Database database, MigrationContext context, CancellationToken cancellation = default)
+			{
+				if(database.Users.Count == 0)
+					return;
+
+				using var client = await OpenAsync(database, database.Settings.Get("Bootstrap", ""), cancellation);
+				var timeout = database.Options.Seconds("CommandTimeout", 300);
+
+				foreach(var user in database.Users)
+				{
+					var query = "SELECT name FROM information_schema.ins_users WHERE name = " + Text(user.Name);
+					if(await client.ExistsAsync(query, timeout, cancellation))
+						continue;
+
+					try
+					{
+						await client.ExecuteAsync("CREATE USER " + Quote(user.Name) + " PASS " + Text(user.Password), timeout, cancellation);
+					}
+					catch(InvalidOperationException)
+					{
+						if(!await client.ExistsAsync(query, timeout, cancellation))
+							throw;
+					}
+				}
+			}
+
+			public override async Task MigrateAsync(MigrationPlan.Step step, MigrationContext context, CancellationToken cancellation = default)
+			{
+				var database = context.GetDatabase(step.DatabaseIndex);
+				var timeout = database.Options.Seconds("CommandTimeout", 300);
+				using var client = await OpenAsync(database, database.Name, cancellation);
+
+				foreach(var script in step.Scripts)
+				{
+					context.Log(string.Format(Properties.Resources.ScriptExecuting, context.StepNumber, script.Path));
+					await client.ExecuteAsync(await File.ReadAllTextAsync(context.GetScriptPath(script), cancellation), timeout, cancellation);
+				}
+			}
+
+			public override async Task GrantAsync(MigrationPlan.Database database, MigrationContext context, CancellationToken cancellation = default)
+			{
+				if(database.Users.Count == 0)
+					return;
+
+				var timeout = database.Options.Seconds("CommandTimeout", 300);
+				using var client = await OpenAsync(database, database.Name, cancellation);
+
+				foreach(var user in database.Users)
+				{
+					MigrationPrivileges.Validate(database, user);
+					var privileges = user.Privileges.Select(value => value == "Select" ? "READ" : "WRITE");
+
+					foreach(var privilege in privileges.Distinct(StringComparer.OrdinalIgnoreCase))
+						await client.ExecuteAsync("GRANT " + privilege + " ON " + Quote(database.Name) + ".* TO " + Quote(user.Name), timeout, cancellation);
 				}
 			}
 			#endregion
 
 			#region 私有方法
-			private static string Quote(string database) => "`" + database.Replace("`", "``") + "`";
+			private static string Quote(string name) => "`" + name.Replace("`", "``") + "`";
+			private static string Text(string value) => "'" + value.Replace("\\", "\\\\").Replace("'", "\\'") + "'";
+
+			private static async Task<Session> OpenAsync(MigrationPlan.Database database, string name, CancellationToken cancellation)
+			{
+				var settings = database.Settings;
+				var endpoint = new UriBuilder(bool.Parse(settings.Get("Secured", "false")) ? "wss" : "ws",
+					settings.Get("Server"), int.Parse(settings.Get("Port", "6041"), System.Globalization.CultureInfo.InvariantCulture), "/rest/ws").Uri;
+
+				var client = new Session();
+
+				try
+				{
+					using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+					timeout.CancelAfter(TimeSpan.FromSeconds(settings.Seconds("Timeout", 30)));
+					await client.ConnectAsync(endpoint, timeout.Token);
+
+					using var response = await client.RequestAsync("conn", writer =>
+					{
+						writer.WriteString("user", settings.Get("UserName"));
+						writer.WriteString("password", settings["Password"]);
+						writer.WriteString("db", name);
+					}, timeout.Token);
+
+					return client;
+				}
+				catch
+				{
+					client.Dispose();
+					throw;
+				}
+			}
 			#endregion
 
 			#region 嵌套子类
@@ -108,9 +187,34 @@ partial class Migrator
 					}
 				}
 
+				public async Task<bool> ExistsAsync(string sql, int seconds, CancellationToken cancellation)
+				{
+					using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+					timeout.CancelAfter(TimeSpan.FromSeconds(seconds));
+
+					using var query = await this.RequestAsync("query", writer => writer.WriteString("sql", sql), timeout.Token);
+
+					if(query.RootElement.GetProperty("is_update").GetBoolean())
+						throw new InvalidDataException(Properties.Resources.TDengineResponseInvalid_Message);
+
+					var id = query.RootElement.GetProperty("id").GetUInt64();
+
+					try
+					{
+						using var rows = await this.RequestAsync("fetch", writer => writer.WriteNumber("id", id), timeout.Token);
+						return rows.RootElement.GetProperty("rows").GetInt32() > 0;
+					}
+					finally
+					{
+						if(!timeout.IsCancellationRequested)
+							await this.SendAsync("free_result", writer => writer.WriteNumber("id", id), timeout.Token);
+					}
+				}
+
 				public async Task<JsonDocument> RequestAsync(string action, Action<Utf8JsonWriter> arguments, CancellationToken cancellation)
 				{
 					await this.SendAsync(action, arguments, cancellation);
+
 					using var message = new MemoryStream();
 					var buffer = new byte[4096];
 					ValueWebSocketReceiveResult received;
@@ -128,6 +232,7 @@ partial class Migrator
 					} while(!received.EndOfMessage);
 
 					var response = JsonDocument.Parse(message.GetBuffer().AsMemory(0, (int)message.Length));
+
 					try
 					{
 						var root = response.RootElement;

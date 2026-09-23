@@ -42,25 +42,41 @@ partial class Migrator
 		public sealed class Sqlite : Database
 		{
 			#region 公共方法
-			public override async Task MigrateAsync(MigrationPlan.Step task, MigrationContext context, CancellationToken cancellation = default)
+			public override async Task InitializeAsync(MigrationPlan.Database database, MigrationContext context, CancellationToken cancellation = default)
 			{
-				var database = task.Parameters.Get("Database");
-				Directory.CreateDirectory(Path.GetDirectoryName(database));
-				await ExecuteScriptsAsync(this.CreateConnection(task.Parameters, database), task, context, cancellation);
+				var path = database.Options.Get("Path");
+				var journal = GetJournal(database, context);
+				var signature = GetConfigurationSignature(database);
+
+				if(File.Exists(path) && !File.Exists(journal))
+					return;
+				if(File.Exists(journal) && await File.ReadAllTextAsync(journal, cancellation) != signature)
+					throw new InvalidDataException(string.Format(MigrationResources.ParameterValueInvalid_Message, "Database.Pending"));
+
+				Directory.CreateDirectory(Path.GetDirectoryName(path));
+				Directory.CreateDirectory(context.StateDirectory);
+				await File.WriteAllTextAsync(journal, signature, cancellation);
+
+				await using var connection = this.Connect(database, path);
+				await connection.OpenAsync(cancellation);
+
+				var timeout = database.Options.Seconds("CommandTimeout", 300);
+				await ExecuteAsync(connection, "PRAGMA encoding = " + Literal(database.Options.Get("Charset")), timeout, cancellation);
+
+				// SQLite 只有写入主数据库 schema 后才保存编码，VACUUM 空库会回到 UTF-8。
+				var marker = "\"__migrator_" + Guid.NewGuid().ToString("N") + "\"";
+				await ExecuteAsync(connection, "BEGIN; CREATE TABLE " + marker + " (value INTEGER); DROP TABLE " + marker + "; COMMIT;", timeout, cancellation);
+				await ExecuteAsync(connection, "VACUUM", timeout, cancellation);
+				File.Delete(journal);
 			}
 			#endregion
 
-			#region 私有方法
-			private DbConnection CreateConnection(IReadOnlyDictionary<string, string> parameters, string database)
+			#region 连接方法
+			protected override DbConnection CreateConnection(MigrationPlan.Database database, string name) => new Microsoft.Data.Sqlite.SqliteConnection(new DbConnectionStringBuilder
 			{
-				var builder = new DbConnectionStringBuilder
-				{
-					["Data Source"] = database,
-					["Default Timeout"] = parameters.Seconds("CommandTimeout", 300),
-				};
-
-				return new Microsoft.Data.Sqlite.SqliteConnection(builder.ConnectionString);
-			}
+				["Data Source"] = name,
+				["Default Timeout"] = database.Options.Seconds("CommandTimeout", 300),
+			}.ConnectionString);
 			#endregion
 		}
 	}

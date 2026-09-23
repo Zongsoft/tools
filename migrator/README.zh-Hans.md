@@ -1,5 +1,7 @@
 # Zongsoft 升迁工具
 
+数据库配置采用 provider/数据库/用户三级段落：provider 的 `Database` 指定默认库，该库可以没有数据库段。只初始化 `.migration` 引用的库及其用户，空段也算引用；已有设置及密码保留，权限仅追加。完整参数和默认值见[数据库指南](docs/databases.zh-Hans.md)。
+
 [English](README.md) | [简体中文](README.zh-Hans.md)
 
 `dotnet-migrate` 制作独立升迁执行包和启动脚本。制作时不连接数据库/S3。版本文件可提供版本号和 Edition，始终只读，不改写。执行生成的脚本时才进行数据库初始化、SQL 执行和 S3 桶配置。
@@ -74,3 +76,5 @@ dotnet test executor/test/Zongsoft.Tools.Migrator.Executor.Tests.csproj -f net10
 ```
 
 详见[升迁指南](docs/migration.zh-Hans.md)、[实现说明](docs/implementation.zh-Hans.md)。
+
+Privileges 使用 20 项跨驱动统一操作名称。ReadWrite 包含 Execute，所有读写授权均包含 Sequence 取值；驱动在指定库内展开原生权限，无法满足的操作或所有权条件明确失败。权限合并和角色范围限制见数据库指南。

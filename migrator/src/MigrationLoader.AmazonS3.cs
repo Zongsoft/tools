@@ -44,14 +44,14 @@ partial class MigrationLoader
 	private sealed partial class AmazonS3
 	{
 		#region 成员字段
-		private readonly MigrationPlan.Step _task;
+		private readonly MigrationPlan.Step _step;
 		private readonly HashSet<string> _names;
 		#endregion
 
 		#region 构造函数
-		public AmazonS3(MigrationPlan.Step task, HashSet<string> names)
+		public AmazonS3(MigrationPlan.Step step, HashSet<string> names)
 		{
-			_task = task;
+			_step = step;
 			_names = names;
 		}
 		#endregion
@@ -63,7 +63,7 @@ partial class MigrationLoader
 			if(!_names.Add(bucket.Name))
 				throw new InvalidDataException(Properties.Resources.MigrationBucketDuplicate_Message);
 
-			_task.Buckets.Add(bucket);
+			_step.Buckets.Add(bucket);
 		}
 		#endregion
 

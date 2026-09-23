@@ -22,7 +22,7 @@ public sealed class MigrationLoaderTest
 		using var directory = new MigrationTestDirectory();
 		var invalid = directory.Write("legacy.ini", "[sqlite]\n./schema.sql\n");
 		directory.Write("main.migration", "#@import legacy.ini\n");
-		directory.Write("sqlite.env", "Database=/data/hosting.db\n");
+		directory.Write("sqlite.env", "[sqlite]\nDatabase=/data/hosting.db\n");
 		directory.Write("schema.sql", "SELECT 1;");
 
 		var error = Assert.Throws<InvalidDataException>(() => Loader().Load(imported ? "main.migration" : "legacy.ini", directory.Path, "zongsoft.daemon", "1.0.0"));
@@ -58,13 +58,13 @@ public sealed class MigrationLoaderTest
 		if(valid)
 		{
 			var plan = Loader().Load("db.migration", directory.Path, "zongsoft.daemon", "1.0.0", "win-x64");
-			Assert.Equal(database, Assert.Single(plan.Tasks).Parameters["Database"]);
+			Assert.Equal(database, Assert.Single(plan.Databases).Options["Path"]);
 			Assert.Equal("win-x64", plan.Runtime);
 		}
 		else
 		{
 			var error = Assert.Throws<InvalidDataException>(() => Loader().Load("db.migration", directory.Path, "zongsoft.daemon", "1.0.0", "win-x64"));
-			Assert.Contains("Database", error.Message);
+			Assert.Contains("Path", error.Message);
 		}
 	}
 
@@ -84,8 +84,8 @@ public sealed class MigrationLoaderTest
 		var plan = Loader().Load(inputs, directory.Path, "zongsoft.daemon", "1.0.0", "linux-arm64");
 
 		Assert.Equal("linux-arm64", plan.Runtime);
-		Assert.Equal(new[] { "/data/last.db", "/data/parts-a.db", "/data/parts-b.db", "/data/last.db" }, plan.Tasks.Select(step => step.Parameters["Database"]));
-		Assert.Equal(new[] { ".migration/.artifacts/sqlite/0001.sql", ".migration/.artifacts/sqlite/0002.sql", ".migration/.artifacts/sqlite/0003.sql", ".migration/.artifacts/sqlite/0004.sql" }, plan.Tasks.SelectMany(step => step.Scripts).Select(script => script.Path));
+		Assert.Equal(new[] { "/data/last.db", "/data/parts-a.db", "/data/parts-b.db", "/data/last.db" }, plan.Steps.Select(step => plan.Databases[step.DatabaseIndex.Value].Options["Path"]));
+		Assert.Equal(new[] { ".migration/.artifacts/sqlite/1.sql", ".migration/.artifacts/sqlite/2.sql", ".migration/.artifacts/sqlite/3.sql", ".migration/.artifacts/sqlite/4.sql" }, plan.Steps.SelectMany(step => step.Scripts).Select(script => script.Path));
 	}
 
 	[Fact]
@@ -99,7 +99,7 @@ public sealed class MigrationLoaderTest
 		var plan = Loader().Load("db.migration", directory.Path, "zongsoft.daemon", "1.0.0", "win-x64");
 
 		Assert.Equal("win-x64", plan.Runtime);
-		Assert.Equal(@"C:\Zongsoft\hosting.db", Assert.Single(plan.Tasks).Parameters["Database"]);
+		Assert.Equal(@"C:\Zongsoft\hosting.db", Assert.Single(plan.Databases).Options["Path"]);
 	}
 
 	[Fact]
@@ -108,18 +108,18 @@ public sealed class MigrationLoaderTest
 		using var directory = new MigrationTestDirectory();
 		directory.Write("migration/main.migration", "#@import imported.migration\n[sqlite]\n./schema.sql\n");
 		directory.Write("migration/imported.migration", "[sqlite]\n./imported.sql\n");
-		directory.Write("migration/sqlite.env", "Database=/var/lib/zongsoft/original.db\n#@import imported.env\n");
-		directory.Write("migration/imported.env", "Database=/var/lib/zongsoft/overridden.db\n");
+		directory.Write("migration/sqlite.env", "[sqlite]\nDatabase=/var/lib/zongsoft/original.db\n#@import imported.env\n");
+		directory.Write("migration/imported.env", "[sqlite]\nDatabase=/var/lib/zongsoft/overridden.db\n");
 		var sql = directory.Write("migration/schema.sql", "SELECT 'intended';");
 		var imported = directory.Write("migration/imported.sql", "SELECT 'imported';");
 
 		var plan = Loader().Load("migration/main.migration", directory.Path, "zongsoft.test", "1.0.0");
 
-		Assert.Equal(2, plan.Tasks.Count);
-		Assert.All(plan.Tasks, task => Assert.Equal("sqlite", task.Provider));
-		Assert.All(plan.Tasks, task => Assert.Equal("/var/lib/zongsoft/overridden.db", task.Parameters["Database"]));
-		Assert.Equal(new[] { imported, sql }, plan.Tasks.SelectMany(task => task.Scripts).Select(script => script.Source));
-		Assert.Equal(new[] { "SELECT 'imported';", "SELECT 'intended';" }, plan.Tasks.SelectMany(task => task.Scripts).Select(script => script.Content));
+		Assert.Equal(2, plan.Steps.Count);
+		Assert.All(plan.Steps, task => Assert.Equal("sqlite", task.Provider));
+		Assert.All(plan.Steps, task => Assert.Equal("/var/lib/zongsoft/overridden.db", plan.Databases[task.DatabaseIndex.Value].Options["Path"]));
+		Assert.Equal(new[] { imported, sql }, plan.Steps.SelectMany(task => task.Scripts).Select(script => script.Source));
+		Assert.Equal(new[] { "SELECT 'imported';", "SELECT 'intended';" }, plan.Steps.SelectMany(task => task.Scripts).Select(script => script.Content));
 	}
 
 	[Theory]
@@ -131,21 +131,21 @@ public sealed class MigrationLoaderTest
 		directory.Write("migration/sql/020-postgres.sql", "SELECT '$(literal);%unchanged%';");
 		directory.Write("migration/sql/010-postgres.sql", "SELECT 1;");
 		directory.Write("migration/db-production.migration", "[POSTGRESQL]\n./sql/*-postgres.sql\n./sql/010-postgres.sql\n");
-		directory.Write("migration/postgres.env", "Server=localhost\nDatabase=hosting\nUserName=operator\nPassword=$(secret)\n");
+		directory.Write("migration/postgres.env", "[postgres]\nServer=localhost\nDatabase=hosting\nUserName=operator\nPassword=$(secret)\n");
 		directory.Write("migration/fs.migration", "[AMAZON.S3]\nattachments=Private\ndownloads=PUBLIC\n");
 		directory.Write("migration/amazon.s3.env", "Server=http://localhost:9000\nRegion=us-east-1\nAccessKey=test\nSecretKey=test\n");
 		var loader = Loader(new() { ["environment"] = "production", ["secret"] = "value=with;punctuation\n[new]" });
 
 		var plan = loader.Load($"migration/db-$(environment).migration{separator}migration/fs.migration", directory.Path, "zongsoft.web", "1.1.0");
 
-		Assert.Equal(new[] { "postgres", "amazon.s3" }, plan.Tasks.Select(task => task.Provider));
-		Assert.Equal(new[] { "010-postgres.sql", "020-postgres.sql" }, plan.Tasks[0].Scripts.Select(script => Path.GetFileName(script.Source)));
-		Assert.Equal("value=with;punctuation\n[new]", plan.Tasks[0].Parameters["Password"]);
-		Assert.Equal("SELECT '$(literal);%unchanged%';", File.ReadAllText(plan.Tasks[0].Scripts[1].Source));
-		Assert.Equal(new[] { "attachments", "downloads" }, plan.Tasks[1].Buckets.Select(bucket => bucket.Name));
-		Assert.False(plan.Tasks[1].Buckets[0].Public);
-		Assert.True(plan.Tasks[1].Buckets[1].Public);
-		Assert.Equal("zongsoft.web", plan.Package);
+		Assert.Equal(new[] { "postgres", "amazon.s3" }, plan.Steps.Select(task => task.Provider));
+		Assert.Equal(new[] { "010-postgres.sql", "020-postgres.sql" }, plan.Steps[0].Scripts.Select(script => Path.GetFileName(script.Source)));
+		Assert.Equal("value=with;punctuation\n[new]", plan.Databases[0].Settings["Password"]);
+		Assert.Equal("SELECT '$(literal);%unchanged%';", File.ReadAllText(plan.Steps[0].Scripts[1].Source));
+		Assert.Equal(new[] { "attachments", "downloads" }, plan.Steps[1].Buckets.Select(bucket => bucket.Name));
+		Assert.False(plan.Steps[1].Buckets[0].Public);
+		Assert.True(plan.Steps[1].Buckets[1].Public);
+		Assert.Equal("zongsoft.web", plan.Name);
 		Assert.Equal("1.1.0", plan.Version);
 	}
 
@@ -161,20 +161,20 @@ public sealed class MigrationLoaderTest
 		directory.Write("hosting/.deploy/default/migration/1.1.0/Zongsoft.fs-production.migration", "[amazon.s3]\nattachments=private\n");
 		directory.Write("hosting/.deploy/default/migration/1.1.0/zongsoft.db-development.migration", "[must-not-be-selected]\ninvalid\n");
 		var sql = directory.Write("hosting/.deploy/default/migration/1.1.0/sql/schema.sql", "SELECT 'hosting';");
-		directory.Write("hosting/.deploy/default/migration/postgres.env", "Server=ancestor-db\nDatabase=hosting\nUserName=operator\n");
+		directory.Write("hosting/.deploy/default/migration/postgres.env", "[postgres]\nServer=ancestor-db\nDatabase=hosting\nUserName=operator\nPassword=\n");
 		directory.Write("hosting/.deploy/default/migration/amazon.s3.env", "Server=http://ancestor-fs:9000\nRegion=us-east-1\nAccessKey=test\nSecretKey=test\n");
 		var loader = Loader(new() { ["scheme"] = "default", ["version"] = "1.1.0", ["environment"] = "production" });
 
 		var plan = loader.Load("../../.deploy/$(scheme)/migration/$(version)/*-$(environment).migration" + separator, source, "zongsoft.web", "1.1.0");
 
-		Assert.Equal(new[] { "amazon.s3", "postgres" }, plan.Tasks.Select(task => task.Provider));
-		Assert.Equal(new[] { "0001-amazon.s3", "0002-postgres" }, plan.Tasks.Select(task => task.Id));
-		Assert.Equal("attachments", Assert.Single(plan.Tasks[0].Buckets).Name);
-		Assert.False(plan.Tasks[0].Buckets[0].Public);
-		Assert.Equal("http://ancestor-fs:9000", plan.Tasks[0].Parameters["Server"]);
-		Assert.Equal("ancestor-db", plan.Tasks[1].Parameters["Server"]);
-		Assert.Equal(sql, Assert.Single(plan.Tasks[1].Scripts).Source);
-		Assert.Equal("SELECT 'hosting';", plan.Tasks[1].Scripts[0].Content);
+		Assert.Equal(new[] { "amazon.s3", "postgres" }, plan.Steps.Select(task => task.Provider));
+
+		Assert.Equal("attachments", Assert.Single(plan.Steps[0].Buckets).Name);
+		Assert.False(plan.Steps[0].Buckets[0].Public);
+		Assert.Equal("http://ancestor-fs:9000", plan.Steps[0].Settings["Server"]);
+		Assert.Equal("ancestor-db", plan.Databases[0].Settings["Server"]);
+		Assert.Equal(sql, Assert.Single(plan.Steps[1].Scripts).Source);
+		Assert.Equal("SELECT 'hosting';", plan.Steps[1].Scripts[0].Content);
 	}
 
 	[Fact]
@@ -183,17 +183,17 @@ public sealed class MigrationLoaderTest
 		using var directory = new MigrationTestDirectory();
 		directory.Write("migration/01-db.migration", "[sqlite]\n./schema.sql\n");
 		directory.Write("migration/02-fs.migration", "[amazon.s3]\nattachments=private\n");
-		directory.Write("migration/sqlite.env", "Database=/var/lib/zongsoft/hosting.db\n");
+		directory.Write("migration/sqlite.env", "[sqlite]\nDatabase=/var/lib/zongsoft/hosting.db\n");
 		directory.Write("migration/amazon.s3.env", "Server=http://localhost:9000\nRegion=us-east-1\nAccessKey=test\nSecretKey=test\n");
 		directory.Write("migration/schema.sql", "SELECT 1;");
 
 		var plan = Loader().Load("migration/02-fs.migration;migration/*.migration|migration/02-fs.migration;", directory.Path, "zongsoft.daemon", "1.1.0");
 
-		Assert.Equal(new[] { "amazon.s3", "sqlite", "amazon.s3", "amazon.s3" }, plan.Tasks.Select(task => task.Provider));
-		Assert.Equal(new[] { "0001-amazon.s3", "0002-sqlite", "0003-amazon.s3", "0004-amazon.s3" }, plan.Tasks.Select(task => task.Id));
-		Assert.Equal("attachments", Assert.Single(plan.Tasks[0].Buckets).Name);
-		Assert.Equal("attachments", Assert.Single(plan.Tasks[2].Buckets).Name);
-		Assert.Equal("attachments", Assert.Single(plan.Tasks[3].Buckets).Name);
+		Assert.Equal(new[] { "amazon.s3", "sqlite", "amazon.s3", "amazon.s3" }, plan.Steps.Select(task => task.Provider));
+
+		Assert.Equal("attachments", Assert.Single(plan.Steps[0].Buckets).Name);
+		Assert.Equal("attachments", Assert.Single(plan.Steps[2].Buckets).Name);
+		Assert.Equal("attachments", Assert.Single(plan.Steps[3].Buckets).Name);
 	}
 
 	[Theory]
@@ -219,7 +219,7 @@ public sealed class MigrationLoaderTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("db.migration", "[sqlite]\n./schema.sql\n");
-		directory.Write("sqlite.env", "Database=/var/lib/zongsoft/hosting.db\n");
+		directory.Write("sqlite.env", "[sqlite]\nDatabase=/var/lib/zongsoft/hosting.db\n");
 		directory.Write("schema.sql", "SELECT 1;");
 		directory.Write("fs.migration", "[amazon.s3]\nattachments=private\n");
 		directory.Write("amazon.s3.env", "Server=http://localhost:9000\nRegion=us-east-1\nAccessKey=test\nSecretKey=test\n");
@@ -228,10 +228,10 @@ public sealed class MigrationLoaderTest
 
 		var plan = loader.Load("missing-$(environment).migration;db.migration|absent/*.migration;fs.migration|", directory.Path, "zongsoft.daemon", "1.1.0");
 
-		Assert.Equal(new[] { "sqlite", "amazon.s3" }, plan.Tasks.Select(task => task.Provider));
-		Assert.Equal(new[] { "0001-sqlite", "0002-amazon.s3" }, plan.Tasks.Select(task => task.Id));
-		Assert.Equal("SELECT 1;", Assert.Single(plan.Tasks[0].Scripts).Content);
-		Assert.Equal("attachments", Assert.Single(plan.Tasks[1].Buckets).Name);
+		Assert.Equal(new[] { "sqlite", "amazon.s3" }, plan.Steps.Select(task => task.Provider));
+
+		Assert.Equal("SELECT 1;", Assert.Single(plan.Steps[0].Scripts).Content);
+		Assert.Equal("attachments", Assert.Single(plan.Steps[1].Buckets).Name);
 		Assert.Equal(2, warnings.Count);
 		Assert.Contains(Path.Combine(directory.Path, "missing-production.migration"), warnings[0]);
 		Assert.Contains(Path.Combine(directory.Path, "absent", "*.migration"), warnings[1]);
@@ -254,14 +254,14 @@ public sealed class MigrationLoaderTest
 
 	[Theory]
 	[InlineData("db.migration", "")]
-	[InlineData("db.migration", "[sqlite]\n")]
+	[InlineData("db.migration", "[sqlite hosting user]\n")]
 	[InlineData("db.txt", "[sqlite]\n./schema.sql\n")]
 	[InlineData("db.migration", "[unknown]\ninvalid\n")]
 	public void Load_ExistingInvalidInputAfterMissingFile_StillFails(string name, string content)
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write(name, content);
-		directory.Write("sqlite.env", "Database=/var/lib/zongsoft/hosting.db\n");
+		directory.Write("sqlite.env", "[sqlite]\nDatabase=/var/lib/zongsoft/hosting.db\n");
 		directory.Write("schema.sql", "SELECT 1;");
 		var warnings = new List<string>();
 
@@ -278,7 +278,7 @@ public sealed class MigrationLoaderTest
 		using var directory = new MigrationTestDirectory();
 		var migration = directory.Write("db.migration", "[sqlite]\n./missing.sql\n");
 		if(parametersExist)
-			directory.Write("sqlite.env", "Database=/var/lib/zongsoft/hosting.db\n");
+			directory.Write("sqlite.env", "[sqlite]\nDatabase=/var/lib/zongsoft/hosting.db\n");
 		var warnings = new List<string>();
 
 		var error = Assert.Throws<InvalidDataException>(() => Loader(warning: warnings.Add).Load("missing.migration;db.migration", directory.Path, "zongsoft.daemon", "1.1.0"));
@@ -307,13 +307,13 @@ public sealed class MigrationLoaderTest
 		using var directory = new MigrationTestDirectory();
 		var migration = directory.Write("nested/migration/db.migration", "[postgres]\n");
 		directory.Write("nested/migration/db.env", "[mysql]\nServer=wrong\n");
-		directory.Write("nested/migration/postgresql.env", "Server=nearest\nDatabase=hosting\nUserName=operator\n");
-		directory.Write("nested/db.env", "[postgres]\nServer=parent\nDatabase=hosting\nUserName=operator\n");
+		directory.Write("nested/migration/postgresql.env", "[postgres]\nServer=nearest\nDatabase=hosting\nUserName=operator\nPassword=\n");
+		directory.Write("nested/db.env", "[postgres]\nServer=parent\nDatabase=hosting\nUserName=operator\nPassword=\n");
 
 		var parameters = Parameters(directory, migration);
 
 		Assert.Equal("nearest", parameters["Server"]);
-		Assert.Equal(3, parameters.Count);
+		Assert.Equal("30s", parameters["Timeout"]);
 	}
 
 	[Fact]
@@ -321,14 +321,14 @@ public sealed class MigrationLoaderTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var migration = directory.Write("db.migration", "[postgres]\n");
-		directory.Write("db.env", "[POSTGRESQL]\nServer=shared\nDatabase=hosting\nUserName=operator\n[mysql]\nPassword=must-not-be-collected\n");
-		directory.Write("postgres.env", "Server=provider\nDatabase=hosting\nUserName=operator\nPassword=ignored\n");
+		directory.Write("db.env", "[POSTGRESQL]\nServer=shared\nDatabase=hosting\nUserName=operator\nPassword=\n[mysql]\nPassword=must-not-be-collected\n");
+		directory.Write("postgres.env", "[postgres]\nServer=provider\nDatabase=hosting\nUserName=operator\nPassword=ignored\n");
 
 		var parameters = Parameters(directory, migration);
 
 		Assert.Equal("shared", parameters["server"]);
-		Assert.False(parameters.ContainsKey("Password"));
-		Assert.Equal(3, parameters.Count);
+		Assert.Equal("", parameters["Password"]);
+		Assert.Equal("30s", parameters["Timeout"]);
 	}
 
 	[Fact]
@@ -336,8 +336,8 @@ public sealed class MigrationLoaderTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var migration = directory.Write("nested/db.migration", "[postgres]\n");
-		var selected = directory.Write("nested/postgres.env", "Server=nearest\nUserName=operator\n");
-		directory.Write("postgres.env", "Server=parent\nDatabase=hosting\nUserName=operator\n");
+		var selected = directory.Write("nested/postgres.env", "[postgres]\nServer=nearest\nUserName=operator\nPassword=\n");
+		directory.Write("postgres.env", "[postgres]\nServer=parent\nDatabase=hosting\nUserName=operator\nPassword=\n");
 
 		var error = Assert.Throws<InvalidDataException>(() => Parameters(directory, migration));
 
@@ -350,7 +350,7 @@ public sealed class MigrationLoaderTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var migration = directory.Write("db.migration", "[postgres]\n");
-		directory.Write("postgres.env", "Database=root-only\n[postgres]\nServer=localhost\nUserName=operator\n");
+		directory.Write("postgres.env", "Database=root-only\n[postgres]\nServer=localhost\nUserName=operator\nPassword=\n");
 
 		var error = Assert.Throws<InvalidDataException>(() => Parameters(directory, migration));
 
@@ -362,12 +362,12 @@ public sealed class MigrationLoaderTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var migration = directory.Write("deep/child/db.migration", "[postgres]\n");
-		directory.Write("postgresql.env", "[POSTGRES]\nServer=parent\nDatabase=hosting\nUserName=operator\n[mysql]\nPassword=other\n");
+		directory.Write("postgresql.env", "[POSTGRES]\nServer=parent\nDatabase=hosting\nUserName=operator\nPassword=\n[mysql]\nPassword=other\n");
 
 		var parameters = Parameters(directory, migration);
 
 		Assert.Equal("parent", parameters["Server"]);
-		Assert.False(parameters.ContainsKey("Password"));
+		Assert.Equal("", parameters["Password"]);
 	}
 
 	[Fact]
@@ -391,7 +391,7 @@ public sealed class MigrationLoaderTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var migration = directory.Write("db.migration", ini);
-		directory.Write("sqlite.env", "Database=/var/lib/zongsoft/test.db\n");
+		directory.Write("sqlite.env", "[sqlite]\nDatabase=/var/lib/zongsoft/test.db\n");
 		directory.Write("schema.sql", "SELECT 1;");
 
 		var error = Assert.Throws<InvalidDataException>(() => Loader().Load("db.migration", directory.Path, "zongsoft.daemon", "1.1.0"));
@@ -405,7 +405,7 @@ public sealed class MigrationLoaderTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var migration = directory.Write("db.migration", "[postgres]\n./schema.sql\n[postgresql]\n./schema.sql\n");
-		directory.Write("postgres.env", "Server=localhost\nDatabase=hosting\nUserName=operator\n");
+		directory.Write("postgres.env", "[postgres]\nServer=localhost\nDatabase=hosting\nUserName=operator\nPassword=\n");
 		directory.Write("schema.sql", "SELECT 1;");
 
 		var error = Assert.Throws<InvalidDataException>(() => Loader().Load("db.migration", directory.Path, "zongsoft.web", "1.1.0"));
@@ -418,7 +418,7 @@ public sealed class MigrationLoaderTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var migration = directory.Write("db.migration", "[postgres]\n");
-		var parameters = directory.Write("postgres.env", "Server=localhost\nDatabase=hosting\nUserName=operator\nPassword=$(missing)\n");
+		var parameters = directory.Write("postgres.env", "[postgres]\nServer=localhost\nDatabase=hosting\nUserName=operator\nPassword=$(missing)\n");
 
 		var error = Assert.Throws<InvalidDataException>(() => Parameters(directory, migration));
 
@@ -467,22 +467,22 @@ public sealed class MigrationLoaderTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("first.migration", "[POSTGRESQL]\n./first*.sql\n./first.sql\n");
-		directory.Write("first.env", "[postgres]\nServer=localhost\nDatabase=first\nUserName=operator\n");
+		directory.Write("first.env", "[postgres]\nServer=localhost\nDatabase=first\nUserName=operator\nPassword=\n");
 		directory.Write("first.sql", "SELECT 'first';");
 		directory.Write("parts/20-postgres.migration", "[postgres]\n./second.sql\n");
-		directory.Write("parts/20-postgres.env", "[postgres]\nServer=localhost\nDatabase=second\nUserName=operator\n");
+		directory.Write("parts/20-postgres.env", "[postgres]\nServer=localhost\nDatabase=second\nUserName=operator\nPassword=\n");
 		directory.Write("parts/second.sql", "SELECT 'second';");
 		directory.Write("parts/10-mysql.migration", "[mysql]\n./mysql.sql\n");
-		directory.Write("mysql.env", "Server=localhost\nDatabase=hosting\nUserName=operator\n");
+		directory.Write("mysql.env", "[mysql]\nServer=localhost\nDatabase=hosting\nUserName=operator\nPassword=\n");
 		directory.Write("parts/mysql.sql", "SELECT 'mysql';");
 
 		var plan = Loader().Load("first.migration;parts/*.migration|first.migration", directory.Path, "zongsoft.web", "1.1.0");
 
-		Assert.Equal(new[] { "postgres", "mysql", "postgres", "postgres" }, plan.Tasks.Select(task => task.Provider));
-		Assert.Equal(new[] { "first", "hosting", "second", "first" }, plan.Tasks.Select(task => task.Parameters["Database"]));
-		Assert.Equal(4, plan.Tasks.Select(task => task.Id).Distinct().Count());
-		var scripts = plan.Tasks.Select(task => Assert.Single(task.Scripts)).ToArray();
-		Assert.Equal(new[] { ".migration/.artifacts/postgres/0001.sql", ".migration/.artifacts/mysql/0001.sql", ".migration/.artifacts/postgres/0002.sql", ".migration/.artifacts/postgres/0003.sql" }, scripts.Select(script => script.Path));
+		Assert.Equal(new[] { "postgres", "mysql", "postgres", "postgres" }, plan.Steps.Select(task => task.Provider));
+		Assert.Equal(new[] { "first", "hosting", "second", "first" }, plan.Steps.Select(task => plan.Databases[task.DatabaseIndex.Value].Name));
+		Assert.Equal(4, plan.Steps.Count);
+		var scripts = plan.Steps.Select(task => Assert.Single(task.Scripts)).ToArray();
+		Assert.Equal(new[] { ".migration/.artifacts/postgres/1.sql", ".migration/.artifacts/mysql/1.sql", ".migration/.artifacts/postgres/2.sql", ".migration/.artifacts/postgres/3.sql" }, scripts.Select(script => script.Path));
 		Assert.Equal(new[] { "SELECT 'first';", "SELECT 'mysql';", "SELECT 'second';", "SELECT 'first';" }, scripts.Select(script => script.Content));
 		Assert.All(scripts, script => Assert.Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(script.Content))), script.Checksum));
 		Assert.Equal(scripts[0].Source, scripts[3].Source);
@@ -494,14 +494,14 @@ public sealed class MigrationLoaderTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("db.migration", "[sqlite]\n./schema.sql\n");
-		directory.Write("sqlite.env", "Database=/var/lib/zongsoft/hosting.db\n");
+		directory.Write("sqlite.env", "[sqlite]\nDatabase=/var/lib/zongsoft/hosting.db\n");
 		directory.Write("schema.sql", "SELECT 1;");
 		var loader = Loader();
 
 		var first = loader.Load("db.migration;db.migration", directory.Path, "zongsoft.daemon", "1.1.0");
 		var second = loader.Load("db.migration;db.migration", directory.Path, "zongsoft.daemon", "1.1.0");
 
-		Assert.Equal(new[] { ".migration/.artifacts/sqlite/0001.sql", ".migration/.artifacts/sqlite/0002.sql" }, second.Tasks.SelectMany(task => task.Scripts).Select(script => script.Path));
+		Assert.Equal(new[] { ".migration/.artifacts/sqlite/1.sql", ".migration/.artifacts/sqlite/2.sql" }, second.Steps.SelectMany(task => task.Scripts).Select(script => script.Path));
 		Assert.Equal(first.Serialize(), second.Serialize());
 		Assert.Equal(first.Fingerprint(), second.Fingerprint());
 	}
@@ -512,15 +512,14 @@ public sealed class MigrationLoaderTest
 		using var directory = new MigrationTestDirectory();
 		directory.Write("one.migration", "[sqlite]\n./schema.sql\n");
 		directory.Write("two.migration", "[sqlite]\n./schema.sql\n");
-		directory.Write("sqlite.env", "Database=/var/lib/zongsoft/hosting.db\n");
+		directory.Write("sqlite.env", "[sqlite]\nDatabase=/var/lib/zongsoft/hosting.db\n");
 		directory.Write("schema.sql", "SELECT 1;");
 
 		var plan = Loader().Load("one.migration;two.migration", directory.Path, "zongsoft.daemon", "1.1.0");
 
-		Assert.Equal(new[] { "0001-sqlite", "0002-sqlite" }, plan.Tasks.Select(task => task.Id));
-		Assert.All(plan.Tasks, task => Assert.Single(task.Scripts));
-		Assert.NotEqual(plan.Tasks[0].Scripts[0].Path, plan.Tasks[1].Scripts[0].Path);
-		Assert.Equal(plan.Tasks[0].Scripts[0].Checksum, plan.Tasks[1].Scripts[0].Checksum);
+		Assert.All(plan.Steps, task => Assert.Single(task.Scripts));
+		Assert.NotEqual(plan.Steps[0].Scripts[0].Path, plan.Steps[1].Scripts[0].Path);
+		Assert.Equal(plan.Steps[0].Scripts[0].Checksum, plan.Steps[1].Scripts[0].Checksum);
 	}
 
 	[Theory]
@@ -555,15 +554,16 @@ public sealed class MigrationLoaderTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("db.migration", "; SQL comment\n# another comment\n[PoStGrEs]\n./schema.sql\n");
-		directory.Write("postgres.env", "# config comment\nServer=localhost\nDatabase=hosting\nUserName=operator\nPassword=value=with;semi#hash\n");
+		directory.Write("postgres.env", "# config comment\n[postgres]\nServer=localhost\nDatabase=hosting\nUserName=operator\nPassword=value=with;semi#hash\n");
 		var sql = directory.Write("schema.sql", "SELECT 1;");
 
 		var plan = Loader().Load("db.migration", directory.Path, "zongsoft.web", "1.1.0");
 
-		Assert.Single(plan.Tasks);
-		Assert.Equal(sql, Assert.Single(plan.Tasks[0].Scripts).Source);
-		Assert.Equal("value=with;semi#hash", plan.Tasks[0].Parameters["password"]);
-		Assert.Equal(4, plan.Tasks[0].Parameters.Count);
+		Assert.Single(plan.Steps);
+		Assert.Equal(sql, Assert.Single(plan.Steps[0].Scripts).Source);
+		Assert.Equal("value=with;semi#hash", plan.Databases[0].Settings["password"]);
+		Assert.Empty(plan.Steps[0].Settings);
+		Assert.Equal("operator", plan.Databases[0].Settings["UserName"]);
 	}
 
 	[Fact]
@@ -573,21 +573,21 @@ public sealed class MigrationLoaderTest
 		directory.Write("fs.migration", "[aMaZoN.S3]\nattachments=private\n");
 		directory.Write("fs.env", "[AMAZON.s3]\nServer=http://localhost:9000\nRegion=us-east-1\nAccessKey=test\nSecretKey=secret=with;punctuation\n");
 
-		var task = Assert.Single(Loader().Load("fs.migration", directory.Path, "zongsoft.web", "1.1.0").Tasks);
+		var task = Assert.Single(Loader().Load("fs.migration", directory.Path, "zongsoft.web", "1.1.0").Steps);
 
 		Assert.Equal("amazon.s3", task.Provider);
-		Assert.Equal("secret=with;punctuation", task.Parameters["SecretKey"]);
+		Assert.Equal("secret=with;punctuation", task.Settings["SecretKey"]);
 		Assert.Equal("attachments", Assert.Single(task.Buckets).Name);
 	}
 
 	[Theory]
-	[InlineData("Database=hosting\nDATABASE=another")]
+	[InlineData("[sqlite]\nDatabase=hosting\nDATABASE=another")]
 	[InlineData("Password=first-secret\npassword=second-secret")]
 	public void Profile_CaseInsensitiveDuplicateParameterKey_FailsWithoutLeakingValues(string duplicate)
 	{
 		using var directory = new MigrationTestDirectory();
 		var migration = directory.Write("db.migration", "[postgres]\n./schema.sql\n");
-		var parameters = directory.Write("postgres.env", "Server=localhost\nUserName=operator\n" + duplicate + "\n");
+		var parameters = directory.Write("postgres.env", "[postgres]\nServer=localhost\nUserName=operator\nPassword=\n" + duplicate + "\n");
 
 		var error = Assert.Throws<InvalidDataException>(() => Parameters(directory, migration));
 
@@ -601,7 +601,7 @@ public sealed class MigrationLoaderTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var migration = directory.Write("db.migration", "[sqlite]\n./schema.sql\n./SCHEMA.SQL\n");
-		directory.Write("sqlite.env", "Database=/var/lib/zongsoft/hosting.db\n");
+		directory.Write("sqlite.env", "[sqlite]\nDatabase=/var/lib/zongsoft/hosting.db\n");
 		directory.Write("schema.sql", "SELECT 1;");
 
 		var error = Assert.Throws<InvalidDataException>(() => Loader().Load("db.migration", directory.Path, "zongsoft.web", "1.1.0"));
@@ -616,12 +616,12 @@ public sealed class MigrationLoaderTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("db.migration", "[" + provider + "]\n./schema.sql\n");
-		directory.Write(provider + ".env", "Server=localhost\nDatabase=hosting\nUserName=operator\n");
+		directory.Write(provider + ".env", "[" + provider + "]\nServer=localhost\nDatabase=hosting\nUserName=operator\nPassword=\n");
 		var source = directory.Write("schema.sql", sql);
 
 		var plan = Loader().Load("db.migration", directory.Path, "zongsoft.web", "1.1.0");
 
-		var script = Assert.Single(Assert.Single(plan.Tasks).Scripts);
+		var script = Assert.Single(Assert.Single(plan.Steps).Scripts);
 		Assert.Equal(source, script.Source);
 		Assert.Equal(sql.ReplaceLineEndings("\r\n"), File.ReadAllText(script.Source));
 		Assert.Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(script.Content))), script.Checksum);
@@ -645,10 +645,10 @@ public sealed class MigrationLoaderTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("db.migration", "[" + provider + "]\n./schema.sql\n");
-		directory.Write(provider + ".env", provider is "sqlite" or "duckdb" ? "Database=/var/lib/zongsoft/hosting.db\n" : "Server=localhost\nDatabase=hosting\nUserName=operator\n");
+		directory.Write(provider + ".env", provider is "sqlite" or "duckdb" ? "[" + provider + "]\nDatabase=/var/lib/zongsoft/hosting.db\n" : "[" + provider + "]\nServer=localhost\nDatabase=hosting\nUserName=operator\nPassword=\n");
 		var source = directory.Write("schema.sql", "SELECT 'unfinished;");
 
-		var task = Assert.Single(Loader().Load("db.migration", directory.Path, "zongsoft.daemon", "1.1.0").Tasks);
+		var task = Assert.Single(Loader().Load("db.migration", directory.Path, "zongsoft.daemon", "1.1.0").Steps);
 
 		Assert.Equal(provider, task.Provider);
 		Assert.Equal(source, Assert.Single(task.Scripts).Source);
@@ -660,17 +660,17 @@ public sealed class MigrationLoaderTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("db.migration", "[mssql]\n./sql/*.sql\n");
-		directory.Write("mssql.env", "Server=localhost\nDatabase=hosting\nUserName=operator\n");
+		directory.Write("mssql.env", "[mssql]\nServer=localhost\nDatabase=hosting\nUserName=operator\nPassword=\n");
 		var later = directory.Write("sql/020-seed.sql", "SELECT 3;\r\nGO\r\n");
 		var first = directory.Write("sql/010-schema.sql", "");
 		File.WriteAllText(first, "SELECT N'附件';\r\n-- retained\r\nGO -- client separator\r\nSELECT 2;\r\n", new UTF8Encoding(true));
 
 		var plan = Loader().Load("db.migration", directory.Path, "zongsoft.daemon", "1.1.0");
 
-		var step = Assert.Single(plan.Tasks);
+		var step = Assert.Single(plan.Steps);
 		Assert.Equal(new[] { "SELECT N'附件';\r\n-- retained", "SELECT 2;", "SELECT 3;" }, step.Scripts.Select(script => script.Content));
 		Assert.Equal(new[] { first, first, later }, step.Scripts.Select(script => script.Source));
-		Assert.Equal(new[] { ".migration/.artifacts/mssql/0001.sql", ".migration/.artifacts/mssql/0002.sql", ".migration/.artifacts/mssql/0003.sql" }, step.Scripts.Select(script => script.Path));
+		Assert.Equal(new[] { ".migration/.artifacts/mssql/1.sql", ".migration/.artifacts/mssql/2.sql", ".migration/.artifacts/mssql/3.sql" }, step.Scripts.Select(script => script.Path));
 		foreach(var script in step.Scripts)
 		{
 			Assert.Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(script.Content))), script.Checksum);
@@ -683,7 +683,7 @@ public sealed class MigrationLoaderTest
 	public void Migration_RecursiveGlob_PreservesSqlOrderAndIndependentTasks()
 	{
 		using var directory = new MigrationTestDirectory();
-		directory.Write("sqlite.env", "Database=/tmp/zongsoft-artifact-hosting.db\n");
+		directory.Write("sqlite.env", "[sqlite]\nDatabase=/tmp/zongsoft-artifact-hosting.db\n");
 		directory.Write("first.migration", "[sqlite]\nsql/z.sql\nsql/**/0?.sql\n");
 		directory.Write("parts/b/db.migration", "[sqlite]\n../../sql/z.sql\n");
 		directory.Write("parts/a/db.migration", "[sqlite]\n../../sql/A/01.sql\n");
@@ -693,14 +693,14 @@ public sealed class MigrationLoaderTest
 
 		var plan = new MigrationLoader(null).Load("first.migration;parts/*/db.migration;first.migration", directory.Path, "zongsoft.daemon", "1.0.0");
 
-		Assert.Equal(4, plan.Tasks.Count);
-		Assert.Equal(new[] { "SELECT 'explicit';", "SELECT 'first';", "SELECT 'nested';" }, plan.Tasks[0].Scripts.Select(script => script.Content));
-		Assert.Equal("SELECT 'first';", Assert.Single(plan.Tasks[1].Scripts).Content);
-		Assert.Equal("SELECT 'explicit';", Assert.Single(plan.Tasks[2].Scripts).Content);
-		Assert.Equal(plan.Tasks[0].Scripts.Select(script => script.Content), plan.Tasks[3].Scripts.Select(script => script.Content));
-		var scripts = plan.Tasks.SelectMany(task => task.Scripts).ToArray();
-		Assert.Equal(Enumerable.Range(1, 8).Select(index => $".migration/.artifacts/sqlite/{index:D4}.sql"), scripts.Select(script => script.Path));
-		Assert.Equal(4, plan.Tasks.Select(task => task.Id).Distinct(StringComparer.Ordinal).Count());
+		Assert.Equal(4, plan.Steps.Count);
+		Assert.Equal(new[] { "SELECT 'explicit';", "SELECT 'first';", "SELECT 'nested';" }, plan.Steps[0].Scripts.Select(script => script.Content));
+		Assert.Equal("SELECT 'first';", Assert.Single(plan.Steps[1].Scripts).Content);
+		Assert.Equal("SELECT 'explicit';", Assert.Single(plan.Steps[2].Scripts).Content);
+		Assert.Equal(plan.Steps[0].Scripts.Select(script => script.Content), plan.Steps[3].Scripts.Select(script => script.Content));
+		var scripts = plan.Steps.SelectMany(task => task.Scripts).ToArray();
+		Assert.Equal(Enumerable.Range(1, 8).Select(index => $".migration/.artifacts/sqlite/{index}.sql"), scripts.Select(script => script.Path));
+		Assert.Equal(4, plan.Steps.Count);
 		Assert.All(scripts, script => Assert.Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(script.Content))), script.Checksum));
 	}
 	#endregion
@@ -712,7 +712,7 @@ public sealed class MigrationLoaderTest
 		if(!content.Contains(".sql", StringComparison.Ordinal))
 			File.AppendAllText(migration, "./schema.sql\n");
 		directory.Write(Path.GetRelativePath(directory.Path, Path.Combine(Path.GetDirectoryName(migration), "schema.sql")), "SELECT 1;");
-		return Assert.Single(Loader().Load(migration, directory.Path, "zongsoft.daemon", "1.1.0").Tasks).Parameters;
+		return Assert.Single(Loader().Load(migration, directory.Path, "zongsoft.daemon", "1.1.0").Databases).Settings;
 	}
 
 	private static MigrationPlan.Bucket Bucket(string options)
@@ -720,7 +720,7 @@ public sealed class MigrationLoaderTest
 		using var directory = new MigrationTestDirectory();
 		directory.Write("fs.migration", "[amazon.s3]\nattachments=" + options + "\n");
 		directory.Write("amazon.s3.env", "Server=http://localhost:9000\nRegion=us-east-1\nAccessKey=test\nSecretKey=test\n");
-		return Assert.Single(Assert.Single(Loader().Load("fs.migration", directory.Path, "zongsoft.daemon", "1.1.0").Tasks).Buckets);
+		return Assert.Single(Assert.Single(Loader().Load("fs.migration", directory.Path, "zongsoft.daemon", "1.1.0").Steps).Buckets);
 	}
 
 	private static MigrationLoader Loader(Dictionary<string, string> variables = null, Action<string> warning = null) => new(value =>

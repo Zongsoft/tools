@@ -41,9 +41,21 @@ public sealed class MigrationContext(string directory, string stateDirectory, Ac
 	public string Directory { get; } = System.IO.Path.GetFullPath(directory);
 	public string StateDirectory { get; } = System.IO.Path.GetFullPath(stateDirectory);
 	public Action<string> Log { get; } = log ?? (_ => { });
+	public IReadOnlyList<MigrationPlan.Database> Databases { get; set; } = [];
+
+	/// <summary>获取当前步骤在计划中的序号（从一开始）；非步骤阶段为零。</summary>
+	public int StepNumber { get; internal set; }
 	#endregion
 
 	#region 公共方法
+	public MigrationPlan.Database GetDatabase(int? index)
+	{
+		if(index is not int position || position < 0 || position >= this.Databases.Count || this.Databases[position] == null)
+			throw new InvalidDataException(MigrationResources.PlanInvalid_Message);
+
+		return this.Databases[position];
+	}
+
 	public string GetScriptPath(MigrationPlan.Script script)
 	{
 		var path = System.IO.Path.GetFullPath(System.IO.Path.Combine(this.Directory, script.Path));

@@ -113,9 +113,8 @@ public sealed class MigrationS3Test
 	#region 辅助方法
 	private static MigrationPlan.Step TaskFor(bool isPublic) => new()
 	{
-		Id = "0001-amazon.s3",
 		Provider = "amazon.s3",
-		Parameters = new(StringComparer.OrdinalIgnoreCase) { ["Server"] = "http://localhost:9000", ["Region"] = "us-east-1", ["AccessKey"] = "test", ["SecretKey"] = "test" },
+		Settings = new(StringComparer.OrdinalIgnoreCase) { ["Server"] = "http://localhost:9000", ["Region"] = "us-east-1", ["AccessKey"] = "test", ["SecretKey"] = "test" },
 		Buckets = [new() { Name = "attachments", Public = isPublic }],
 	};
 	#endregion
@@ -173,17 +172,21 @@ public sealed class MigrationExecutorTests
 		var plan = Plan();
 		var context = new MigrationContext(directory.Path, Path.Combine(directory.Path, "state"));
 		var calls = new List<string>();
-		var executor = new MigrationExecutor(_ => new ActionMigrator(task => calls.Add(task.Id)));
+		var executor = new MigrationExecutor(_ => new ActionMigrator(task => calls.Add(task.Provider)));
 
 		await executor.ApplyAsync(plan, context, TestContext.Current.CancellationToken);
-		Assert.Equal(new[] { "one", "two" }, calls.OrderBy(id => id, StringComparer.Ordinal));
+		Assert.Equal(new[] { "sqlite", "duckdb" }, calls);
 		calls.Clear();
 		await executor.ApplyAsync(plan, context, TestContext.Current.CancellationToken);
 
-		Assert.Equal(new[] { "one", "two" }, calls.OrderBy(id => id, StringComparer.Ordinal));
+		Assert.Equal(new[] { "sqlite", "duckdb" }, calls);
 		Assert.True(MigrationExecutor.IsReady(plan, context.StateDirectory));
 		using var status = JsonDocument.Parse(File.ReadAllText(Path.Combine(context.StateDirectory, "status.json")));
 		Assert.Equal("complete", status.RootElement.GetProperty("status").GetString());
+		Assert.Equal("complete", status.RootElement.GetProperty("phase").GetString());
+		Assert.Equal(JsonValueKind.Null, status.RootElement.GetProperty("step").ValueKind);
+		Assert.Equal(JsonValueKind.Null, status.RootElement.GetProperty("databaseIndex").ValueKind);
+		Assert.False(status.RootElement.TryGetProperty("task", out _));
 		plan.Version = "1.2.0";
 		Assert.False(MigrationExecutor.IsReady(plan, context.StateDirectory));
 	}
@@ -196,18 +199,21 @@ public sealed class MigrationExecutorTests
 		var context = new MigrationContext(directory.Path, Path.Combine(directory.Path, "state"));
 		await new MigrationExecutor(_ => new ActionMigrator(_ => { })).ApplyAsync(plan, context, TestContext.Current.CancellationToken);
 		var calls = new List<string>();
-		var executor = new MigrationExecutor(_ => new ActionMigrator(task => { calls.Add(task.Id); throw new InvalidOperationException("secret;password=value"); }));
+		var executor = new MigrationExecutor(_ => new ActionMigrator(task => { calls.Add(task.Provider); throw new InvalidOperationException("secret;password=value"); }));
 
 		var error = await Assert.ThrowsAsync<MigrationException>(() => executor.ApplyAsync(plan, context, TestContext.Current.CancellationToken));
 
 		var failed = Assert.Single(calls);
-		Assert.Contains(failed, plan.Tasks.Select(task => task.Id));
+		Assert.Contains(failed, plan.Steps.Select(task => task.Provider));
 		Assert.False(MigrationExecutor.IsReady(plan, context.StateDirectory));
 		var status = File.ReadAllText(Path.Combine(context.StateDirectory, "status.json"));
 		Assert.DoesNotContain("password", status + error.Message);
 		using var document = JsonDocument.Parse(status);
 		Assert.Equal("failed", document.RootElement.GetProperty("status").GetString());
-		Assert.Equal(failed, document.RootElement.GetProperty("task").GetString());
+		Assert.Equal(0, document.RootElement.GetProperty("databaseIndex").GetInt32());
+		Assert.Equal("steps", document.RootElement.GetProperty("phase").GetString());
+		Assert.Equal(1, document.RootElement.GetProperty("step").GetInt32());
+		Assert.False(document.RootElement.TryGetProperty("task", out _));
 	}
 
 	[Fact]
@@ -219,7 +225,7 @@ public sealed class MigrationExecutorTests
 		using var held = new FileStream(Path.Combine(state, "migration.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
 		var calls = new List<string>();
 
-		await Assert.ThrowsAsync<IOException>(() => new MigrationExecutor(_ => new ActionMigrator(task => calls.Add(task.Id))).ApplyAsync(Plan(), new(directory.Path, state), TestContext.Current.CancellationToken));
+		await Assert.ThrowsAsync<IOException>(() => new MigrationExecutor(_ => new ActionMigrator(task => calls.Add(task.Provider))).ApplyAsync(Plan(), new(directory.Path, state), TestContext.Current.CancellationToken));
 
 		Assert.Empty(calls);
 		Assert.False(File.Exists(Path.Combine(state, "ready")));
@@ -231,17 +237,20 @@ public sealed class MigrationExecutorTests
 		using var directory = new MigrationTestDirectory();
 		var plan = Plan();
 		var script = directory.Script(".migration/.artifacts/later.sql", "SELECT 1;");
-		plan.Tasks[1].Scripts.Add(script);
+		plan.Steps[1].Scripts.Add(script);
 		directory.Write(".migration/.artifacts/later.sql", "SELECT 2;");
 		var calls = new List<string>();
 		var context = new MigrationContext(directory.Path, Path.Combine(directory.Path, "state"));
 
-		await Assert.ThrowsAsync<MigrationException>(() => new MigrationExecutor(_ => new ActionMigrator(task => calls.Add(task.Id))).ApplyAsync(plan, context, TestContext.Current.CancellationToken));
+		await Assert.ThrowsAsync<MigrationException>(() => new MigrationExecutor(_ => new ActionMigrator(task => calls.Add(task.Provider))).ApplyAsync(plan, context, TestContext.Current.CancellationToken));
 
 		Assert.Empty(calls);
 		Assert.False(MigrationExecutor.IsReady(plan, context.StateDirectory));
 		using var status = JsonDocument.Parse(File.ReadAllText(Path.Combine(context.StateDirectory, "status.json")));
-		Assert.Equal("two", status.RootElement.GetProperty("task").GetString());
+		Assert.Equal(2, status.RootElement.GetProperty("step").GetInt32());
+		Assert.Equal("validation", status.RootElement.GetProperty("phase").GetString());
+		Assert.Equal(1, status.RootElement.GetProperty("databaseIndex").GetInt32());
+		Assert.False(status.RootElement.TryGetProperty("task", out _));
 		Assert.Equal("failed", status.RootElement.GetProperty("status").GetString());
 	}
 	#endregion
@@ -249,15 +258,20 @@ public sealed class MigrationExecutorTests
 	#region 辅助方法
 	private static MigrationPlan Plan() => new()
 	{
-		Package = "zongsoft.web",
+		Name = "zongsoft.web",
 		Version = "1.1.0",
 		Runtime = "linux-x64",
-		Tasks = [new() { Id = "one", Provider = "sqlite", Parameters = new(StringComparer.OrdinalIgnoreCase) { ["Database"] = "/var/lib/zongsoft/web.db" } }, new() { Id = "two", Provider = "duckdb", Parameters = new(StringComparer.OrdinalIgnoreCase) { ["Database"] = "/var/lib/zongsoft/web.duckdb" } }],
+		Steps = [new() { Provider = "sqlite", DatabaseIndex = 0 }, new() { Provider = "duckdb", DatabaseIndex = 1 }],
+		Databases =
+		[
+			new() { Provider = "sqlite", Name = "web", Options = new(StringComparer.OrdinalIgnoreCase) { ["Path"] = "/var/lib/zongsoft/web.db" } },
+			new() { Provider = "duckdb", Name = "web", Options = new(StringComparer.OrdinalIgnoreCase) { ["Path"] = "/var/lib/zongsoft/web.duckdb" } },
+		],
 	};
 	#endregion
 
 	#region 嵌套类型
-	private sealed class ActionMigrator(Action<MigrationPlan.Step> action) : Migrator
+	private sealed class ActionMigrator(Action<MigrationPlan.Step> action) : Migrator.Database
 	{
 		#region 模拟方法
 		public override Task MigrateAsync(MigrationPlan.Step task, MigrationContext context, CancellationToken cancellation = default)

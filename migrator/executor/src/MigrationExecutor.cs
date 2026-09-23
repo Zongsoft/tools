@@ -51,51 +51,114 @@ public sealed class MigrationExecutor(Func<string, Migrator> resolve = null)
 		using var exclusive = new FileStream(Path.Combine(context.StateDirectory, "migration.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
 		var ready = Path.Combine(context.StateDirectory, "ready");
 		File.Delete(ready);
+
 		var current = "validation";
+		var phase = "validation";
+		int? target = null;
+		context.StepNumber = 0;
 
 		try
 		{
 			plan.Validate();
-			foreach(var task in plan.Tasks)
+			context.Databases = plan.Databases;
+			var databases = new Migrator.Database[plan.Databases.Count];
+
+			for(var index = 0; index < plan.Databases.Count; index++)
+				databases[index] = _resolve(plan.Databases[index].Provider) as Migrator.Database ?? throw new InvalidDataException(MigrationResources.PlanInvalid_Message);
+
+			for(var index = 0; index < plan.Steps.Count; index++)
 			{
-				current = task.Id;
-				MigrationProvider.Get(task.Provider).Validate(task.Parameters, plan.Runtime);
-				foreach(var script in task.Scripts)
+				var step = plan.Steps[index];
+				context.StepNumber = index + 1;
+				current = context.StepNumber.ToString(System.Globalization.CultureInfo.InvariantCulture);
+				target = step.DatabaseIndex;
+
+				foreach(var script in step.Scripts)
 					context.GetScriptPath(script);
 			}
 
-			foreach(var task in plan.Tasks)
+			context.StepNumber = 0;
+			phase = "databases";
+			for(var index = 0; index < plan.Databases.Count; index++)
 			{
-				current = task.Id;
-				context.Log(string.Format(Properties.Resources.MigrationStarting, task.Id));
-				await _resolve(task.Provider).MigrateAsync(task, context, cancellation);
+				current = index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+				target = index;
+				await databases[index].InitializeAsync(plan.Databases[index], context, cancellation);
 			}
+
+			phase = "users";
+			for(var index = 0; index < plan.Databases.Count; index++)
+			{
+				current = index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+				target = index;
+				await databases[index].CreateUsersAsync(plan.Databases[index], context, cancellation);
+			}
+
+			phase = "steps";
+			for(var index = 0; index < plan.Steps.Count; index++)
+			{
+				var step = plan.Steps[index];
+				context.StepNumber = index + 1;
+				current = context.StepNumber.ToString(System.Globalization.CultureInfo.InvariantCulture);
+				target = step.DatabaseIndex;
+
+				context.Log(string.Format(Properties.Resources.MigrationStarting, context.StepNumber));
+				await (step.DatabaseIndex is int databaseIndex ? databases[databaseIndex] : _resolve(step.Provider)).MigrateAsync(step, context, cancellation);
+			}
+
+			context.StepNumber = 0;
+			phase = "permissions";
+
+			for(var index = 0; index < plan.Databases.Count; index++)
+			{
+				current = index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+				target = index;
+				await databases[index].GrantAsync(plan.Databases[index], context, cancellation);
+			}
+
+			phase = "complete";
+			target = null;
 
 			await WriteStatusAsync("complete", null);
 			await File.WriteAllTextAsync(ready + ".tmp", plan.Fingerprint(), cancellation);
+
 			if(!OperatingSystem.IsWindows())
 				File.SetUnixFileMode(ready + ".tmp", UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+
 			File.Move(ready + ".tmp", ready, true);
 		}
 		catch(Exception ex)
 		{
 			// Driver error messages can contain SQL, connection strings or credentials.
-			await WriteStatusAsync("failed", ex.GetType().Name);
-			throw new MigrationException(string.Format(Properties.Resources.MigrationFailed_Message, current, ex.GetType().Name));
+			await WriteStatusAsync("failed", ex is MigrationPrivilegeException ? ex.Message : ex.GetType().Name);
+			throw new MigrationException(string.Format(Properties.Resources.MigrationFailed_Message, current, ex is MigrationPrivilegeException ? ex.Message : ex.GetType().Name));
 		}
 
 		async Task WriteStatusAsync(string status, string error)
 		{
 			await using var stream = File.Create(Path.Combine(context.StateDirectory, "status.json"));
 			await using var writer = new Utf8JsonWriter(stream, new() { Indented = true });
+
 			writer.WriteStartObject();
-			writer.WriteString("package", plan.Package);
+			writer.WriteString("name", plan.Name);
 			writer.WriteString("version", plan.Version);
 			writer.WriteString("status", status);
-			writer.WriteString("task", current);
+			writer.WriteString("phase", phase);
+
+			if(context.StepNumber > 0)
+				writer.WriteNumber("step", context.StepNumber);
+			else
+				writer.WriteNull("step");
+
+			if(target is int databaseIndex)
+				writer.WriteNumber("databaseIndex", databaseIndex);
+			else
+				writer.WriteNull("databaseIndex");
+
 			writer.WriteString("error", error);
 			writer.WriteString("time", DateTimeOffset.UtcNow);
 			writer.WriteEndObject();
+
 			await writer.FlushAsync();
 		}
 	}

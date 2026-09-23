@@ -22,17 +22,16 @@ public sealed class MigrationRuntimeTest
 		var logs = new List<string>();
 		var migration = new MigrationPlan.Step
 		{
-			Id = "0001-" + provider,
 			Provider = provider,
-			Parameters = new(StringComparer.OrdinalIgnoreCase) { ["Database"] = database },
+			DatabaseIndex = 0,
 			Scripts = [directory.Script(".migration/.artifacts/schema.sql", "CREATE TABLE IF NOT EXISTS samples (id INTEGER PRIMARY KEY, title VARCHAR(100));\nINSERT INTO samples SELECT 1, 'hosting;ready' WHERE NOT EXISTS (SELECT 1 FROM samples WHERE id=1);\nCREATE TABLE IF NOT EXISTS migration_audit (id INTEGER); INSERT INTO migration_audit VALUES (1);")],
 		};
 		var context = new MigrationContext(directory.Path, Path.Combine(directory.Path, "state"), logs.Add);
 		var migrator = Migrator.Create(migration.Provider);
 		try
 		{
-			await migrator.MigrateAsync(migration, context, TestContext.Current.CancellationToken);
-			await migrator.MigrateAsync(migration, context, TestContext.Current.CancellationToken);
+			await RunAsync(database, migration, context);
+			await RunAsync(database, migration, context);
 
 			Assert.True(File.Exists(database));
 			await using var connection = Connection(provider, database);
@@ -58,14 +57,13 @@ public sealed class MigrationRuntimeTest
 		var database = Path.Combine(directory.Path, "hosting.db");
 		var migration = new MigrationPlan.Step
 		{
-			Id = "0001-" + provider,
 			Provider = provider,
-			Parameters = new(StringComparer.OrdinalIgnoreCase) { ["Database"] = database },
+			DatabaseIndex = 0,
 			Scripts = [directory.Script(".migration/.artifacts/failure.sql", "CREATE TABLE samples (id INTEGER); INSERT INTO absent_table VALUES (1); INSERT INTO samples VALUES (2);")],
 		};
 		try
 		{
-			await Assert.ThrowsAnyAsync<DbException>(() => Migrator.Create(migration.Provider).MigrateAsync(migration, new(directory.Path, Path.Combine(directory.Path, "state")), TestContext.Current.CancellationToken));
+			await Assert.ThrowsAnyAsync<DbException>(() => RunAsync(database, migration, new(directory.Path, Path.Combine(directory.Path, "state"))));
 
 			await using var connection = Connection(provider, database);
 			await connection.OpenAsync(TestContext.Current.CancellationToken);
@@ -97,14 +95,13 @@ public sealed class MigrationRuntimeTest
 		var database = Path.Combine(directory.Path, "hosting.db");
 		var migration = new MigrationPlan.Step
 		{
-			Id = "0001-sqlite",
 			Provider = "sqlite",
-			Parameters = new(StringComparer.OrdinalIgnoreCase) { ["Database"] = database },
+			DatabaseIndex = 0,
 			Scripts = [directory.Script(".migration/.artifacts/trigger.sql", "CREATE TABLE samples (id INTEGER); CREATE TABLE audit (message TEXT); CREATE TRIGGER sample_added AFTER INSERT ON samples BEGIN INSERT INTO audit VALUES ('first;part'); INSERT INTO audit VALUES ('second'); END; INSERT INTO samples VALUES (1);")],
 		};
 		try
 		{
-			await Migrator.Create(migration.Provider).MigrateAsync(migration, new(directory.Path, Path.Combine(directory.Path, "state")), TestContext.Current.CancellationToken);
+			await RunAsync(database, migration, new(directory.Path, Path.Combine(directory.Path, "state")));
 			await using var connection = Connection("sqlite", database);
 			await connection.OpenAsync(TestContext.Current.CancellationToken);
 			await using var command = connection.CreateCommand();
@@ -123,9 +120,8 @@ public sealed class MigrationRuntimeTest
 		var database = Path.Combine(directory.Path, "hosting.db");
 		var migration = new MigrationPlan.Step
 		{
-			Id = "0001-sqlite",
 			Provider = "sqlite",
-			Parameters = new(StringComparer.OrdinalIgnoreCase) { ["Database"] = database },
+			DatabaseIndex = 0,
 			Scripts =
 			[
 				directory.Script(".migration/.artifacts/first.sql", "CREATE TABLE IF NOT EXISTS migration_audit (id INTEGER); INSERT INTO migration_audit VALUES (1);"),
@@ -135,11 +131,11 @@ public sealed class MigrationRuntimeTest
 		var context = new MigrationContext(directory.Path, Path.Combine(directory.Path, "state"));
 		try
 		{
-			await Assert.ThrowsAnyAsync<DbException>(() => Migrator.Create(migration.Provider).MigrateAsync(migration, context, TestContext.Current.CancellationToken));
+			await Assert.ThrowsAnyAsync<DbException>(() => RunAsync(database, migration, context));
 			Assert.Equal(1L, await CountAudits());
 			migration.Scripts[1] = directory.Script(".migration/.artifacts/second.sql", "CREATE TABLE IF NOT EXISTS repaired (id INTEGER); INSERT INTO repaired VALUES (2);");
 
-			await Migrator.Create(migration.Provider).MigrateAsync(migration, context, TestContext.Current.CancellationToken);
+			await RunAsync(database, migration, context);
 
 			Assert.Equal(2L, await CountAudits());
 			await using var connection = Connection("sqlite", database);
@@ -179,6 +175,15 @@ public sealed class MigrationRuntimeTest
 	#endregion
 
 	#region 辅助方法
+	private static async Task RunAsync(string path, MigrationPlan.Step step, MigrationContext context)
+	{
+		var database = new MigrationPlan.Database { Provider = step.Provider, Name = "hosting", Options = new(StringComparer.OrdinalIgnoreCase) { ["Path"] = path } };
+		MigrationProvider.Get(step.Provider).Prepare(database, OperatingSystem.IsWindows() ? "win-x64" : "linux-x64");
+		context.Databases = [database];
+		var migrator = (Migrator.Database)Migrator.Create(step.Provider);
+		await migrator.InitializeAsync(database, context, TestContext.Current.CancellationToken);
+		await migrator.MigrateAsync(step, context, TestContext.Current.CancellationToken);
+	}
 	private static DbConnection Connection(string provider, string database) => provider switch
 	{
 		"sqlite" => new Microsoft.Data.Sqlite.SqliteConnection(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = database }.ConnectionString),

@@ -78,7 +78,7 @@ public sealed class MigrationBundle : IDisposable
 		try
 		{
 			bundle.AddRuntime(plan.Runtime, runtimeDirectory ?? GetRuntimeDirectory());
-			foreach(var script in plan.Tasks.SelectMany(task => task.Scripts))
+			foreach(var script in plan.Steps.SelectMany(step => step.Scripts))
 				bundle.AddText(script.Path, script.Content, Utility.Unix.Mode644, false);
 
 			bundle.AddText(".migration/migration.json", plan.Serialize(), UnixFileMode.UserRead | UnixFileMode.UserWrite);

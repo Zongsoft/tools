@@ -194,7 +194,7 @@ public sealed partial class MigrateCommandTest
 		var entries = ReadArchive(archive);
 		using var plan = JsonDocument.Parse(Assert.Single(entries, entry => entry.Name == ".migration/migration.json").Content);
 		Assert.Equal("zongsoft.daemon Enterprise 2.3.4", plan.RootElement.GetProperty("Title").GetString());
-		Assert.Equal("SELECT 234;", System.Text.Encoding.UTF8.GetString(Assert.Single(entries, entry => entry.Name.EndsWith("0001.sql", StringComparison.Ordinal)).Content));
+		Assert.Equal("SELECT 234;", System.Text.Encoding.UTF8.GetString(Assert.Single(entries, entry => entry.Name.EndsWith("1.sql", StringComparison.Ordinal)).Content));
 		Assert.False(Directory.Exists(Path.Combine(directory.Path, "versions/out")));
 	}
 	#endregion
@@ -345,7 +345,7 @@ public sealed partial class MigrateCommandTest
 		Assert.True(File.Exists(prefix + ".sh"), prefix);
 		Assert.Contains(Path.GetFileName(prefix) + ".tar.gz", File.ReadAllText(prefix + ".sh"));
 		using var plan = JsonDocument.Parse(Assert.Single(ReadArchive(prefix + ".tar.gz"), entry => entry.Name == ".migration/migration.json").Content);
-		Assert.Equal(name, plan.RootElement.GetProperty("Package").GetString());
+		Assert.Equal(name, plan.RootElement.GetProperty("Name").GetString());
 		Assert.Equal(version, plan.RootElement.GetProperty("Version").GetString());
 	}
 	#endregion

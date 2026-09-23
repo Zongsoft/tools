@@ -42,24 +42,20 @@ partial class Migrator
 		public sealed class DuckDB : Database
 		{
 			#region 公共方法
-			public override async Task MigrateAsync(MigrationPlan.Step task, MigrationContext context, CancellationToken cancellation = default)
+			public override async Task InitializeAsync(MigrationPlan.Database database, MigrationContext context, CancellationToken cancellation = default)
 			{
-				var database = task.Parameters.Get("Database");
-				Directory.CreateDirectory(Path.GetDirectoryName(database));
-				await ExecuteScriptsAsync(this.CreateConnection(task.Parameters, database), task, context, cancellation);
+				var path = database.Options.Get("Path");
+				if(File.Exists(path))
+					return;
+
+				Directory.CreateDirectory(Path.GetDirectoryName(path));
+				await using var connection = this.Connect(database, path);
+				await connection.OpenAsync(cancellation);
 			}
 			#endregion
 
-			#region 私有方法
-			private DbConnection CreateConnection(IReadOnlyDictionary<string, string> parameters, string database)
-			{
-				var builder = new DbConnectionStringBuilder
-				{
-					["Data Source"] = database,
-				};
-
-				return new global::DuckDB.NET.Data.DuckDBConnection(builder.ConnectionString);
-			}
+			#region 连接方法
+			protected override DbConnection CreateConnection(MigrationPlan.Database database, string name) => new global::DuckDB.NET.Data.DuckDBConnection(new DbConnectionStringBuilder { ["Data Source"] = name }.ConnectionString);
 			#endregion
 		}
 	}

@@ -1,5 +1,7 @@
 # Zongsoft Migration Tool
 
+Database configuration uses provider/database/user sections: provider `Database` selects the default, which may omit a database section. Only `.migration`-referenced databases and their users initialize, including empty sections. Existing settings and passwords are preserved, and grants are additive. See the [complete database parameter reference](docs/databases.md).
+
 [English](README.md) | [简体中文](README.zh-Hans.md)
 
 `dotnet-migrate` creates a standalone migration archive and launcher. Generation does not connect to databases/S3. A version file can supply the version and Edition; it is only read, never modified. Running the generated launcher performs database initialization, SQL execution and S3 bucket configuration.
@@ -55,7 +57,7 @@ packages/zongsoft-migrate@1.0.0_linux-x64.tar.gz
 packages/zongsoft-migrate@1.0.0_linux-x64.sh
 ```
 
-Keep both files together on the target. Run `sh zongsoft-migrate@1.0.0_linux-x64.sh [apply|status|check] [state-directory]`, or the corresponding cmd on Windows. Default action is apply; every apply executes all SQL, which must be idempotent. Default persistent state is `.migration/<migration-name>[-edition]/` beside the script, without version or RID. Versions share the lock, ready, status and S3 pending files.
+Keep both files together on the target. Run `sh zongsoft-migrate@1.0.0_linux-x64.sh [apply|status|check] [state-directory]`, or the corresponding cmd on Windows. Default action is apply; every apply executes all SQL, which must be idempotent. Default persistent state is `.migration/<migration-name>[-edition]/` beside the script, without version or RID. Versions share the lock, ready, status and database/S3 pending files.
 
 Apply/status extract into a unique temporary directory, invoke the native executor, clean up and return its exit code. Check compares the embedded fingerprint with ready, without extraction or launching the executor. Exit codes are 0 success, 1 failure, 2 invalid action/arguments. Both outputs are staged before publication, require overwrite to replace existing files, and restore previous outputs on failure.
 
@@ -74,3 +76,5 @@ dotnet test executor/test/Zongsoft.Tools.Migrator.Executor.Tests.csproj -f net10
 ```
 
 See the [migration guide](docs/migration.md), [implementation](docs/implementation.md).
+
+Privileges uses 20 provider-independent operation names. ReadWrite includes Execute; every read/write permission includes sequence value generation. Providers expand native grants within the target database, and unsupported operations or ownership requirements fail explicitly. See the database reference for coarse mappings and role-scope limits.

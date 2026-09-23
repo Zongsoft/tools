@@ -45,16 +45,16 @@ partial class MigrationLoader
 	private sealed partial class Database
 	{
 		#region 成员字段
-		private readonly MigrationPlan.Step _task;
+		private readonly MigrationPlan.Step _step;
 		private readonly string _directory;
 		private readonly Dictionary<string, int> _indexes;
 		private readonly HashSet<string> _selected;
 		#endregion
 
 		#region 构造函数
-		public Database(MigrationPlan.Step task, string directory, Dictionary<string, int> indexes, HashSet<string> selected)
+		public Database(MigrationPlan.Step step, string directory, Dictionary<string, int> indexes, HashSet<string> selected)
 		{
-			_task = task;
+			_step = step;
 			_directory = directory;
 			_indexes = indexes;
 			_selected = selected;
@@ -74,15 +74,15 @@ partial class MigrationLoader
 				if(!sql.EndsWith(".sql", StringComparison.OrdinalIgnoreCase))
 					throw new InvalidDataException(Properties.Resources.MigrationSqlExtension_Message);
 
-				foreach(var content in Read(File.ReadAllText(sql), _task.Provider))
+				foreach(var content in Read(File.ReadAllText(sql), _step.Provider))
 				{
-					var index = _indexes.GetValueOrDefault(_task.Provider) + 1;
-					_indexes[_task.Provider] = index;
-					_task.Scripts.Add(new()
+					var index = _indexes.GetValueOrDefault(_step.Provider) + 1;
+					_indexes[_step.Provider] = index;
+					_step.Scripts.Add(new()
 					{
 						Source = sql,
 						Content = content,
-						Path = $".migration/.artifacts/{_task.Provider}/{index:D4}.sql",
+						Path = $".migration/.artifacts/{_step.Provider}/{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}.sql",
 						Checksum = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content))),
 					});
 				}

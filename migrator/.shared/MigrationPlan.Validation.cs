@@ -42,29 +42,64 @@ partial class MigrationPlan
 	#region 公共方法
 	public void Validate()
 	{
-		if(this.FormatVersion != 1 || string.IsNullOrWhiteSpace(this.Package) || this.Tasks == null || this.Tasks.Count == 0)
+		if(string.IsNullOrWhiteSpace(this.Name) || this.Steps == null || this.Steps.Count == 0 || this.Databases == null)
 			throw new InvalidDataException(MigrationResources.PlanInvalid_Message);
 
 		MigrationRuntime.Validate(this.Runtime);
 
-		var identifiers = new HashSet<string>(StringComparer.Ordinal);
-		foreach(var task in this.Tasks)
+		var targets = new HashSet<string>(StringComparer.Ordinal);
+		var accounts = new Dictionary<string, string>(StringComparer.Ordinal);
+
+		foreach(var database in this.Databases)
 		{
-			if(task == null || string.IsNullOrWhiteSpace(task.Id) || !identifiers.Add(task.Id) || task.Parameters == null || task.Scripts == null || task.Buckets == null)
+			if(database == null)
 				throw new InvalidDataException(MigrationResources.PlanInvalid_Message);
 
-			var provider = MigrationProvider.Get(task.Provider);
-			if(task.Provider != provider.Name || (provider.Name == "amazon.s3" ? task.Scripts.Count > 0 : task.Buckets.Count > 0))
+			MigrationProvider.Get(database.Provider).Prepare(database, this.Runtime);
+
+			if(!targets.Add(database.TargetKey))
 				throw new InvalidDataException(MigrationResources.PlanInvalid_Message);
 
-			task.Parameters = new(task.Parameters, StringComparer.OrdinalIgnoreCase);
-			provider.Validate(task.Parameters, this.Runtime);
+			foreach(var user in database.Users)
+			{
+				var key = database.ServerKey + "\0" + user.Name + "\0" + user.Host?.ToLowerInvariant();
+				if(accounts.TryGetValue(key, out var password) && password != user.Password)
+					throw new InvalidDataException(string.Format(MigrationResources.ParameterValueInvalid_Message, "Users.Password"));
 
-			foreach(var script in task.Scripts)
+				accounts[key] = user.Password;
+			}
+		}
+
+		var referenced = new HashSet<int>();
+
+		foreach(var step in this.Steps)
+		{
+			if(step == null || step.Settings == null || step.Scripts == null || step.Buckets == null)
+				throw new InvalidDataException(MigrationResources.PlanInvalid_Message);
+
+			var provider = MigrationProvider.Get(step.Provider);
+			if(step.Provider != provider.Name || (provider.Name == "amazon.s3" ? step.Scripts.Count > 0 : step.Buckets.Count > 0))
+				throw new InvalidDataException(MigrationResources.PlanInvalid_Message);
+
+			step.Settings = new(step.Settings, StringComparer.OrdinalIgnoreCase);
+			if(provider.Name == "amazon.s3")
+			{
+				if(step.DatabaseIndex != null)
+					throw new InvalidDataException(MigrationResources.PlanInvalid_Message);
+				provider.Validate(step.Settings, this.Runtime);
+			}
+			else
+			{
+				if(step.DatabaseIndex is not int index || index < 0 || index >= this.Databases.Count || this.Databases[index].Provider != provider.Name || step.Settings.Count > 0)
+					throw new InvalidDataException(MigrationResources.PlanInvalid_Message);
+				referenced.Add(index);
+			}
+
+			foreach(var script in step.Scripts)
 				if(script == null || string.IsNullOrWhiteSpace(script.Path) || string.IsNullOrWhiteSpace(script.Checksum))
 					throw new InvalidDataException(MigrationResources.PlanInvalid_Message);
 
-			foreach(var bucket in task.Buckets)
+			foreach(var bucket in step.Buckets)
 			{
 				if(bucket == null)
 					throw new InvalidDataException(MigrationResources.PlanInvalid_Message);
@@ -72,6 +107,9 @@ partial class MigrationPlan
 				bucket.Validate();
 			}
 		}
+
+		if(referenced.Count != this.Databases.Count)
+			throw new InvalidDataException(MigrationResources.PlanInvalid_Message);
 	}
 	#endregion
 }

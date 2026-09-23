@@ -28,10 +28,10 @@ public sealed class MigrationImportTest
 
 		var plan = Loader().Load("main.migration", directory.Path, "test", "1.0.0");
 
-		Assert.Equal(new[] { "/data/leaf.db", "/data/child.db", "/data/root.db" }, plan.Tasks.Select(task => task.Parameters["Database"]));
-		Assert.Equal(new[] { leaf, child, root }, plan.Tasks.Select(task => Assert.Single(task.Scripts).Source));
-		Assert.Equal(new[] { "0001-sqlite", "0002-sqlite", "0003-sqlite" }, plan.Tasks.Select(task => task.Id));
-		Assert.Equal(new[] { ".migration/.artifacts/sqlite/0001.sql", ".migration/.artifacts/sqlite/0002.sql", ".migration/.artifacts/sqlite/0003.sql" }, plan.Tasks.SelectMany(task => task.Scripts).Select(script => script.Path));
+		Assert.Equal(new[] { "/data/leaf.db", "/data/child.db", "/data/root.db" }, plan.Steps.Select(task => plan.Databases[task.DatabaseIndex.Value].Name));
+		Assert.Equal(new[] { leaf, child, root }, plan.Steps.Select(task => Assert.Single(task.Scripts).Source));
+
+		Assert.Equal(new[] { ".migration/.artifacts/sqlite/1.sql", ".migration/.artifacts/sqlite/2.sql", ".migration/.artifacts/sqlite/3.sql" }, plan.Steps.SelectMany(task => task.Scripts).Select(script => script.Path));
 	}
 
 	[Fact]
@@ -49,10 +49,10 @@ public sealed class MigrationImportTest
 
 		var plan = Loader().Load("main.migration", directory.Path, "test", "1.0.0");
 
-		Assert.Equal(new[] { "/data/root.db", "/data/child.db", "/data/root.db" }, plan.Tasks.Select(task => task.Parameters["Database"]));
-		Assert.Equal(new[] { first, second, shared, last }, plan.Tasks.SelectMany(task => task.Scripts).Select(script => script.Source));
-		Assert.Equal(new[] { 2, 1, 1 }, plan.Tasks.Select(task => task.Scripts.Count));
-		Assert.Equal(new[] { ".migration/.artifacts/sqlite/0001.sql", ".migration/.artifacts/sqlite/0002.sql", ".migration/.artifacts/sqlite/0003.sql", ".migration/.artifacts/sqlite/0004.sql" }, plan.Tasks.SelectMany(task => task.Scripts).Select(script => script.Path));
+		Assert.Equal(new[] { "/data/root.db", "/data/child.db", "/data/root.db" }, plan.Steps.Select(task => plan.Databases[task.DatabaseIndex.Value].Name));
+		Assert.Equal(new[] { first, second, shared, last }, plan.Steps.SelectMany(task => task.Scripts).Select(script => script.Source));
+		Assert.Equal(new[] { 2, 1, 1 }, plan.Steps.Select(task => task.Scripts.Count));
+		Assert.Equal(new[] { ".migration/.artifacts/sqlite/1.sql", ".migration/.artifacts/sqlite/2.sql", ".migration/.artifacts/sqlite/3.sql", ".migration/.artifacts/sqlite/4.sql" }, plan.Steps.SelectMany(task => task.Scripts).Select(script => script.Path));
 	}
 
 	[Theory]
@@ -69,9 +69,10 @@ public sealed class MigrationImportTest
 		directory.Write("child/part.env", "[sqlite]\nDatabase=/data/child.db\n");
 		var selected = directory.Write(importFirst ? "schema.sql" : "child/schema.sql", "SELECT 'winner';");
 
-		var task = Assert.Single(Loader().Load("main.migration", directory.Path, "test", "1.0.0").Tasks);
+		var plan = Loader().Load("main.migration", directory.Path, "test", "1.0.0");
+		var task = Assert.Single(plan.Steps);
 
-		Assert.Equal(importFirst ? "/data/root.db" : "/data/child.db", task.Parameters["Database"]);
+		Assert.Equal(importFirst ? "/data/root.db" : "/data/child.db", plan.Databases[task.DatabaseIndex.Value].Name);
 		Assert.Equal(selected, Assert.Single(task.Scripts).Source);
 		Assert.Equal("SELECT 'winner';", task.Scripts[0].Content);
 	}
@@ -84,16 +85,17 @@ public sealed class MigrationImportTest
 		directory.Write("main.env", "#@import settings/defaults.env\n[postgres]\nDatabase=selected\n");
 		directory.Write("settings/defaults.env", "#@import deep/base.env\n[postgres]\nDatabase=original\nUserName=operator\n");
 		directory.Write("settings/deep/base.env", "[postgres]\nServer=nested-host\nPassword=secret=punctuation\n");
-		directory.Write("postgres.env", "Server=wrong-host\nDatabase=wrong\nUserName=wrong\nCommandTimeout=9\n");
+		directory.Write("postgres.env", "[postgres]\nServer=wrong-host\nDatabase=wrong\nUserName=wrong\nCommandTimeout=9\n");
 		directory.Write("schema.sql", "SELECT 1;");
 
-		var task = Assert.Single(Loader().Load("main.migration", directory.Path, "test", "1.0.0").Tasks);
+		var plan = Loader().Load("main.migration", directory.Path, "test", "1.0.0");
+		var task = Assert.Single(plan.Steps);
 
-		Assert.Equal("nested-host", task.Parameters["Server"]);
-		Assert.Equal("selected", task.Parameters["Database"]);
-		Assert.Equal("operator", task.Parameters["UserName"]);
-		Assert.Equal("secret=punctuation", task.Parameters["Password"]);
-		Assert.False(task.Parameters.ContainsKey("CommandTimeout"));
+		Assert.Equal("nested-host", plan.Databases[task.DatabaseIndex.Value].Settings["Server"]);
+		Assert.Equal("selected", plan.Databases[task.DatabaseIndex.Value].Name);
+		Assert.Equal("operator", plan.Databases[task.DatabaseIndex.Value].Settings["UserName"]);
+		Assert.Equal("secret=punctuation", plan.Databases[task.DatabaseIndex.Value].Settings["Password"]);
+		Assert.Equal("300s", Assert.Single(plan.Databases).Settings["CommandTimeout"]);
 		Assert.Single(task.Scripts);
 	}
 
@@ -108,7 +110,7 @@ public sealed class MigrationImportTest
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "#@import child/invalid.migration\n[sqlite]\n./local.sql\n");
 		var child = directory.Write("child/invalid.migration", content);
-		directory.Write("sqlite.env", "Database=/data/test.db\n");
+		directory.Write("sqlite.env", "[sqlite]\nDatabase=/data/test.db\n");
 		directory.Write("local.sql", "SELECT 1;");
 
 		var error = Assert.Throws<InvalidDataException>(() => Loader().Load("main.migration", directory.Path, "test", "1.0.0"));
@@ -121,8 +123,8 @@ public sealed class MigrationImportTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "[sqlite]\n./schema.sql\n");
-		directory.Write("sqlite.env", "#@import settings/duplicate.env\nDatabase=/data/local.db\n");
-		var child = directory.Write("settings/duplicate.env", "Database=private-first\nDATABASE=private-second\n");
+		directory.Write("sqlite.env", "#@import settings/duplicate.env\n[sqlite]\nDatabase=/data/local.db\n");
+		var child = directory.Write("settings/duplicate.env", "[sqlite]\nDatabase=private-first\nDATABASE=private-second\n");
 		directory.Write("schema.sql", "SELECT 1;");
 
 		var error = Assert.Throws<InvalidDataException>(() => Loader().Load("main.migration", directory.Path, "test", "1.0.0"));
@@ -152,9 +154,9 @@ public sealed class MigrationImportTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var source = directory.Write("original/part.migration", "[sqlite]\n./schema.sql\n");
-		directory.Write("original/sqlite.env", "Database=/data/target.db\n");
+		directory.Write("original/sqlite.env", "[sqlite]\nDatabase=/data/target.db\n");
 		directory.Write("original/schema.sql", "SELECT 'target';");
-		directory.Write("sqlite.env", "Database=/data/logical.db\n");
+		directory.Write("sqlite.env", "[sqlite]\nDatabase=/data/logical.db\n");
 		directory.Write("schema.sql", "SELECT 'logical';");
 		var link = Path.Combine(directory.Path, directoryLink ? "linked" : "linked.migration");
 		if(directoryLink)
@@ -163,9 +165,10 @@ public sealed class MigrationImportTest
 			File.CreateSymbolicLink(link, source);
 		directory.Write("main.migration", "#@import " + (directoryLink ? "linked/part.migration" : "linked.migration") + "\n");
 
-		var task = Assert.Single(Loader().Load("main.migration", directory.Path, "test", "1.0.0").Tasks);
+		var plan = Loader().Load("main.migration", directory.Path, "test", "1.0.0");
+		var task = Assert.Single(plan.Steps);
 
-		Assert.Equal(directoryLink ? "/data/target.db" : "/data/logical.db", task.Parameters["Database"]);
+		Assert.Equal(directoryLink ? "/data/target.db" : "/data/logical.db", plan.Databases[task.DatabaseIndex.Value].Name);
 		var script = Assert.Single(task.Scripts);
 		Assert.Equal(Path.GetFullPath(Path.Combine(directory.Path, directoryLink ? "linked/schema.sql" : "schema.sql")), script.Source);
 		Assert.Equal(directoryLink ? "SELECT 'target';" : "SELECT 'logical';", script.Content);
@@ -188,9 +191,10 @@ public sealed class MigrationImportTest
 		var script = Path.GetFullPath(Path.Combine(directory.Path, "logical/script.sql"));
 		File.CreateSymbolicLink(script, sql);
 
-		var tasks = Loader().Load("logical/main.migration", directory.Path, "test", "1.0.0").Tasks;
+		var plan = Loader().Load("logical/main.migration", directory.Path, "test", "1.0.0");
+		var tasks = plan.Steps;
 
-		Assert.Equal(new[] { "/data/import.db", "/data/main.db" }, tasks.Select(task => task.Parameters["Database"]));
+		Assert.Equal(new[] { "/data/import.db", "/data/main.db" }, tasks.Select(task => plan.Databases[task.DatabaseIndex.Value].Name));
 		Assert.Equal(new[] { "SELECT 'import';", "SELECT 'linked';" }, tasks.SelectMany(task => task.Scripts).Select(item => item.Content));
 		Assert.Equal(script, Assert.Single(tasks[1].Scripts).Source);
 	}
@@ -201,7 +205,7 @@ public sealed class MigrationImportTest
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "#@import child/part.migration\n");
 		var child = directory.Write("child/part.migration", "# child\n[sqlite]\n./missing.sql\n");
-		directory.Write("child/sqlite.env", "Database=/data/child.db\n");
+		directory.Write("child/sqlite.env", "[sqlite]\nDatabase=/data/child.db\n");
 
 		var error = Assert.Throws<InvalidDataException>(() => Loader().Load("main.migration", directory.Path, "test", "1.0.0"));
 
@@ -214,8 +218,8 @@ public sealed class MigrationImportTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "[postgres]\n./schema.sql\n");
-		directory.Write("postgres.env", "Server=localhost\nDatabase=test\nUserName=operator\n#@import settings/secret.env\n");
-		var child = directory.Write("settings/secret.env", "# secret source\nPassword=private-prefix-$(missing)\n");
+		directory.Write("postgres.env", "[postgres]\nServer=localhost\nDatabase=test\nUserName=operator\n#@import settings/secret.env\n");
+		var child = directory.Write("settings/secret.env", "[postgres]\nPassword=private-prefix-$(missing)\n");
 		directory.Write("schema.sql", "SELECT 1;");
 
 		var error = Assert.Throws<InvalidDataException>(() => Loader().Load("main.migration", directory.Path, "test", "1.0.0"));
@@ -237,11 +241,11 @@ public sealed class MigrationImportTest
 
 		Assert.Contains(child, error.Message);
 		directory.Write("child/part.migration", "[sqlite]\n./schema.sql\n");
-		directory.Write("child/sqlite.env", "Database=/data/child.db\n");
+		directory.Write("child/sqlite.env", "[sqlite]\nDatabase=/data/child.db\n");
 		var sql = directory.Write("child/schema.sql", "SELECT 'retry';");
-		var task = Assert.Single(loader.Load("main.migration", directory.Path, "test", "1.0.0").Tasks);
+		var task = Assert.Single(loader.Load("main.migration", directory.Path, "test", "1.0.0").Steps);
 		Assert.Equal(sql, Assert.Single(task.Scripts).Source);
-		Assert.Equal(".migration/.artifacts/sqlite/0001.sql", task.Scripts[0].Path);
+		Assert.Equal(".migration/.artifacts/sqlite/1.sql", task.Scripts[0].Path);
 	}
 
 	[Fact]
@@ -249,7 +253,7 @@ public sealed class MigrationImportTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "[sqlite]\n./schema.sql\n");
-		directory.Write("sqlite.env", "#@import settings/child.env\nDatabase=/data/test.db\n");
+		directory.Write("sqlite.env", "#@import settings/child.env\n[sqlite]\nDatabase=/data/test.db\n");
 		var child = directory.Write("settings/child.env", "#@import ../sqlite.env\n");
 		directory.Write("schema.sql", "SELECT 1;");
 
@@ -263,14 +267,15 @@ public sealed class MigrationImportTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "#@import missing/child.migration\n[sqlite]\n./schema.sql\n");
-		directory.Write("sqlite.env", "#@import absent.env\nDatabase=/data/local.db\n");
+		directory.Write("sqlite.env", "#@import absent.env\n[sqlite]\nDatabase=/data/local.db\n");
 		var sql = directory.Write("schema.sql", "SELECT 1;");
 		var warnings = new List<string>();
 
-		var task = Assert.Single(Loader(warnings.Add).Load("main.migration", directory.Path, "test", "1.0.0").Tasks);
+		var plan = Loader(warnings.Add).Load("main.migration", directory.Path, "test", "1.0.0");
+		var task = Assert.Single(plan.Steps);
 
 		Assert.Equal(sql, Assert.Single(task.Scripts).Source);
-		Assert.Equal("/data/local.db", task.Parameters["Database"]);
+		Assert.Equal("/data/local.db", plan.Databases[task.DatabaseIndex.Value].Name);
 		Assert.Empty(warnings);
 	}
 
@@ -285,11 +290,11 @@ public sealed class MigrationImportTest
 
 		var plan = Loader().Load("main.migration", directory.Path, "test", "1.0.0");
 
-		Assert.Equal(new[] { "http://child.invalid:9000", "http://root.invalid:9000" }, plan.Tasks.Select(task => task.Parameters["Server"]));
-		Assert.Equal(new[] { "child-bucket", "root-bucket" }, plan.Tasks.Select(task => Assert.Single(task.Buckets).Name));
-		Assert.True(plan.Tasks[0].Buckets[0].Public);
-		Assert.False(plan.Tasks[1].Buckets[0].Public);
-		Assert.All(plan.Tasks, task => Assert.Empty(task.Scripts));
+		Assert.Equal(new[] { "http://child.invalid:9000", "http://root.invalid:9000" }, plan.Steps.Select(task => task.Settings["Server"]));
+		Assert.Equal(new[] { "child-bucket", "root-bucket" }, plan.Steps.Select(task => Assert.Single(task.Buckets).Name));
+		Assert.True(plan.Steps[0].Buckets[0].Public);
+		Assert.False(plan.Steps[1].Buckets[0].Public);
+		Assert.All(plan.Steps, task => Assert.Empty(task.Scripts));
 	}
 
 	[Theory]
@@ -300,12 +305,13 @@ public sealed class MigrationImportTest
 		using var directory = new MigrationTestDirectory();
 		for(var index = 0; index < depth; index++)
 			directory.Write($"part-{index}.migration", index + 1 < depth ? $"#@import part-{index + 1}.migration\n" : "[sqlite]\n./schema.sql\n");
-		directory.Write("sqlite.env", "Database=/data/test.db\n");
+		directory.Write("sqlite.env", "[sqlite]\nDatabase=/data/test.db\n");
 		var sql = directory.Write("schema.sql", "SELECT 'leaf';");
 
 		if(depth == 64)
 		{
-			var task = Assert.Single(Loader().Load("part-0.migration", directory.Path, "test", "1.0.0").Tasks);
+			var plan = Loader().Load("part-0.migration", directory.Path, "test", "1.0.0");
+			var task = Assert.Single(plan.Steps);
 			Assert.Equal(sql, Assert.Single(task.Scripts).Source);
 			Assert.Equal("SELECT 'leaf';", task.Scripts[0].Content);
 		}

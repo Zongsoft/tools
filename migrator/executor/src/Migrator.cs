@@ -36,7 +36,7 @@ namespace Zongsoft.Tools.Migrator.Migration;
 public abstract partial class Migrator
 {
 	#region 公共方法
-	public abstract Task MigrateAsync(MigrationPlan.Step task, MigrationContext context, CancellationToken cancellation = default);
+	public abstract Task MigrateAsync(MigrationPlan.Step step, MigrationContext context, CancellationToken cancellation = default);
 	public static Migrator Create(string provider) => MigrationProvider.Get(provider).Name switch
 	{
 		"mssql" => new Database.MsSql(),

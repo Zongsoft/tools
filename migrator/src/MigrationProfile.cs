@@ -98,8 +98,9 @@ internal static class MigrationProfile
 			if(!text.EndsWith(']') || text.Length < 3)
 				throw new InvalidDataException(string.Format(Properties.Resources.MigrationSectionInvalid_Message, path, i + 1));
 
-			var name = text[1..^1].Trim();
-			if(name.Length == 0 || name.Any(char.IsWhiteSpace))
+			var parts = text[1..^1].Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
+			var name = string.Join(" ", parts);
+			if(parts.Length == 0 || parts.Length > (migration ? 2 : 3))
 				throw new InvalidDataException(string.Format(Properties.Resources.MigrationSectionInvalid_Message, path, i + 1));
 
 			if(!names.Add(name))

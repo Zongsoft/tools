@@ -72,13 +72,13 @@ public sealed partial class MigrateCommandTest
 		var planEntry = Assert.Single(payload, entry => entry.Name.EndsWith(".migration/migration.json", StringComparison.Ordinal));
 		Assert.Equal((UnixFileMode)384, planEntry.Mode);
 		using var plan = JsonDocument.Parse(planEntry.Content);
-		Assert.Equal(identity, plan.RootElement.GetProperty("Package").GetString());
+		Assert.Equal(identity, plan.RootElement.GetProperty("Name").GetString());
 		Assert.Equal(runtime, plan.RootElement.GetProperty("Runtime").GetString());
 		Assert.Equal("1.2.3", plan.RootElement.GetProperty("Version").GetString());
 		Assert.Equal(name, plan.RootElement.GetProperty("Title").GetString());
 		Assert.Equal("Initial bootstrap", plan.RootElement.GetProperty("Summary").GetString());
 		Assert.Equal("Zongsoft hosting migration", plan.RootElement.GetProperty("Description").GetString());
-		var sql = Assert.Single(payload, entry => entry.Name.EndsWith(".migration/.artifacts/sqlite/0001.sql", StringComparison.Ordinal));
+		var sql = Assert.Single(payload, entry => entry.Name.EndsWith(".migration/.artifacts/sqlite/1.sql", StringComparison.Ordinal));
 		Assert.Equal("CREATE TABLE must_not_run (id INTEGER);", Encoding.UTF8.GetString(sql.Content));
 		Assert.DoesNotContain(payload, entry => entry.Name.EndsWith(".version", StringComparison.Ordinal));
 		Assert.Contains(payload, entry => entry.Name.EndsWith(runtime == "win-x64" ? ".migration/migrate.cmd" : ".migration/migrate.sh", StringComparison.Ordinal));
@@ -166,7 +166,7 @@ public sealed partial class MigrateCommandTest
 			var entry = Assert.Single(ReadArchive(archive), entry => entry.Name.EndsWith(".migration/migration.json", StringComparison.Ordinal));
 			using var plan = JsonDocument.Parse(entry.Content);
 			Assert.Equal("linux-x64", plan.RootElement.GetProperty("Runtime").GetString());
-			Assert.Equal("zongsoft.daemon-migrate", plan.RootElement.GetProperty("Package").GetString());
+			Assert.Equal("zongsoft.daemon-migrate", plan.RootElement.GetProperty("Name").GetString());
 			Assert.Equal("1.2.3", plan.RootElement.GetProperty("Version").GetString());
 			Assert.False(Directory.Exists(Path.Combine(directory.Path, "wrong-output")));
 		}

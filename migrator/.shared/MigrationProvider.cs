@@ -72,6 +72,7 @@ public abstract partial class MigrationProvider
 	}
 
 	public abstract void Validate(IReadOnlyDictionary<string, string> parameters, string runtime = "linux-x64");
+	public virtual void Prepare(MigrationPlan.Database database, string runtime = "linux-x64") => throw new InvalidDataException(MigrationResources.PlanInvalid_Message);
 	#endregion
 
 	#region 保护方法

@@ -42,7 +42,7 @@ namespace Zongsoft.Tools.Migrator.Migration;
 partial class MigrationPlan
 {
 	#region 静态字段
-	private static readonly Serialization _serialization = new(new JsonSerializerOptions { WriteIndented = true, PropertyNameCaseInsensitive = true });
+	private static readonly Serialization _serialization = new(new JsonSerializerOptions(Serialization.Default.Options) { WriteIndented = true });
 	#endregion
 
 	#region 公共方法
@@ -57,7 +57,7 @@ partial class MigrationPlan
 	#endregion
 
 	#region 嵌套类型
-	[JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
+	[JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 	[JsonSerializable(typeof(MigrationPlan))]
 	private partial class Serialization : JsonSerializerContext;
 	#endregion

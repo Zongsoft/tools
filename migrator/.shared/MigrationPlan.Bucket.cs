@@ -34,7 +34,6 @@
 using System;
 using System.IO;
 using System.Collections.Generic;
-using System.Text.Json.Serialization;
 
 namespace Zongsoft.Tools.Migrator.Migration;
 
@@ -45,14 +44,8 @@ public sealed partial class MigrationPlan
 		#region 公共属性
 		public string Name { get; set; }
 		public bool Public { get; set; }
-
-		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public EncryptionOptions Encryption { get; set; }
-
-		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public string Versioning { get; set; }
-
-		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public Dictionary<string, string> Tags { get; set; }
 		#endregion
 
@@ -88,8 +81,6 @@ public sealed partial class MigrationPlan
 		{
 			#region 公共属性
 			public string Mode { get; set; }
-
-			[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 			public string Key { get; set; }
 			#endregion
 		}
