@@ -59,6 +59,52 @@ public sealed class MigrationDatabaseTest
 	}
 
 	[Fact]
+	public void Load_ProviderNamedEnvWithoutProviderSection_UsesRootSettingsAndDatabaseUserSections()
+	{
+		using var directory = new MigrationTestDirectory();
+		directory.Write("1.0.0/mysql.migration", "[mysql]\n");
+		directory.Write("mysql.env", "Server=localhost\nPort=3306\nDatabase=zongsoft\nUserName=root\nPassword=operator-secret\nSecured=false\nTimeout=30s\nCommandTimeout=10m\n[zongsoft program]\nPassword=application-secret\nPermission=ReadWrite\nPrivileges=CreateTable\n");
+
+		var plan = new MigrationLoader(null).Load("1.0.0/mysql.migration", directory.Path, "test", "1.0.0");
+		var database = Assert.Single(plan.Databases);
+		var user = Assert.Single(database.Users);
+
+		Assert.Equal("zongsoft", database.Name);
+		Assert.Equal("localhost", database.Settings["Server"]);
+		Assert.Equal("operator-secret", database.Settings["Password"]);
+		Assert.Equal("10m", database.Settings["CommandTimeout"]);
+		Assert.Equal("program", user.Name);
+		Assert.Equal("application-secret", user.Password);
+		Assert.Equal("readwrite", user.Permission);
+		Assert.Contains("CreateTable", user.Privileges);
+		Assert.Equal(0, Assert.Single(plan.Steps).DatabaseIndex);
+	}
+
+	[Fact]
+	public void Load_ProviderNamedEnvWithExplicitProviderSection_PrefersSectionOverRootSettings()
+	{
+		using var directory = new MigrationTestDirectory();
+		directory.Write("main.migration", "[mysql]\n");
+		directory.Write("mysql.env", "Server=root-host\nDatabase=ignored\nPassword=root-secret\n[mysql]\nServer=section-host\nDatabase=hosting\nPassword=section-secret\n[mysql hosting program]\nPassword=application-secret\n");
+
+		var database = Assert.Single(new MigrationLoader(null).Load("main.migration", directory.Path, "test", "1.0.0").Databases);
+		Assert.Equal("hosting", database.Name);
+		Assert.Equal("section-host", database.Settings["Server"]);
+		Assert.Equal("section-secret", database.Settings["Password"]);
+		Assert.Equal("program", Assert.Single(database.Users).Name);
+	}
+
+	[Fact]
+	public void Load_GenericEnvWithoutProviderSection_DoesNotTreatRootAsDatabaseSettings()
+	{
+		using var directory = new MigrationTestDirectory();
+		directory.Write("main.migration", "[mysql]\n");
+		directory.Write("main.env", "Server=localhost\nDatabase=hosting\nPassword=operator-secret\n");
+
+		Assert.Throws<FileNotFoundException>(() => new MigrationLoader(null).Load("main.migration", directory.Path, "test", "1.0.0"));
+	}
+
+	[Fact]
 	public void Load_ExplicitAndDefaultTargets_RoutesSharedSqlAndExcludesUnusedDeclarations()
 	{
 		using var directory = new MigrationTestDirectory();

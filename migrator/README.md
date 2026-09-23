@@ -43,7 +43,9 @@ dotnet-migrate --name:zongsoft --version:1.0.0 --platform:linux --output:package
 
 Required options: name and platform. Optional: version, edition, architecture (x64), output (current directory), overwrite (false), title (input name), summary and description. Summary/description support existing file:/text: sources relative to the current directory. At least one positional path is required; each supports variables, wildcards and semicolon/pipe lists. Explicit options override environment variables. Expand each argument at its position, sorting relative matches ordinally within that pattern. Missing paths warn and skip; no valid inputs/tasks fails. Existing invalid inputs fail. Only .migration files are accepted, including imports; contents remain INI, with .env parameters. SQL contents are not variable-expanded.
 
-Linux supports glibc x64/arm64. win/windows normalize to win, x64 only. unix requires a concrete OS; osx/xos/macos have no executor and fail without outputs.
+> - Linux supports glibc x64/arm64.
+> - Windows normalize to win, x64 only.
+> - Unix requires a concrete OS; osx/xos/macos have no executor and fail without outputs.
 
 ### Choose a version and Edition
 
@@ -120,9 +122,9 @@ Database common.env files declare provider/database/user sections. Only the sele
 There is no parameter-file command option. For each migrator, start in the declaring INI's directory for the entry, then walk through its parents to the filesystem root. At **each directory**, try:
 
 1. The migration filename with its extension changed to `.env`, reading the matching section.
-2. `<migrator>.env`; `postgres.env` precedes `postgresql.env`. A matching section takes precedence over root entries. Only Amazon S3 provider-named files may omit their section.
+2. `<migrator>.env`; `postgres.env` precedes `postgresql.env`. A matching section takes precedence over root entries. Provider-named files may omit their section; for databases, root entries become provider settings and top-level sections become database/user sections.
 
-A file without the applicable section is skipped unless it is Amazon S3-provider-named and has root entries. Once an applicable configuration, including its explicit imports, is found, it must be complete: values are not filled automatically from another candidate or a parent. A shared file must separate providers into sections. Missing files/configuration fail packaging and identify the searched paths. Filename case follows the build filesystem; use the lower-case names above for portability.
+A file without the applicable section is skipped unless its filename matches the provider and it has root entries. Once an applicable configuration, including its explicit imports, is found, it must be complete: values are not filled automatically from another candidate or a parent. A shared file must separate providers into sections. Missing files/configuration fail packaging and identify the searched paths. Filename case follows the build filesystem; use the lower-case names above for portability.
 
 > 🚨 **Warning:** The first applicable `.env` file is used as a complete configuration. Migrator does not combine values from another candidate or parent directory; add shared settings through an explicit `#@import`.
 
@@ -177,6 +179,18 @@ Password=$(reporting_password)
 Permission=readonly
 ```
 
+In a provider-named file such as `mysql.env`, the filename can supply the provider level. The equivalent shorthand is:
+
+```ini
+Server=localhost
+Database=hosting
+Password=$(mysql_root_password)
+
+[hosting application]
+Password=$(application_password)
+Permission=readwrite
+```
+
 The corresponding `.migration`:
 
 ```ini
@@ -193,7 +207,7 @@ Only referenced databases and all their declared users enter the plan and finger
 
 > 💡 **Tip:** `[mysql]` selects the provider's `Database`. That default database can be created with provider defaults even when `[mysql hosting]` is absent; a user section such as `[mysql hosting application]` also declares `hosting`.
 
-Parameters follow the declaration-source search: same-name `.env`, then provider-named `.env`, up through parent directories. Only explicit imports merge configuration. Database configuration requires provider sections; no filling from other candidates or expansion of unrelated providers.
+Parameters follow the declaration-source search: same-name `.env`, then provider-named `.env`, up through parent directories. Only explicit imports merge configuration. Database configuration requires a provider section unless the file is provider-named and has root entries; no filling from other candidates or expansion of unrelated providers.
 
 Parameter/provider names and enum values are case insensitive. Database names, usernames and passwords retain spelling. Values support variable expansion. Unknown, misplaced or unsupported parameters fail. Spaces separate section levels; use variables or Path for file paths containing spaces.
 

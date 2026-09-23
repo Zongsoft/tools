@@ -125,13 +125,14 @@ partial class MigrationLoader
 
 				if(sections.Length > 1)
 					throw new InvalidDataException(string.Format(Properties.Resources.MigrationAliasesDuplicate_Message, path));
-				if(sections.Length == 0)
+				var section = sections.FirstOrDefault();
+				var specialized = provider.Aliases.Contains(Path.GetFileNameWithoutExtension(file), StringComparer.OrdinalIgnoreCase);
+				if(section == null && (!specialized || profile.Entries.Count == 0))
 					continue;
 
 				try
 				{
-					var section = sections[0];
-					var parameters = this.ReadParameters(section.Entries);
+					var parameters = this.ReadParameters(section == null ? profile.Entries : section.Entries);
 					provider.Validate(parameters, runtime);
 
 					var defaultName = parameters.Get("Database");
@@ -140,7 +141,8 @@ partial class MigrationLoader
 					if(string.IsNullOrWhiteSpace(target))
 						throw new InvalidDataException(string.Format(MigrationResources.ParameterMissing_Message, "Database", providerName));
 
-					var matches = section.Sections.Where(child => string.Equals(_expand(child.Name), target, StringComparison.OrdinalIgnoreCase)).ToArray();
+					var matches = (section == null ? profile.Sections : section.Sections)
+						.Where(child => string.Equals(_expand(child.Name), target, StringComparison.OrdinalIgnoreCase)).ToArray();
 					if(matches.Length > 1 || matches.Length == 0 && !string.Equals(defaultName, target, StringComparison.OrdinalIgnoreCase))
 						throw new InvalidDataException(string.Format(MigrationResources.ParameterValueInvalid_Message, "Database"));
 

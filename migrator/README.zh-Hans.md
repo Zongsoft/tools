@@ -43,7 +43,9 @@ dotnet-migrate --name:zongsoft --version:1.0.0 --platform:linux --output:package
 
 必填选项为 name、platform；可选 version、edition、architecture（默认 x64）、output（默认当前目录）、overwrite（默认 false）、title（默认输入名称）、summary 和 description。summary/description 采用 `file:`、`text:` 文本来源规则，文件相对当前目录。至少一个位置参数；每个参数支持变量、通配符及 `;`/`|` 列表，显式选项优先于环境变量。路径按参数位置展开，各模式按固定前缀下的相对路径 Ordinal 排序。缺失路径逐项警告，全缺失或无任务则失败；存在但无效的输入仍报错。只接受 `.migration`（INI 内容），导入同样检查扩展名；参数仍为 `.env`。SQL 内容不展开变量。
 
-Linux 支持 glibc x64/arm64；win/windows 规范化为 win，仅支持 x64。unix 必须指定具体系统，osx/xos/macos 尚无运行器，均不生成产物。
+> - Linux 支持 glibc x64/arm64；
+> - Windows 规范化为 win，仅支持 x64。
+> - Unix 必须指定具体系统，osx/xos/macos 尚无运行器，均不生成产物。
 
 ### 选择版本与 Edition
 
@@ -120,9 +122,9 @@ Database=/var/lib/example/application.db
 不提供参数文件命令选项。针对每个升迁器，从条目声明所属 INI 的目录逐级向父目录查找，直至文件系统根目录。**每一级目录**均按以下顺序查找：
 
 1. 与升迁文件同名、扩展名改为 `.env` 的文件，读取对应段落。
-2. `<升迁器>.env`；PostgreSQL 先 `postgres.env` 后 `postgresql.env`。对应段落优先于根条目；仅 Amazon S3 升迁器命名的文件允许省略段落。
+2. `<升迁器>.env`；PostgreSQL 先 `postgres.env` 后 `postgresql.env`。对应段落优先于根条目；升迁器同名文件允许省略段落。数据库文件的根条目作为 provider 参数，顶层段落作为数据库/用户段落。
 
-没有适用段落的文件继续查找，仅 Amazon S3 升迁器命名且有根条目的文件除外。一旦找到适用配置（包括其显式导入），必须完整有效；不与其他候选文件或父目录自动合并，也不因缺少必填项而回退。多个升迁器共享参数文件时必须分段。最终未找到配置则打包失败，提示查找过的路径。文件名大小写遵循打包机文件系统，建议统一使用上述小写文件名。
+没有适用段落的文件继续查找，文件名与升迁器相同且有根条目的文件除外。一旦找到适用配置（包括其显式导入），必须完整有效；不与其他候选文件或父目录自动合并，也不因缺少必填项而回退。多个升迁器共享参数文件时必须分段。最终未找到配置则打包失败，提示查找过的路径。文件名大小写遵循打包机文件系统，建议统一使用上述小写文件名。
 
 > 🚨 注意：第一个适用的 `.env` 文件会作为完整配置使用。迁移器不会从其他候选文件或父目录拼接参数；需要共享设置时，请显式使用 `#@import`。
 
@@ -177,6 +179,18 @@ Password=$(reporting_password)
 Permission=readonly
 ```
 
+对于 `mysql.env` 这样的 provider 同名文件，文件名可代替 provider 段，上述配置也可简写为：
+
+```ini
+Server=localhost
+Database=hosting
+Password=$(mysql_root_password)
+
+[hosting application]
+Password=$(application_password)
+Permission=readwrite
+```
+
 对应 `.migration`：
 
 ```ini
@@ -193,7 +207,7 @@ sql/analytics/*.sql
 
 只初始化 `.migration` 引用的库及其全部用户，空段也算引用；未引用库及用户不进入计划或指纹。同一目标初始化一次，SQL 不广播到其他库。同一来源脚本对同一实际目标去重，用于不同库则分别执行。
 
-从条目或空段的声明来源逐级查找同名 `.env`、provider 名称 `.env`；只合并显式导入，不跨候选文件补齐参数，不展开无关 provider 的配置。数据库配置必须有 provider 段。
+从条目或空段的声明来源逐级查找同名 `.env`、provider 名称 `.env`；只合并显式导入，不跨候选文件补齐参数，不展开无关 provider 的配置。数据库配置须有 provider 段，或在 provider 同名文件的根级提供参数。
 
 参数名、provider 名、枚举值不区分大小写；数据库名、用户名、密码保留拼写。值支持变量展开。未知参数、错误层级、不支持的参数报错。段落名称中的空白分隔层级，含空格的文件路径应通过变量或 `Path` 设置。
 
