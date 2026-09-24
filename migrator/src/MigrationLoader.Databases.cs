@@ -71,7 +71,7 @@ partial class MigrationLoader
 			catch(Exception ex) when(ex is not (OutOfMemoryException or MigrationPrivilegeException))
 			{
 				throw new InvalidDataException(string.Format(Properties.Resources.MigrationEntryError_Message,
-					entry.Profile.FilePath, entry.LineNumber + 1, section.FullName, ex.Message), ex);
+					entry.Profile.FilePath, entry.LineNumber + 1, section.FullName, Environment.NewLine + ex.Message), ex);
 			}
 		}
 
@@ -89,7 +89,7 @@ partial class MigrationLoader
 				{
 					throw new InvalidDataException(
 						string.Format(Properties.Resources.MigrationParameterError_Message, path, provider,
-						string.Format(MigrationResources.ParameterValueInvalid_Message, "Database")));
+						Environment.NewLine + string.Format(MigrationResources.ParameterValueInvalid_Message, "Database")));
 				}
 			}
 			else
@@ -190,12 +190,17 @@ partial class MigrationLoader
 				}
 				catch(InvalidDataException ex)
 				{
-					throw new InvalidDataException(string.Format(Properties.Resources.MigrationParameterError_Message, path, provider.Name, ex.Message), ex);
+					throw new InvalidDataException(string.Format(Properties.Resources.MigrationParameterError_Message, path, provider.Name, Environment.NewLine + ex.Message), ex);
 				}
 			}
 		}
 
-		throw new FileNotFoundException(string.Format(Properties.Resources.MigrationParametersMissing_Message, provider.Name, migration, string.Join(", ", candidates)));
+		throw new FileNotFoundException(
+			string.Format(
+				Properties.Resources.MigrationParametersMissing_Message,
+				provider.Name,
+				Utility.Indent(string.Join(Environment.NewLine, candidates))
+			));
 	}
 
 	private Dictionary<string, string> ReadParameters(IEnumerable<ProfileEntry> entries)

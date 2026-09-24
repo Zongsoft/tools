@@ -355,17 +355,7 @@ dotnet test test/Zongsoft.Tools.Deployer.Tests.csproj -f net10.0 -p:GeneratePack
 
 Profile 导入复用 Core：Reader 内置导入及递归保护，通过 ProfileOptions.Importing 登记导入文件哈希。详见[实现细节](docs/implementation.zh-Hans.md#profile-导入回调)。
 
-Core Profile 的来源与覆盖规则，以及读取和保存职责，见[实现说明](docs/implementation.zh-Hans.md#core-profile-声明与保存)。部署过程不保存描述文件。
+Core Profile 的来源与覆盖规则，以及读取和保存职责，见[实现说明](docs/implementation.zh-Hans.md#core-profile-声明与保存)。
 
 本地源搜索及链接规则见[实现文档](docs/implementation.zh-Hans.md#本地搜索与源链接)。
-
-## 开发规范检查
-
-生产和测试项目使用 `Zongsoft.CodeAnalysis`，版本由仓库根 `Directory.Packages.props` 管理；使用 .NET SDK 10.0.401 或具有 Roslyn 5.9 及以上版本编译器的工具链。分析器为私有构建依赖，不随工具作为运行时依赖分发。
-
-```powershell
-dotnet build src/Zongsoft.Tools.Deployer.csproj -p:ZongsoftCodeStyleStrict=true -p:GeneratePackageOnBuild=false
-dotnet format style src/Zongsoft.Tools.Deployer.csproj --no-restore --verify-no-changes --diagnostics IDE0049
-```
-
-多目标构建覆盖项目全部目标框架；详细规范检查及资源生成要求见 [仓库说明](../AGENTS.md#代码规范检查)。
+详细规范检查及资源生成要求见 [仓库说明](../AGENTS.md#代码规范检查)。

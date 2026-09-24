@@ -148,7 +148,7 @@
     <value>{0} [{1}]：{2}</value>
   </data>
   <data name="MigrationParametersMissing.Message" xml:space="preserve">
-    <value>未找到升迁器“{0}”的参数文件（{1}）。已查找：{2}</value>
+    <value>未找到升迁器“{0}”的参数文件，已查找：{1}</value>
   </data>
   <data name="MigrationBucketNameInvalid.Message" xml:space="preserve">
     <value>存储桶名称“{0}”无效。</value>

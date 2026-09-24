@@ -39,7 +39,7 @@ It is designed for .NET services and command-line applications that need repeata
 - [Recommended workflow](#recommended-workflow)
 - [Packager version metadata](#packager-version-metadata)
 - [Troubleshooting](#troubleshooting)
-- [Implementation notes (Chinese)](docs/implementation.md)
+- [Implementation notes](docs/implementation.md)
 
 ## Features
 
@@ -604,7 +604,7 @@ Common variables:
 
 Summary, description and the four main lifecycle hooks share one resolver. `file:` selects a file relative to source; `text:` preserves literal contents. Unprefixed values expand package variables and read existing source-relative files; multiline values are text, obvious missing paths fail, and other values are text. File contents are neither expanded nor interpreted as another path. Keep shell expressions in a file or `text:` value. Pre/post hooks are strict file lists separated by `;` or `|` and reject `text:`.
 
-Debian/RPM payloads use automatically cleaned temporary files and streaming digests. Reserve temporary disk space; the complete package body is not assembled in memory. See [payload streams](docs/implementation.md#载荷流与目录条目).
+Debian/RPM payloads use automatically cleaned temporary files and streaming digests. Reserve temporary disk space; the complete package body is not assembled in memory. See [payload streams](docs/implementation.md#payload-streams-and-directory-entries).
 
 ## Package Formats
 
@@ -755,16 +755,5 @@ See [docs/implementation.md](docs/implementation.md) for the internal design, pa
 
 This project is licensed under the [MIT](https://github.com/Zongsoft/tools/blob/main/LICENSE) license.
 
-Local source searches and links follow [the implementation contract](docs/implementation.md#本地搜索与源链接).
-
-
-## Development checks
-
-Production and test projects use `Zongsoft.CodeAnalysis` with its version defined in the repository root `Directory.Packages.props`. Use .NET SDK 10.0.401 or a toolchain with Roslyn 5.9 or later. The analyzer is a private build dependency, not a runtime dependency of the tool.
-
-```powershell
-dotnet build src/Zongsoft.Tools.Packager.csproj -p:ZongsoftCodeStyleStrict=true
-dotnet format style src/Zongsoft.Tools.Packager.csproj --no-restore --verify-no-changes --diagnostics IDE0049
-```
-
-The build checks every configured target framework. See the [repository instructions](../AGENTS.md#代码规范检查) for editor configuration, resource generation and validation requirements.
+Local source searches and links follow [the implementation contract](docs/implementation.md#local-searches-and-source-links).
+See the [repository instructions](../AGENTS.md#代码规范检查) for editor configuration, resource generation and validation requirements.

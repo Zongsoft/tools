@@ -1,6 +1,6 @@
 ## 概述
 
-本目录遵循 [../AGENTS.md](../AGENTS.md)。本工具生成 tar.gz、deb、rpm 安装包。开始修改前阅读 [SKILL.md](SKILL.md)、双语 README 和 [实现说明](docs/implementation.md)。
+本目录遵循 [../AGENTS.md](../AGENTS.md)。本工具生成 tar.gz、deb、rpm 安装包。开始修改前阅读 [SKILL.md](SKILL.md)、双语 README 和 [实现说明](docs/implementation.zh-Hans.md)。
 
 ## 代码规范
 

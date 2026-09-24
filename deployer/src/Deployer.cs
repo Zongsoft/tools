@@ -214,7 +214,7 @@ public partial class Deployer
 		var identity = DeploymentPath.Identity(path);
 
 		if(this.Session.Active.Count >= 64 || !this.Session.Active.Add(identity))
-			throw new InvalidOperationException(string.Format(Properties.Resources.Review_Cycle, string.Join(" -> ", this.Session.Stack.Append(path))));
+			throw new InvalidOperationException(string.Format(Properties.Resources.Review_Cycle, Utility.Indent(string.Join(" ->" + Environment.NewLine, this.Session.Stack.Append(path)))));
 
 		this.Session.Stack.Add(path);
 
@@ -272,7 +272,7 @@ public partial class Deployer
 			catch(Exception exception)
 			{
 				context.Counter.Fail();
-				this.Error(string.Format(Properties.Resources.Review_Failure, $"{entry.Profile.FilePath}:{entry.LineNumber}", exception.Message));
+				this.Error(string.Format(Properties.Resources.Review_Failure, $"{entry.Profile.FilePath}:{entry.LineNumber}", Environment.NewLine + exception.Message));
 			}
 		}
 	}

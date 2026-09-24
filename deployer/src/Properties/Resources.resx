@@ -124,13 +124,13 @@
     <value>Conflicting deployment assets: {0}</value>
   </data>
   <data name="Review.Cycle" xml:space="preserve">
-    <value>Deployment cycle or depth limit: {0}</value>
+    <value>Deployment cycle or depth limit:{0}</value>
   </data>
   <data name="Review.DependencyConflict" xml:space="preserve">
-    <value>Dependency constraints cannot be satisfied: {0}</value>
+    <value>Dependency constraints cannot be satisfied:{0}</value>
   </data>
   <data name="Review.Failure" xml:space="preserve">
-    <value>{0}: {1}</value>
+    <value>{0}:{1}</value>
   </data>
   <data name="Review.InvalidFilter" xml:space="preserve">
     <value>Invalid filter: {0}</value>

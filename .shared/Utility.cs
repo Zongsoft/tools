@@ -54,6 +54,9 @@ namespace Zongsoft.Tools;
 internal static partial class Utility
 {
 	#region 命令方法
+	/// <summary>将详细信息另起一行并整体缩进，保留已有的多行层级。</summary>
+	internal static string Indent(string text) => Environment.NewLine + "\t" + text.ReplaceLineEndings(Environment.NewLine + "\t");
+
 	/// <summary>将工具的绝对输入适配为 Core 本地搜索，结果保留逻辑名称。</summary>
 	public static IEnumerable<Zongsoft.IO.Searcher.Match> Search(string path, bool files = false, string sourceDirectory = null)
 	{

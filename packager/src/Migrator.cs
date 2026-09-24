@@ -131,7 +131,7 @@ public sealed class Migrator
 		}
 
 		throw new FileNotFoundException(string.Format(Properties.Resources.MigratorArtifactsNotFound_Message,
-			archiveName, scriptName, string.Join(Environment.NewLine, searched)), Path.Combine(directory, archiveName));
+			archiveName, scriptName, Utility.Indent(string.Join(Environment.NewLine, searched)), Environment.NewLine), Path.Combine(directory, archiveName));
 	}
 
 	private static void Validate(string archive, string expectedRuntime)

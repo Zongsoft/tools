@@ -156,7 +156,7 @@ public sealed partial class MigrationLoader(Func<string, string> expand, Action<
 			catch(Exception ex) when(ex is not OutOfMemoryException)
 			{
 				throw new InvalidDataException(string.Format(Properties.Resources.MigrationEntryError_Message,
-					profile.FilePath, section.LineNumber + 1, section.Name, ex.Message), ex);
+					profile.FilePath, section.LineNumber + 1, section.Name, Environment.NewLine + ex.Message), ex);
 			}
 		}
 	}
@@ -202,7 +202,7 @@ public sealed partial class MigrationLoader(Func<string, string> expand, Action<
 			catch(Exception ex) when(ex is not OutOfMemoryException)
 			{
 				throw new InvalidDataException(string.Format(Properties.Resources.MigrationEntryError_Message,
-					entry.Profile.FilePath, entry.LineNumber + 1, section.Name, ex.Message), ex);
+					entry.Profile.FilePath, entry.LineNumber + 1, section.Name, Environment.NewLine + ex.Message), ex);
 			}
 		}
 	}
@@ -278,14 +278,19 @@ public sealed partial class MigrationLoader(Func<string, string> expand, Action<
 				}
 				catch(InvalidDataException ex)
 				{
-					throw new InvalidDataException(string.Format(Properties.Resources.MigrationParameterError_Message, path, provider, ex.Message));
+					throw new InvalidDataException(string.Format(Properties.Resources.MigrationParameterError_Message, path, provider, Environment.NewLine + ex.Message));
 				}
 
 				return result;
 			}
 		}
 
-		throw new FileNotFoundException(string.Format(Properties.Resources.MigrationParametersMissing_Message, provider, migration, string.Join(", ", candidates)));
+		throw new FileNotFoundException(
+			string.Format(
+				Properties.Resources.MigrationParametersMissing_Message,
+				provider,
+				Utility.Indent(string.Join(Environment.NewLine, candidates))
+			));
 	}
 	#endregion
 }

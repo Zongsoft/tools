@@ -6,7 +6,7 @@ This document describes responsibilities, execution order, and maintenance const
 
 ## Entry point and responsibilities
 
-`Program.Main` uses Zongsoft.Core `CommandLine` to parse arguments, creates a cancellation token, and calls `Deployer.CreateVariables` and `DeployManyAsync`. With no input arguments it reads `.deploy` in the current directory. Exit codes are 0 for success, 1 for failure, and 130 for cancellation. Execution writes to a `TextWriter` and does not require an interactive console handle.
+`Program.Main` uses Zongsoft.Core `CommandLine` to parse arguments, creates a cancellation token, and calls `Deployer.CreateVariables` and `DeployManyAsync`. With no input arguments it reads `.deploy` in the current directory. Exit codes are 0 for success, 1 for failure, and 130 for cancellation. Manifest diagnostics separate source locations from reasons on the next line; dependency constraints and cycle paths are listed on separate lines. Shared `Utility.Indent` preserves nested detail indentation and uses platform line endings. Execution writes to a `TextWriter` and does not require an interactive console handle.
 
 | File/type | Responsibility |
 | --- | --- |

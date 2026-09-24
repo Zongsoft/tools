@@ -215,7 +215,7 @@ namespace Zongsoft.Tools.Migrator.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to {0}:{1} [{2}]: {3}.
+        ///   Looks up a localized string similar to {0}:{1} [{2}]:{3}.
         /// </summary>
         internal static string MigrationEntryError_Message {
             get {
@@ -260,7 +260,7 @@ namespace Zongsoft.Tools.Migrator.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to {0} [{1}]: {2}.
+        ///   Looks up a localized string similar to {0} [{1}]:{2}.
         /// </summary>
         internal static string MigrationParameterError_Message {
             get {
@@ -269,7 +269,7 @@ namespace Zongsoft.Tools.Migrator.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to No migration parameters found for &apos;{0}&apos; ({1}). Searched: {2}.
+        ///   Looks up a localized string similar to No migration parameters found for &apos;{0}&apos;. Searched:{1}.
         /// </summary>
         internal static string MigrationParametersMissing_Message {
             get {

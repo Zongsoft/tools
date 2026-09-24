@@ -209,7 +209,6 @@
     <value>The migrator archive {0} must contain Migrator metadata and target runtime {1}.</value>
   </data>
   <data name="MigratorArtifactsNotFound.Message" xml:space="preserve">
-    <value>The migrator artifacts &quot;{0}&quot; and &quot;{1}&quot; were not found. Searched directories:
-{2}</value>
+    <value>The migrator artifacts &quot;{0}&quot; and &quot;{1}&quot; were not found.{3}Searched directories:{2}</value>
   </data>
 </root>

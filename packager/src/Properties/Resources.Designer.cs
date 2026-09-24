@@ -187,8 +187,7 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
-        ///   Looks up a localized string similar to The migrator artifacts &quot;{0}&quot; and &quot;{1}&quot; were not found. Searched directories:
-        ///{2}.
+        ///   Looks up a localized string similar to The migrator artifacts &quot;{0}&quot; and &quot;{1}&quot; were not found.{3}Searched directories:{2}.
         /// </summary>
         internal static string MigratorArtifactsNotFound_Message {
             get {

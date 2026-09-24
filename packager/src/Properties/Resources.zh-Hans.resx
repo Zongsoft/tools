@@ -229,7 +229,6 @@
     <value>升迁包 {0} 必须包含 Migrator 元数据，且目标运行平台为 {1}。</value>
   </data>
   <data name="MigratorArtifactsNotFound.Message" xml:space="preserve">
-    <value>未找到升迁产物“{0}”和“{1}”。已检查目录：
-{2}</value>
+    <value>未找到升迁产物“{0}”和“{1}”。{3}已检查目录：{2}</value>
   </data>
 </root>

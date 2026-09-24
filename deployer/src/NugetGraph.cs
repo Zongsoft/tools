@@ -126,7 +126,7 @@ internal sealed class NugetGraph
 		{
 			if(selected.TryGetValue(pair.Key, out var package) && pair.Value.Any(request => !request.Range.Satisfies(package.Identity.Version)))
 			{
-				_conflict = $"{package.Identity}: {Describe(pair.Value)}";
+				_conflict = $"{package.Identity}:{Describe(pair.Value)}";
 				return null;
 			}
 		}
@@ -158,7 +158,7 @@ internal sealed class NugetGraph
 		}
 
 		if(string.IsNullOrEmpty(_conflict))
-			_conflict = $"{unresolved.Key}: {Describe(unresolved.Value)}";
+			_conflict = $"{unresolved.Key}:{Describe(unresolved.Value)}";
 
 		return null;
 	}
@@ -202,7 +202,7 @@ internal sealed class NugetGraph
 
 			if(active.Contains(key))
 			{
-				_conflict = "cycle: " + string.Join(" -> ", chain.Append(key));
+				_conflict = "cycle:" + Utility.Indent(string.Join(" ->" + Environment.NewLine, chain.Append(key)));
 				return false;
 			}
 
@@ -235,9 +235,9 @@ internal sealed class NugetGraph
 
 	#region 辅助方法
 	private static string Describe(IEnumerable<(VersionRange Range, string Parent)> requirements) =>
-		string.Join("; ", requirements.Select(item => $"{item.Parent} {item.Range}"));
+		Utility.Indent(string.Join(Environment.NewLine, requirements.Select(item => $"{item.Parent} {item.Range}")));
 
 	private static InvalidOperationException Conflict(string detail) =>
-		new(string.Format(Properties.Resources.Review_DependencyConflict, detail));
+		new(string.Format(Properties.Resources.Review_DependencyConflict, Environment.NewLine + detail));
 	#endregion
 }

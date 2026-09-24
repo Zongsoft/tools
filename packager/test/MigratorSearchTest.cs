@@ -54,7 +54,7 @@ public sealed partial class MigratorPackageTest
 		var expected = new List<string>();
 		for(var current = new DirectoryInfo(source); current != null; current = current.Parent)
 			expected.Add(current.FullName);
-		Assert.Equal(expected, lines.Where(line => expected.Contains(line, StringComparer.Ordinal)));
+		Assert.Equal(expected.Select(path => "\t" + path), lines.Where(line => line.StartsWith('\t')));
 		Assert.Empty(package.Entries);
 	}
 

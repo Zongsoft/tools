@@ -79,7 +79,7 @@ namespace Zongsoft.Tools.Deployer.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Deployment cycle or depth limit: {0} 的本地化字符串。
+        ///   查找类似 Deployment cycle or depth limit:{0} 的本地化字符串。
         /// </summary>
         internal static string Review_Cycle {
             get {
@@ -88,7 +88,7 @@ namespace Zongsoft.Tools.Deployer.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Dependency constraints cannot be satisfied: {0} 的本地化字符串。
+        ///   查找类似 Dependency constraints cannot be satisfied:{0} 的本地化字符串。
         /// </summary>
         internal static string Review_DependencyConflict {
             get {
@@ -97,7 +97,7 @@ namespace Zongsoft.Tools.Deployer.Properties {
         }
 
         /// <summary>
-        ///   查找类似 {0}: {1} 的本地化字符串。
+        ///   查找类似 {0}:{1} 的本地化字符串。
         /// </summary>
         internal static string Review_Failure {
             get {

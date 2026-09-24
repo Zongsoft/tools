@@ -112,6 +112,8 @@ previous 只接受同一目标根的成功报告。按目标路径取最后有�
 
 执行阶段 I/O 失败停止后续操作，但已完成写入不回滚；路径检查也不是对并发恶意修改文件系统的原子事务。验证资产文件集合不等同宿主实际加载通过。
 
+清单错误将来源位置与原因分行显示，依赖约束和循环引用路径逐行列出。共享 `Utility.Indent` 使用平台换行并保留嵌套详情的缩进。
+
 ## 开发约定与验证
 
 Cake 的 `--edition` 同时控制还原、编译和测试，`restore` 显式传递 MSBuild 的 `Configuration`，确保 Debug 本地 Core DLL 与 Release Core NuGet 包的条件依赖正确。测试项目只引用主项目；Cake 仅收集 `test/*.csproj`，不扫描构建输出中的副本。`dotnet cake --edition Release` 执行清理、还原、构建及三个框架的测试；构建生成本地工具包，只有显式 `pack` 目标会推送 NuGet。

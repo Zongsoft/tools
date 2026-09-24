@@ -39,7 +39,7 @@
 - [推荐打包流程](#推荐打包流程)
 - [打包器版本元数据](#打包器版本元数据)
 - [故障排查](#故障排查)
-- [实现说明（简体中文）](docs/implementation.md)
+- [实现说明（简体中文）](docs/implementation.zh-Hans.md)
 
 ## 功能特性
 
@@ -605,7 +605,7 @@ dotnet-pack deb \
 
 摘要、描述和四个主生命周期钩子共用解析规则：`file:` 明确指定文件（相对 source），`text:` 后的字面文本原样保留。无前缀时展开打包变量，读取源目录下已有文件；多行内容为文本，明显的缺失文件路径会报错，其余值为文本。文件内容直接使用，不展开变量或作为路径读取，Shell 表达式可放入文件或 `text:` 文本中。pre/post 钩子是以 `;` 或 `|` 分隔的严格文件列表，不接受 `text:`。
 
-Debian/RPM 载荷使用自动清理的临时文件和流式摘要，需预留临时磁盘空间；不在内存中拼接整个包体。实现见[载荷流与目录条目](docs/implementation.md#载荷流与目录条目)。
+Debian/RPM 载荷使用自动清理的临时文件和流式摘要，需预留临时磁盘空间；不在内存中拼接整个包体。实现见[载荷流与目录条目](docs/implementation.zh-Hans.md#载荷流与目录条目)。
 
 ## 包格式
 
@@ -749,22 +749,11 @@ dotnet cake --target=test --edition=Release
 
 ## 更多细节
 
-参见 [docs/implementation.md](docs/implementation.md) 了解内部设计、打包流水线和格式级实现细节。
+参见 [docs/implementation.zh-Hans.md](docs/implementation.zh-Hans.md) 了解内部设计、打包流水线和格式级实现细节。
 
 ## 许可证
 
 本项目采用 [MIT](https://github.com/Zongsoft/tools/blob/main/LICENSE) 许可证。
 
-本地源搜索及链接规则见[实现文档](docs/implementation.md#本地搜索与源链接)。
-
-
-## 开发规范检查
-
-生产和测试项目使用 `Zongsoft.CodeAnalysis`，版本由仓库根 `Directory.Packages.props` 管理；使用 .NET SDK 10.0.401 或具有 Roslyn 5.9 及以上版本编译器的工具链。分析器为私有构建依赖，不随工具作为运行时依赖分发。
-
-```powershell
-dotnet build src/Zongsoft.Tools.Packager.csproj -p:ZongsoftCodeStyleStrict=true
-dotnet format style src/Zongsoft.Tools.Packager.csproj --no-restore --verify-no-changes --diagnostics IDE0049
-```
-
-多目标构建覆盖项目全部目标框架；详细规范检查及资源生成要求见 [仓库说明](../AGENTS.md#代码规范检查)。
+本地源搜索及链接规则见[实现文档](docs/implementation.zh-Hans.md#本地搜索与源链接)。
+详细规范检查及资源生成要求见 [仓库说明](../AGENTS.md#代码规范检查)。

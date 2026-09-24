@@ -6,7 +6,7 @@
 
 版本解析前，共享 `Utility.CreateVariables` 依次加载默认值、系统环境、从文件系统根目录到工作目录的直属 `.env`、显式选项。`Utility.LoadEnvironmentVariables` 使用 `Profile.Load`，各级段落与条目以下划线拼名，根条目保留原名，同时保留 Core 空值和导入语义。仅跳过打开阶段的缺失文件，其余读取及解析错误传播。变量按需展开、每次调用独立，不修改进程环境；全部输入共用变量视图，不随各输入所在目录改变。
 
-数据库与 Amazon S3 从声明来源向根目录逐级查找 `<输入名>.ini`，然后查找 `postgres.ini`、`postgresql.ini` 等 provider 别名文件。保持就近选择完整配置、仅合并显式导入的规则，自动查找不再回退 `*.env`；原有参数夹具、示例及导入路径使用 `.ini`。通用 `.env` 变量继承不参与连接配置的跨文件合并。
+数据库与 Amazon S3 从声明来源向根目录逐级查找 `<输入名>.ini`，然后查找 `postgres.ini`、`postgresql.ini` 等 provider 别名文件。保持就近选择完整配置、仅合并显式导入的规则，错误将来源位置与原因分行显示，候选参数文件按查找顺序逐行列出；共享 `Utility.Indent` 使用平台换行并保留嵌套详情的缩进。自动查找不再回退 `*.env`；原有参数夹具、示例及导入路径使用 `.ini`。通用 `.env` 变量继承不参与连接配置的跨文件合并。
 
 `MigrateCommand.Version.cs` 的私有嵌套类型 `VersionSource` 负责版本来源解析。主流程先从初始变量中移除环境变量及 `.env` 中的 `version`，仅将本次命令选项传入解析器。解析器展开选项值，优先识别版本号，目录追加 `.version`，并使用 `File.OpenRead` 和 `ApplicationVersion.Load(Stream)` 只读加载文件。Edition 通过文件的忽略大小写集合选择并保留原拼写；读取或格式异常补充完整路径，非零版本和 Edition 校验均先于输出处理。
 

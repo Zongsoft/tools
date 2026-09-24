@@ -119,7 +119,7 @@
     <value>Database scripts must use .sql.</value>
   </data>
   <data name="MigrationEntryError.Message" xml:space="preserve">
-    <value>{0}:{1} [{2}]: {3}</value>
+    <value>{0}:{1} [{2}]:{3}</value>
   </data>
   <data name="MigrationBucketDuplicate.Message" xml:space="preserve">
     <value>Duplicate bucket name.</value>
@@ -134,10 +134,10 @@
     <value>Invalid or unresolved parameter '{0}' at {1}:{2}.</value>
   </data>
   <data name="MigrationParameterError.Message" xml:space="preserve">
-    <value>{0} [{1}]: {2}</value>
+    <value>{0} [{1}]:{2}</value>
   </data>
   <data name="MigrationParametersMissing.Message" xml:space="preserve">
-    <value>No migration parameters found for '{0}' ({1}). Searched: {2}</value>
+    <value>No migration parameters found for '{0}'. Searched:{1}</value>
   </data>
   <data name="MigrationBucketNameInvalid.Message" xml:space="preserve">
     <value>Invalid bucket name '{0}'.</value>

@@ -5,7 +5,7 @@ description: 修改打包命令、应用版本管理、载荷路径、三种包�
 
 # Packager 开发流程
 
-先阅读 [AGENTS.md](AGENTS.md)、[README](README.zh-Hans.md)、[实现说明](docs/implementation.md)。
+先阅读 [AGENTS.md](AGENTS.md)、[README](README.zh-Hans.md)、[实现说明](docs/implementation.zh-Hans.md)。
 
 - 命令与版本：PackCommand*、Variables、Normalizer。
 - 变量依次加载默认值、系统环境、从根到 source 的直属 `.env`、显式选项；共用 Utility/Profile.Load，多级段落与条目以下划线拼名。先用环境和选项固定 source，再加载 `.env`；不搜索子目录、不以 `.env` 重定位 source，保留显式身份与源版本文件规则。
