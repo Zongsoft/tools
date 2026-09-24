@@ -7,7 +7,7 @@ dotnet-migrate 制作可移交的升迁归档和启动脚本。制作阶段描�
 ## 基础概念
 
 - **升迁输入**：.migration 格式的 INI 文件，在 provider 段中列出 SQL 文件或 Amazon S3 桶。段落和条目顺序决定任务顺序。
-- **连接配置**：.env 文件提供管理员凭据、建库设置、应用账号及 Amazon S3 凭据。制作升迁包时会展开变量。
+- **连接配置**：.ini 文件提供管理员凭据、建库设置、应用账号及 Amazon S3 凭据。制作升迁包时会展开变量。
 - **升迁包和启动脚本**：同名前缀的 .tar.gz 归档与 .sh 或 .cmd 文件。归档保存解析后的计划和数据；启动脚本调用包内执行器。两个文件必须放在一起。
 - **数据库目标**：provider 的 Database 指定默认库；具名升迁段可指定其他库。空数据库段仍表示需要初始化。
 - **计划指纹（fingerprint）**：根据最终升迁计划计算的 SHA-256 摘要，用于识别升迁包中的计划内容。计划变化时指纹也会变化；它不是目标数据库的校验和，也不描述数据库当前的数据或结构。
@@ -52,7 +52,7 @@ dotnet-migrate --name:zongsoft --version:1.0.0 --platform:linux --output:package
 dotnet-migrate --name:<名称> --platform:<平台> [选项...] <输入.migration|模式> [更多输入...]
 ```
 
-制作命令没有子命令。选项可写 `--key:value` 或 `--key=value`；含空格的值按终端语法加引号。显式选项覆盖环境变量，再覆盖描述符默认值；版本文件阶段另有下述规则。
+制作命令没有子命令。选项可写 `--key:value` 或 `--key=value`；含空格的值按终端语法加引号。优先级从高到低为显式选项、祖先链 `.env`、环境变量、描述符默认值；版本文件阶段另有下述规则。
 制作成功返回 `0`，无参数返回 `2`，参数、输入或制作失败返回 `1`。
 
 | 选项 | 必填/默认值 | 说明 |
@@ -68,15 +68,23 @@ dotnet-migrate --name:<名称> --platform:<平台> [选项...] <输入.migration
 | `--summary:<文本或文件>` | 空 | 摘要，支持 `text:` 字面文本或 `file:` 文件来源。 |
 | `--description:<文本或文件>` | 空 | 描述，来源规则同摘要。 |
 
-至少一个位置参数；每个参数支持变量、通配符及 `;`/`|` 列表。路径按参数位置展开，各模式按固定前缀下的相对路径 Ordinal 排序。缺失路径逐项警告，全缺失或无任务则失败；存在但无效的输入仍报错。只接受 `.migration`（INI 内容），导入同样检查扩展名；参数仍为 `.env`。SQL 内容和 `text:` 字面文本不展开变量。摘要与描述的文件相对当前目录。
+至少一个位置参数；每个参数支持变量、通配符及 `;`/`|` 列表。路径按参数位置展开，各模式按固定前缀下的相对路径 Ordinal 排序。缺失路径逐项警告，全缺失或无任务则失败；存在但无效的输入仍报错。只接受 `.migration`（INI 内容），导入同样检查扩展名；参数使用 `.ini`。SQL 内容和 `text:` 字面文本不展开变量。摘要与描述的文件相对当前目录。
 
 > - Linux 支持 glibc x64/arm64；
 > - Windows 规范化为 win，仅支持 x64。
 > - Unix 必须指定具体系统，osx/xos/macos 尚无运行器，均不生成产物。
 
+### 变量与 .env 文件
+
+每次调用依次加载描述符默认值、系统环境变量、从文件系统根目录到工作目录的各级直属 `.env`、显式命令选项。同名变量后加载覆盖先加载，空值也参与覆盖，名称不区分大小写。不搜索子目录，各个输入文件及版本文件的目录也不建立额外变量作用域。变量仅属于本次调用，不修改进程环境变量。
+
+使用 Core `Profile.Load` 读取 INI，支持 `#@import`。根条目保留原名，各级段落名与条目名以 `_` 拼接。例如 `[mysql]` 下的 `root_password=example` 生成 `mysql_root_password`，`[io rustfs]` 下的 `access_key=example` 生成 `io_rustfs_access_key`，根级 `environment=Development` 生成 `environment`。值按需通过 `$(name)` 或 `%name%` 展开，可用于命令选项和 `.ini` 连接参数。缺失的 `.env` 跳过，读取或解析失败终止制作。
+
+`.env` 提供共享变量，`.ini` 提供升迁连接配置。原有 `mysql.env`、`main.env` 等参数文件需要改名为 `mysql.ini`、`main.ini`，同时更新其导入路径。自动参数查找不再回退 `*.env`，显式导入沿用 Core 既有规则。版本选择及必填选项保持既有约定。
+
 ### 选择版本与 Edition
 
-`--version` 接受非零的 `System.Version` 版本号（两段、三段或四段数字）、版本文件路径，或包含 `.version` 的现有目录路径。相对路径基于当前工作目录。省略选项、空串或全空白值只读取当前目录直属的 `.version`，不使用环境变量 `version` 代替。版本文件由 Core `ApplicationVersion` 读取，始终不修改；文件缺失、不可读或内容无效时，在生成任何产物之前报错退出。
+`--version` 接受非零的 `System.Version` 版本号（两段、三段或四段数字）、版本文件路径，或包含 `.version` 的现有目录路径。相对路径基于当前工作目录。省略选项、空串或全空白值只读取当前目录直属的 `.version`，不使用环境变量或 `.env` 中的 `version` 代替。版本文件由 Core `ApplicationVersion` 读取，始终不修改；文件缺失、不可读或内容无效时，在生成任何产物之前报错退出。
 
 未指定非空 `--edition` 时：单版本文件使用顶层版本，只有一个具名 Edition 时自动选择，多个 Edition 时必须明确指定。指定的 Edition 必须存在，忽略大小写匹配，并采用文件中的拼写。`--name` 仍必填，与版本文件中的应用名称无关。直接指定版本号时不读取版本文件，采用命令提供的 Edition。
 
@@ -107,7 +115,7 @@ dotnet-migrate --name:zongsoft --platform:linux --output:../../packages '../../.
 
 ### 导入共享配置
 
-升迁 INI 和 `.env` 均支持 Core 的 `#@import` 指令。例如：
+升迁 INI 和 `.ini` 均支持 Core 的 `#@import` 指令。例如：
 
 ```ini
 # migration/main.migration
@@ -122,18 +130,18 @@ dotnet-migrate --name:zongsoft --platform:linux --output:../../packages '../../.
 ./schema.sql
 ```
 
-`schema.sql` 相对于 `migration/shared/`，它的参数从该目录的 `schema.env`、`sqlite.env` 开始逐级查找；`main.sql` 则从 `migration/` 查找 `main.env`、`sqlite.env`。两者形成各自持有连接参数的任务。Amazon S3 条目也从其声明所属 INI 查找参数。
+`schema.sql` 相对于 `migration/shared/`，它的参数从该目录的 `schema.ini`、`sqlite.ini` 开始逐级查找；`main.sql` 则从 `migration/` 查找 `main.ini`、`sqlite.ini`。两者形成各自持有连接参数的任务。Amazon S3 条目也从其声明所属 INI 查找参数。
 
 参数文件可以显式导入公共配置后覆盖值：
 
 ```ini
-# migration/sqlite.env
-#@import common.env
+# migration/sqlite.ini
+#@import common.ini
 [sqlite]
 Database=/var/lib/example/application.db
 ```
 
-数据库 common.env 声明 provider、数据库和用户段。只有选中的候选文件及其显式导入参与合并；缺少必需参数时报错，不从其他候选文件补齐。Amazon S3 保留 provider 命名文件的根参数简写。
+数据库 common.ini 声明 provider、数据库和用户段。只有选中的候选文件及其显式导入参与合并；缺少必需参数时报错，不从其他候选文件补齐。Amazon S3 保留 provider 命名文件的根参数简写。
 
 - 导入路径相对于包含该指令的文件，也可为绝对路径。多个路径用空格、Tab 或 `|` 分隔，不支持引号转义、通配符或变量展开。指令合并完整 Profile，即使位于段落内也不会把子文件根条目移入当前段落。
 - 缺失的导入文件按 Core 可选导入规则跳过。循环导入或超过 64 层（含根文件）时失败；允许菱形及重复导入，每次重新读取。配置链接保留逻辑来源，导入、SQL 和旁侧参数以链接位置为基准。
@@ -142,16 +150,16 @@ Database=/var/lib/example/application.db
 - 一个有效段落按连续的声明来源拆成任务，保留有效条目顺序；同一来源在该段落内的 SQL 重叠选择跨任务去重，不对不同来源或独立输入去重。各来源保留自己的参数。跨任务及数据库段保留有效 SQL 顺序。
 - 导入文件解析和参数展开错误报告实际来源，参数错误不输出敏感值。所有解析在打包阶段完成，不因导入而执行 SQL 或访问 Amazon S3。
 
-### 查找 .env 并配置 Amazon S3
+### 查找 .ini 并配置 Amazon S3
 
 不提供参数文件命令选项。针对每个升迁器，从条目声明所属 INI 的目录逐级向父目录查找，直至文件系统根目录。**每一级目录**均按以下顺序查找：
 
-1. 与升迁文件同名、扩展名改为 `.env` 的文件，读取对应段落。
-2. `<升迁器>.env`；PostgreSQL 先 `postgres.env` 后 `postgresql.env`。对应段落优先于根条目；升迁器同名文件允许省略段落。数据库文件的根条目作为 provider 参数，顶层段落作为数据库/用户段落。
+1. 与升迁文件同名、扩展名改为 `.ini` 的文件，读取对应段落。
+2. `<升迁器>.ini`；PostgreSQL 先 `postgres.ini` 后 `postgresql.ini`。对应段落优先于根条目；升迁器同名文件允许省略段落。数据库文件的根条目作为 provider 参数，顶层段落作为数据库/用户段落。
 
 没有适用段落的文件继续查找，文件名与升迁器相同且有根条目的文件除外。一旦找到适用配置（包括其显式导入），必须完整有效；不与其他候选文件或父目录自动合并，也不因缺少必填项而回退。多个升迁器共享参数文件时必须分段。最终未找到配置则打包失败，提示查找过的路径。文件名大小写遵循打包机文件系统，建议统一使用上述小写文件名。
 
-> 🚨 注意：第一个适用的 `.env` 文件会作为完整配置使用。迁移器不会从其他候选文件或父目录拼接参数；需要共享设置时，请显式使用 `#@import`。
+> 🚨 注意：第一个适用的 `.ini` 文件会作为完整配置使用。迁移器不会从其他候选文件或父目录拼接参数；需要共享设置时，请显式使用 `#@import`。
 
 [数据库配置](#database-configuration)列出完整的 provider、数据库、用户参数及默认值、权限与 pending 恢复规则。Amazon S3 必填 `Server`、`Region`、`AccessKey`、`SecretKey`；可选 `Timeout` 默认 30 秒，支持正整数秒数及 s/m 后缀，上限一天。
 
@@ -180,11 +188,11 @@ learning=private,versioning:enabled
 
 <a id="database-configuration"></a>
 
-### 数据库 .env 配置
+### 数据库 .ini 配置
 
 配置采用 provider、数据库和用户三级段落。参数名、provider 名和枚举值不区分大小写；数据库名、用户名和密码保留拼写。值支持变量展开。未知参数、层级错误或不支持的参数会在制作阶段失败。
 
-`.env` 采用 provider → 数据库 → 用户三级结构：
+`.ini` 采用 provider → 数据库 → 用户三级结构：
 
 ```ini
 [mysql]
@@ -204,7 +212,7 @@ Password=$(reporting_password)
 Permission=readonly
 ```
 
-对于 `mysql.env` 这样的 provider 同名文件，文件名可代替 provider 段，上述配置也可简写为：
+对于 `mysql.ini` 这样的 provider 同名文件，文件名可代替 provider 段，上述配置也可简写为：
 
 ```ini
 Server=localhost
@@ -226,13 +234,13 @@ sql/hosting/*.sql
 sql/analytics/*.sql
 ```
 
-`[mysql]` 使用 `Database`，缺少默认库时报错；`[mysql hosting]` 显式选择 hosting。默认库可以没有数据库段，隐式使用 provider 默认设置。用户子段也形成数据库节点，无须空数据库段。非默认库必须在选中的 `.env` 中声明。
+`[mysql]` 使用 `Database`，缺少默认库时报错；`[mysql hosting]` 显式选择 hosting。默认库可以没有数据库段，隐式使用 provider 默认设置。用户子段也形成数据库节点，无须空数据库段。非默认库必须在选中的 `.ini` 中声明。
 
 > 💡 提示：`[mysql]` 使用 provider 的 `Database` 作为默认目标。即使没有 `[mysql hosting]`，被引用的默认库也会用 provider 默认值创建；`[mysql hosting application]` 这样的用户段同样会声明 hosting。
 
 只初始化 `.migration` 引用的库及其全部用户，空段也算引用；未引用库及用户不进入计划或指纹。同一目标初始化一次，SQL 不广播到其他库。同一来源脚本对同一实际目标去重，用于不同库则分别执行。
 
-从条目或空段的声明来源逐级查找同名 `.env`、provider 名称 `.env`；只合并显式导入，不跨候选文件补齐参数，不展开无关 provider 的配置。数据库配置须有 provider 段，或在 provider 同名文件的根级提供参数。
+从条目或空段的声明来源逐级查找同名 `.ini`、provider 名称 `.ini`；只合并显式导入，不跨候选文件补齐参数，不展开无关 provider 的配置。数据库配置须有 provider 段，或在 provider 同名文件的根级提供参数。
 
 参数名、provider 名、枚举值不区分大小写；数据库名、用户名、密码保留拼写。值支持变量展开。未知参数、错误层级、不支持的参数报错。段落名称中的空白分隔层级，含空格的文件路径应通过变量或 `Path` 设置。
 
@@ -388,7 +396,7 @@ packages/zongsoft-migrate@1.0.0_linux-x64.sh
 
 归档包含 .migration/migration.json、.migration/.artifacts/ 下的 SQL 批次和解析后的升迁数据。两个输出先暂存再发布；替换已有文件须指定 --overwrite，发布失败会恢复原输出。
 
-> 🚨 注意：归档包含从 `.env` 展开的数据库和 Amazon S3 凭据。请限制升迁包的查看、存储和下载权限。
+> 🚨 注意：归档包含从 `.ini` 展开的数据库和 Amazon S3 凭据。请限制升迁包的查看、存储和下载权限。
 
 <a id="execution-phase"></a>
 
@@ -445,7 +453,7 @@ SQL 校验和只用于在外部资源操作之前验证包内文件与当前计�
 ## 最佳实践
 
 1. **准备变更。** 将每个版本的 `.migration` 输入和 SQL 一起维护。通配符决定顺序时使用编号文件名；每项 SQL 都应能在部分失败后从当前任务首个文件重新执行。
-2. **配置访问。** 在选中的 `.env` 中填写管理员连接信息，显式声明每个非默认数据库，并为各库配置独立、最小权限的应用账号。秘密值通过环境变量展开，不要将 `.env` 提交到源代码库；生成的升迁包包含展开后的凭据。
+2. **配置访问。** 在选中的 `.ini` 中填写管理员连接信息，显式声明每个非默认数据库，并为各库配置独立、最小权限的应用账号。秘密值通过环境变量展开，不要将 `.ini` 提交到源代码库；生成的升迁包包含展开后的凭据。
 3. **制作并保护升迁包。** 将归档和匹配的启动脚本生成到受限目录，始终成对保管和分发。检查归档文件列表与计划时，避免打印或公开包含密码的设置。
 4. **在预发布环境验证。** 为预发布环境使用稳定且独立于生产的状态目录，执行 `apply`，检查 `status` 并验证服务行为。成功后可用 `check` 确认该包与 ready 记录一致。执行失败后先修复部分变更和 SQL，再重试，因为每次 `apply` 都会重跑全部 SQL。
 5. **发布到生产环境。** 先完成可恢复备份并确认恢复步骤，再将升迁包放到目标机。使用生产状态目录执行 `apply`，再通过 `status` 或 `check` 确认完成。`check` 只报告当前包是否已有匹配的成功记录，不检查服务连接，也不预演 SQL。此生产状态目录应跨包版本保留。

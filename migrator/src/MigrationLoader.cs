@@ -237,7 +237,7 @@ public sealed partial class MigrationLoader(Func<string, string> expand, Action<
 
 		for(var directory = new DirectoryInfo(Path.GetDirectoryName(Path.GetFullPath(migration))); directory != null; directory = directory.Parent)
 		{
-			foreach(var name in new[] { Path.ChangeExtension(Path.GetFileName(migration), ".env") }.Concat(MigrationProvider.Get(provider).Aliases.Select(alias => alias + ".env")).Distinct(StringComparer.Ordinal))
+			foreach(var name in new[] { Path.ChangeExtension(Path.GetFileName(migration), ".ini") }.Concat(MigrationProvider.Get(provider).Aliases.Select(alias => alias + ".ini")).Distinct(StringComparer.Ordinal))
 			{
 				var path = Path.Combine(directory.FullName, name);
 				candidates.Add(path);

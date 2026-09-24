@@ -540,7 +540,7 @@ Debian 的 `prerm` 仅在 `remove` 或 `deconfigure` 时进入卸载生命周期
 
 ## 升迁产物集成
 
-升迁由独立的 [migrator 工具](../migrator/README.zh-Hans.md) 预先制作。packager 不解析 `.migration`/`.env`、SQL 或执行计划，也不携带原生执行器。设置 `--migrator:<名称或路径>` 可收录已制作的升迁归档和配套启动脚本，例如 `--migrator:../../packages/zongsoft`。
+升迁由独立的 [migrator 工具](../migrator/README.zh-Hans.md) 预先制作。packager 不解析 `.migration`/`.ini`、SQL 或执行计划，也不携带原生执行器。设置 `--migrator:<名称或路径>` 可收录已制作的升迁归档和配套启动脚本，例如 `--migrator:../../packages/zongsoft`。
 
 查找从最终的 `--source` 目录开始，而不是从运行命令时的工作目录开始：
 
@@ -570,9 +570,11 @@ $(name)
 %name%
 ```
 
-变量名支持点号、连字符和索引，不区分大小写。显式命令选项（含额外选项）覆盖环境变量，环境变量覆盖描述符默认值。变量按使用递归展开，未使用的无效引用不阻止制包；用到的未知、循环或超过 64 层的引用会报错。
+变量名支持点号、连字符和索引，不区分大小写。依次加载描述符默认值、系统环境变量、从远到近的祖先链 `.env`、显式命令选项（含额外选项）；后加载覆盖先加载，空值也参与覆盖。变量按使用递归展开，未使用的无效引用不阻止制包；用到的未知、循环或超过 64 层的引用会报错。
 
-`name`、`edition`、`version` 仍由源版本文件及显式身份选项决定；同名环境变量不替代身份。最终身份与解析后的 source/output 覆盖变量集合。`--migrator` 必须显式启用；`--overwrite` 可由环境变量提供，再由命令行覆盖。
+命令先用既有环境变量和选项解析并固定 `--source`，默认当前工作目录，再加载文件系统根目录到该源目录的各级直属 `.env`；不搜索子目录，也不额外加载另一条工作目录祖先链。`.env` 不能用于确定或重新指定 source。使用 Core `Profile.Load` 读取 INI 及 `#@import`；根条目保留原名，各级段落名与条目名以 `_` 拼接。例如 `[io rustfs]` 下的 `access_key=example` 生成 `io_rustfs_access_key=example`，根级 `environment=Development` 生成 `environment`。缺失文件跳过，读取或解析失败终止制包。每次调用的变量独立，不修改进程环境变量。
+
+`name`、`edition`、`version` 仍由源版本文件及显式身份选项决定；同名环境变量及 `.env` 变量不替代身份，显式选项可引用 `.env` 中的变量。最终身份与解析后的 source/output 覆盖变量集合。`--migrator` 必须显式启用；`--overwrite` 可由环境变量或 `.env` 提供，再由命令行覆盖。
 
 命令先保留原始选项文本。定位 `source` 后，显式提供的 `name`、`edition`、`version` 先展开再参与源版本校验和版本类型转换；`platform`、`architecture` 和 `overwrite` 也先展开再转换。可传入字面量 `$(APP_VERSION)` 或 `%APP_VERSION%`，在 Bash 中须加引号避免 Shell 抢先解释。尚未从源 `.version` 获得的身份值不能用来定位该源目录。
 

@@ -103,7 +103,7 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 
 	#region 内部方法
 	private string GetRaw(string name) => _variables.GetValueOrDefault(name);
-	internal static Dictionary<string, string> From(CommandContext context) => Utility.CreateVariables(context);
+	internal static Dictionary<string, string> From(CommandContext context, string directory = null) => Utility.CreateVariables(context, directory);
 	#endregion
 
 	#region 显式实现

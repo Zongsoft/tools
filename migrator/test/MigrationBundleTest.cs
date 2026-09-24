@@ -118,7 +118,7 @@ public sealed class MigrationBundleTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("db.migration", "[mssql]\n./sql/*.sql\n");
-		directory.Write("mssql.env", "[mssql]\nServer=localhost\nDatabase=hosting\nUserName=operator\nPassword=\n");
+		directory.Write("mssql.ini", "[mssql]\nServer=localhost\nDatabase=hosting\nUserName=operator\nPassword=\n");
 		directory.Write("sql/020-seed.sql", "INSERT INTO samples VALUES (N'附件');\r\nGO\r\n");
 		directory.Write("sql/010-schema.sql", "CREATE TABLE samples (title NVARCHAR(100));\r\nGO\r\nSELECT N'GO';\r\n");
 		directory.Write("second.migration", "[mssql]\n./other.sql\n");

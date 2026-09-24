@@ -19,7 +19,7 @@ It is recommended to define a default deployment file named `.deploy` in the dep
 
 The deployment file is a plain text file in `.ini` format, and its content consists of **Section**(`Paragraph`) and **Entry**(`Entry`) enclosed in square brackets, the **Section** part represents the destination directory of deployment.
 
-The **Section** and **Entry** values both support variable references in the format of dollar sign followed by parentheses `$(...)` or double percent signs `%...%`, the referenced variable is the deployment options passed in by the command line or environment variables.
+The **Section** and **Entry** values both support variable references in the format of dollar sign followed by parentheses `$(...)` or double percent signs `%...%`, variables come from command options, environment variables, ancestor `.env` files and destination appsettings.
 
 Each entry consists of **KEY** and **VALUE** parts separated by an equal sign _(`=`)_, and the **VALUE** part is optional.
 
@@ -156,14 +156,16 @@ Supports matching and version comparison of *TargetFramework*. If *TargetFramewo
 
 ## Variables
 
-This tool will sequentially load the environment variables, the contents of the `appsettings.json` file of the deployed application, and the command options for calling this tool into the variable set. If the variable has the same name, the value loaded later will overwrite the value of the variable with the same name loaded before. **Note:** Variable names are not case sensitive.
+Variables load in this order: environment variables, ancestor `.env` files from the filesystem root to the working directory, the destination application's `appsettings.json`, and command options. Later values overwrite earlier values with the same case-insensitive name, including empty values.
 
-Variable values may reference other values recursively, regardless of command-option order. Values expand when used; missing references, cycles, and chains longer than 64 levels fail. `destination` may reference other options from the same command, but only command options and environment variables can locate the destination; its `appsettings.json` is loaded afterward.
+Each directory contributes only its direct `.env`; child directories and individual manifest directories are not searched. All manifests in one invocation share the resulting variables. Core `Profile.Load` reads these INI files, including `#@import`. Root entries retain their names; section levels and entry names join with `_`: `[io rustfs]` with `access_key=example` creates `io_rustfs_access_key=example`. A root `environment=Development` creates `environment`. Missing `.env` files are skipped; read or parse failures stop initialization. Values expand only when used, and process environment variables are not modified.
+
+Variable values may reference other values recursively, regardless of command-option order. Values expand when used; missing references, cycles, and chains longer than 64 levels fail. `destination` may reference command options, environment variables and loaded `.env` values; its `appsettings.json` is loaded afterward.
 
 - If a property named `ApplicationName` is defined in `appsettings.json`, you can use `application` as a variable alias for that property.
 - The variable named `Framework` represents the .NET *TargetFramework* identity, which is defined in https://learn.microsoft.com/en-us/dotnet/standard/frameworks
 
-NuGet-related parameters can be specified via command options or environment variables:
+NuGet-related parameters can be specified via command options, environment variables or `.env` files:
 - `NuGet_Server` indicates the NuGet server information, the default value is: `https://api.nuget.org/v3/index.json`.
 - `NuGet_Packages` indicates the directory of NuGet packages, the default value is: `%USERPROFILE%/.nuget/packages`.
 
@@ -252,7 +254,7 @@ The two entry points are equivalent and have no subcommands. With no positional 
 
 | Option | Default | Purpose |
 | --- | --- | --- |
-| `--destination:<directory>` | Current directory | Target root; resolve using command options and environment variables before loading its `appsettings.json`. |
+| `--destination:<directory>` | Current directory | Target root; resolve using command options, environment variables and `.env` values before loading its `appsettings.json`. |
 | `--verbosity:<level>` | `normal` | `quiet`, `normal`, or `detail`; unconvertible values fail. |
 | `--overwrite:<policy>` | `newest` | `alway` (the existing enum spelling), `never`, or `newest`. This is not a Boolean switch. |
 | `--expansion[:boolean]` | `false` | Preserve matched relative directory levels in target paths for directory wildcards; `false` keeps only wildcard captures. |
@@ -270,7 +272,7 @@ The two entry points are equivalent and have no subcommands. With no positional 
 
 Boolean options accept a bare switch, `true/false`, `1/0`, `yes/no`, `on/off`, or `enable(d)/disable(d)`, case-insensitively; other values are false under Core's `Switch` convention. `$(name)` and `%name%` support names containing dots, hyphens, and indices. Values expand lazily and recursively; missing, cyclic, or over-64-level references fail when used, before type conversion. Enum options follow Core conversion rules without an additional check that the enum member is defined; callers must supply a valid member. Unselected deployment branches are not expanded.
 
-`NuGet_Server` and `NuGet_Packages` may be supplied as command or environment variables. `Framework`, `Platform`, `Architecture`, and `edition` are ordinary variables used by resolvers and manifests. Example:
+`NuGet_Server` and `NuGet_Packages` may be supplied as command options, environment variables or `.env` entries. `Framework`, `Platform`, `Architecture`, and `edition` are ordinary variables used by resolvers and manifests. Example:
 
 ```powershell
 dotnet deploy --destination:'bin/$(edition)/$(framework)' --edition:Release --framework:net10.0 --dry-run --report:deploy-plan.json .deploy extra.deploy
@@ -347,7 +349,7 @@ RID fallback uses the repository-pinned dotnet/runtime v10.0.0 graph through NuG
 
 Package access, dependency resolution, asset selection, and RID fallback have separate implementations; framework and version models reuse NuGet/.NET types. See [implementation details](docs/implementation.md) for responsibilities and behavior.
 
-Variables load from the environment, the destination application's appsettings.json, and finally command options. Nested keys support `$(Database.Name)` and `%Items[0].Name%`; substitution preserves URL slashes.
+Variables load from the environment, ancestor `.env` files, the destination application's appsettings.json, and finally command options. Nested JSON keys support `$(Database.Name)` and `%Items[0].Name%`; substitution preserves URL slashes.
 
 Run regression tests without publishing:
 

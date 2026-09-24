@@ -111,8 +111,8 @@ partial class MigrationLoader
 
 		for(var directory = new DirectoryInfo(Path.GetDirectoryName(Path.GetFullPath(migration))); directory != null; directory = directory.Parent)
 		{
-			foreach(var file in new[] { Path.ChangeExtension(Path.GetFileName(migration), ".env") }
-				.Concat(provider.Aliases.Select(alias => alias + ".env")).Distinct(StringComparer.Ordinal))
+			foreach(var file in new[] { Path.ChangeExtension(Path.GetFileName(migration), ".ini") }
+				.Concat(provider.Aliases.Select(alias => alias + ".ini")).Distinct(StringComparer.Ordinal))
 			{
 				var path = Path.Combine(directory.FullName, file);
 				candidates.Add(path);

@@ -7,12 +7,12 @@
 - `Deployer` 与 `DeploymentContext` 编排描述文件、变量、目标目录和计数；`DeploymentSession`/`DeploymentPlan` 先解析检查后执行，写入须通过 `DeploymentPath`。
 - `IDeploymentResolver`、`DeploymentResolverBase`、`DeploymentResolverManager` 定义条目解析扩展点；默认路径（`path`，GetResolver 对 null、空字符串和纯空白名称也返回默认实例）、`nuget`、`delete`/`remove` 语义应保持清晰分离；解析器名不区分大小写，Windows 字面绝对源路径示例使用 `path:` 前缀。
 - `NugetAssets.ResolveLibraryPath` 负责显式缓存路径的框架适配；`DeploymentUtility.GetFiles` 展开文件和通配符，已选定包资产使用 `resolveLibrary: false` 避免重复匹配。路径选择不混入复制策略。
-- `Normalizer` 负责 `$(name)`、`%name%` 变量替换；`AppSettingsUtility`、环境变量和命令选项共同提供变量。
+- `Normalizer` 负责 `$(name)`、`%name%` 变量替换；`AppSettingsUtility`、环境变量、祖先链 `.env` 和命令选项共同提供变量。
 
 ## 高风险契约
 
 - 章节指定目标目录，条目格式为 `resolver:argument = destination <filter>`；源路径支持通配符，过滤条件支持逻辑组合和目标框架版本比较。
-- 变量名支持点号、连字符与索引且不区分大小写；加载顺序为环境变量、目标应用 `appsettings.json`、命令选项，后加载值覆盖先前值。用全部选项和环境变量先定位 destination；其他值按需递归展开，先展开再转换。
+- 变量名支持点号、连字符与索引且不区分大小写；加载顺序为环境变量、从根到工作目录的各级 `.env`、目标应用 `appsettings.json`、命令选项，后加载值覆盖先前值。`.env` 通过共享 Utility 和 Core Profile.Load 读取，多级段落与条目以下划线拼名，不按各清单目录重新加载。用全部选项、环境变量和 `.env` 先定位 destination；其他值按需递归展开，先展开再转换。
 - NuGet 解析器会访问包源、解析依赖、选择最适用的框架资产并可能递归执行包内 `.deploy`；修改时检查循环、路径越界和依赖忽略规则。
 - `delete`/`remove`、覆盖策略和目标规范化可破坏现有文件。所有测试目标必须是已确认的临时目录。
 - 命令、选项或消息变化时同步 `README.md`、`README.zh-Hans.md` 和 `.resx`；中性资源 `Resources.resx` 使用 `ResXFileCodeGenerator` 重新生成 `Resources.Designer.cs`，业务代码通过生成属性取资源，不使用字符串键动态查询；生成属性不手工维护。

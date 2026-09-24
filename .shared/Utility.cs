@@ -38,6 +38,7 @@ using System.Collections;
 using System.Collections.Generic;
 
 using Zongsoft.Components;
+using Zongsoft.Configuration.Profiles;
 
 #if DEPLOYER
 namespace Zongsoft.Tools.Deployer;
@@ -106,7 +107,7 @@ internal static partial class Utility
 		return text.ToString();
 	}
 
-	internal static Dictionary<string, string> CreateVariables(CommandContext context)
+	internal static Dictionary<string, string> CreateVariables(CommandContext context, string directory = null)
 	{
 		ArgumentNullException.ThrowIfNull(context);
 		var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -117,10 +118,58 @@ internal static partial class Utility
 		foreach(DictionaryEntry variable in Environment.GetEnvironmentVariables())
 			variables[variable.Key.ToString()] = variable.Value?.ToString();
 
+		if(directory != null)
+			LoadEnvironmentVariables(variables, directory);
+
 		foreach(var option in context.Options)
 			variables[option.Key] = option.Value?.ToString();
 
 		return variables;
+	}
+	#endregion
+
+	#region 环境文件
+	/// <summary>从文件系统根目录到指定目录依次加载 .env，将段落和条目以下划线拼接为变量名。</summary>
+	internal static void LoadEnvironmentVariables(IDictionary<string, string> variables, string directory)
+	{
+		ArgumentNullException.ThrowIfNull(variables);
+		ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+
+		var paths = new Stack<string>();
+		for(var current = new DirectoryInfo(directory); current != null; current = current.Parent)
+			paths.Push(Path.Combine(current.FullName, ".env"));
+
+		while(paths.TryPop(out var path))
+		{
+			FileStream stream;
+
+			//只忽略打开阶段的缺失文件；权限、读取及解析错误必须终止初始化。
+			try
+			{
+				stream = File.OpenRead(path);
+			}
+			catch(FileNotFoundException) { continue; }
+			catch(DirectoryNotFoundException) { continue; }
+
+			using(stream)
+				Populate(Profile.Load(stream), null);
+		}
+
+		void Populate(IEnumerable<ProfileItem> items, string prefix)
+		{
+			foreach(var item in items)
+			{
+				switch(item)
+				{
+					case ProfileEntry entry:
+						variables[prefix == null ? entry.Name : $"{prefix}_{entry.Name}"] = entry.Value;
+						break;
+					case ProfileSection section:
+						Populate(section, prefix == null ? section.Name : $"{prefix}_{section.Name}");
+						break;
+				}
+			}
+		}
 	}
 	#endregion
 

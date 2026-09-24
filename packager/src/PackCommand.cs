@@ -134,15 +134,6 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		//仅使用已知变量解析源目录，身份信息随后由源版本文件补全。
 		var variables = GetVariables(context);
 
-		foreach(var option in new[] { NAME_OPTION, EDITION_OPTION, VERSION_OPTION })
-		{
-			var value = context.Options.GetValue(option)?.ToString();
-			if(!string.IsNullOrWhiteSpace(value))
-				variables[option] = value;
-			else
-				variables.Remove(option);
-		}
-
 		var normalized = Normalizer.Normalize(variables.GetValueOrDefault(SOURCE_OPTION), variables);
 		if(!normalized.Succeed)
 			throw new InvalidOperationException(string.Format(Properties.Resources.SourceVariableUndefined_Message, normalized.Value));
@@ -159,6 +150,11 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 			Dumper.DirectoryNotExist(CommandOutletColor.Red, source);
 			return ValueTask.FromResult<object>(null);
 		}
+
+		//源目录确定后加载其祖先链 .env；后续变量不能改变本次查找起点。
+		source = Path.GetFullPath(source);
+		variables = GetVariables(context, source);
+		variables[SOURCE_OPTION] = source;
 
 		var name = ResolveIdentity(NAME_OPTION);
 		var edition = ResolveIdentity(EDITION_OPTION);
@@ -242,6 +238,21 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	#endregion
 
 	#region 私有方法
-	internal static Dictionary<string, string> GetVariables(CommandContext context) => Variables.From(context);
+	internal static Dictionary<string, string> GetVariables(CommandContext context, string directory = null)
+	{
+		var variables = Variables.From(context, directory);
+
+		//身份只由显式选项与源版本文件决定，环境和 .env 可作为选项引用的变量。
+		foreach(var option in new[] { NAME_OPTION, EDITION_OPTION, VERSION_OPTION })
+		{
+			var value = context.Options.GetValue(option)?.ToString();
+			if(!string.IsNullOrWhiteSpace(value))
+				variables[option] = value;
+			else
+				variables.Remove(option);
+		}
+
+		return variables;
+	}
 	#endregion
 }

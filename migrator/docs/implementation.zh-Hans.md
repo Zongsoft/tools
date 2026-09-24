@@ -4,7 +4,11 @@
 
 生成端 src 使用 Core Profile 与 Searcher 解析输入，MigrationLoader.Database 预处理 SQL 批次，AmazonS3 解析桶选项。MigrationBundle 收集完整原生产物和计划；Generator 使用 System.Formats.Tar 写 PAX，记录 Migrator（程序集名@版本）和 Runtime。项目不引用 packager。
 
-`MigrateCommand.Version.cs` 的私有嵌套类型 `VersionSource` 负责版本来源解析。主流程先从初始变量中移除环境变量 `version`，仅将本次命令选项传入解析器。解析器展开选项值，优先识别版本号，目录追加 `.version`，并使用 `File.OpenRead` 和 `ApplicationVersion.Load(Stream)` 只读加载文件。Edition 通过文件的忽略大小写集合选择并保留原拼写；读取或格式异常补充完整路径，非零版本和 Edition 校验均先于输出处理。
+版本解析前，共享 `Utility.CreateVariables` 依次加载默认值、系统环境、从文件系统根目录到工作目录的直属 `.env`、显式选项。`Utility.LoadEnvironmentVariables` 使用 `Profile.Load`，各级段落与条目以下划线拼名，根条目保留原名，同时保留 Core 空值和导入语义。仅跳过打开阶段的缺失文件，其余读取及解析错误传播。变量按需展开、每次调用独立，不修改进程环境；全部输入共用变量视图，不随各输入所在目录改变。
+
+数据库与 Amazon S3 从声明来源向根目录逐级查找 `<输入名>.ini`，然后查找 `postgres.ini`、`postgresql.ini` 等 provider 别名文件。保持就近选择完整配置、仅合并显式导入的规则，自动查找不再回退 `*.env`；原有参数夹具、示例及导入路径使用 `.ini`。通用 `.env` 变量继承不参与连接配置的跨文件合并。
+
+`MigrateCommand.Version.cs` 的私有嵌套类型 `VersionSource` 负责版本来源解析。主流程先从初始变量中移除环境变量及 `.env` 中的 `version`，仅将本次命令选项传入解析器。解析器展开选项值，优先识别版本号，目录追加 `.version`，并使用 `File.OpenRead` 和 `ApplicationVersion.Load(Stream)` 只读加载文件。Edition 通过文件的忽略大小写集合选择并保留原拼写；读取或格式异常补充完整路径，非零版本和 Edition 校验均先于输出处理。
 
 进程入口使用 `tools/.shared/Utility.cs` 逐项保留参数边界，并转义反斜杠，保留空值与含空格的 Windows 路径。可能含变量的命令选项先作为字符串进入命令；版本来源解析后回填版本号和 Edition，并为本次命令建立独立 `Variables` 视图，按需递归展开其他值并在类型转换之前完成。布尔开关交由 Core `Switch` 判定。枚举使用 Core 转换，不额外检查成员定义。`--name` 独立于版本文件，输入和输出路径始终以当前目录为基准；全过程不保存版本文件。计划协议和原生执行器不参与源版本查找，只接收最终身份。命令测试覆盖版本号、文件、目录及默认来源、Edition 选择、变量展开，以及失败时源文件和已有输出保持不变。
 

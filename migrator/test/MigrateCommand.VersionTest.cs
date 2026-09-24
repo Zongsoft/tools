@@ -179,7 +179,7 @@ public sealed partial class MigrateCommandTest
 		using var directory = new MigrationTestDirectory();
 		directory.Write("versions/app.release", "Other.Application\n[Enterprise]\n2.3.4");
 		directory.Write("Enterprise/2.3.4/db.migration", "[sqlite]\n./schema.sql\n");
-		directory.Write("Enterprise/2.3.4/db.env", "[sqlite]\nDatabase=/data/hosting.db\n");
+		directory.Write("Enterprise/2.3.4/db.ini", "[sqlite]\nDatabase=/data/hosting.db\n");
 		directory.Write("Enterprise/2.3.4/schema.sql", "SELECT 234;");
 		var arguments = VersionArguments("versions/app.release");
 		arguments.Remove("--output:out");

@@ -11,9 +11,11 @@ description: 修改独立升迁输入、SQL 批次、原生执行、产物命名
 
 先阅读 [AGENTS.md](AGENTS.md)、[README](README.zh-Hans.md)、[升迁指南](README.zh-Hans.md#package-phase)和[实现说明](docs/implementation.zh-Hans.md)。
 
-命令身份先由 MigrateCommand.Version.cs 的私有 VersionSource 解析：--version 可为版本号、文件或现有目录，省略/空白只读当前目录直属 .version，不能由环境 version 代替。ApplicationVersion 选择 Edition，保留文件拼写；name 保持独立必填。最终值回填后建立本次命令独立的变量视图，按需展开、再转换；源版本文件始终不写入，失败不能修改已有产物。
+命令身份先由 MigrateCommand.Version.cs 的私有 VersionSource 解析：--version 可为版本号、文件或现有目录，省略/空白只读当前目录直属 .version，不能由环境或 .env 中的 version 代替。ApplicationVersion 选择 Edition，保留文件拼写；name 保持独立必填。最终值回填后建立本次命令独立的变量视图，按需展开、再转换；源版本文件始终不写入，失败不能修改已有产物。
 
 输入处理在 src/MigrationLoader* 与 MigrationProfile，生成文件集在 MigrationBundle，归档和脚本在 Generator。协议及参数描述在 .shared。数据库/Amazon S3/锁/状态在 executor/src。保持这些边界；packager 只消费产物。
+
+通用变量按默认值、系统环境、从根到工作目录的直属 `.env`、显式选项顺序覆盖，先通过共享 Utility/Profile.Load 加载再解析版本来源；各级段落与条目以下划线拼名，同次命令全部输入共用变量。连接参数使用 `<输入名>.ini` 或 `<provider>.ini`，保持就近选择完整配置及显式导入规则，自动查找不回退旧 `*.env`。迁移示例、测试与文档时同步导入路径，不能把通用 `.env` 改成 `.ini`。
 
 核对两端名称契约：缺少既定后缀时补 -migrate，Edition 可省略，版本与 RID 明确。脚本和归档必须同前缀，check 不解压，状态跨版本保留，外部调用可覆盖 state。已有输入无效不能按缺失跳过。
 

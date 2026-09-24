@@ -166,13 +166,15 @@ systemd 与生命周期脚本选项：
 
 ### 变量来源
 
-`PackCommand<TPackage>.GetVariables(context)` 先加载描述符默认值，再加载环境变量，最后覆盖显式命令选项（包括额外选项）。变量名不区分大小写，优先级为显式选项 > 环境变量 > 默认值。
+`PackCommand<TPackage>.GetVariables(context, directory)` 依次加载描述符默认值、系统环境变量、指定目录的祖先链 `.env`、显式命令选项（包括额外选项）。省略 directory 时跳过 `.env`，供第一次解析 source 使用。源目录存在并绝对化后重新加载变量并固定 source；`.env` 不参与 source 的反向推导。变量名不区分大小写，优先级为显式选项 > 近层 `.env` > 远层 `.env` > 环境变量 > 默认值。
+
+共享 `Utility.LoadEnvironmentVariables` 从文件系统根目录到 source 加载直属 `.env`，不搜索子目录。使用 `Profile.Load` 保留 Core 的空值和导入语义，各级段落与条目以下划线拼名；读取或解析异常终止制包，仅缺失文件跳过。不写入进程环境变量。
 
 `PackCommand` 为每次调用建立独立的 `Variables` 视图，并传给包、脚本和文本来源；不保留进程级变量状态。访问值时递归展开引用，未使用的未知引用不会阻止制包。未知变量、循环引用及超过 64 层的展开失败，诊断指出变量名。展开不读取文件。
 
 Core 命令描述符将可能含变量的选项保留为字符串；`source` 先由完整原始变量集展开。显式 `name`、`edition`、`version` 随后展开，`version` 再转为 `System.Version`，供源 `.version` 选择使用。确定最终身份后，`platform`、`architecture` 与 `overwrite` 在使用时展开并转换。裸 `--overwrite` 仍为 true，未指定时为 false。
 
-身份仍由源 `.version` 与显式 name/edition/version 选项共同确定，不从同名环境变量隐式替代身份。最终身份及已解析的 source/output 覆盖变量集合。`--migrator` 仍须显式启用，`--overwrite` 可从环境变量提供并由命令行覆盖。
+身份仍由源 `.version` 与显式 name/edition/version 选项共同确定，不从同名环境变量或 `.env` 变量隐式替代身份；显式选项可引用 `.env` 中的其他变量。最终身份及已解析的 source/output 覆盖变量集合。`--migrator` 仍须显式启用，`--overwrite` 可从环境变量或 `.env` 提供并由命令行覆盖。
 
 ### 变量语法
 
@@ -1000,7 +1002,7 @@ Debian 的 control/data gzip tar 分别写入受控临时文件，ar 依据实�
 
 ## 升迁产物集成
 
-升迁由独立的 [migrator 工具](../../migrator/README.zh-Hans.md) 预先制作。packager 不解析 `.migration`/`.env`、SQL 或执行计划，也不携带原生执行器。
+升迁由独立的 [migrator 工具](../../migrator/README.zh-Hans.md) 预先制作。packager 不解析 `.migration`/`.ini`、SQL 或执行计划，也不携带原生执行器。
 
 `--migrator` 指定制作升迁时的输入名称，可带目录，例如 `--migrator:../../packages/zongsoft`。
 

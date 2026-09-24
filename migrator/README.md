@@ -7,7 +7,7 @@ dotnet-migrate creates a portable migration archive and launcher. The package ph
 ## Basic concepts
 
 - **Migration input**: a .migration INI file listing SQL files or Amazon S3 buckets under provider sections. Section and entry order define task order.
-- **Connection configuration**: .env files supply administrator credentials, database creation settings, application accounts and Amazon S3 credentials. Values expand when the package is created.
+- **Connection configuration**: .ini files supply administrator credentials, database creation settings, application accounts and Amazon S3 credentials. Values expand when the package is created.
 - **Package and launcher**: a matching .tar.gz archive and .sh or .cmd script. The archive carries the resolved plan and migration data; the launcher starts the bundled executor. Keep both files together.
 - **Database target**: provider Database selects a default; a named migration section can select another. Empty database sections still request initialization.
 - **Plan fingerprint**: a SHA-256 digest calculated from the final migration plan. It identifies the exact plan included in a package; it is not a checksum of the target database and says nothing about its current data or schema.
@@ -52,7 +52,7 @@ dotnet-migrate --name:zongsoft --version:1.0.0 --platform:linux --output:package
 dotnet-migrate --name:<name> --platform:<platform> [options...] <input.migration|pattern> [more inputs...]
 ```
 
-The package command has no subcommands. Options accept `--key:value` or `--key=value`; quote values with spaces according to the shell. Explicit options override environment variables and then descriptor defaults; version-file selection has the separate rules below.
+The package command has no subcommands. Options accept `--key:value` or `--key=value`; quote values with spaces according to the shell. Explicit options override ancestor `.env` values, environment variables and descriptor defaults, in descending priority; version-file selection has the separate rules below.
 Successful generation returns `0`; no arguments return `2`; invalid options, inputs, or generation failures return `1`.
 
 | Option | Required/default | Description |
@@ -68,15 +68,23 @@ Successful generation returns `0`; no arguments return `2`; invalid options, inp
 | `--summary:<text-or-file>` | Empty | Summary using literal `text:` or file `file:` sources. |
 | `--description:<text-or-file>` | Empty | Description with the same source rule. |
 
-At least one positional argument is required. Each argument supports variables, wildcards, and `;`/`|` lists. Paths expand at their argument position, with each pattern sorted by relative path using Ordinal order under its fixed prefix. Missing paths warn individually; all missing paths or no tasks fail. Existing but invalid inputs still fail. Only `.migration` (INI content) is accepted, including imports; parameters remain `.env`. SQL content and literal `text:` values are not expanded. Summary/description files are relative to the current directory.
+At least one positional argument is required. Each argument supports variables, wildcards, and `;`/`|` lists. Paths expand at their argument position, with each pattern sorted by relative path using Ordinal order under its fixed prefix. Missing paths warn individually; all missing paths or no tasks fail. Existing but invalid inputs still fail. Only `.migration` (INI content) is accepted, including imports; parameters use `.ini`. SQL content and literal `text:` values are not expanded. Summary/description files are relative to the current directory.
 
 > - Linux supports glibc x64/arm64.
 > - Windows normalize to win, x64 only.
 > - Unix requires a concrete OS; osx/xos/macos have no executor and fail without outputs.
 
+### Variables and .env files
+
+Each invocation loads descriptor defaults, environment variables, direct `.env` files from the filesystem root down to the working directory, and explicit command options, in that order. Later values overwrite earlier case-insensitive names, including empty values. Child directories and individual input/version-file directories do not establish additional variable scopes. Variables remain local to the invocation and do not modify the process environment.
+
+Core `Profile.Load` reads these INI files, including `#@import`. Root entries retain their names; section levels and entry names join with `_`. For example, `[mysql]` with `root_password=example` creates `mysql_root_password`, and `[io rustfs]` with `access_key=example` creates `io_rustfs_access_key`. Root `environment=Development` creates `environment`. Values expand lazily through `$(name)` or `%name%`, including references in command options and `.ini` connection parameters. Missing `.env` files are skipped; read or parse failures stop generation.
+
+`.env` supplies shared variables; `.ini` supplies migration connection configuration. Rename existing parameter files such as `mysql.env` and `main.env` to `mysql.ini` and `main.ini`, and update their import paths. Automatic parameter lookup no longer falls back to `*.env`; explicit imports keep Core's existing rules. Version selection and required options retain their existing contracts.
+
 ### Choose a version and Edition
 
-`--version` accepts a nonzero `System.Version` (two, three or four numeric parts), a version file, or an existing directory containing `.version`. Relative paths resolve from the current working directory. Omitting the option, or passing an empty/whitespace value, reads only that directory's direct `.version`; the `version` environment variable is not a fallback. Files are read with Core `ApplicationVersion`, without changing them. Missing, unreadable or invalid files fail before any output is generated.
+`--version` accepts a nonzero `System.Version` (two, three or four numeric parts), a version file, or an existing directory containing `.version`. Relative paths resolve from the current working directory. Omitting the option, or passing an empty/whitespace value, reads only that directory's direct `.version`; the `version` environment or `.env` variable is not a fallback. Files are read with Core `ApplicationVersion`, without changing them. Missing, unreadable or invalid files fail before any output is generated.
 
 With no nonblank `--edition`, a single-version file supplies its top-level version; one named Edition is selected automatically; multiple Editions require `--edition`. Explicit Editions must exist, match case-insensitively and retain the file's spelling. `--name` is still required and independent of the application's name in that file. A literal version bypasses the version file and uses the supplied Edition.
 
@@ -107,7 +115,7 @@ Database connection credentials, default/explicit targets, creation settings and
 
 ### Import shared configuration
 
-Migration INIs and `.env` files support Core's `#@import` directive:
+Migration INIs and `.ini` files support Core's `#@import` directive:
 
 ```ini
 # migration/main.migration
@@ -122,18 +130,18 @@ Migration INIs and `.env` files support Core's `#@import` directive:
 ./schema.sql
 ```
 
-`schema.sql` resolves against `migration/shared/`. Its parameter search starts there with `schema.env`, then `sqlite.env`, before moving to parent directories. `main.sql` starts in `migration/` with `main.env` and `sqlite.env`. They produce separate tasks with their own connection parameters. Amazon S3 entries also find parameters from their declaring INI.
+`schema.sql` resolves against `migration/shared/`. Its parameter search starts there with `schema.ini`, then `sqlite.ini`, before moving to parent directories. `main.sql` starts in `migration/` with `main.ini` and `sqlite.ini`. They produce separate tasks with their own connection parameters. Amazon S3 entries also find parameters from their declaring INI.
 
 Parameter files can explicitly import common settings and override values:
 
 ```ini
-# migration/sqlite.env
-#@import common.env
+# migration/sqlite.ini
+#@import common.ini
 [sqlite]
 Database=/var/lib/example/application.db
 ```
 
-Database common.env files declare provider/database/user sections. Only the selected candidate and its explicit imports are merged; required parameters are not filled from another candidate. Amazon S3 retains its existing provider-named root-parameter shorthand.
+Database common.ini files declare provider/database/user sections. Only the selected candidate and its explicit imports are merged; required parameters are not filled from another candidate. Amazon S3 retains its existing provider-named root-parameter shorthand.
 
 - Import paths are relative to the file containing the directive, or absolute. Separate paths with spaces, tabs or `|`. Quoted escaping, globs and variable expansion are not supported in import arguments. Imports merge the complete Profile; placing the directive inside a section does not move imported root entries into that section.
 - Missing imports are skipped under Core's optional import rules. Cycles and depths above 64 files, including the root, fail. Diamond and repeated imports are allowed and read again each time. Linked configuration files retain logical paths, so imports, SQL, and adjacent parameters resolve relative to the link location.
@@ -142,16 +150,16 @@ Database common.env files declare provider/database/user sections. Only the sele
 - Effective sections are split into tasks at each change of declaration source, preserving effective entry order. Overlapping SQL selections from the same source within that section are deduplicated across task splits; different sources and independent inputs are not deduplicated. Each source retains its own parameters. SQL order is preserved across task splits and database sections.
 - Imported parse and parameter-expansion errors identify the actual source without exposing parameter secrets. Imports are resolved during packaging and do not execute SQL or contact Amazon S3.
 
-### Find .env files and configure Amazon S3
+### Find .ini files and configure Amazon S3
 
 There is no parameter-file command option. For each migrator, start in the declaring INI's directory for the entry, then walk through its parents to the filesystem root. At **each directory**, try:
 
-1. The migration filename with its extension changed to `.env`, reading the matching section.
-2. `<migrator>.env`; `postgres.env` precedes `postgresql.env`. A matching section takes precedence over root entries. Provider-named files may omit their section; for databases, root entries become provider settings and top-level sections become database/user sections.
+1. The migration filename with its extension changed to `.ini`, reading the matching section.
+2. `<migrator>.ini`; `postgres.ini` precedes `postgresql.ini`. A matching section takes precedence over root entries. Provider-named files may omit their section; for databases, root entries become provider settings and top-level sections become database/user sections.
 
 A file without the applicable section is skipped unless its filename matches the provider and it has root entries. Once an applicable configuration, including its explicit imports, is found, it must be complete: values are not filled automatically from another candidate or a parent. A shared file must separate providers into sections. Missing files/configuration fail packaging and identify the searched paths. Filename case follows the build filesystem; use the lower-case names above for portability.
 
-> 🚨 **Warning:** The first applicable `.env` file is used as a complete configuration. Migrator does not combine values from another candidate or parent directory; add shared settings through an explicit `#@import`.
+> 🚨 **Warning:** The first applicable `.ini` file is used as a complete configuration. Migrator does not combine values from another candidate or parent directory; add shared settings through an explicit `#@import`.
 
 The [database configuration](#database-configuration) lists all provider, database and user parameters, defaults, grants and pending recovery. Amazon S3 requires `Server`, `Region`, `AccessKey`, `SecretKey`; optional `Timeout` defaults to 30 seconds and accepts positive seconds or s/m suffixes up to one day.
 
@@ -180,7 +188,7 @@ Existing buckets are skipped without changing their policies or other settings. 
 
 <a id="database-configuration"></a>
 
-### Database .env configuration
+### Database .ini configuration
 
 Configuration has provider, database and user levels. Parameter/provider names and enum values are case-insensitive; database names, usernames and passwords retain their spelling. Values support variable expansion. Unknown, misplaced and unsupported parameters fail during package creation.
 
@@ -204,7 +212,7 @@ Password=$(reporting_password)
 Permission=readonly
 ```
 
-In a provider-named file such as `mysql.env`, the filename can supply the provider level. The equivalent shorthand is:
+In a provider-named file such as `mysql.ini`, the filename can supply the provider level. The equivalent shorthand is:
 
 ```ini
 Server=localhost
@@ -226,13 +234,13 @@ sql/hosting/*.sql
 sql/analytics/*.sql
 ```
 
-`[mysql]` uses Database and fails if it is missing. `[mysql hosting]` explicitly selects hosting. The default database can omit its database section and use provider defaults. User subsections also declare their database without an empty parent header. Nondefault databases require a node in the selected `.env`.
+`[mysql]` uses Database and fails if it is missing. `[mysql hosting]` explicitly selects hosting. The default database can omit its database section and use provider defaults. User subsections also declare their database without an empty parent header. Nondefault databases require a node in the selected `.ini`.
 
 Only referenced databases and all their declared users enter the plan and fingerprint. Empty migration sections count as references. Each target initializes once; SQL is never broadcast. A source script is deduplicated for the same actual target and runs separately for different targets.
 
 > 💡 **Tip:** `[mysql]` selects the provider's `Database`. That default database can be created with provider defaults even when `[mysql hosting]` is absent; a user section such as `[mysql hosting application]` also declares `hosting`.
 
-Parameters follow the declaration-source search: same-name `.env`, then provider-named `.env`, up through parent directories. Only explicit imports merge configuration. Database configuration requires a provider section unless the file is provider-named and has root entries; no filling from other candidates or expansion of unrelated providers.
+Parameters follow the declaration-source search: same-name `.ini`, then provider-named `.ini`, up through parent directories. Only explicit imports merge configuration. Database configuration requires a provider section unless the file is provider-named and has root entries; no filling from other candidates or expansion of unrelated providers.
 
 Parameter/provider names and enum values are case insensitive. Database names, usernames and passwords retain spelling. Values support variable expansion. Unknown, misplaced or unsupported parameters fail. Spaces separate section levels; use variables or Path for file paths containing spaces.
 
@@ -388,7 +396,7 @@ packages/zongsoft-migrate@1.0.0_linux-x64.sh
 
 The archive contains .migration/migration.json, prepared SQL under .migration/.artifacts/, and resolved migration data. Both outputs are staged before publication; replacing existing files requires --overwrite, and failed publication restores previous outputs.
 
-> 🚨 **Warning:** The archive contains expanded database and Amazon S3 credentials from `.env`. Restrict who can inspect, store or download the package.
+> 🚨 **Warning:** The archive contains expanded database and Amazon S3 credentials from `.ini`. Restrict who can inspect, store or download the package.
 
 <a id="execution-phase"></a>
 
@@ -445,7 +453,7 @@ SQL checksums only verify that packaged files match the current plan before any 
 ## Best practices
 
 1. **Prepare the change.** Keep each release’s `.migration` inputs and SQL together. Use numbered SQL filenames where wildcard expansion determines order, and make every change safe to rerun from the first file after a partial failure.
-2. **Configure access.** In the selected `.env`, set the administrator connection, explicitly declare every nondefault database, and define a separate least-privilege application user for each database. Use environment expansion for secrets, keep `.env` out of source control, and remember that the generated archive contains resolved credentials.
+2. **Configure access.** In the selected `.ini`, set the administrator connection, explicitly declare every nondefault database, and define a separate least-privilege application user for each database. Use environment expansion for secrets, keep `.ini` out of source control, and remember that the generated archive contains resolved credentials.
 3. **Create and protect the package.** Generate the archive and matching launcher into a restricted directory. Keep the pair together and distribute both as sensitive release artifacts. Review the archive’s file list and plan without printing or publishing password-bearing settings.
 4. **Validate in staging.** Use a stable state directory for staging, separate from production. Run `apply`, inspect `status`, and verify the resulting service behavior. After a successful apply, `check` can confirm that this package matches the ready record. If an apply fails, repair the partial state and SQL before retrying; all SQL runs again.
 5. **Promote to production.** Take a recoverable backup, confirm the restore procedure, and place the package on the target. Run `apply` with the production state directory, then confirm completion with `status` or `check`. `check` only reports whether this exact package has a successful ready record; it does not test connectivity or preview SQL. Keep that production state directory across package versions.

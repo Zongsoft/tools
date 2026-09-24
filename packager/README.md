@@ -539,7 +539,7 @@ Debian `prerm` runs the uninstall lifecycle only for `remove` or `deconfigure`, 
 
 ## Migrator artifact integration
 
-Prepare migrations with the independent [migrator tool](../migrator/README.md). Packager does not parse `.migration`/`.env`, SQL or execution plans, and does not distribute a native executor. Set `--migrator:<name-or-path>` to include an already generated migration archive and its matching launcher, for example `--migrator:../../packages/zongsoft`.
+Prepare migrations with the independent [migrator tool](../migrator/README.md). Packager does not parse `.migration`/`.ini`, SQL or execution plans, and does not distribute a native executor. Set `--migrator:<name-or-path>` to include an already generated migration archive and its matching launcher, for example `--migrator:../../packages/zongsoft`.
 
 Lookup starts from the final `--source` directory, not the command working directory:
 
@@ -569,9 +569,11 @@ $(name)
 %name%
 ```
 
-Variable names may contain dots, hyphens, and indices and are case insensitive. Explicit command options, including extra options, override environment variables, which override descriptor defaults. Values expand lazily and recursively: unused invalid references do not block packaging; referenced missing, cyclic, or over-64-level variables fail.
+Variable names may contain dots, hyphens, and indices and are case insensitive. Values load from descriptor defaults, environment variables, ancestor `.env` files from farthest to nearest, and explicit command options (including extra options). Later values overwrite earlier ones, including empty values. Values expand lazily and recursively: unused invalid references do not block packaging; referenced missing, cyclic, or over-64-level variables fail.
 
-Source-version rules and explicit identity options determine name, edition and version, independently of same-named environment variables. Final identity and resolved source/output paths override the collection. `--migrator` requires explicit activation; `--overwrite` can come from the environment and be overridden on the command line.
+The command first resolves and fixes `--source` using the existing environment and options, defaulting to the working directory. It then loads each direct `.env` from the filesystem root down to that source, without searching child directories or a separate working-directory chain. `.env` values cannot determine or redirect source. Core `Profile.Load` reads INI and `#@import`; root entry names are unchanged, while section levels and entry names join with `_`. For example, `[io rustfs]` with `access_key=example` creates `io_rustfs_access_key=example`, and root `environment=Development` creates `environment`. Missing files are skipped; read or parse failures stop packaging. Variables are isolated per invocation and do not modify the process environment.
+
+Source-version rules and explicit identity options determine name, edition and version, independently of same-named environment or `.env` variables. Explicit options can reference `.env` variables. Final identity and resolved source/output paths override the collection. `--migrator` requires explicit activation; `--overwrite` can come from the environment or `.env` and be overridden on the command line.
 
 The command keeps option text until it is used. After locating `source`, explicit `name`, `edition`, and `version` values expand before source-version validation and version conversion; `platform`, `architecture`, and `overwrite` values also expand before conversion. Literal `$(APP_VERSION)` or `%APP_VERSION%` is accepted; quote it in Bash to prevent shell expansion. Identity values available only from the source `.version` cannot locate that source directory.
 

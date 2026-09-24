@@ -41,7 +41,7 @@ public sealed class MigrationDatabaseTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "[mysql]\n");
-		directory.Write("main.env", "[mysql]\nServer=localhost\nDatabase=hosting\nPassword=$(root)\n[mysql hosting AppUser]\nPassword=$(app)\nPermission=READONLY\nPrivileges=createTABLE|SELECT\nRoles=Reporting,Audit\nHost=10.%\n");
+		directory.Write("main.ini", "[mysql]\nServer=localhost\nDatabase=hosting\nPassword=$(root)\n[mysql hosting AppUser]\nPassword=$(app)\nPermission=READONLY\nPrivileges=createTABLE|SELECT\nRoles=Reporting,Audit\nHost=10.%\n");
 		var variables = new Dictionary<string, string> { ["root"] = "operator-secret", ["app"] = "app'quoted;secret" };
 		var loader = new MigrationLoader(value => Normalizer.Normalize(value, variables).Value);
 
@@ -59,11 +59,11 @@ public sealed class MigrationDatabaseTest
 	}
 
 	[Fact]
-	public void Load_ProviderNamedEnvWithoutProviderSection_UsesRootSettingsAndDatabaseUserSections()
+	public void Load_ProviderNamedIniWithoutProviderSection_UsesRootSettingsAndDatabaseUserSections()
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("1.0.0/mysql.migration", "[mysql]\n");
-		directory.Write("mysql.env", "Server=localhost\nPort=3306\nDatabase=zongsoft\nUserName=root\nPassword=operator-secret\nSecured=false\nTimeout=30s\nCommandTimeout=10m\n[zongsoft program]\nPassword=application-secret\nPermission=ReadWrite\nPrivileges=CreateTable\n");
+		directory.Write("mysql.ini", "Server=localhost\nPort=3306\nDatabase=zongsoft\nUserName=root\nPassword=operator-secret\nSecured=false\nTimeout=30s\nCommandTimeout=10m\n[zongsoft program]\nPassword=application-secret\nPermission=ReadWrite\nPrivileges=CreateTable\n");
 
 		var plan = new MigrationLoader(null).Load("1.0.0/mysql.migration", directory.Path, "test", "1.0.0");
 		var database = Assert.Single(plan.Databases);
@@ -81,11 +81,11 @@ public sealed class MigrationDatabaseTest
 	}
 
 	[Fact]
-	public void Load_ProviderNamedEnvWithExplicitProviderSection_PrefersSectionOverRootSettings()
+	public void Load_ProviderNamedIniWithExplicitProviderSection_PrefersSectionOverRootSettings()
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "[mysql]\n");
-		directory.Write("mysql.env", "Server=root-host\nDatabase=ignored\nPassword=root-secret\n[mysql]\nServer=section-host\nDatabase=hosting\nPassword=section-secret\n[mysql hosting program]\nPassword=application-secret\n");
+		directory.Write("mysql.ini", "Server=root-host\nDatabase=ignored\nPassword=root-secret\n[mysql]\nServer=section-host\nDatabase=hosting\nPassword=section-secret\n[mysql hosting program]\nPassword=application-secret\n");
 
 		var database = Assert.Single(new MigrationLoader(null).Load("main.migration", directory.Path, "test", "1.0.0").Databases);
 		Assert.Equal("hosting", database.Name);
@@ -95,11 +95,11 @@ public sealed class MigrationDatabaseTest
 	}
 
 	[Fact]
-	public void Load_GenericEnvWithoutProviderSection_DoesNotTreatRootAsDatabaseSettings()
+	public void Load_GenericIniWithoutProviderSection_DoesNotTreatRootAsDatabaseSettings()
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "[mysql]\n");
-		directory.Write("main.env", "Server=localhost\nDatabase=hosting\nPassword=operator-secret\n");
+		directory.Write("main.ini", "Server=localhost\nDatabase=hosting\nPassword=operator-secret\n");
 
 		Assert.Throws<FileNotFoundException>(() => new MigrationLoader(null).Load("main.migration", directory.Path, "test", "1.0.0"));
 	}
@@ -139,9 +139,9 @@ public sealed class MigrationDatabaseTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "#@import child/part.migration\n[mysql]\n");
-		directory.Write("main.env", "[mysql]\nServer=root-host\nDatabase=hosting\nPassword=root\n[mysql archive]\nCharset=latin1\n");
+		directory.Write("main.ini", "[mysql]\nServer=root-host\nDatabase=hosting\nPassword=root\n[mysql archive]\nCharset=latin1\n");
 		directory.Write("child/part.migration", "[mysql archive]\n");
-		directory.Write("child/part.env", "[mysql]\nServer=child-host\nPassword=child\n[mysql archive]\nCollation=utf8mb4_bin\n");
+		directory.Write("child/part.ini", "[mysql]\nServer=child-host\nPassword=child\n[mysql archive]\nCollation=utf8mb4_bin\n");
 
 		var plan = new MigrationLoader(null).Load("main.migration", directory.Path, "test", "1.0.0");
 
@@ -159,9 +159,9 @@ public sealed class MigrationDatabaseTest
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "#@import first/part.migration second/part.migration\n");
 		directory.Write("first/part.migration", "[mysql archive]\n");
-		directory.Write("first/part.env", "[mysql]\nServer=localhost\nPassword=private-root\n[mysql archive]\nCollation=utf8mb4_bin\n");
+		directory.Write("first/part.ini", "[mysql]\nServer=localhost\nPassword=private-root\n[mysql archive]\nCollation=utf8mb4_bin\n");
 		directory.Write("second/part.migration", "[mysql archive]\n");
-		directory.Write("second/part.env", "[mysql]\nServer=localhost\nPassword=private-root\n[mysql archive]\nCollation=utf8mb4_0900_ai_ci\n");
+		directory.Write("second/part.ini", "[mysql]\nServer=localhost\nPassword=private-root\n[mysql archive]\nCollation=utf8mb4_0900_ai_ci\n");
 
 		var error = Assert.Throws<InvalidDataException>(() => new MigrationLoader(null).Load("main.migration", directory.Path, "test", "1.0.0"));
 
@@ -176,9 +176,9 @@ public sealed class MigrationDatabaseTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "#@import child/part.migration\n[mysql]\n" + (rootHasSql ? "schema.sql\n" : ""));
-		directory.Write("main.env", "[mysql]\nServer=localhost\nDatabase=hosting\nPassword=root\n");
+		directory.Write("main.ini", "[mysql]\nServer=localhost\nDatabase=hosting\nPassword=root\n");
 		directory.Write("child/part.migration", "[mysql]\n" + (rootHasSql ? "" : "schema.sql\n"));
-		directory.Write("child/part.env", "[mysql]\nServer=localhost\nDatabase=archive\nPassword=root\n");
+		directory.Write("child/part.ini", "[mysql]\nServer=localhost\nDatabase=archive\nPassword=root\n");
 		directory.Write(rootHasSql ? "schema.sql" : "child/schema.sql", "SELECT 'one-target-only';");
 
 		var plan = new MigrationLoader(null).Load("main.migration", directory.Path, "test", "1.0.0");
@@ -197,9 +197,9 @@ public sealed class MigrationDatabaseTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "#@import child/part.migration\n[mysql archive]\n" + (rootHasSql ? "schema.sql\n" : ""));
-		directory.Write("main.env", "[mysql]\nServer=localhost\nPassword=root\n[mysql archive]\nCollation=utf8mb4_bin\n");
+		directory.Write("main.ini", "[mysql]\nServer=localhost\nPassword=root\n[mysql archive]\nCollation=utf8mb4_bin\n");
 		directory.Write("child/part.migration", "[mysql archive]\n" + (rootHasSql ? "" : "schema.sql\n"));
-		directory.Write("child/part.env", "[mysql]\nServer=localhost\nPassword=root\n[mysql archive]\nCollation=utf8mb4_0900_ai_ci\n");
+		directory.Write("child/part.ini", "[mysql]\nServer=localhost\nPassword=root\n[mysql archive]\nCollation=utf8mb4_0900_ai_ci\n");
 		directory.Write(rootHasSql ? "schema.sql" : "child/schema.sql", "SELECT 1;");
 
 		var error = Assert.Throws<InvalidDataException>(() => new MigrationLoader(null).Load("main.migration", directory.Path, "test", "1.0.0"));
@@ -212,7 +212,7 @@ public sealed class MigrationDatabaseTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "[mysql analytics]\nfirst.sql\n#@import child/part.migration\nthird.sql\n");
-		directory.Write("mysql.env", "[mysql]\nServer=localhost\nPassword=root\n[mysql analytics]\n[mysql hosting]\n");
+		directory.Write("mysql.ini", "[mysql]\nServer=localhost\nPassword=root\n[mysql analytics]\n[mysql hosting]\n");
 		directory.Write("child/part.migration", "[mysql hosting]\nsecond.sql\n");
 		directory.Write("first.sql", "SELECT 'first';");
 		directory.Write("child/second.sql", "SELECT 'second';");
@@ -333,7 +333,7 @@ public sealed class MigrationDatabaseTest
 		var error = Assert.Throws<InvalidDataException>(() => Load(directory, $"[{provider}]\n", $"[{provider}]\nServer=localhost\nDatabase=hosting\nPassword=operator-secret\n[{provider} hosting]\n" + settings));
 
 		Assert.DoesNotContain("operator-secret", error.ToString());
-		Assert.Contains("main.env", error.Message);
+		Assert.Contains("main.ini", error.Message);
 	}
 
 	[Theory]
@@ -358,9 +358,9 @@ public sealed class MigrationDatabaseTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("first.migration", "[sqlite]\n");
-		directory.Write("first.env", "[sqlite]\nDatabase=hosting\n[sqlite hosting]\nPath=C:/Data/hosting.db\nCharset=UTF-8\n");
+		directory.Write("first.ini", "[sqlite]\nDatabase=hosting\n[sqlite hosting]\nPath=C:/Data/hosting.db\nCharset=UTF-8\n");
 		directory.Write("second.migration", "[sqlite]\n");
-		directory.Write("second.env", $"[sqlite]\nDatabase=hosting\n[sqlite hosting]\nPath={secondPath}\nCharset=UTF-16le\n");
+		directory.Write("second.ini", $"[sqlite]\nDatabase=hosting\n[sqlite hosting]\nPath={secondPath}\nCharset=UTF-16le\n");
 
 		var error = Assert.Throws<InvalidDataException>(() => new MigrationLoader(null).Load("first.migration;second.migration", directory.Path, "test", "1.0.0", "win-x64"));
 
@@ -432,9 +432,9 @@ public sealed class MigrationDatabaseTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "[mysql]\nfirst.sql\n#@import remote/part.migration\nthird.sql\n");
-		directory.Write("main.env", "[mysql]\nServer=first-server\nDatabase=hosting\nPassword=first-admin\n");
+		directory.Write("main.ini", "[mysql]\nServer=first-server\nDatabase=hosting\nPassword=first-admin\n");
 		directory.Write("remote/part.migration", "[mysql]\nsecond.sql\n");
-		directory.Write("remote/part.env", "[mysql]\nServer=second-server\nDatabase=hosting\nPassword=second-admin\n");
+		directory.Write("remote/part.ini", "[mysql]\nServer=second-server\nDatabase=hosting\nPassword=second-admin\n");
 		directory.Write("first.sql", "SELECT 'first';");
 		directory.Write("remote/second.sql", "SELECT 'second';");
 		directory.Write("third.sql", "SELECT 'third';");
@@ -453,7 +453,7 @@ public sealed class MigrationDatabaseTest
 	private static MigrationPlan Load(MigrationTestDirectory directory, string migration, string settings, string runtime = "linux-x64")
 	{
 		directory.Write("main.migration", migration);
-		directory.Write("main.env", settings);
+		directory.Write("main.ini", settings);
 		return new MigrationLoader(null).Load("main.migration", directory.Path, "test", "1.0.0", runtime);
 	}
 }

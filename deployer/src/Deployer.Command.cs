@@ -47,12 +47,13 @@ partial class Deployer
 		currentDirectory ??= Environment.CurrentDirectory;
 
 		var variables = Environment.GetEnvironmentVariables().ToDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+		Utility.LoadEnvironmentVariables(variables, currentDirectory);
 		var arguments = new Dictionary<string, string>(options, StringComparer.OrdinalIgnoreCase);
 
 		if(!arguments.TryGetValue(DESTINATION_OPTION, out var target) && !variables.TryGetValue(DESTINATION_OPTION, out target))
 			target = currentDirectory;
 
-		//目标配置尚未加载；启动路径只能依赖环境和本次命令的完整选项集。
+		//目标配置尚未加载；启动路径依赖环境、.env 和本次命令的完整选项集。
 		var bootstrap = new Dictionary<string, string>(variables, StringComparer.OrdinalIgnoreCase);
 		foreach(var option in arguments)
 			bootstrap[option.Key] = option.Value ?? string.Empty;

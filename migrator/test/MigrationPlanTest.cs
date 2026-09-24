@@ -226,13 +226,13 @@ public sealed class MigrationPlanTest
 		using var directory = new MigrationTestDirectory();
 		var database = Path.Combine(directory.Path, "hosting.db");
 		directory.Write("input/db.migration", "[sqlite]\n./sql/*.sql\n");
-		directory.Write("input/sqlite.env", "[sqlite]\nDatabase=" + database + "\n");
+		directory.Write("input/sqlite.ini", "[sqlite]\nDatabase=" + database + "\n");
 		directory.Write("input/sql/020-seed.sql", "INSERT INTO samples VALUES (2, '附件;ready');");
 		directory.Write("input/sql/010-schema.sql", "CREATE TABLE IF NOT EXISTS samples (id INTEGER PRIMARY KEY, title TEXT); DELETE FROM samples; INSERT INTO samples VALUES (1, 'first');");
 		directory.Write("input/sql/030-verify.sql", "CREATE TABLE IF NOT EXISTS verification (value INTEGER CHECK (value=1)); INSERT INTO verification SELECT CASE WHEN (SELECT COUNT(*) FROM samples)=2 AND (SELECT title FROM samples WHERE id=2)='附件;ready' THEN 1 ELSE 0 END;");
 		var other = Path.Combine(directory.Path, "other.db");
 		directory.Write("input/other.migration", "[sqlite]\n./other.sql\n");
-		directory.Write("input/other.env", "[sqlite]\nDatabase=" + other + "\n");
+		directory.Write("input/other.ini", "[sqlite]\nDatabase=" + other + "\n");
 		directory.Write("input/other.sql", "CREATE TABLE IF NOT EXISTS independent (id INTEGER);");
 		var plan = new MigrationLoader(null).Load("input/db.migration;input/other.migration", directory.Path, "zongsoft.daemon", "1.1.0", MigrationTestDirectory.CurrentRuntime);
 		Assert.Equal(2, plan.Steps.Count);
@@ -267,7 +267,7 @@ public sealed class MigrationPlanTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("db.migration", "[sqlite]\nsql/*.sql\n");
-		directory.Write("db.env", "[sqlite]\nDatabase=" + Path.Combine(directory.Path, "ordered.db") + "\n");
+		directory.Write("db.ini", "[sqlite]\nDatabase=" + Path.Combine(directory.Path, "ordered.db") + "\n");
 		for(var number = 1; number <= 11; number++)
 		{
 			var schema = number == 1 ? "CREATE TABLE sequence (value INTEGER, previous INTEGER CHECK (previous = value - 1)); " : "";

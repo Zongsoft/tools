@@ -60,7 +60,7 @@ public sealed partial class MigrateCommand : CommandBase<CommandContext>
 	#region 执行方法
 	protected override ValueTask<object> OnExecuteAsync(CommandContext context, CancellationToken cancellation)
 	{
-		var values = Variables.From(context);
+		var values = Variables.From(context, Environment.CurrentDirectory);
 		values[Variables.SOURCE] = Environment.CurrentDirectory;
 		values.Remove(Variables.VERSION);
 		var selected = VersionSource.Load(context.Options.GetValue<string>(Variables.VERSION), new Variables(values));

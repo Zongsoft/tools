@@ -19,9 +19,9 @@ public sealed class MigrationImportTest
 		directory.Write("main.migration", "#@import child/part.migration\n[sqlite]\n./root.sql\n");
 		directory.Write("child/part.migration", "#@import deep/leaf.migration\n[sqlite]\n./child.sql\n");
 		directory.Write("child/deep/leaf.migration", "[sqlite]\n./leaf.sql\n");
-		directory.Write("main.env", "[sqlite]\nDatabase=/data/root.db\n");
-		directory.Write("child/part.env", "[sqlite]\nDatabase=/data/child.db\n");
-		directory.Write("child/deep/leaf.env", "[sqlite]\nDatabase=/data/leaf.db\n");
+		directory.Write("main.ini", "[sqlite]\nDatabase=/data/root.db\n");
+		directory.Write("child/part.ini", "[sqlite]\nDatabase=/data/child.db\n");
+		directory.Write("child/deep/leaf.ini", "[sqlite]\nDatabase=/data/leaf.db\n");
 		var root = directory.Write("root.sql", "SELECT 'root';");
 		var child = directory.Write("child/child.sql", "SELECT 'child';");
 		var leaf = directory.Write("child/deep/leaf.sql", "SELECT 'leaf';");
@@ -40,8 +40,8 @@ public sealed class MigrationImportTest
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "[sqlite]\n./first*.sql\n./shared.sql\n./first.sql\n./last.sql\n#@import child/part.migration\n");
 		directory.Write("child/part.migration", "[sqlite]\n./shared.sql\n");
-		directory.Write("main.env", "[sqlite]\nDatabase=/data/root.db\n");
-		directory.Write("child/part.env", "[sqlite]\nDatabase=/data/child.db\n");
+		directory.Write("main.ini", "[sqlite]\nDatabase=/data/root.db\n");
+		directory.Write("child/part.ini", "[sqlite]\nDatabase=/data/child.db\n");
 		var first = directory.Write("first.sql", "SELECT 'first';");
 		var second = directory.Write("first2.sql", "SELECT 'second';");
 		var shared = directory.Write("child/shared.sql", "SELECT 'child';");
@@ -65,8 +65,8 @@ public sealed class MigrationImportTest
 		var declaration = "[sqlite]\n./schema.sql\n";
 		directory.Write("main.migration", importFirst ? directive + declaration : declaration + directive);
 		directory.Write("child/part.migration", declaration);
-		directory.Write("main.env", "[sqlite]\nDatabase=/data/root.db\n");
-		directory.Write("child/part.env", "[sqlite]\nDatabase=/data/child.db\n");
+		directory.Write("main.ini", "[sqlite]\nDatabase=/data/root.db\n");
+		directory.Write("child/part.ini", "[sqlite]\nDatabase=/data/child.db\n");
 		var selected = directory.Write(importFirst ? "schema.sql" : "child/schema.sql", "SELECT 'winner';");
 
 		var plan = Loader().Load("main.migration", directory.Path, "test", "1.0.0");
@@ -82,10 +82,10 @@ public sealed class MigrationImportTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "[postgres]\n./schema.sql\n");
-		directory.Write("main.env", "#@import settings/defaults.env\n[postgres]\nDatabase=selected\n");
-		directory.Write("settings/defaults.env", "#@import deep/base.env\n[postgres]\nDatabase=original\nUserName=operator\n");
-		directory.Write("settings/deep/base.env", "[postgres]\nServer=nested-host\nPassword=secret=punctuation\n");
-		directory.Write("postgres.env", "[postgres]\nServer=wrong-host\nDatabase=wrong\nUserName=wrong\nCommandTimeout=9\n");
+		directory.Write("main.ini", "#@import settings/defaults.ini\n[postgres]\nDatabase=selected\n");
+		directory.Write("settings/defaults.ini", "#@import deep/base.ini\n[postgres]\nDatabase=original\nUserName=operator\n");
+		directory.Write("settings/deep/base.ini", "[postgres]\nServer=nested-host\nPassword=secret=punctuation\n");
+		directory.Write("postgres.ini", "[postgres]\nServer=wrong-host\nDatabase=wrong\nUserName=wrong\nCommandTimeout=9\n");
 		directory.Write("schema.sql", "SELECT 1;");
 
 		var plan = Loader().Load("main.migration", directory.Path, "test", "1.0.0");
@@ -110,7 +110,7 @@ public sealed class MigrationImportTest
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "#@import child/invalid.migration\n[sqlite]\n./local.sql\n");
 		var child = directory.Write("child/invalid.migration", content);
-		directory.Write("sqlite.env", "[sqlite]\nDatabase=/data/test.db\n");
+		directory.Write("sqlite.ini", "[sqlite]\nDatabase=/data/test.db\n");
 		directory.Write("local.sql", "SELECT 1;");
 
 		var error = Assert.Throws<InvalidDataException>(() => Loader().Load("main.migration", directory.Path, "test", "1.0.0"));
@@ -123,8 +123,8 @@ public sealed class MigrationImportTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "[sqlite]\n./schema.sql\n");
-		directory.Write("sqlite.env", "#@import settings/duplicate.env\n[sqlite]\nDatabase=/data/local.db\n");
-		var child = directory.Write("settings/duplicate.env", "[sqlite]\nDatabase=private-first\nDATABASE=private-second\n");
+		directory.Write("sqlite.ini", "#@import settings/duplicate.ini\n[sqlite]\nDatabase=/data/local.db\n");
+		var child = directory.Write("settings/duplicate.ini", "[sqlite]\nDatabase=private-first\nDATABASE=private-second\n");
 		directory.Write("schema.sql", "SELECT 1;");
 
 		var error = Assert.Throws<InvalidDataException>(() => Loader().Load("main.migration", directory.Path, "test", "1.0.0"));
@@ -154,9 +154,9 @@ public sealed class MigrationImportTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var source = directory.Write("original/part.migration", "[sqlite]\n./schema.sql\n");
-		directory.Write("original/sqlite.env", "[sqlite]\nDatabase=/data/target.db\n");
+		directory.Write("original/sqlite.ini", "[sqlite]\nDatabase=/data/target.db\n");
 		directory.Write("original/schema.sql", "SELECT 'target';");
-		directory.Write("sqlite.env", "[sqlite]\nDatabase=/data/logical.db\n");
+		directory.Write("sqlite.ini", "[sqlite]\nDatabase=/data/logical.db\n");
 		directory.Write("schema.sql", "SELECT 'logical';");
 		var link = Path.Combine(directory.Path, directoryLink ? "linked" : "linked.migration");
 		if(directoryLink)
@@ -181,10 +181,10 @@ public sealed class MigrationImportTest
 		using var directory = new MigrationTestDirectory();
 		var ini = directory.Write("physical/config.data", "#@import extra.migration\n[sqlite]\n./script.sql\n");
 		directory.Write("physical/extra.migration", "[unknown]\n");
-		directory.Write("physical/main.env", "[sqlite]\nDatabase=/data/wrong.db\n");
+		directory.Write("physical/main.ini", "[sqlite]\nDatabase=/data/wrong.db\n");
 		directory.Write("logical/extra.migration", "[sqlite]\n./extra.sql\n");
-		directory.Write("logical/extra.env", "[sqlite]\nDatabase=/data/import.db\n");
-		directory.Write("logical/main.env", "[sqlite]\nDatabase=/data/main.db\n");
+		directory.Write("logical/extra.ini", "[sqlite]\nDatabase=/data/import.db\n");
+		directory.Write("logical/main.ini", "[sqlite]\nDatabase=/data/main.db\n");
 		directory.Write("logical/extra.sql", "SELECT 'import';");
 		var sql = directory.Write("physical/statement.data", "SELECT 'linked';");
 		File.CreateSymbolicLink(Path.Combine(directory.Path, "logical/main.migration"), ini);
@@ -205,7 +205,7 @@ public sealed class MigrationImportTest
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "#@import child/part.migration\n");
 		var child = directory.Write("child/part.migration", "# child\n[sqlite]\n./missing.sql\n");
-		directory.Write("child/sqlite.env", "[sqlite]\nDatabase=/data/child.db\n");
+		directory.Write("child/sqlite.ini", "[sqlite]\nDatabase=/data/child.db\n");
 
 		var error = Assert.Throws<InvalidDataException>(() => Loader().Load("main.migration", directory.Path, "test", "1.0.0"));
 
@@ -218,8 +218,8 @@ public sealed class MigrationImportTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "[postgres]\n./schema.sql\n");
-		directory.Write("postgres.env", "[postgres]\nServer=localhost\nDatabase=test\nUserName=operator\n#@import settings/secret.env\n");
-		var child = directory.Write("settings/secret.env", "[postgres]\nPassword=private-prefix-$(missing)\n");
+		directory.Write("postgres.ini", "[postgres]\nServer=localhost\nDatabase=test\nUserName=operator\n#@import settings/secret.ini\n");
+		var child = directory.Write("settings/secret.ini", "[postgres]\nPassword=private-prefix-$(missing)\n");
 		directory.Write("schema.sql", "SELECT 1;");
 
 		var error = Assert.Throws<InvalidDataException>(() => Loader().Load("main.migration", directory.Path, "test", "1.0.0"));
@@ -241,7 +241,7 @@ public sealed class MigrationImportTest
 
 		Assert.Contains(child, error.Message);
 		directory.Write("child/part.migration", "[sqlite]\n./schema.sql\n");
-		directory.Write("child/sqlite.env", "[sqlite]\nDatabase=/data/child.db\n");
+		directory.Write("child/sqlite.ini", "[sqlite]\nDatabase=/data/child.db\n");
 		var sql = directory.Write("child/schema.sql", "SELECT 'retry';");
 		var task = Assert.Single(loader.Load("main.migration", directory.Path, "test", "1.0.0").Steps);
 		Assert.Equal(sql, Assert.Single(task.Scripts).Source);
@@ -253,8 +253,8 @@ public sealed class MigrationImportTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "[sqlite]\n./schema.sql\n");
-		directory.Write("sqlite.env", "#@import settings/child.env\n[sqlite]\nDatabase=/data/test.db\n");
-		var child = directory.Write("settings/child.env", "#@import ../sqlite.env\n");
+		directory.Write("sqlite.ini", "#@import settings/child.ini\n[sqlite]\nDatabase=/data/test.db\n");
+		var child = directory.Write("settings/child.ini", "#@import ../sqlite.ini\n");
 		directory.Write("schema.sql", "SELECT 1;");
 
 		var error = Assert.Throws<InvalidDataException>(() => Loader().Load("main.migration", directory.Path, "test", "1.0.0"));
@@ -267,7 +267,7 @@ public sealed class MigrationImportTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "#@import missing/child.migration\n[sqlite]\n./schema.sql\n");
-		directory.Write("sqlite.env", "#@import absent.env\n[sqlite]\nDatabase=/data/local.db\n");
+		directory.Write("sqlite.ini", "#@import absent.ini\n[sqlite]\nDatabase=/data/local.db\n");
 		var sql = directory.Write("schema.sql", "SELECT 1;");
 		var warnings = new List<string>();
 
@@ -285,8 +285,8 @@ public sealed class MigrationImportTest
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "#@import child/buckets.migration\n[amazon.s3]\nroot-bucket=private\n");
 		directory.Write("child/buckets.migration", "[amazon.s3]\nchild-bucket=public\n");
-		directory.Write("main.env", "[amazon.s3]\nServer=http://root.invalid:9000\nRegion=us-east-1\nAccessKey=root\nSecretKey=sample\n");
-		directory.Write("child/buckets.env", "[amazon.s3]\nServer=http://child.invalid:9000\nRegion=us-east-1\nAccessKey=child\nSecretKey=sample\n");
+		directory.Write("main.ini", "[amazon.s3]\nServer=http://root.invalid:9000\nRegion=us-east-1\nAccessKey=root\nSecretKey=sample\n");
+		directory.Write("child/buckets.ini", "[amazon.s3]\nServer=http://child.invalid:9000\nRegion=us-east-1\nAccessKey=child\nSecretKey=sample\n");
 
 		var plan = Loader().Load("main.migration", directory.Path, "test", "1.0.0");
 
@@ -305,7 +305,7 @@ public sealed class MigrationImportTest
 		using var directory = new MigrationTestDirectory();
 		for(var index = 0; index < depth; index++)
 			directory.Write($"part-{index}.migration", index + 1 < depth ? $"#@import part-{index + 1}.migration\n" : "[sqlite]\n./schema.sql\n");
-		directory.Write("sqlite.env", "[sqlite]\nDatabase=/data/test.db\n");
+		directory.Write("sqlite.ini", "[sqlite]\nDatabase=/data/test.db\n");
 		var sql = directory.Write("schema.sql", "SELECT 'leaf';");
 
 		if(depth == 64)

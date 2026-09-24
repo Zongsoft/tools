@@ -19,7 +19,7 @@
 
 部署文件为 `.ini` 格式的纯文本文件，其内容由中括号包裹的 **章节**_(`Section`)_ 和 **条目**_(`Entry`)_ 两种内容组成，其中 **章节** 部分表示部署的目标目录。
 
-**章节** 和 **条目** 值均支持以美元符接圆括号 `$(...)` 或双百分号 `%...%` 格式的变量引用，引用的变量为部署命令传入的选项或环境变量。
+**章节** 和 **条目** 值均支持以美元符接圆括号 `$(...)` 或双百分号 `%...%` 格式的变量引用，变量来自命令选项、环境变量、祖先链 `.env` 和目标应用配置。
 
 每个条目由 **键** 和 **值** 两部分组成，以等于号 _(`=`)_ 分隔，其中 **值** 可省略。
 
@@ -155,14 +155,16 @@ _**N**uget_ 包下载器默认会忽略以 `System.`、`Microsoft.Extensions.`�
 
 ## 变量
 
-本工具会依次加载环境变量、部署应用程序的`appsettings.json`文件内容、调用本工具的命令选项到变量集中，如果有重名则后加载的会覆盖之前加载的同名变量值。注意：变量名不区分大小写。
+变量依次加载：系统环境变量、从文件系统根目录到工作目录的各级 `.env`、目标应用的 `appsettings.json`、命令选项。同名变量后加载覆盖先加载，空值也参与覆盖，变量名不区分大小写。
 
-变量值可递归引用其他变量，不受命令选项顺序影响；仅在使用时展开，缺失、循环引用或超过 64 层会报错。`destination` 可引用本次命令的其他选项，但定位目标目录时只能使用命令选项和环境变量；目标目录确定后才加载其中的 `appsettings.json`。
+每级只读取直属 `.env`，不搜索子目录或各个清单所在目录；同次调用的全部清单共用变量集合。INI 文件使用 Core `Profile.Load` 读取，支持 `#@import`。根条目保留原名，各级段落名与条目名以 `_` 拼接：`[io rustfs]` 下的 `access_key=example` 生成 `io_rustfs_access_key=example`，根级 `environment=Development` 生成 `environment`。缺失的 `.env` 跳过，读取或解析失败终止初始化。值仅在使用时展开，不修改进程环境变量。
+
+变量值可递归引用其他变量，不受命令选项顺序影响；仅在使用时展开，缺失、循环引用或超过 64 层会报错。`destination` 可引用命令选项、环境变量及已加载的 `.env` 变量；目标目录确定后才加载其中的 `appsettings.json`。
 
 - 如果 `appsettings.json` 中定义了名为 `ApplicationName` 的属性，则可以使用 `application` 作为该属性的变量别名。
 - 名称为 `Framework` 的变量表示 .NET *目标框架* 标识，有关该 *目标框架* 标识的定义请参考：https://learn.microsoft.com/zh-cn/dotnet/standard/frameworks
 
-可以通过命令选项或环境变量来指定 NuGet 相关参数：
+可以通过命令选项、环境变量或 `.env` 来指定 NuGet 相关参数：
 - `NuGet_Server` 表示 NuGet 服务器信息，默认值为：`https://api.nuget.org/v3/index.json`
 - `NuGet_Packages` 表示 NuGet 包的目录，默认值为：`%USERPROFILE%/.nuget/packages`
 
@@ -248,7 +250,7 @@ dotnet-deploy [--选项:值 ...] [部署文件或目录 ...]
 
 | 选项 | 默认值 | 用途 |
 | --- | --- | --- |
-| `--destination:<目录>` | 当前目录 | 目标根目录；先用命令选项与环境变量解析，再加载该目录的 `appsettings.json`。 |
+| `--destination:<目录>` | 当前目录 | 目标根目录；先用命令选项、环境变量及 `.env` 变量解析，再加载该目录的 `appsettings.json`。 |
 | `--verbosity:<级别>` | `normal` | `quiet`、`normal`、`detail`；无法转换的值报错。 |
 | `--overwrite:<策略>` | `newest` | `alway`（保持现有枚举拼写）、`never`、`newest`。这不是布尔开关。 |
 | `--expansion[:布尔值]` | `false` | 目录通配匹配时，将匹配到的相对目录层级保留到目标路径；`false` 只保留通配捕获部分。 |
@@ -266,7 +268,7 @@ dotnet-deploy [--选项:值 ...] [部署文件或目录 ...]
 
 所有布尔选项支持裸开关，以及 `true/false`、`1/0`、`yes/no`、`on/off`、`enable(d)/disable(d)`，大小写不敏感；其他值按 Core `Switch` 约定视为 false。可用 `$(name)` 或 `%name%` 引用变量，名称支持点号、连字符与索引，按需递归展开；用到的值缺失、循环或超过 64 层即报错，先展开再转换类型。枚举选项沿用 Core 的转换规则，不额外检查枚举成员是否已定义；调用方应提供有效枚举项。未选中的部署分支不展开。
 
-NuGet 相关的 `NuGet_Server` 与 `NuGet_Packages` 既可作为命令变量也可作为环境变量；`Framework`、`Platform`、`Architecture`、`edition` 等是供解析器和部署文件使用的普通变量。示例：
+NuGet 相关的 `NuGet_Server` 与 `NuGet_Packages` 可通过命令选项、环境变量或 `.env` 提供；`Framework`、`Platform`、`Architecture`、`edition` 等是供解析器和部署文件使用的普通变量。示例：
 
 ```powershell
 dotnet deploy --destination:'bin/$(edition)/$(framework)' --edition:Release --framework:net10.0 --dry-run --report:deploy-plan.json .deploy extra.deploy
@@ -343,7 +345,7 @@ RID 回退通过 NuGet.RuntimeModel 使用仓库内固定的 dotnet/runtime v10.
 
 包访问、依赖求解、资产选择和 RID 回退分别由独立类型负责，框架与版本模型复用 NuGet/.NET 类型，职责与行为见[实现细节](docs/implementation.zh-Hans.md)。
 
-目标应用配置按环境变量、目标目录 appsettings.json、命令选项的顺序加载；嵌套键可用 `$(Database.Name)`、`%Items[0].Name%` 引用。变量替换保留 URL 的斜线。
+变量按环境变量、祖先链 `.env`、目标目录 appsettings.json、命令选项的顺序加载；JSON 嵌套键可用 `$(Database.Name)`、`%Items[0].Name%` 引用。变量替换保留 URL 的斜线。
 
 回归命令（不会推送工具包）：
 

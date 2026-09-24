@@ -426,7 +426,7 @@ public sealed partial class MigrateCommandTest
 	private static void PrepareMigration(MigrationTestDirectory directory, string database)
 	{
 		directory.Write("db.migration", "[sqlite]\n./schema.sql\n");
-		directory.Write("db.env", "[sqlite]\nDatabase=" + database + "\n");
+		directory.Write("db.ini", "[sqlite]\nDatabase=" + database + "\n");
 		directory.Write("schema.sql", "CREATE TABLE must_not_run (id INTEGER);");
 	}
 

@@ -3,7 +3,7 @@
 		<OutputType>Exe</OutputType>
 		<TargetFrameworks>net8.0;net9.0;net10.0;</TargetFrameworks>
 		<DefineConstants>$(DefineConstants);DEPLOYER</DefineConstants>
-		<Version>7.14.0</Version>
+		<Version>7.15.0</Version>
 		<PackAsTool>true</PackAsTool>
 		<ToolCommandName>dotnet-deploy</ToolCommandName>
 		<PackageDescription>The Zongsoft Deployment .NET Tool.</PackageDescription>

@@ -18,7 +18,7 @@ public sealed class MigrationPrivilegesTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", $"[{provider}]\n");
-		var path = directory.Write("main.env", $"[{provider}]\nServer=localhost\nDatabase=sample\nPassword=root\n[{provider} sample app]\nPassword=secret\nPermission=ReadWrite\nPrivileges=createTABLE|SELECT,createfunction,CreateProcedure,createtable\n");
+		var path = directory.Write("main.ini", $"[{provider}]\nServer=localhost\nDatabase=sample\nPassword=root\n[{provider} sample app]\nPassword=secret\nPermission=ReadWrite\nPrivileges=createTABLE|SELECT,createfunction,CreateProcedure,createtable\n");
 		var plan = new MigrationLoader(null).Load("main.migration", directory.Path, "test", "1.0.0");
 		var user = Assert.Single(Assert.Single(plan.Databases).Users);
 
@@ -76,7 +76,7 @@ public sealed class MigrationPrivilegesTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "[mysql]\n");
-		directory.Write("main.env", "[mysql]\nServer=localhost\nDatabase=sample\nPassword=root\n[mysql sample app]\nPassword=secret\nNativePrivileges=CREATE\n");
+		directory.Write("main.ini", "[mysql]\nServer=localhost\nDatabase=sample\nPassword=root\n[mysql sample app]\nPassword=secret\nNativePrivileges=CREATE\n");
 		Assert.Throws<InvalidDataException>(() => new MigrationLoader(null).Load("main.migration", directory.Path, "test", "1.0.0"));
 	}
 
@@ -88,7 +88,7 @@ public sealed class MigrationPrivilegesTest
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "[tdengine]\n" + script + "\n");
 		directory.Write("script.sql", "SELECT 1;");
-		directory.Write("main.env", "[tdengine]\nServer=localhost\nDatabase=sample\nPassword=root\n[tdengine sample app]\nPassword=secret\nPermission=ReadWrite\n");
+		directory.Write("main.ini", "[tdengine]\nServer=localhost\nDatabase=sample\nPassword=root\n[tdengine sample app]\nPassword=secret\nPermission=ReadWrite\n");
 		var error = Assert.Throws<MigrationPrivilegeException>(() => new MigrationLoader(null).Load("main.migration", directory.Path, "test", "1.0.0"));
 		Assert.Equal("Update", error.Privilege);
 		Assert.Equal("UnsupportedOperation", error.Reason);
