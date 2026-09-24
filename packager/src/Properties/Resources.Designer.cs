@@ -250,6 +250,15 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
+        ///   查找类似 The output file &apos;{0}&apos; already exists. Use --overwrite to replace it, or choose another --output directory. 的本地化字符串。
+        /// </summary>
+        internal static string PackageFileAlreadyExists_Message {
+            get {
+                return ResourceManager.GetString("PackageFileAlreadyExists.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
         ///   Looks up a localized string similar to The &apos;{0}&apos; package file generated successfully..
         /// </summary>
         internal static string PackageGeneratedSuccessfully_Message {

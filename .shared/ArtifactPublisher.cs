@@ -118,7 +118,14 @@ internal sealed class ArtifactPublisher : IDisposable
 		// 单文件可直接原子替换，无须移走旧文件进行备份。
 		if(_names.Length == 1)
 		{
-			File.Move(this.StagePath(_names[0]), Path.Combine(_output, _names[0]), _overwrite);
+			var target = Path.Combine(_output, _names[0]);
+
+			try { File.Move(this.StagePath(_names[0]), target, _overwrite); }
+			catch(IOException exception) when(!_overwrite && File.Exists(target))
+			{
+				throw new ArtifactAlreadyExistsException(target, exception);
+			}
+
 			return;
 		}
 
@@ -130,13 +137,19 @@ internal sealed class ArtifactPublisher : IDisposable
 			foreach(var name in _names)
 			{
 				var target = Path.Combine(_output, name);
-				if(File.Exists(target))
+
+				if(_overwrite && File.Exists(target))
 				{
 					File.Move(target, this.BackupPath(name));
 					backedUp.Add(name);
 				}
 
-				File.Move(this.StagePath(name), target);
+				try { File.Move(this.StagePath(name), target); }
+				catch(IOException exception) when(!_overwrite && File.Exists(target))
+				{
+					throw new ArtifactAlreadyExistsException(target, exception);
+				}
+
 				published.Add(name);
 			}
 		}
@@ -194,9 +207,23 @@ internal sealed class ArtifactPublisher : IDisposable
 		{
 			var path = Path.Combine(_output, name);
 
-			if(Directory.Exists(path) || !_overwrite && File.Exists(path))
+			if(Directory.Exists(path))
 				throw new IOException(path);
+
+			if(!_overwrite && File.Exists(path))
+				throw new ArtifactAlreadyExistsException(path);
 		}
 	}
+	#endregion
+}
+
+internal sealed class ArtifactAlreadyExistsException : IOException
+{
+	#region 构造函数
+	internal ArtifactAlreadyExistsException(string path, Exception innerException = null) : base(path, innerException) => this.FilePath = path;
+	#endregion
+
+	#region 属性定义
+	internal string FilePath { get; }
 	#endregion
 }

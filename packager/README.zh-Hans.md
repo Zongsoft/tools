@@ -745,7 +745,7 @@ dotnet cake --target=test --edition=Release
 - **`The daemon host location failed.`** 没有找到已有服务文件或可用宿主 `.dll`，也无法从唯一的 `.exe` 推断名称。可指定 `--daemon:<service-file>`，或使用 `--daemon:none` 禁用服务生成。
 - **`A valid nonzero --version or selected source version is required. Source: <path>`** 没有有效的命令版本或源文件版本，或者版本为零；非版本文本会在变量展开后、选择源版本前报错。
 - **`The source path '<path>' does not exist.`** 位置参数没有匹配到现有文件、目录或通配路径。
-- **`Package file already exists.`** 重新执行时使用 `--overwrite`，或选择其他 `--output` 目录。
+- **`输出文件“<路径>”已存在。`** 消息会指出冲突的安装包或 tar 安装脚本。需要替换时添加 `--overwrite`，也可指定其他 `--output` 目录；未启用覆盖时已有产物保持不变。
 
 ## 更多细节
 

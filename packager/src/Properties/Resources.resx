@@ -103,6 +103,9 @@
   <data name="PackageGeneratedSuccessfully.Message" xml:space="preserve">
     <value>The '{0}' package file generated successfully.</value>
   </data>
+  <data name="PackageFileAlreadyExists.Message" xml:space="preserve">
+    <value>The output file '{0}' already exists. Use --overwrite to replace it, or choose another --output directory.</value>
+  </data>
   <data name="VariableUndefined.Message" xml:space="preserve">
     <value>The '{0}' variable in the '{1}' expression is undefined.</value>
   </data>

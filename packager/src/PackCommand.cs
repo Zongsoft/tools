@@ -213,7 +213,12 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		package.Entries.SetVersion(versionFile.Identifier);
 
 		//安装包全部生成成功后才更新源版本文件。
-		package.Pack(output, overwrite);
+		try { package.Pack(output, overwrite); }
+		catch(ArtifactAlreadyExistsException exception)
+		{
+			throw new IOException(string.Format(Properties.Resources.PackageFileAlreadyExists_Message, exception.FilePath), exception);
+		}
+
 		versionFile.Save(Path.Combine(output, package.FileName));
 
 		//输出安装包制作成功

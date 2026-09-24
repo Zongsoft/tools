@@ -745,7 +745,7 @@ dotnet cake --target=test --edition=Release
 - **`The daemon host location failed.`** No service file or usable host `.dll` was found, and a unique `.exe` could not supply the host name. Provide `--daemon:<service-file>` or disable service generation with `--daemon:none`.
 - **`A valid nonzero --version or selected source version is required. Source: <path>`** No usable command/source version is available, or it is zero. Non-version text is rejected after variable expansion, before source-version selection.
 - **`The source path '<path>' does not exist.`** A positional entry did not match an existing file, directory or glob.
-- **`Package file already exists.`** Re-run with `--overwrite` or choose another `--output` directory.
+- **`The output file '<path>' already exists.`** The message names the conflicting package or tar installer script. Re-run with `--overwrite` to replace it, or choose another `--output` directory. Existing artifacts stay intact when overwrite is disabled.
 
 ## More Details
 

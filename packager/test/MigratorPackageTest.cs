@@ -125,6 +125,51 @@ public sealed partial class MigratorPackageTest
 		}
 	}
 
+	[Theory]
+	[InlineData("tar", false)]
+	[InlineData("tar", true)]
+	[InlineData("deb", false)]
+	[InlineData("rpm", false)]
+	public async Task Command_ExistingOutput_ReportsConflictingPathAndPreservesArtifactsAsync(string format, bool installerConflict)
+	{
+		using var directory = new MigrationTestDirectory();
+		directory.Write(".version", "zongsoft.daemon@1.0.0");
+		directory.Write("application.txt", "package payload");
+		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
+		var previousTerminal = (ITerminal)terminalField.GetValue(null);
+		var arguments = new[] { format, "--source:" + directory.Path, "--output:out", "--platform:Linux", "--architecture:X64", "--framework:net10.0", "--daemon:disabled", "--overwrite:false", "application.txt" };
+
+		try
+		{
+			Terminal.Default = DispatchProxy.Create<ITerminal, RecordingTerminal>();
+			var first = CreateCommand();
+			var archive = Assert.IsType<string>(await ((ICommand)first.Command).ExecuteAsync(first.Context, TestContext.Current.CancellationToken));
+			var conflict = installerConflict ? archive[..^Package.Tar.EXTENSION.Length] + ".sh" : archive;
+
+			if(installerConflict)
+				File.Delete(archive);
+
+			File.WriteAllText(conflict, "existing artifact");
+			var version = File.ReadAllBytes(Path.Combine(directory.Path, ".version"));
+
+			var second = CreateCommand();
+			var error = await Assert.ThrowsAsync<IOException>(async () => await ((ICommand)second.Command).ExecuteAsync(second.Context, TestContext.Current.CancellationToken));
+			Assert.Contains(conflict, error.Message);
+			Assert.Contains("--overwrite", error.Message);
+			Assert.Equal("existing artifact", File.ReadAllText(conflict));
+			Assert.Equal(version, File.ReadAllBytes(Path.Combine(directory.Path, ".version")));
+			Assert.Empty(Directory.GetDirectories(Path.GetDirectoryName(archive), ".zongsoft-*"));
+		}
+		finally { Terminal.Default = previousTerminal; }
+
+		(CommandBase<CommandContext> Command, CommandContext Context) CreateCommand()
+		{
+			CommandBase<CommandContext> command = format switch { "tar" => new TarCommand(), "deb" => new DebCommand(), _ => new RpmCommand() };
+			var context = new CommandContext(new CommandExecutor(), CommandLine.Parse(CommandLine.Get(arguments))[0], command, null);
+			return (command, context);
+		}
+	}
+
 	[Fact]
 	public async Task Command_FormattedEqualsOptionsPreserveSpacesAndCommandOverwriteWinsAsync()
 	{
