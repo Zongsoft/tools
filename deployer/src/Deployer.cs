@@ -117,7 +117,7 @@ public partial class Deployer
 			this.Plan = this.Session.Plan;
 			this.Overwrite = GetOverwrite(this.Variables);
 
-			ValidateBooleanOptions(this.Variables);
+			ValidateVerbosity(this.Variables);
 
 			this.Session.Validate(root);
 
@@ -287,10 +287,11 @@ public partial class Deployer
 
 	internal string Normalize(string text) => Normalizer.Normalize(text, this.Variables, name => throw new FormatException(string.Format(Properties.Resources.Review_UndefinedVariable, name)));
 
-	private static void ValidateBooleanOptions(IDictionary<string, string> variables)
+	private static void ValidateVerbosity(IDictionary<string, string> variables)
 	{
-		foreach(var key in new[] { "dry-run", "offline", "prerelease", "locked", "prune", "explain" })
-			Flag(variables, key);
+		if(variables.TryGetValue(VERBOSITY_OPTION, out var verbosity) &&
+			!Zongsoft.Common.Convert.TryConvertValue<Verbosity>(verbosity, out _))
+			throw new ArgumentException(string.Format(Properties.Resources.Review_InvalidOption, VERBOSITY_OPTION, verbosity));
 	}
 
 	internal static bool Flag(IDictionary<string, string> variables, string key)
@@ -301,10 +302,15 @@ public partial class Deployer
 		if(string.IsNullOrEmpty(value))
 			return true;
 
-		if(bool.TryParse(value, out var result))
+		// 部署器使用变量字典，按 Core Switch 的判断顺序处理展开后的值。
+		if(Zongsoft.Common.Convert.TryConvertValue<bool>(value, out var result))
 			return result;
 
-		throw new ArgumentException(string.Format(Properties.Resources.Review_InvalidOption, key, "boolean"));
+		return string.Equals(value, "1", StringComparison.OrdinalIgnoreCase) ||
+			string.Equals(value, "on", StringComparison.OrdinalIgnoreCase) ||
+			string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase) ||
+			string.Equals(value, "enable", StringComparison.OrdinalIgnoreCase) ||
+			string.Equals(value, "enabled", StringComparison.OrdinalIgnoreCase);
 	}
 
 	internal static Overwrite GetOverwrite(IDictionary<string, string> variables)
@@ -312,7 +318,7 @@ public partial class Deployer
 		if(!variables.TryGetValue(OVERWRITE_OPTION, out var text))
 			return Overwrite.Newest;
 
-		if(Enum.TryParse<Overwrite>(text, true, out var result) && Enum.IsDefined(result) && !int.TryParse(text, out _))
+		if(Zongsoft.Common.Convert.TryConvertValue<Overwrite>(text, out var result))
 			return result;
 
 		throw new ArgumentException(string.Format(Properties.Resources.Review_InvalidOption, OVERWRITE_OPTION, text));

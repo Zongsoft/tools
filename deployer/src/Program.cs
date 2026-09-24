@@ -56,7 +56,7 @@ internal class Program
 
 		try
 		{
-			var command = CommandLine.Parse($"deploy {CommandLine.Get(args)}")[0];
+			var command = CommandLine.Parse(Utility.FormatCommand("deploy", args))[0];
 			var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
 			foreach(var option in command.Options)

@@ -74,7 +74,7 @@ public sealed class PackageVersionTest
 		var sourceBytes = File.ReadAllBytes(original);
 		var output = Path.Combine(directory.Path, "output");
 		Directory.CreateDirectory(output);
-		Normalizer.Initialize(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+		var variables = new Variables(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
 		{
 			["source"] = source,
 			["framework"] = "net10.0",
@@ -82,9 +82,9 @@ public sealed class PackageVersionTest
 		});
 		Package package = format switch
 		{
-			"tar" => new Package.Tar("Zongsoft.Hosting.Web", "Community", new Version(2, 3, 4), Platform.Linux, Architecture.X64),
-			"deb" => new Package.Deb("Zongsoft.Hosting.Web", "Community", new Version(2, 3, 4), Platform.Linux, Architecture.X64),
-			"rpm" => new Package.Rpm("Zongsoft.Hosting.Web", "Community", new Version(2, 3, 4), Platform.Linux, Architecture.X64),
+			"tar" => new Package.Tar("Zongsoft.Hosting.Web", "Community", new Version(2, 3, 4), Platform.Linux, Architecture.X64, variables),
+			"deb" => new Package.Deb("Zongsoft.Hosting.Web", "Community", new Version(2, 3, 4), Platform.Linux, Architecture.X64, variables),
+			"rpm" => new Package.Rpm("Zongsoft.Hosting.Web", "Community", new Version(2, 3, 4), Platform.Linux, Architecture.X64, variables),
 			_ => throw new ArgumentOutOfRangeException(nameof(format)),
 		};
 		package.InstallPath = "/opt/zongsoft/web";

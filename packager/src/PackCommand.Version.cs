@@ -139,8 +139,7 @@ public abstract partial class PackCommand<TPackage>
 		{
 			try
 			{
-				using var stream = File.Create(_path);
-				_application.Save(stream);
+				ArtifactPublisher.Write(_path, _application.Save);
 			}
 			catch(Exception exception) when(exception is IOException or UnauthorizedAccessException)
 			{

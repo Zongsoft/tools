@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 
 using Xunit;
 
@@ -9,9 +10,9 @@ public sealed class VariablesTest
 {
 	#region 变量展开
 	[Fact]
-	public void Initialize_UnusedInvalidVariables_DoesNotBlockUsedValues()
+	public void Variables_UnusedInvalidVariables_DoesNotBlockUsedValues()
 	{
-		Normalizer.Initialize(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+		var variables = new Variables(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
 		{
 			["name"] = "zongsoft.daemon",
 			["payload"] = "$(name)/bin",
@@ -19,10 +20,10 @@ public sealed class VariablesTest
 			["loop"] = "$(loop)",
 		});
 
-		Assert.Equal("zongsoft.daemon/bin", Normalizer.Variables["payload"]);
-		Assert.Equal("zongsoft.daemon", Normalizer.Variables.Name);
-		Assert.Throws<InvalidOperationException>(() => Normalizer.Variables["unused"]);
-		Assert.Throws<InvalidOperationException>(() => Normalizer.Variables["loop"]);
+		Assert.Equal("zongsoft.daemon/bin", variables["payload"]);
+		Assert.Equal("zongsoft.daemon", variables.Name);
+		Assert.Throws<InvalidOperationException>(() => variables["unused"]);
+		Assert.Throws<InvalidOperationException>(() => variables["loop"]);
 	}
 
 	[Fact]
@@ -40,6 +41,33 @@ public sealed class VariablesTest
 		Assert.True(result.Succeed);
 		Assert.Equal("default/zongsoft.daemon/zongsoft.daemon-zongsoft.daemon", result.Value);
 		Assert.Equal("$(scheme)/%NAME%", variables["root"]);
+	}
+
+	[Fact]
+	public void Normalize_OrdinaryDictionaryIgnoresVariableNameCase()
+	{
+		var variables = new Dictionary<string, string>
+		{
+			["Root"] = "$(service.name)",
+			["Service.Name"] = "worker",
+		};
+
+		var result = Normalizer.Normalize("$(ROOT)/%SERVICE.NAME%", variables);
+		Assert.True(result.Succeed);
+		Assert.Equal("worker/worker", result.Value);
+	}
+
+	[Theory]
+	[InlineData("0", (Architecture)0)]
+	[InlineData("999", (Architecture)999)]
+	public void Variables_NumericArchitectureUsesCoreConversionAfterExpansion(string architecture, Architecture expected)
+	{
+		var variables = new Variables(new Dictionary<string, string>
+		{
+			["architecture"] = "$(target)",
+			["target"] = architecture,
+		});
+		Assert.Equal(expected, variables.Architecture);
 	}
 
 	[Theory]
@@ -113,6 +141,31 @@ public sealed class VariablesTest
 		var beyondLimit = Normalizer.Normalize("$(step0)", variables);
 		Assert.False(beyondLimit.Succeed);
 		Assert.Equal("step64", beyondLimit.Value);
+	}
+
+	[Fact]
+	public void Variables_StructuredNamesAndSameKeysRemainInstanceScoped()
+	{
+		var first = new Variables(new Dictionary<string, string>
+		{
+			["channel.name"] = "alpha",
+			["settings[0]"] = "one",
+			["profile-key"] = "primary",
+			["route"] = "$(channel.name)/%settings[0]%/$(profile-key)",
+		});
+		var second = new Variables(new Dictionary<string, string>
+		{
+			["channel.name"] = "beta",
+			["settings[0]"] = "two",
+			["profile-key"] = "secondary",
+			["route"] = "$(channel.name)/%settings[0]%/$(profile-key)",
+		});
+
+		Assert.Equal("alpha/one/primary", first["route"]);
+		Assert.Equal("beta/two/secondary", second["route"]);
+		first["channel.name"] = "updated";
+		Assert.Equal("updated/one/primary", first["route"]);
+		Assert.Equal("beta/two/secondary", second["route"]);
 	}
 	#endregion
 }

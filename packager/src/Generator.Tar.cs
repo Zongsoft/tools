@@ -51,30 +51,29 @@ partial class Generator
 	#region 公共方法
 	public static void Tar(this Package package, string output, bool overwrite)
 	{
-		using var stream = new FileStream(
-			Path.Combine(output, package.FileName),
-			overwrite ? FileMode.Create : FileMode.CreateNew,
-			FileAccess.Write);
-
-		using var gzip = new GZipStream(stream, CompressionLevel.Optimal);
-		using var writer = new TarWriter(gzip, TarEntryFormat.Pax, false);
-		writer.WriteEntry(new PaxGlobalExtendedAttributesTarEntry([new KeyValuePair<string, string>("Packager", GetIdentity())]));
-
-		foreach(var entry in GetPackageDirectories(package.Entries, true).Concat(package.Entries.Where(entry => !entry.IsDirectory)))
+		var installer = GetInstallerFileName(package);
+		using var publisher = new ArtifactPublisher(output, overwrite, package.FileName, installer);
+		using(var stream = new FileStream(publisher.StagePath(package.FileName), FileMode.CreateNew, FileAccess.Write))
+		using(var gzip = new GZipStream(stream, CompressionLevel.Optimal))
+		using(var writer = new TarWriter(gzip, TarEntryFormat.Pax, false))
 		{
-			if(entry.Rooted)
-				WriteTarEntry(writer, entry, TAR_ROOT_PREFIX + entry.EntryName);
-			else
-				WriteTarEntry(writer, entry);
+			writer.WriteEntry(new PaxGlobalExtendedAttributesTarEntry([new KeyValuePair<string, string>("Packager", GetIdentity())]));
+
+			foreach(var entry in GetPackageDirectories(package.Entries, true).Concat(package.Entries.Where(entry => !entry.IsDirectory)))
+			{
+				if(entry.Rooted)
+					WriteTarEntry(writer, entry, TAR_ROOT_PREFIX + entry.EntryName);
+				else
+					WriteTarEntry(writer, entry);
+			}
+
+			WriteTarText(writer, "install.sh", CreateInstallScript(package), Utility.Unix.Mode755);
+			WriteTarText(writer, "uninstall.sh", CreateUninstallScript(package), Utility.Unix.Mode755);
 		}
 
-		WriteTarText(writer, "install.sh", CreateInstallScript(package), Utility.Unix.Mode755);
-		WriteTarText(writer, "uninstall.sh", CreateUninstallScript(package), Utility.Unix.Mode755);
-
 		//生成与包同名的安装器脚本
-		WriteInstallerScript(
-			Path.Combine(output, GetInstallerFileName(package)),
-			CreateInstallerScript(package));
+		WriteInstallerScript(publisher.StagePath(installer), CreateInstallerScript(package));
+		publisher.Commit();
 
 		static string GetInstallerFileName(Package package) => package.FileName.EndsWith(Package.Tar.EXTENSION, StringComparison.OrdinalIgnoreCase) ?
 			package.FileName[..^Package.Tar.EXTENSION.Length] + ".sh" :
@@ -116,7 +115,7 @@ partial class Generator
 	{
 		var data = Encoding.UTF8.GetBytes((text ?? string.Empty).ReplaceLineEndings("\n"));
 
-		using(var stream = new FileStream(path, FileMode.Create, FileAccess.Write))
+		using(var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write))
 			stream.Write(data);
 
 		if(!OperatingSystem.IsWindows())

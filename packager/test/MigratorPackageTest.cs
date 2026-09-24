@@ -34,7 +34,6 @@ public sealed partial class MigratorPackageTest
 		CommandBase<CommandContext> command = format switch { "tar" => new TarCommand(), "deb" => new DebCommand(), _ => new RpmCommand() };
 		var arguments = new[] { format, "--source:" + directory.Path, "--output:out", "--platform:Linux", "--architecture:Arm64", "--framework:net10.0", "--edition:enterprise", "--daemon:disabled", "--install-path:/opt/zongsoft/web", "--migrator:releases/zongsoft.bootstrap", "application.txt" };
 		var context = new CommandContext(new CommandExecutor(), CommandLine.Parse(CommandLine.Get(arguments))[0], command, null);
-		var previous = Normalizer.Variables?.Raw;
 		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
 		var terminal = (ITerminal)terminalField.GetValue(null);
 		try
@@ -50,7 +49,6 @@ public sealed partial class MigratorPackageTest
 		finally
 		{
 			Terminal.Default = terminal;
-			Normalizer.Initialize(previous ?? new Dictionary<string, string>());
 		}
 	}
 
@@ -63,7 +61,6 @@ public sealed partial class MigratorPackageTest
 		var existing = directory.Write("out/zongsoft.daemon@2.3.4-arm64.tar.gz", "previous artifact");
 		var names = new[] { "zongsoft_pack_source", "zongsoft_pack_name", "zongsoft_pack_version", "zongsoft_pack_release", "zongsoft_pack_platform", "zongsoft_pack_architecture", "zongsoft_pack_overwrite" };
 		var previousEnvironment = names.ToDictionary(name => name, Environment.GetEnvironmentVariable);
-		var previousVariables = Normalizer.Variables?.Raw;
 		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
 		var previousTerminal = (ITerminal)terminalField.GetValue(null);
 
@@ -89,23 +86,91 @@ public sealed partial class MigratorPackageTest
 			Assert.Equal((byte)0x1f, bytes[0]);
 			Assert.Equal((byte)0x8b, bytes[1]);
 			Assert.Contains("2.3.4", File.ReadAllText(Path.Combine(directory.Path, ".version")));
-			Assert.Equal(Platform.Linux, Normalizer.Variables.Platform);
-			Assert.Equal(Architecture.Arm64, Normalizer.Variables.Architecture);
+			Assert.EndsWith("-arm64.tar.gz", path, StringComparison.Ordinal);
 			Assert.Equal("isolated package payload", Encoding.UTF8.GetString(Assert.Single(ReadPayload(Path.GetDirectoryName(path), "tar"), entry => entry.Key.EndsWith("application.txt", StringComparison.Ordinal)).Value));
+
+			var published = File.ReadAllBytes(path);
+			Environment.SetEnvironmentVariable("zongsoft_pack_overwrite", "off");
+			var deniedCommand = new TarCommand();
+			var deniedContext = new CommandContext(new CommandExecutor(), CommandLine.Parse(CommandLine.Get(arguments))[0], deniedCommand, null);
+			await Assert.ThrowsAsync<IOException>(async () => await ((ICommand)deniedCommand).ExecuteAsync(deniedContext, TestContext.Current.CancellationToken));
+			Assert.Equal(published, File.ReadAllBytes(path));
+
+			Environment.SetEnvironmentVariable("zongsoft_pack_overwrite", "yes");
+			File.WriteAllText(path, "previous artifact");
+			var allowedCommand = new TarCommand();
+			var allowedContext = new CommandContext(new CommandExecutor(), CommandLine.Parse(CommandLine.Get(arguments))[0], allowedCommand, null);
+			Assert.Equal(path, Assert.IsType<string>(await ((ICommand)allowedCommand).ExecuteAsync(allowedContext, TestContext.Current.CancellationToken)));
+			Assert.Equal((byte)0x1f, File.ReadAllBytes(path)[0]);
+
+			File.WriteAllText(path, "previous artifact");
+			var switchArguments = arguments.Select(argument => argument == "--overwrite:$(zongsoft_pack_overwrite)" ? "--overwrite" : argument).ToArray();
+			var switchCommand = new TarCommand();
+			var switchContext = new CommandContext(new CommandExecutor(), CommandLine.Parse(CommandLine.Get(switchArguments))[0], switchCommand, null);
+			Assert.Equal(path, Assert.IsType<string>(await ((ICommand)switchCommand).ExecuteAsync(switchContext, TestContext.Current.CancellationToken)));
+			Assert.Equal((byte)0x1f, File.ReadAllBytes(path)[0]);
 
 			Environment.SetEnvironmentVariable("zongsoft_pack_architecture", "invalid-architecture");
 			var invalidArguments = arguments.Select(argument => argument == "--output:out" ? "--output:invalid-out" : argument).ToArray();
 			var invalidCommand = new TarCommand();
 			var invalidContext = new CommandContext(new CommandExecutor(), CommandLine.Parse(CommandLine.Get(invalidArguments))[0], invalidCommand, null);
-			await Assert.ThrowsAsync<ArgumentException>(async () => await ((ICommand)invalidCommand).ExecuteAsync(invalidContext, TestContext.Current.CancellationToken));
+			await Assert.ThrowsAsync<InvalidOperationException>(async () => await ((ICommand)invalidCommand).ExecuteAsync(invalidContext, TestContext.Current.CancellationToken));
 			Assert.False(Directory.Exists(Path.Combine(directory.Path, "invalid-out")));
 		}
 		finally
 		{
 			Terminal.Default = previousTerminal;
-			Normalizer.Initialize(previousVariables ?? new Dictionary<string, string>());
 			foreach(var name in names)
 				Environment.SetEnvironmentVariable(name, previousEnvironment[name]);
+		}
+	}
+
+	[Fact]
+	public async Task Command_FormattedEqualsOptionsPreserveSpacesAndCommandOverwriteWinsAsync()
+	{
+		using var directory = new MigrationTestDirectory();
+		directory.Write("source with spaces/.version", "zongsoft.daemon@1.0.0");
+		directory.Write("source with spaces/application.txt", "package payload");
+		var previousDirectory = Environment.CurrentDirectory;
+		var previousOverwrite = Environment.GetEnvironmentVariable("overwrite");
+		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
+		var previousTerminal = (ITerminal)terminalField.GetValue(null);
+		var arguments = new[] { "tar", "--source=source with spaces", "--output=out with spaces", "--platform=Linux", "--architecture=X64", "--framework=net10.0", "--daemon=disabled", "application.txt" };
+
+		try
+		{
+			Environment.CurrentDirectory = directory.Path;
+			Terminal.Default = DispatchProxy.Create<ITerminal, RecordingTerminal>();
+			var invalidArguments = arguments.Select(argument => argument == "--architecture=X64" ? "--architecture=invalid" : argument).ToArray();
+			var invalid = new TarCommand();
+			var invalidLine = CommandLine.Parse(Utility.FormatCommand(invalidArguments[0], invalidArguments.AsSpan(1)))[0];
+			var invalidContext = new CommandContext(new CommandExecutor(), invalidLine, invalid, null);
+			await Assert.ThrowsAsync<InvalidOperationException>(async () => await ((ICommand)invalid).ExecuteAsync(invalidContext, TestContext.Current.CancellationToken));
+			Assert.False(Directory.Exists(Path.Combine(directory.Path, "source with spaces", "out with spaces")));
+
+			var command = new TarCommand();
+			var line = CommandLine.Parse(Utility.FormatCommand(arguments[0], arguments.AsSpan(1)))[0];
+			Assert.Equal("source with spaces", Assert.Single(line.Options, option => option.Name == "source").Value);
+			Assert.Equal("out with spaces", Assert.Single(line.Options, option => option.Name == "output").Value);
+			var context = new CommandContext(new CommandExecutor(), line, command, null);
+			var archive = Assert.IsType<string>(await ((ICommand)command).ExecuteAsync(context, TestContext.Current.CancellationToken));
+			Assert.Contains(Path.Combine("source with spaces", "out with spaces"), archive);
+			Assert.Equal((byte)0x1f, File.ReadAllBytes(archive)[0]);
+
+			File.WriteAllText(archive, "existing artifact");
+			Environment.SetEnvironmentVariable("overwrite", "true");
+			var blockedArguments = new[] { arguments[0], "--overwrite=false" }.Concat(arguments.Skip(1)).ToArray();
+			var blocked = new TarCommand();
+			var blockedLine = CommandLine.Parse(Utility.FormatCommand(blockedArguments[0], blockedArguments.AsSpan(1)))[0];
+			var blockedContext = new CommandContext(new CommandExecutor(), blockedLine, blocked, null);
+			await Assert.ThrowsAsync<IOException>(async () => await ((ICommand)blocked).ExecuteAsync(blockedContext, TestContext.Current.CancellationToken));
+			Assert.Equal("existing artifact", File.ReadAllText(archive));
+		}
+		finally
+		{
+			Terminal.Default = previousTerminal;
+			Environment.SetEnvironmentVariable("overwrite", previousOverwrite);
+			Environment.CurrentDirectory = previousDirectory;
 		}
 	}
 
@@ -133,11 +198,10 @@ public sealed partial class MigratorPackageTest
 		using var directory = new MigrationTestDirectory();
 		directory.Write(".version", "zongsoft.daemon@2.7.1");
 		directory.Write("application.txt", "ordinary application");
-		directory.Write("zongsoft.daemon.service", "[Unit]\nDescription=Hosting\n[Service]\nExecStart=/bin/true\n");
+		var service = directory.Write("zongsoft.daemon.service", "[Unit]\nDescription=Hosting\n[Service]\nExecStart=/bin/true\n");
 		CommandBase<CommandContext> command = format switch { "tar" => new TarCommand(), "deb" => new DebCommand(), _ => new RpmCommand() };
 		var arguments = new[] { format, "--source:" + directory.Path, "--output:out", "--platform:Linux", "--architecture:X64", "--framework:net10.0", "--daemon:zongsoft.daemon.service", "--install-path:/opt/zongsoft/daemon", "application.txt" };
 		var context = new CommandContext(new CommandExecutor(), CommandLine.Parse(CommandLine.Get(arguments) + " " + option)[0], command, null);
-		var previous = Normalizer.Variables?.Raw;
 		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
 		var terminal = (ITerminal)terminalField.GetValue(null);
 		try
@@ -146,6 +210,7 @@ public sealed partial class MigratorPackageTest
 			var path = Assert.IsType<string>(await ((ICommand)command).ExecuteAsync(context, TestContext.Current.CancellationToken));
 			var payload = ReadPayload(Path.GetDirectoryName(path), format);
 			Assert.Equal("ordinary application", Encoding.UTF8.GetString(Assert.Single(payload, entry => entry.Key.EndsWith("application.txt", StringComparison.Ordinal)).Value));
+			Assert.Equal(File.ReadAllBytes(service), Assert.Single(payload, entry => entry.Key.EndsWith("zongsoft.daemon.service", StringComparison.Ordinal)).Value);
 			Assert.DoesNotContain(payload.Keys, name => name.Contains(".migration", StringComparison.Ordinal));
 			var script = ReadInstalled(Path.GetDirectoryName(path), format);
 			Assert.DoesNotContain(".migration", script);
@@ -155,7 +220,6 @@ public sealed partial class MigratorPackageTest
 		finally
 		{
 			Terminal.Default = terminal;
-			Normalizer.Initialize(previous ?? new Dictionary<string, string>());
 		}
 	}
 
@@ -332,7 +396,7 @@ public sealed partial class MigratorPackageTest
 	private static Package Create(string format, MigrationTestDirectory directory, string edition = null, Architecture architecture = Architecture.X64, string daemon = "zongsoft.daemon.service", string installed = null)
 	{
 		directory.Write("zongsoft.daemon.service", "[Unit]\nDescription=Hosting\n[Service]\nExecStart=/bin/true\n");
-		Normalizer.Initialize(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+		var variables = new Variables(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
 		{
 			["source"] = directory.Path,
 			["framework"] = "net10.0",
@@ -344,9 +408,9 @@ public sealed partial class MigratorPackageTest
 		});
 		Package package = format switch
 		{
-			"tar" => new Package.Tar("zongsoft.daemon", edition, new Version(2, 7, 1), Platform.Linux, architecture),
-			"deb" => new Package.Deb("zongsoft.daemon", edition, new Version(2, 7, 1), Platform.Linux, architecture),
-			"rpm" => new Package.Rpm("zongsoft.daemon", edition, new Version(2, 7, 1), Platform.Linux, architecture),
+			"tar" => new Package.Tar("zongsoft.daemon", edition, new Version(2, 7, 1), Platform.Linux, architecture, variables),
+			"deb" => new Package.Deb("zongsoft.daemon", edition, new Version(2, 7, 1), Platform.Linux, architecture, variables),
+			"rpm" => new Package.Rpm("zongsoft.daemon", edition, new Version(2, 7, 1), Platform.Linux, architecture, variables),
 			_ => throw new ArgumentOutOfRangeException(nameof(format)),
 		};
 		package.InstallPath = "/opt/zongsoft/daemon";

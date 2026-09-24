@@ -66,8 +66,7 @@ public sealed partial class MigrateCommand : CommandBase<CommandContext>
 		var selected = VersionSource.Load(context.Options.GetValue<string>(Variables.VERSION), new Variables(values));
 		values[Variables.VERSION] = selected.Version.ToString();
 		values[Variables.EDITION] = selected.Edition;
-		Normalizer.Initialize(values);
-		var variables = Normalizer.Variables;
+		var variables = new Variables(values);
 		var name = variables.Name;
 		var edition = variables.Edition;
 		var version = selected.Version;
@@ -96,7 +95,9 @@ public sealed partial class MigrateCommand : CommandBase<CommandContext>
 		var prefix = migrationName + "@" + version + "_" + runtime;
 		var archive = prefix + ".tar.gz";
 		var launcher = prefix + (platform == "win" ? ".cmd" : ".sh");
-		var overwrite = GetOverwrite(context, variables);
+		var cmdlet = new CommandLine.Cmdlet(context.Command.Name);
+		cmdlet.Options.Add(new(CommandLine.CmdletOptionKind.Fully, "overwrite", variables["overwrite"]));
+		var overwrite = new CommandContext(context.Executor, cmdlet, context.Command, null).Options.Switch("overwrite");
 		Generator.CheckMigrationOutputs(output, archive, launcher, overwrite);
 
 		var plan = new MigrationLoader(value =>
@@ -120,39 +121,6 @@ public sealed partial class MigrateCommand : CommandBase<CommandContext>
 	#endregion
 
 	#region 私有方法
-	private static bool GetOverwrite(CommandContext context, Variables variables)
-	{
-		foreach(var option in context.Options)
-		{
-			if(!string.Equals(option.Key, "overwrite", StringComparison.OrdinalIgnoreCase))
-				continue;
-
-			if(option.Value == null)
-				return true;
-
-			var value = Normalizer.Normalize(option.Value.ToString(), variables);
-			if(!value.Succeed)
-				throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed_Message, value.Value));
-
-			if(bool.TryParse(value.Value, out var result))
-				return result;
-
-			if(string.Equals(value.Value, "1", StringComparison.OrdinalIgnoreCase) || string.Equals(value.Value, "yes", StringComparison.OrdinalIgnoreCase) ||
-				string.Equals(value.Value, "on", StringComparison.OrdinalIgnoreCase) || string.Equals(value.Value, "enable", StringComparison.OrdinalIgnoreCase) ||
-				string.Equals(value.Value, "enabled", StringComparison.OrdinalIgnoreCase))
-				return true;
-
-			if(string.Equals(value.Value, "0", StringComparison.OrdinalIgnoreCase) || string.Equals(value.Value, "no", StringComparison.OrdinalIgnoreCase) ||
-				string.Equals(value.Value, "off", StringComparison.OrdinalIgnoreCase) || string.Equals(value.Value, "disable", StringComparison.OrdinalIgnoreCase) ||
-				string.Equals(value.Value, "disabled", StringComparison.OrdinalIgnoreCase))
-				return false;
-
-			throw new ArgumentException(null, "overwrite");
-		}
-
-		return false;
-	}
-
 	private static bool HasSuffix(string name) =>
 		name.EndsWith("-migrate", StringComparison.OrdinalIgnoreCase) || name.EndsWith("-migration", StringComparison.OrdinalIgnoreCase) ||
 		name.EndsWith(".migrate", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".migration", StringComparison.OrdinalIgnoreCase);

@@ -43,6 +43,7 @@
 | `Variables.cs` | 变量集合和常用变量的强类型访问器。 |
 | `Utility.cs` | RID、安装路径、路径规范化、Unix 时间戳、文件权限等辅助逻辑。 |
 | `Dumper.cs` | 控制台输出启动画面、错误和警告消息。 |
+| `tools/.shared` 链接源码 | `Utility.cs` 与本项目的 `partial Utility` 合并编译，共用递归变量与命令/文本方法；`ArtifactPublisher` 统一管理暂存与发布，单文件原子替换，多文件成组提交并在失败时恢复。布尔开关使用 Core `Switch`，枚举沿用 Core 转换且不检查成员定义，不生成共享 DLL。 |
 
 ## 执行流水线
 
@@ -61,7 +62,7 @@ dotnet-pack
 flowchart TD
     A["Program.Main(args)"] --> B["Terminal executor dispatches tar/deb/rpm"]
     B --> C["Resolve source and load ApplicationVersion"]
-    C --> D["Select and validate identity, then initialize variables"]
+    C --> D["Select and validate identity, then create invocation variables"]
     D --> E["Normalize source/output paths"]
     E --> F["Create Package.Tar/Deb/Rpm"]
     F --> M["Locate and validate optional migrator artifacts"]
@@ -70,8 +71,8 @@ flowchart TD
     H --> N["Attach unchanged migrator archive and launcher"]
     N --> V["Replace installation root .version with memory entry"]
     V --> I["Call package.Pack(output, overwrite)"]
-    I --> J["Generator writes all package output"]
-    J --> S["ApplicationVersion.Save(source/.version)"]
+    I --> J["Generator stages and commits package output"]
+    J --> S["Atomically save source/.version"]
     S --> OK["Report success"]
 ```
 
@@ -167,11 +168,11 @@ systemd 与生命周期脚本选项：
 
 `PackCommand<TPackage>.GetVariables(context)` 先加载描述符默认值，再加载环境变量，最后覆盖显式命令选项（包括额外选项）。变量名不区分大小写，优先级为显式选项 > 环境变量 > 默认值。
 
-`Normalizer.Initialize` 只保存原始值；访问值时递归展开引用，未使用的未知引用不会阻止制包。未知变量、循环引用及超过 64 层的展开失败，诊断指出变量名。展开不读取文件。
+`PackCommand` 为每次调用建立独立的 `Variables` 视图，并传给包、脚本和文本来源；不保留进程级变量状态。访问值时递归展开引用，未使用的未知引用不会阻止制包。未知变量、循环引用及超过 64 层的展开失败，诊断指出变量名。展开不读取文件。
 
-Core 命令描述符将可能含变量的选项保留为字符串；`source` 先由完整原始变量集展开。显式 `name`、`edition`、`version` 随后展开，`version` 再转为 `System.Version`，供源 `.version` 选择使用。确定最终身份后，`platform`、`architecture` 与显式 `overwrite` 在使用时展开并转换。裸 `--overwrite` 仍为 true，未指定时仍为 false。
+Core 命令描述符将可能含变量的选项保留为字符串；`source` 先由完整原始变量集展开。显式 `name`、`edition`、`version` 随后展开，`version` 再转为 `System.Version`，供源 `.version` 选择使用。确定最终身份后，`platform`、`architecture` 与 `overwrite` 在使用时展开并转换。裸 `--overwrite` 仍为 true，未指定时为 false。
 
-身份仍由源 `.version` 与显式 name/edition/version 选项共同确定，不从同名环境变量隐式替代身份。最终身份及已解析的 source/output 覆盖变量集合。`--migrator` 仍须显式启用，`--overwrite` 仍是显式开关。
+身份仍由源 `.version` 与显式 name/edition/version 选项共同确定，不从同名环境变量隐式替代身份。最终身份及已解析的 source/output 覆盖变量集合。`--migrator` 仍须显式启用，`--overwrite` 可从环境变量提供并由命令行覆盖。
 
 ### 变量语法
 
@@ -199,9 +200,9 @@ dotnet-pack deb \
   --output:../packages/
 ```
 
-此示例的身份选项由 Bash 展开；`--version` 在进入 OnExecuteAsync 前按 `System.Version` 解析，名称与 Edition 按传入值校验。打包器变量表达式主要用于后续路径、文本和升迁配置。
+此示例的身份选项由 Bash 展开；`--version` 作为字符串进入 `OnExecuteAsync`，展开后才按 `System.Version` 解析，名称与 Edition 按传入值校验。打包器变量表达式也可用于后续路径、文本和升迁配置。
 
-源路径、输出、载荷、排除表达式、文本和升迁输入引用未知变量时均失败；未使用的变量不展开。`TryNormalize` 保留返回失败的底层接口，调用方不得把错误值继续作为有效输入。
+源路径、输出、载荷、排除表达式、文本和升迁输入引用未知变量时均失败；未使用的变量不展开。`Normalizer.Normalize` 的结果结构可表示失败，调用方不得把错误值继续作为有效输入。
 
 ### 文本与文件
 
@@ -400,7 +401,7 @@ Windows 主机或读取不到有效权限时：
 1. 若 `--daemon:none`、`--daemon:disable` 或 `--daemon:disabled`，禁用服务生成。
 2. 否则在 `source` 下查找 `--daemon` 指定的文件。
 3. 如果文件存在，将其加入包条目。
-4. 如果文件不存在，尝试生成临时 `.service` 文件并加入包条目。
+4. 如果文件不存在，在内存中生成 `.service` 文件并加入包条目，不使用固定临时路径。服务文件名先校验，再加入条目。
 
 ### 宿主定位
 
@@ -488,7 +489,7 @@ http://127.0.0.1:<port>
 
 ## 打包器版本元数据
 
-每个安装包自动记录当前生成工具的身份，逻辑内容为 `Packager:Zongsoft.Tools.Packager@0.12.0.0`。值采用 `程序集名@版本号`，从打包器自身程序集读取，独立于宿主应用版本；无需指定额外选项或启用升迁。
+每个安装包自动记录当前生成工具的身份，逻辑内容为 `Packager:Zongsoft.Tools.Packager@<assembly-version>`。值采用 `程序集名@版本号`，从打包器自身程序集读取，独立于宿主应用版本；无需指定额外选项或启用升迁。
 
 | 格式 | 存放位置 | 查看方式 |
 | --- | --- | --- |
@@ -498,7 +499,7 @@ http://127.0.0.1:<port>
 
 RPM 用生成工具版本标签保存本工具身份；其 `PACKAGER` 标签（1015）保存 `--maintainer` 的维护者信息。元数据位于格式头中，不增加安装目录文件，也不改变 `.version` 或 `migration.json`。
 
-`Generator.GetIdentity` 通过 `Assembly.GetName()` 读取自身程序集的简单名称和 `Version`，保留版本对象的完整文本，例如 `0.12.0.0`。三个生成器调用同一方法读取身份，不取调用进程或宿主程序集版本。主 Header 的 RPM 摘要覆盖该标签。
+`Generator.GetIdentity` 通过 `Assembly.GetName()` 读取自身程序集的简单名称和 `Version`，保留版本对象的完整文本，不写死工具版本号。三个生成器调用同一方法读取身份，不取调用进程或宿主程序集版本。主 Header 的 RPM 摘要覆盖该标签。
 
 tar 通过 `PaxGlobalExtendedAttributesTarEntry` 写入一个全局扩展记录，不将其加入 `Package.Entries`；deb 写入控制字段；RPM 直接写入 1064 标签，不占用已有维护者字段。RPM 原生标签含义参见[官方标签说明](https://rpm-software-management.github.io/rpm/manual/tags.html)，PAX API 参见[官方构造说明](https://learn.microsoft.com/en-us/dotnet/api/system.formats.tar.paxglobalextendedattributestarentry.-ctor)。
 

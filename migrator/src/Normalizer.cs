@@ -33,38 +33,18 @@
 
 using System;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
 
 namespace Zongsoft.Tools.Migrator;
 
-public class Normalizer
+public static class Normalizer
 {
-	#region 常量定义
-	//变量解析的正则表达式（变量包括两种语法：$(variable) 或 %variable%）
-	private static readonly Regex _variableRegex = new(@"(?<opt>\$\((?<name>\w+)\))|(?<env>\%(?<name>\w+)\%)", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.IgnorePatternWhitespace);
-	#endregion
-
-	#region 公共属性
-	private static Variables _variables;
-	public static Variables Variables => _variables;
-	#endregion
-
-	#region 初始方法
-	public static void Initialize(IReadOnlyDictionary<string, string> variables)
-	{
-		ArgumentNullException.ThrowIfNull(variables);
-
-		_variables = new Variables(variables);
-	}
-	#endregion
-
 	#region 公共方法
-	public static string Normalize(string text, string fallback = null)
+	public static string Normalize(string text, IReadOnlyDictionary<string, string> variables, string fallback)
 	{
 		if(string.IsNullOrWhiteSpace(text))
 			return fallback;
 
-		var result = Normalize(text, _variables);
+		var result = Normalize(text, variables);
 		if(!result.Succeed)
 			throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed_Message, result.Value));
 
@@ -76,11 +56,11 @@ public class Normalizer
 		if(string.IsNullOrWhiteSpace(text))
 			return Result.Success(string.Empty);
 
-		variables ??= _variables ?? throw new InvalidOperationException(Properties.Resources.NormalizerNotInitialized_Message);
+		ArgumentNullException.ThrowIfNull(variables);
 		if(variables is Variables collection)
 			variables = collection.Raw;
 
-		var result = VariableExpander.Expand(text, variables, _variableRegex);
+		var result = VariableExpander.Expand(text, variables);
 		return result.Succeed ? Result.Success(result.Value) : Result.Failure(result.Variable);
 	}
 

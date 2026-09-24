@@ -65,17 +65,17 @@ Task("pack")
 	.IsDependentOn("build")
 	.Does(() =>
 {
-	var packages = GetFiles($"**/{edition}/*.nupkg");
+	var version = XmlPeek("src/Zongsoft.Tools.Packager.csproj", "/Project/PropertyGroup/Version");
+	var package = $"src/bin/{edition}/Zongsoft.Tools.Packager.{version}.nupkg";
+	if(!FileExists(package))
+		throw new Exception($"NuGet package does not exist: {package}");
 
-	foreach(var package in packages)
+	DotNetNuGetPush(package, new DotNetNuGetPushSettings
 	{
-		DotNetNuGetPush(package.FullPath, new DotNetNuGetPushSettings
-		{
-			Source = "nuget.org",
-			ApiKey = EnvironmentVariable("NUGET_API_KEY"),
-			SkipDuplicate = true,
-		});
-	}
+		Source = "nuget.org",
+		ApiKey = EnvironmentVariable("NUGET_API_KEY"),
+		SkipDuplicate = true,
+	});
 });
 
 Task("default")

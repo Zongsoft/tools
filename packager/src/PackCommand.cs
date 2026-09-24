@@ -184,23 +184,21 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		variables[VERSION_OPTION] = versionFile.Identifier.Version.ToString();
 		variables[SOURCE_OPTION] = Path.GetFullPath(source);
 
-		Normalizer.Initialize(variables);
+		var resolved = new Variables(variables);
+		var cmdlet = new CommandLine.Cmdlet(context.Command.Name);
+		cmdlet.Options.Add(new(CommandLine.CmdletOptionKind.Fully, OVERWRITE_OPTION, resolved[OVERWRITE_OPTION]));
+		var overwrite = new CommandContext(context.Executor, cmdlet, context.Command, null).Options.Switch(OVERWRITE_OPTION);
+		var output = resolved.Output ?? source;
 
-		var overwrite = GetOverwrite(context);
-		var output = Normalizer.Variables.Output ?? source;
-
-		Normalizer.Variables[SOURCE_OPTION] = source = Path.GetFullPath(source);
-		Normalizer.Variables[OUTPUT_OPTION] = output = Path.GetFullPath(Path.Combine(source, output));
+		resolved[SOURCE_OPTION] = source = Path.GetFullPath(source);
+		resolved[OUTPUT_OPTION] = output = Path.GetFullPath(Path.Combine(source, output));
 
 		//创建安装包对象
-		var package = this.CreatePackage(context);
+		var package = this.CreatePackage(context, resolved);
 		if(package == null)
 			return ValueTask.FromResult<object>(null);
 
 		//确保输出目录存在
-		if(!Directory.Exists(output))
-			Directory.CreateDirectory(output);
-
 		var migrator = context.Options.GetValue<string>(MIGRATOR_OPTION);
 		if(!string.IsNullOrWhiteSpace(migrator))
 			package.Migrator = Migrator.Load(package, migrator);
@@ -211,7 +209,7 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		//加载安装条目
 		package.Entries.Load(source,
 			context.Arguments,
-			[Normalizer.Variables.Exclude]);
+			[resolved.Exclude]);
 
 		package.Migrator?.Attach(package);
 
@@ -230,50 +228,20 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	#endregion
 
 	#region 抽象方法
-	protected abstract TPackage CreatePackage(CommandContext context);
+	protected abstract TPackage CreatePackage(CommandContext context, Variables variables);
 	#endregion
 
 	#region 配置方法
 	protected static void Configure(Package package, CommandContext context)
 	{
-		var installPath = Normalizer.Variables[INSTALL_PATH_OPTION];
+		var installPath = package.Variables[INSTALL_PATH_OPTION];
 
 		if(!string.IsNullOrEmpty(installPath))
-			package.InstallPath = Normalizer.Normalize(installPath);
+			package.InstallPath = Normalizer.Normalize(installPath, package.Variables, null);
 	}
 	#endregion
 
 	#region 私有方法
 	internal static Dictionary<string, string> GetVariables(CommandContext context) => Variables.From(context);
-
-	private static bool GetOverwrite(CommandContext context)
-	{
-		foreach(var option in context.Options)
-		{
-			if(!string.Equals(option.Key, OVERWRITE_OPTION, StringComparison.OrdinalIgnoreCase))
-				continue;
-
-			if(option.Value == null)
-				return true;
-
-			var value = Normalizer.Normalize(option.Value.ToString());
-			if(bool.TryParse(value, out var result))
-				return result;
-
-			if(string.Equals(value, "1", StringComparison.OrdinalIgnoreCase) || string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase) ||
-				string.Equals(value, "on", StringComparison.OrdinalIgnoreCase) || string.Equals(value, "enable", StringComparison.OrdinalIgnoreCase) ||
-				string.Equals(value, "enabled", StringComparison.OrdinalIgnoreCase))
-				return true;
-
-			if(string.Equals(value, "0", StringComparison.OrdinalIgnoreCase) || string.Equals(value, "no", StringComparison.OrdinalIgnoreCase) ||
-				string.Equals(value, "off", StringComparison.OrdinalIgnoreCase) || string.Equals(value, "disable", StringComparison.OrdinalIgnoreCase) ||
-				string.Equals(value, "disabled", StringComparison.OrdinalIgnoreCase))
-				return false;
-
-			throw new ArgumentException(null, OVERWRITE_OPTION);
-		}
-
-		return false;
-	}
 	#endregion
 }

@@ -39,33 +39,11 @@ using System.Runtime.InteropServices;
 
 namespace Zongsoft.Tools.Packager;
 
-internal static class Utility
+internal static partial class Utility
 {
 	#region 公共方法
-	/// <summary>将工具的绝对输入适配为 Core 本地搜索，结果保留逻辑名称。</summary>
-	public static IEnumerable<Zongsoft.IO.Searcher.Match> Search(string path, bool files = false, string sourceDirectory = null)
-	{
-		path = Path.GetFullPath(path);
-		var origin = sourceDirectory ?? (path.IndexOfAny(['*', '?']) < 0 ? Path.GetDirectoryName(path) : Path.GetPathRoot(path));
-		var directory = new DirectoryInfo(origin ?? path);
-		var pattern = Path.GetRelativePath(directory.FullName, path);
-
-		return Zongsoft.IO.Searcher.Search(directory, pattern, files ? Zongsoft.IO.Searcher.Target.Files : Zongsoft.IO.Searcher.Target.Both);
-	}
-
 	/// <summary>解析单个来源；显式文件路径允许其祖先是链接。</summary>
 	public static FileSystemInfo Resolve(string path) => Search(path).Single().Result;
-
-	/// <summary>判断指定的版本号是否为零。</summary>
-	/// <param name="version">指定的版本。</param>
-	/// <returns>如果版本号为零则返回真(<c>True</c>)，否则返回假(<c>False</c>)。</returns>
-	public static bool IsZero(this Version version) => version == null ||
-	(
-		version.Major == 0 &&
-		version.Minor == 0 &&
-		version.Build <= 0 &&
-		version.Revision <= 0
-	);
 
 	public static string GetRuntimeIdentifier(Platform platform, Architecture? architecture) => platform == Platform.Windows ?
 		(!architecture.HasValue ? "win" : $"win-{architecture.ToString().ToLowerInvariant()}") :

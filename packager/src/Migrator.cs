@@ -64,9 +64,9 @@ public sealed class Migrator
 		if(string.IsNullOrWhiteSpace(name))
 			throw new ArgumentException(Properties.Resources.MigratorNameInvalid_Message, nameof(name));
 
-		name = Normalizer.Normalize(name);
+		name = Normalizer.Normalize(name, package.Variables, null);
 		var searchParents = name.IndexOfAny(['/', '\\']) < 0;
-		var path = Path.GetFullPath(Path.Combine(Normalizer.Variables.Source, name));
+		var path = Path.GetFullPath(Path.Combine(package.Variables.Source, name));
 		name = Path.GetFileName(path);
 
 		if(!Regex.IsMatch(name, @"^[A-Za-z0-9][A-Za-z0-9._+-]*$") ||

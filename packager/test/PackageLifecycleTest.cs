@@ -27,13 +27,13 @@ public sealed class PackageLifecycleTest
 	public void Package_Provenance_RecordsGeneratorAndPreservesApplicationMetadata(string format)
 	{
 		using var directory = new TemporaryDirectory();
-		InitializeNormalizer(directory.Path);
+		var variables = CreateVariables(directory.Path);
 		var version = new Version(1, 2, 3);
 		Package package = format switch
 		{
-			"tar" => new Package.Tar("zongsoft.daemon", null, version, Platform.Linux, Architecture.X64),
-			"deb" => new Package.Deb("zongsoft.daemon", null, version, Platform.Linux, Architecture.X64),
-			_ => new Package.Rpm("zongsoft.daemon", null, version, Platform.Linux, Architecture.X64),
+			"tar" => new Package.Tar("zongsoft.daemon", null, version, Platform.Linux, Architecture.X64, variables),
+			"deb" => new Package.Deb("zongsoft.daemon", null, version, Platform.Linux, Architecture.X64, variables),
+			_ => new Package.Rpm("zongsoft.daemon", null, version, Platform.Linux, Architecture.X64, variables),
 		};
 		package.InstallPath = INSTALL_PATH;
 		package.Maintainer = "Hosting Maintainer";
@@ -147,9 +147,9 @@ public sealed class PackageLifecycleTest
 	public void TarUninstallScript_ExplicitUninstall_DeletesOnlyResolvedTarget()
 	{
 		using var directory = new TemporaryDirectory();
-		InitializeNormalizer(directory.Path);
+		var variables = CreateVariables(directory.Path);
 
-		var package = new Package.Tar("lifecycle-test", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64)
+		var package = new Package.Tar("lifecycle-test", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, variables)
 		{
 			InstallPath = INSTALL_PATH,
 		};
@@ -168,9 +168,9 @@ public sealed class PackageLifecycleTest
 
 	private static string GenerateDebianScript(string output, string name)
 	{
-		InitializeNormalizer(output);
+		var variables = CreateVariables(output);
 
-		var package = new Package.Deb("lifecycle-test", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64)
+		var package = new Package.Deb("lifecycle-test", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, variables)
 		{
 			InstallPath = INSTALL_PATH,
 			Scripts = new(":", ":", UNINSTALLING_MARKER, UNINSTALLED_MARKER),
@@ -182,9 +182,9 @@ public sealed class PackageLifecycleTest
 
 	private static (string PreUninstall, string PostUninstall) GenerateRpmUninstallScripts(string output)
 	{
-		InitializeNormalizer(output);
+		var variables = CreateVariables(output);
 
-		var package = new Package.Rpm("lifecycle-test", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64)
+		var package = new Package.Rpm("lifecycle-test", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, variables)
 		{
 			InstallPath = INSTALL_PATH,
 			Scripts = new(":", ":", UNINSTALLING_MARKER, UNINSTALLED_MARKER),
@@ -196,9 +196,9 @@ public sealed class PackageLifecycleTest
 		return (scripts[1025], scripts[1026]);
 	}
 
-	private static void InitializeNormalizer(string source)
+	private static Variables CreateVariables(string source)
 	{
-		Normalizer.Initialize(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+		return new Variables(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
 		{
 			["framework"] = "net10.0",
 			["source"] = source,

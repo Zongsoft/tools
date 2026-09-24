@@ -58,7 +58,7 @@
 
 ## 打包器版本元数据
 
-每个安装包自动记录当前生成工具的身份，逻辑内容为 `Packager:Zongsoft.Tools.Packager@0.12.0.0`。值采用 `程序集名@版本号`，从打包器自身程序集读取，独立于宿主应用版本；无需指定额外选项或启用升迁。
+每个安装包自动记录当前生成工具的身份，逻辑内容为 `Packager:Zongsoft.Tools.Packager@<assembly-version>`。值采用 `程序集名@版本号`，从打包器自身程序集读取，独立于宿主应用版本；无需指定额外选项或启用升迁。
 
 | 格式 | 存放位置 | 查看方式 |
 | --- | --- | --- |
@@ -107,10 +107,11 @@ dotnet tool uninstall -g Zongsoft.Tools.Packager
 dotnet pack src/Zongsoft.Tools.Packager.csproj -c Release
 ```
 
-确认构建成功且 `src/bin/Release/Zongsoft.Tools.Packager.0.12.0.nupkg` 已生成后，首次安装执行：
+确认构建成功且 `src/bin/Release/Zongsoft.Tools.Packager.<version>.nupkg` 已生成后，首次安装执行：
 
 ```powershell
-dotnet tool install -g Zongsoft.Tools.Packager --version 0.12.0 --source ./src/bin/Release --no-http-cache
+$toolVersion = dotnet msbuild src/Zongsoft.Tools.Packager.csproj -getProperty:Version -nologo
+dotnet tool install -g Zongsoft.Tools.Packager --version "$toolVersion" --source ./src/bin/Release --no-http-cache
 ```
 
 若已安装该工具，尤其是重新编译了同一版本，先卸载，再执行上面的本地安装命令：
@@ -119,7 +120,7 @@ dotnet tool install -g Zongsoft.Tools.Packager --version 0.12.0 --source ./src/b
 dotnet tool uninstall -g Zongsoft.Tools.Packager
 ```
 
-示例版本 `0.12.0` 对应当前项目版本，请随实际 `.nupkg` 调整。`--source` 限定本次安装只使用本地目录，避免选中 NuGet.org 的同名包；`--no-http-cache` 禁用下载缓存，选项说明见 [.NET 工具安装文档](https://learn.microsoft.com/zh-cn/dotnet/core/tools/dotnet-tool-install)。安装后使用 `dotnet tool list -g` 核对版本。这里的“本地”指包来源，`-g` 仍会替换当前用户的全局工具。只做本地测试不要运行 Cake 的 `pack` 任务，它会推送到 NuGet.org。
+安装命令从项目文件自动读取版本号；包文件名中的 `<version>` 表示该值。`--source` 限定本次安装只使用本地目录，避免选中 NuGet.org 的同名包；`--no-http-cache` 禁用下载缓存，选项说明见 [.NET 工具安装文档](https://learn.microsoft.com/zh-cn/dotnet/core/tools/dotnet-tool-install)。安装后使用 `dotnet tool list -g` 核对版本。这里的“本地”指包来源，`-g` 仍会替换当前用户的全局工具。只做本地测试不要运行 Cake 的 `pack` 任务，它会推送到 NuGet.org。
 
 ## 快速开始
 
@@ -193,7 +194,8 @@ dotnet-pack deb <选项...> [打包项...]
 dotnet-pack rpm <选项...> [打包项...]
 ```
 
-三个子命令共享通用选项。`rpm` 额外支持 RPM 包关系元数据选项。
+必须指定且只指定 `tar`、`deb`、`rpm` 之一。三个子命令共享通用选项；`deb` 和 `rpm` 另有各自的包关系选项。选项使用 `--key:value` 或 `--key=value`，含空格的值按终端语法加引号。位置参数的载荷映射见[打包项](#打包项)。
+制作成功返回 `0`，无命令返回 `2`，参数、输入或制包失败返回 `1`。
 
 ### 示例
 
@@ -304,8 +306,10 @@ hosting 的 `web/default` 宿主不区分 Edition 时可写为 `Zongsoft.Hosting
 | `--edition:<name>` | 空 | 可选发行/版本标识。会追加到包名；对 RPM 而言，有值时也作为 release。 |
 | `--compilation:<name>` | `Release` | 查找宿主文件时使用的构建配置目录，例如 `bin/<configuration>/<framework>`。 |
 | `--architecture:<arch>` | `x64` | 目标 CPU 架构，例如 `x64`、`x86`、`arm64`、`arm`。 |
-| `--overwrite` | `false` | 覆盖已存在的包文件。未指定时，输出文件已存在会导致创建失败。 |
+| `--overwrite[:布尔值]` | `false` | 覆盖已存在的产物；tar 归档和安装脚本作为一组提交。 |
 | `--install-path:<path>` | `/opt/<将点号替换为 / 的标识>` | Linux 安装目录。标识转为小写，每个点号均替换为目录分隔符，例如 `Zongsoft.Hosting.Web` 对应 `/opt/zongsoft/hosting/web`，指定 `--daemon:zongsoft.web` 后则为 `/opt/zongsoft/web`；如果指定了未禁用的 `--daemon`，默认路径改用 daemon 标识而不是 `--name` 推导。 |
+| `--daemon:<名称或文件>` | 自动查找/生成 | 指定 systemd 服务标识或现有 `.service` 文件；`none`、`disable`、`disabled` 禁用服务。 |
+| `--daemon-environments:<名称列表>` | 空 | 生成服务时从变量视图读取这些名称的值，写入 `Environment=`；用 `,` 或 `;` 分隔。 |
 | `--listen:<port-or-url>` | 空 | 自动生成服务时使用的监听端口或地址；端口默认使用 127.0.0.1，完整地址原样传给宿主 --urls。 |
 | `--title:<text>` | 空 | 人类可读的软件包标题，也用于生成 systemd 描述。 |
 | `--summary:<text-or-file>` | 空 | 简短摘要。如果值是已存在文件路径，则读取文件内容。 |
@@ -315,6 +319,8 @@ hosting 的 `web/default` 宿主不区分 Edition 时可写为 `Zongsoft.Hosting
 | `--category:<text>` | 格式默认值 | Debian `Section` 或 RPM `Group`；Debian 默认 `utils`，RPM 默认 `Applications/System`。 |
 | `--maintainer:<text>` | `Zongsoft Studio <zongsoft@gmail.com>` | 软件包维护者/厂商文本。 |
 | `--dependencies:<list>` | 空 | 以逗号或分号分隔的依赖列表。Debian 写入 `Depends`，版本关系使用 `name (>= version)`；RPM 写入 `Requires`，可使用 `name >= version`。 |
+
+`--overwrite` 可裸写，也可显式写 `true/false`、`1/0`、`yes/no`、`on/off` 或 `enable(d)/disable(d)`；其他值按 Core `Switch` 约定视为 false。枚举选项沿用 Core 的转换规则，不额外检查枚举成员是否已定义；调用方应提供有效枚举项。输出冲突在制包前和提交前检查；生成失败时旧产物保留。包生成成功后，源 `.version` 才原子保存；保存失败时包保留而命令报错。
 
 ### Debian 选项
 
@@ -515,12 +521,14 @@ dotnet-pack deb \
 - **安装：** `--installing:<script>` 在安装前执行，`--installed:<script>` 在安装后执行。
 - **卸载或移除：** `--uninstalling:<script>` 在移除前执行，`--uninstalled:<script>` 在移除后执行。
 
-每个主钩子都可以追加基于文件的前置和后置脚本片段：`pre` 在主钩子前执行，`post` 在主钩子后执行。
+每个主钩子都可以追加基于文件的前置和后置脚本片段，默认均为空：
 
-- `--preinstalling:<paths>` / `--postinstalling:<paths>` 包围 `installing`。
-- `--preinstalled:<paths>` / `--postinstalled:<paths>` 包围 `installed`。
-- `--preuninstalling:<paths>` / `--postuninstalling:<paths>` 包围 `uninstalling`。
-- `--preuninstalled:<paths>` / `--postuninstalled:<paths>` 包围 `uninstalled`。
+| 主钩子 | 前置文件选项 | 后置文件选项 |
+| --- | --- | --- |
+| `--installing:<文本或文件>` | `--preinstalling:<路径列表>` | `--postinstalling:<路径列表>` |
+| `--installed:<文本或文件>` | `--preinstalled:<路径列表>` | `--postinstalled:<路径列表>` |
+| `--uninstalling:<文本或文件>` | `--preuninstalling:<路径列表>` | `--postuninstalling:<路径列表>` |
+| `--uninstalled:<文本或文件>` | `--preuninstalled:<路径列表>` | `--postuninstalled:<路径列表>` |
 
 多个 pre/post 脚本路径使用 `;` 或 `|` 分隔。pre/post 选项只接受文件列表，不接受内联文本。
 
@@ -562,11 +570,11 @@ $(name)
 %name%
 ```
 
-变量名不区分大小写。显式命令选项（含额外选项）覆盖环境变量，环境变量覆盖描述符默认值。变量按使用展开，未使用的无效引用不阻止制包；用到的未知或循环引用会报错。
+变量名支持点号、连字符和索引，不区分大小写。显式命令选项（含额外选项）覆盖环境变量，环境变量覆盖描述符默认值。变量按使用递归展开，未使用的无效引用不阻止制包；用到的未知、循环或超过 64 层的引用会报错。
 
-`name`、`edition`、`version` 仍由源版本文件及显式身份选项决定；同名环境变量不替代身份。最终身份与解析后的 source/output 覆盖变量集合。`--migrator` 必须显式启用，`--overwrite` 仍为显式开关。
+`name`、`edition`、`version` 仍由源版本文件及显式身份选项决定；同名环境变量不替代身份。最终身份与解析后的 source/output 覆盖变量集合。`--migrator` 必须显式启用；`--overwrite` 可由环境变量提供，再由命令行覆盖。
 
-命令先保留原始选项文本。定位 `source` 后，显式提供的 `name`、`edition`、`version` 先展开再参与源版本校验和版本类型转换；`platform`、`architecture` 和显式 `overwrite` 也先展开再转换。可传入字面量 `$(APP_VERSION)` 或 `%APP_VERSION%`，在 Bash 中须加引号避免 Shell 抢先解释。尚未从源 `.version` 获得的身份值不能用来定位该源目录。
+命令先保留原始选项文本。定位 `source` 后，显式提供的 `name`、`edition`、`version` 先展开再参与源版本校验和版本类型转换；`platform`、`architecture` 和 `overwrite` 也先展开再转换。可传入字面量 `$(APP_VERSION)` 或 `%APP_VERSION%`，在 Bash 中须加引号避免 Shell 抢先解释。尚未从源 `.version` 获得的身份值不能用来定位该源目录。
 
 ```bash
 export APP_NAME=Zongsoft.Hosting.Web

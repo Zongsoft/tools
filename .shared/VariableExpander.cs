@@ -43,16 +43,26 @@ internal static class VariableExpander
 {
 	#region 常量定义
 	internal const int MAXIMUM_DEPTH = 64;
+	private static readonly Regex _pattern = new(@"(?<opt>\$\((?<name>[\w.\[\]-]+)\))|(?<env>\%(?<name>[\w.\[\]-]+)\%)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 	#endregion
 
 	#region 公共方法
-	internal static Result Expand(string text, IReadOnlyDictionary<string, string> variables, Regex pattern, bool preserveMissing = false, Action<string> missing = null)
+	internal static Result Expand(string text, IReadOnlyDictionary<string, string> variables, Action<string> missing = null)
 	{
 		if(string.IsNullOrWhiteSpace(text))
 			return Result.Success(string.Empty);
 
 		ArgumentNullException.ThrowIfNull(variables);
-		ArgumentNullException.ThrowIfNull(pattern);
+
+		if(variables is not Dictionary<string, string> dictionary || !dictionary.Comparer.Equals(StringComparer.OrdinalIgnoreCase))
+		{
+			var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+			foreach(var variable in variables)
+				values[variable.Key] = variable.Value;
+
+			variables = values;
+		}
 
 		var active = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -65,16 +75,13 @@ internal static class VariableExpander
 			return Result.Failure(exception.Name, exception.Reason);
 		}
 
-		string ExpandValue(string value) => pattern.Replace(value ?? string.Empty, match =>
+		string ExpandValue(string value) => _pattern.Replace(value ?? string.Empty, match =>
 		{
 			var name = match.Groups["name"].Value;
 
 			if(!variables.TryGetValue(name, out var replacement))
 			{
 				missing?.Invoke(name);
-				if(preserveMissing)
-					return match.Value;
-
 				throw new ResolutionException(name, FailureReason.Missing);
 			}
 
@@ -142,27 +149,31 @@ internal sealed class VariableMap : IDictionary<string, string>
 	#endregion
 
 	#region 公共属性
-	internal IReadOnlyDictionary<string, string> Raw => _raw;
-	public string this[string key]
-	{
-		get => this.Resolve(_raw[key]);
-		set => _raw[key] = value;
-	}
-
+	public int Count => _raw.Count;
+	public bool IsReadOnly => false;
 	public ICollection<string> Keys => _raw.Keys;
 	public ICollection<string> Values
 	{
 		get
 		{
 			var values = new List<string>(_raw.Count);
+
 			foreach(var value in _raw.Values)
 				values.Add(this.Resolve(value));
+
 			return values;
 		}
 	}
 
-	public int Count => _raw.Count;
-	public bool IsReadOnly => false;
+	public string this[string key]
+	{
+		get => this.Resolve(_raw[key]);
+		set => _raw[key] = value;
+	}
+	#endregion
+
+	#region 内部属性
+	internal IReadOnlyDictionary<string, string> Raw => _raw;
 	#endregion
 
 	#region 公共方法

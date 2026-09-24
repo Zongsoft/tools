@@ -48,6 +48,7 @@ internal static class Generator
 		foreach(var name in new[] { archive, launcher })
 		{
 			var path = Path.Combine(output, name);
+
 			if(Directory.Exists(path) || !overwrite && File.Exists(path))
 				throw new IOException(string.Format(Properties.Resources.MigrateOutputExists_Message, path));
 		}
@@ -56,68 +57,30 @@ internal static class Generator
 	internal static void Migrate(MigrationBundle bundle, string output, string archive, string launcher, string name, bool windows, bool overwrite)
 	{
 		CheckMigrationOutputs(output, archive, launcher, overwrite);
-		Directory.CreateDirectory(output);
-		var staging = Path.Combine(output, ".migrate-" + Guid.NewGuid().ToString("N"));
-		Directory.CreateDirectory(staging);
+		using var publisher = new ArtifactPublisher(output, overwrite, archive, launcher);
+		using(var stream = File.Create(publisher.StagePath(archive)))
+		using(var gzip = new GZipStream(stream, CompressionLevel.Optimal))
+		using(var writer = new TarWriter(gzip, TarEntryFormat.Pax, false))
+		{
+			writer.WriteEntry(new PaxGlobalExtendedAttributesTarEntry([new KeyValuePair<string, string>("Migrator", GetIdentity()), new KeyValuePair<string, string>("Runtime", bundle.Runtime)]));
+
+			foreach(var directory in bundle.Entries.SelectMany(entry => GetDirectories(entry.EntryName)).Distinct(StringComparer.Ordinal).OrderBy(path => path.Count(character => character == '/')).ThenBy(path => path, StringComparer.Ordinal))
+				writer.WriteEntry(new PaxTarEntry(TarEntryType.Directory, directory) { Mode = Utility.Unix.Mode755 });
+
+			foreach(var entry in bundle.Entries)
+				WriteTarEntry(writer, entry);
+		}
+
+		var script = windows ? CreateMigrationWindowsLauncher(archive, name, bundle.Fingerprint) : CreateMigrationUnixLauncher(archive, name, bundle.Fingerprint);
+		File.WriteAllText(publisher.StagePath(launcher), script);
+
 		if(!OperatingSystem.IsWindows())
-			File.SetUnixFileMode(staging, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-
-		var cleanup = true;
-		var published = new List<string>();
-		var backups = new List<string>();
-		try
 		{
-			using(var stream = File.Create(Path.Combine(staging, archive)))
-			using(var gzip = new GZipStream(stream, CompressionLevel.Optimal))
-			using(var writer = new TarWriter(gzip, TarEntryFormat.Pax, false))
-			{
-				writer.WriteEntry(new PaxGlobalExtendedAttributesTarEntry([new KeyValuePair<string, string>("Migrator", GetIdentity()), new KeyValuePair<string, string>("Runtime", bundle.Runtime)]));
-				foreach(var directory in bundle.Entries.SelectMany(entry => GetDirectories(entry.EntryName)).Distinct(StringComparer.Ordinal).OrderBy(path => path.Count(character => character == '/')).ThenBy(path => path, StringComparer.Ordinal))
-					writer.WriteEntry(new PaxTarEntry(TarEntryType.Directory, directory) { Mode = Utility.Unix.Mode755 });
-
-				foreach(var entry in bundle.Entries)
-					WriteTarEntry(writer, entry);
-			}
-
-			var script = windows ? CreateMigrationWindowsLauncher(archive, name, bundle.Fingerprint) : CreateMigrationUnixLauncher(archive, name, bundle.Fingerprint);
-			File.WriteAllText(Path.Combine(staging, launcher), script);
-			if(!OperatingSystem.IsWindows())
-			{
-				File.SetUnixFileMode(Path.Combine(staging, launcher), Utility.Unix.Mode755);
-				File.SetUnixFileMode(Path.Combine(staging, archive), UnixFileMode.UserRead | UnixFileMode.UserWrite);
-			}
-
-			// Stage both outputs before touching either destination; preserve originals for rollback.
-			CheckMigrationOutputs(output, archive, launcher, overwrite);
-			foreach(var file in new[] { archive, launcher })
-			{
-				var target = Path.Combine(output, file);
-				if(File.Exists(target))
-				{
-					File.Move(target, Path.Combine(staging, file + ".previous"));
-					backups.Add(file);
-				}
-				File.Move(Path.Combine(staging, file), target);
-				published.Add(file);
-			}
+			File.SetUnixFileMode(publisher.StagePath(launcher), Utility.Unix.Mode755);
+			File.SetUnixFileMode(publisher.StagePath(archive), UnixFileMode.UserRead | UnixFileMode.UserWrite);
 		}
-		catch
-		{
-			try
-			{
-				foreach(var file in published)
-					File.Delete(Path.Combine(output, file));
-				foreach(var file in backups)
-					File.Move(Path.Combine(staging, file + ".previous"), Path.Combine(output, file));
-			}
-			catch { cleanup = false; throw; }
-			throw;
-		}
-		finally
-		{
-			if(cleanup)
-				Directory.Delete(staging, true);
-		}
+
+		publisher.Commit();
 	}
 	#endregion
 

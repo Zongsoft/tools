@@ -11,6 +11,7 @@ This document describes responsibilities, execution order, and maintenance const
 | File/type | Responsibility |
 | --- | --- |
 | `Deployer.Command.cs` | Combine variables and locate the destination application's configuration. |
+| Linked `tools/.shared` source | `Utility.cs` compiles into this project's `partial Utility`; it shares recursive variables and command helpers. `ArtifactPublisher` manages staging and publication; deployment copies and reports use its atomic single-file replacement. Boolean values in the variable map follow Core `Switch` semantics; enums use Core conversion. |
 | `Deployer.cs` | Coordinate one invocation, traverse manifests, and collect requests and preflight failures. |
 | `DeploymentSession.cs` | Own counters, active manifest paths, package requests, selected versions, and expansion buffers. |
 | `DeploymentPlan.cs`, `DeploymentOperation.cs`, `PackageSelection.cs` | Store the plan, operation origins, selected packages, and hashes in separate types/files. |
@@ -26,7 +27,7 @@ A `Deployer` instance rejects concurrent calls. Sequential calls create fresh se
 
 ## Reusing libraries
 
-Release references Zongsoft.Core 7.59.0; Debug references the local Core assembly. NuGet.* uses 7.9.0. Core and test/analyzer versions are managed in the repository root Directory.Packages.props; NuGet.* versions are declared with VersionOverride in this tool project.
+Release references the Zongsoft.Core NuGet package; Debug references the local Core assembly. Core and test/analyzer versions are managed in the repository root Directory.Packages.props; NuGet.* versions are declared with VersionOverride in this tool project.
 
 | Capability | Reused API and remaining tool responsibility |
 | --- | --- |
@@ -38,7 +39,7 @@ Release references Zongsoft.Core 7.59.0; Debug references the local Core assembl
 | TFM | NuGetFramework represents framework identity and uses System.Version for framework/platform versions. NuGetVersion and VersionRange represent package versions and constraints. Explicit framework-filter rules, including ^, are handled separately from nearest-compatible asset selection. |
 | RID | NuGet `JsonRuntimeFormat.ReadRuntimeGraph` loads the graph; `RuntimeGraph.ExpandRuntime` supplies fallback candidates. |
 
-Core 7.59.0 handles imports directly in ProfileReader with cycle/depth checks. ProfileOptions supplies two Action<ProfileContext> import callbacks. Deployer hashes imported files in Importing and records roots separately. Appsettings dotted keys, target containment, link rejection and ownership remain deployment responsibilities.
+Core handles imports directly in ProfileReader with cycle/depth checks. ProfileOptions supplies two Action<ProfileContext> import callbacks. Deployer hashes imported files in Importing and records roots separately. Appsettings dotted keys, target containment, link rejection and ownership remain deployment responsibilities.
 
 ## From manifests to execution
 
@@ -55,7 +56,7 @@ Online parsing/resolution can populate the NuGet cache, so dry-run does not mean
 
 `DeploymentEntry.Get` splits the source at the first colon before expanding variables. Entries without a colon use the name `path`. `DeploymentResolverManager.GetResolver` selects the default path resolver for null, empty, or whitespace-only names. It matches `path`, `nuget`, and `delete`/`remove` case-insensitively; unknown names return null. Default selection for an empty name is part of the resolver API contract. The default resolver has an empty Name; `path` is a lookup name selecting that instance. Use `path:D:\dir\files.ext` or `path:D:/dir/files.ext` for a literal Windows absolute source path so the drive letter is not parsed as a resolver name. Relative paths may omit the prefix or use `path:`.
 
-Variable names are case-insensitive. Environment values are overridden by destination appsettings and then command options. The destination is resolved recursively from all command options and environment variables before its configuration is loaded. Final values remain raw until read, so option order does not matter; referenced missing variables, cycles, and chains over 64 levels fail, while unused values are left alone. JSON comments and trailing commas are accepted. Objects and arrays produce keys such as `Database.Name` and `Items[0].Name`.
+Variable names may contain dots, hyphens, and indices and are case-insensitive. Environment values are overridden by destination appsettings and then command options. The destination is resolved recursively from all command options and environment variables before its configuration is loaded. Final values remain raw until read, so option order does not matter; referenced missing variables, cycles, and chains over 64 levels fail, while unused values are left alone. Boolean and enum option values expand before conversion; `expansion` obeys its Boolean value and unconvertible `verbosity` fails. Enum options follow Core conversion rules without an additional check that the enum member is defined; callers must supply a valid member. JSON comments and trailing commas are accepted. Objects and arrays produce keys such as `Database.Name` and `Items[0].Name`.
 
 `Normalizer` expands `$(name)` and `%name%` without changing URL slashes. Undefined variables fail during deployment-path expansion, while filtered-out branches need not provide their variables. Combined filters retain left-to-right evaluation; both source and destination filters must match.
 
@@ -145,7 +146,7 @@ ProfileOptions exposes Importing/Imported as Action<ProfileContext>. FilePath is
 
 ## Core Profile declarations and saving
 
-Core 7.59.0 separates ordered local statements from the merged effective view. Imports replace effective references and entries identify their actual source declarations. Duplicate local keys still fail; local/import precedence follows reading order. ProfileReader owns loading and ProfileWriter owns saving.
+Core separates ordered local statements from the merged effective view. Imports replace effective references and entries identify their actual source declarations. Duplicate local keys still fail; local/import precedence follows reading order. ProfileReader owns loading and ProfileWriter owns saving.
 
 Core Save() without an explicit destination writes changed declarations in the receiver and import subtree back to their respective sources. Explicit paths, streams and text writers output only the receiver's statements. Unchanged files are not rewritten. Multiple outputs are all prepared before individual commits; this is not a cross-file transaction. Deployer only reads manifests and records hashes through Importing; it does not invoke these save entry points.
 

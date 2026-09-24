@@ -79,31 +79,20 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 
 	public string Name => this[NAME];
 	public string Title => this[TITLE];
-	public string Summary => TextSource.Read(this.Source, this.GetRaw(SUMMARY));
-	public string Description => TextSource.Read(this.Source, this.GetRaw(DESCRIPTION));
+	public string Summary => TextSource.Read(this.Source, this.GetRaw(SUMMARY), this);
+	public string Description => TextSource.Read(this.Source, this.GetRaw(DESCRIPTION), this);
 	public string Source => this[SOURCE];
 	public string Output => this[OUTPUT];
 	public string Edition => this[EDITION];
 	public Version Version => _variables.TryGetValue(VERSION, out var value) ? Version.Parse(this[VERSION]) : null;
-	public Architecture Architecture => _variables.TryGetValue(ARCHITECTURE, out var value) ? Enum.Parse<Architecture>(this[ARCHITECTURE], true) : Architecture.X64;
+	public Architecture Architecture => !_variables.ContainsKey(ARCHITECTURE) ? Architecture.X64 : Zongsoft.Common.Convert.ConvertValue<Architecture>(this[ARCHITECTURE]);
+	#endregion
+
+	#region 内部属性
+	internal IReadOnlyDictionary<string, string> Raw => _variables;
 	#endregion
 
 	#region 公共方法
-	internal static Dictionary<string, string> From(CommandContext context)
-	{
-		var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-		foreach(var option in context.Descriptor.Options)
-			variables[option.Name] = option.DefaultValue?.ToString();
-
-		foreach(System.Collections.DictionaryEntry variable in Environment.GetEnvironmentVariables())
-			variables[variable.Key.ToString()] = variable.Value?.ToString();
-
-		foreach(var option in context.Options)
-			variables[option.Key] = option.Value?.ToString();
-
-		return variables;
-	}
-
 	public bool Contains(string name) => name != null && _variables.ContainsKey(name);
 	public bool TryGetValue(string name, out string value)
 	{
@@ -113,8 +102,8 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 	#endregion
 
 	#region 内部方法
-	internal IReadOnlyDictionary<string, string> Raw => _variables;
 	private string GetRaw(string name) => _variables.GetValueOrDefault(name);
+	internal static Dictionary<string, string> From(CommandContext context) => Utility.CreateVariables(context);
 	#endregion
 
 	#region 显式实现

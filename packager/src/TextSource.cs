@@ -39,46 +39,16 @@ namespace Zongsoft.Tools.Packager;
 internal static class TextSource
 {
 	#region 公共方法
-	public static string Read(string source, string value, bool fileOnly = false)
+	public static string Read(string source, string value, Variables variables, bool fileOnly = false)
 	{
-		if(string.IsNullOrWhiteSpace(value))
-			return null;
-
-		if(value.StartsWith("text:", StringComparison.OrdinalIgnoreCase))
+		ArgumentNullException.ThrowIfNull(variables);
+		return Utility.ReadTextSource(source, value, text =>
 		{
-			if(fileOnly)
-				throw new InvalidDataException(Properties.Resources.TextSourceFileRequired_Message);
-
-			return value[5..];
-		}
-
-		var explicitFile = value.StartsWith("file:", StringComparison.OrdinalIgnoreCase);
-		if(explicitFile)
-			value = value[5..];
-
-		var result = Normalizer.Normalize(value, Normalizer.Variables);
-		if(!result.Succeed)
-			throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed_Message, result.Value));
-
-		value = result.Value;
-		if(!explicitFile && !fileOnly && (value.Contains('\r') || value.Contains('\n')))
-			return value;
-
-		var path = Path.GetFullPath(Path.Combine(source ?? Environment.CurrentDirectory, value));
-		if(File.Exists(path))
-			return File.ReadAllText(path);
-
-		if(explicitFile || fileOnly || IsPath(value))
-			throw new FileNotFoundException(string.Format(Properties.Resources.TextSourceMissing_Message, path), path);
-
-		return value;
+			var result = Normalizer.Normalize(text, variables);
+			if(!result.Succeed)
+				throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed_Message, result.Value));
+			return result.Value;
+		}, fileOnly, Properties.Resources.TextSourceFileRequired_Message, Properties.Resources.TextSourceMissing_Message);
 	}
-	#endregion
-
-	#region 私有方法
-	private static bool IsPath(string value) =>
-		Path.IsPathFullyQualified(value) || value.StartsWith("./") || value.StartsWith("../") ||
-		value.StartsWith(@".\") || value.StartsWith(@"..\") ||
-		(!value.Contains(' ') && (value.Contains('/') || value.Contains('\\') || value.EndsWith(".sh", StringComparison.OrdinalIgnoreCase)));
 	#endregion
 }

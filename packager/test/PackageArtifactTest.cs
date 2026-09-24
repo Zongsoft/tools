@@ -6,10 +6,13 @@ using System.Formats.Tar;
 using System.IO.Compression;
 using System.Buffers.Binary;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Runtime.InteropServices;
 
 using Xunit;
+
+using Zongsoft.Terminals;
 
 namespace Zongsoft.Tools.Packager.Tests;
 
@@ -263,6 +266,30 @@ public sealed class PackageArtifactTest
 		Assert.DoesNotContain(package.Entries, entry => entry.EntryName.EndsWith("ignored.log", StringComparison.Ordinal));
 	}
 
+	[Theory]
+	[InlineData("tar")]
+	[InlineData("deb")]
+	[InlineData("rpm")]
+	public void Entries_DuplicateTarget_KeepsFirstSelectedContent(string format)
+	{
+		using var directory = new MigrationTestDirectory();
+		var first = directory.Write("first.txt", "first content");
+		directory.Write("second.txt", "second content");
+		var package = CreatePackage(format, directory.Path);
+		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
+		var previousTerminal = (ITerminal)terminalField.GetValue(null);
+		try
+		{
+			Terminal.Default = DispatchProxy.Create<ITerminal, MigratorPackageTest.RecordingTerminal>();
+			package.Entries.Load(directory.Path, ["first.txt:shared.txt", "second.txt:shared.txt", "first.txt:shared.txt"]);
+			Assert.Equal(first, Assert.Single(package.Entries).Source);
+			package.Pack(directory.Path, true);
+			var entries = ReadArchive(Path.Combine(directory.Path, package.FileName), format);
+			Assert.Equal("first content", Encoding.UTF8.GetString(Assert.Single(entries, entry => entry.Name.EndsWith("shared.txt", StringComparison.Ordinal)).Content));
+		}
+		finally { Terminal.Default = previousTerminal; }
+	}
+
 	#endregion
 
 	#region 流式载荷
@@ -324,6 +351,30 @@ public sealed class PackageArtifactTest
 		Assert.Throws<FileNotFoundException>(() => package.Pack(output, true));
 
 		Assert.Equal(baseline, GetTemporaryBuffers());
+	}
+
+	[Theory]
+	[InlineData("tar")]
+	[InlineData("deb")]
+	[InlineData("rpm")]
+	public void Package_StagingFailure_PreservesExistingArtifactsAndRemovesStaging(string format)
+	{
+		using var directory = new MigrationTestDirectory();
+		var file = directory.Write("source/payload.bin", "selected before deletion");
+		var source = Path.Combine(directory.Path, "source");
+		var output = Directory.CreateDirectory(Path.Combine(directory.Path, "output")).FullName;
+		var package = CreatePackage(format, source);
+		package.Entries.Load(source, ["payload.bin"]);
+		var archive = directory.Write("output/" + package.FileName, "old archive");
+		var installer = format == "tar" ? directory.Write("output/" + package.FileName[..^Package.Tar.EXTENSION.Length] + ".sh", "old installer") : null;
+		File.Delete(file);
+
+		Assert.Throws<FileNotFoundException>(() => package.Pack(output, true));
+
+		Assert.Equal("old archive", File.ReadAllText(archive));
+		if(installer != null)
+			Assert.Equal("old installer", File.ReadAllText(installer));
+		Assert.Empty(Directory.GetDirectories(output, ".zongsoft-*"));
 	}
 	#endregion
 
@@ -396,7 +447,7 @@ public sealed class PackageArtifactTest
 
 	private static Package CreatePackage(string format, string source)
 	{
-		Normalizer.Initialize(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+		var variables = new Variables(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
 		{
 			["source"] = source,
 			["framework"] = "net10.0",
@@ -404,9 +455,9 @@ public sealed class PackageArtifactTest
 		});
 		Package package = format switch
 		{
-			"tar" => new Package.Tar("zongsoft.web", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64),
-			"deb" => new Package.Deb("zongsoft.web", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64),
-			_ => new Package.Rpm("zongsoft.web", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64),
+			"tar" => new Package.Tar("zongsoft.web", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, variables),
+			"deb" => new Package.Deb("zongsoft.web", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, variables),
+			_ => new Package.Rpm("zongsoft.web", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, variables),
 		};
 		package.InstallPath = "/opt/zongsoft/web";
 		package.Scripts = new(":", ":", ":", ":");

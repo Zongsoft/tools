@@ -40,7 +40,7 @@ partial class Package
 {
 	public sealed class Rpm : Package
 	{
-		public Rpm(string name, string edition, Version version, Platform platform, Architecture architecture) : base(name, edition, version, platform, architecture)
+		public Rpm(string name, string edition, Version version, Platform platform, Architecture architecture, Variables variables = null) : base(name, edition, version, platform, architecture, variables)
 		{
 			this.Scriptor = new Scriptor.Systemd(this);
 			this.InstallPath = Utility.Unix.GetInstallPath(this.PackageIdentity);

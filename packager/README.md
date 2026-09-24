@@ -58,7 +58,7 @@ It is designed for .NET services and command-line applications that need repeata
 
 ## Packager version metadata
 
-Every package records the current generator identity, logically `Packager:Zongsoft.Tools.Packager@0.12.0.0`. The value is `assembly-name@version`, read from the packager's own assembly, independently of the host application's version. No additional option or migration configuration is required.
+Every package records the current generator identity, logically `Packager:Zongsoft.Tools.Packager@<assembly-version>`. The value is `assembly-name@version`, read from the packager's own assembly, independently of the host application's version. No additional option or migration configuration is required.
 
 | Format | Location | Inspection |
 | --- | --- | --- |
@@ -106,10 +106,11 @@ Install the generated `.nupkg` directly without publishing it to NuGet.org. The 
 dotnet pack src/Zongsoft.Tools.Packager.csproj -c Release
 ```
 
-After the build succeeds and `src/bin/Release/Zongsoft.Tools.Packager.0.12.0.nupkg` exists, install it for the first time:
+After the build succeeds and `src/bin/Release/Zongsoft.Tools.Packager.<version>.nupkg` exists, install it for the first time:
 
 ```powershell
-dotnet tool install -g Zongsoft.Tools.Packager --version 0.12.0 --source ./src/bin/Release --no-http-cache
+$toolVersion = dotnet msbuild src/Zongsoft.Tools.Packager.csproj -getProperty:Version -nologo
+dotnet tool install -g Zongsoft.Tools.Packager --version "$toolVersion" --source ./src/bin/Release --no-http-cache
 ```
 
 If the tool is already installed, especially when rebuilding the same version, uninstall it first, then repeat the local installation command above:
@@ -118,7 +119,7 @@ If the tool is already installed, especially when rebuilding the same version, u
 dotnet tool uninstall -g Zongsoft.Tools.Packager
 ```
 
-The example version `0.12.0` matches the current project; adjust it to the actual `.nupkg`. `--source` restricts installation to the local directory, avoiding a same-named package from NuGet.org; `--no-http-cache` disables the download cache. See the [.NET tool installation reference](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-tool-install). Check the installed version with `dotnet tool list -g`. Here, “local” describes the package source; `-g` still replaces the current user’s global tool. Do not run the Cake `pack` task for local testing: it pushes packages to NuGet.org.
+The installation command reads the version from the project file; `<version>` in the package filename denotes that value. `--source` restricts installation to the local directory, avoiding a same-named package from NuGet.org; `--no-http-cache` disables the download cache. See the [.NET tool installation reference](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-tool-install). Check the installed version with `dotnet tool list -g`. Here, “local” describes the package source; `-g` still replaces the current user’s global tool. Do not run the Cake `pack` task for local testing: it pushes packages to NuGet.org.
 
 ## Quick Start
 
@@ -192,7 +193,8 @@ dotnet-pack deb <options...> [entries...]
 dotnet-pack rpm <options...> [entries...]
 ```
 
-The three subcommands share the same common options. `rpm` adds package relationship options for RPM metadata.
+Specify exactly one of `tar`, `deb`, and `rpm`. They share common options; `deb` and `rpm` have their own relationship options. Use `--key:value` or `--key=value`; quote values containing spaces according to the shell. See [package entries](#package-entries) for positional payload mapping.
+Successful packaging returns `0`; no command returns `2`; invalid options, inputs, or packaging failures return `1`.
 
 ### Examples
 
@@ -303,8 +305,10 @@ After all package output is successfully generated, the source file is saved usi
 | `--edition:<name>` | Empty | Optional edition. Appended to package name; used as RPM release when present. |
 | `--compilation:<name>` | `Release` | Build configuration used when locating a daemon host under `bin/<configuration>/<framework>`. |
 | `--architecture:<arch>` | `x64` | Target CPU architecture, such as `x64`, `x86`, `arm64`, or `arm`. |
-| `--overwrite` | `false` | Replace an existing package file. Without this switch, an existing file causes creation to fail. |
+| `--overwrite[:boolean]` | `false` | Replace existing artifacts; commit the tar archive and installer script as one group. |
 | `--install-path:<path>` | `/opt/<identity with dots replaced by />` | Linux installation directory. The identity is lowercased and every dot becomes a directory separator; for example, `Zongsoft.Hosting.Web` becomes `/opt/zongsoft/hosting/web`. With `--daemon:zongsoft.web`, the path is `/opt/zongsoft/web`. If `--daemon` is supplied and not disabled, its identifier is used instead of `--name` for the default path. |
+| `--daemon:<name-or-file>` | Auto-detect/generate | Select a systemd service identifier or existing `.service` file; `none`, `disable`, or `disabled` disables service handling. |
+| `--daemon-environments:<names>` | Empty | Read named variables into generated `Environment=` lines; separate names with `,` or `;`. |
 | `--listen:<port-or-url>` | Empty | Listening port or address for generated services; ports use 127.0.0.1 and complete addresses pass through as host --urls. |
 | `--title:<text>` | Empty | Human-friendly package title and generated systemd description. |
 | `--summary:<text-or-file>` | Empty | Short package summary. If the value is an existing file path, the file content is used. |
@@ -314,6 +318,8 @@ After all package output is successfully generated, the source file is saved usi
 | `--category:<text>` | Format default | Debian `Section` or RPM `Group`; defaults to `utils` for Debian and `Applications/System` for RPM. |
 | `--maintainer:<text>` | `Zongsoft Studio <zongsoft@gmail.com>` | Package maintainer/vendor text. |
 | `--dependencies:<list>` | Empty | Comma- or semicolon-separated dependency list. Debian `Depends` uses `name (>= version)`; RPM `Requires` accepts `name >= version`. |
+
+`--overwrite` accepts a bare switch or `true/false`, `1/0`, `yes/no`, `on/off`, or `enable(d)/disable(d)`; other values are false under Core's `Switch` convention. Enum options follow Core conversion rules without an additional check that the enum member is defined; callers must supply a valid member. Output collisions are checked before packaging and again before commit; failed generation preserves old artifacts. After successful packaging, the source `.version` is saved atomically. A save failure reports an error and preserves the generated package.
 
 ### Debian Options
 
@@ -514,12 +520,14 @@ Lifecycle scripts can be source-relative file paths, absolute file paths, or inl
 - **Install:** `--installing:<script>` runs before installation; `--installed:<script>` runs after it.
 - **Uninstall or removal:** `--uninstalling:<script>` runs before removal; `--uninstalled:<script>` runs after it.
 
-Each main hook accepts file-based pre/post snippets. The `pre` option runs before its main hook and `post` runs after it:
+Each main hook accepts file-based pre/post snippets; all are empty by default:
 
-- `--preinstalling:<paths>` / `--postinstalling:<paths>` surround `installing`.
-- `--preinstalled:<paths>` / `--postinstalled:<paths>` surround `installed`.
-- `--preuninstalling:<paths>` / `--postuninstalling:<paths>` surround `uninstalling`.
-- `--preuninstalled:<paths>` / `--postuninstalled:<paths>` surround `uninstalled`.
+| Main hook | Pre-files option | Post-files option |
+| --- | --- | --- |
+| `--installing:<text-or-file>` | `--preinstalling:<paths>` | `--postinstalling:<paths>` |
+| `--installed:<text-or-file>` | `--preinstalled:<paths>` | `--postinstalled:<paths>` |
+| `--uninstalling:<text-or-file>` | `--preuninstalling:<paths>` | `--postuninstalling:<paths>` |
+| `--uninstalled:<text-or-file>` | `--preuninstalled:<paths>` | `--postuninstalled:<paths>` |
 
 Separate multiple pre/post script paths with `;` or `|`. Pre/post options accept file lists, not inline text.
 
@@ -561,11 +569,11 @@ $(name)
 %name%
 ```
 
-Variable names are case insensitive. Explicit command options, including extra options, override environment variables, which override descriptor defaults. Values expand on use: unused invalid references do not block packaging; referenced missing or cyclic variables fail.
+Variable names may contain dots, hyphens, and indices and are case insensitive. Explicit command options, including extra options, override environment variables, which override descriptor defaults. Values expand lazily and recursively: unused invalid references do not block packaging; referenced missing, cyclic, or over-64-level variables fail.
 
-Source-version rules and explicit identity options determine name, edition and version, independently of same-named environment variables. Final identity and resolved source/output paths override the collection. `--migrator` requires explicit activation; `--overwrite` remains an explicit switch.
+Source-version rules and explicit identity options determine name, edition and version, independently of same-named environment variables. Final identity and resolved source/output paths override the collection. `--migrator` requires explicit activation; `--overwrite` can come from the environment and be overridden on the command line.
 
-The command keeps option text until it is used. After locating `source`, explicit `name`, `edition`, and `version` values expand before source-version validation and version conversion; `platform`, `architecture`, and explicit `overwrite` values also expand before conversion. Literal `$(APP_VERSION)` or `%APP_VERSION%` is accepted; quote it in Bash to prevent shell expansion. Identity values available only from the source `.version` cannot locate that source directory.
+The command keeps option text until it is used. After locating `source`, explicit `name`, `edition`, and `version` values expand before source-version validation and version conversion; `platform`, `architecture`, and `overwrite` values also expand before conversion. Literal `$(APP_VERSION)` or `%APP_VERSION%` is accepted; quote it in Bash to prevent shell expansion. Identity values available only from the source `.version` cannot locate that source directory.
 
 ```bash
 export APP_NAME=Zongsoft.Hosting.Web

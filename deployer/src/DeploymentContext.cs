@@ -67,5 +67,5 @@ public class DeploymentContext
 public static class DeploymentContextUtility
 {
 	public static bool IsVerbosity(this Deployer deployer, Verbosity verbosity) =>
-		deployer.Variables.TryGetValue(Deployer.VERBOSITY_OPTION, out var variable) && Enum.TryParse<Verbosity>(variable, true, out var value) && verbosity == value;
+		deployer.Variables.TryGetValue(Deployer.VERBOSITY_OPTION, out var variable) && Zongsoft.Common.Convert.TryConvertValue<Verbosity>(variable, out var value) && verbosity == value;
 }

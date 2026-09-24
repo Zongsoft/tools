@@ -206,10 +206,11 @@ The deployer enables `GeneratePackageOnBuild`, so a Release build also creates t
 dotnet build src/Zongsoft.Tools.Deployer.csproj -c Release
 ```
 
-After the build succeeds and `src/bin/Release/Zongsoft.Tools.Deployer.7.13.0.nupkg` exists, install it for the first time:
+After the build succeeds and `src/bin/Release/Zongsoft.Tools.Deployer.<version>.nupkg` exists, install it for the first time:
 
 ```powershell
-dotnet tool install -g Zongsoft.Tools.Deployer --version 7.13.0 --source ./src/bin/Release --no-http-cache
+$toolVersion = dotnet msbuild src/Zongsoft.Tools.Deployer.csproj -getProperty:Version -nologo
+dotnet tool install -g Zongsoft.Tools.Deployer --version "$toolVersion" --source ./src/bin/Release --no-http-cache
 ```
 
 If the tool is already installed, especially when rebuilding the same version, uninstall it first, then repeat the local installation command above:
@@ -218,7 +219,7 @@ If the tool is already installed, especially when rebuilding the same version, u
 dotnet tool uninstall -g Zongsoft.Tools.Deployer
 ```
 
-The example version `7.13.0` matches the current project; adjust it to the actual `.nupkg`. `--source` restricts installation to the local directory, avoiding a same-named package from NuGet.org; `--no-http-cache` disables the download cache. See the [.NET tool installation reference](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-tool-install). Check the installed version with `dotnet tool list -g`. Here, “local” describes the package source; `-g` still replaces the current user’s global tool. Do not run the Cake `pack` task for local testing: it pushes packages to NuGet.org.
+The installation command reads the version from the project file; `<version>` in the package filename denotes that value. `--source` restricts installation to the local directory, avoiding a same-named package from NuGet.org; `--no-http-cache` disables the download cache. See the [.NET tool installation reference](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-tool-install). Check the installed version with `dotnet tool list -g`. Here, “local” describes the package source; `-g` still replaces the current user’s global tool. Do not run the Cake `pack` task for local testing: it pushes packages to NuGet.org.
 
 ## Deploy
 
@@ -240,18 +241,40 @@ dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:
 
 ### Command options
 
-The command supports redirected or piped output without a PTY. Exit codes are 0 for success, 1 for validation/dependency/I/O failure, and 130 for cancellation. The complete plan is validated before target writes; skipped copies and deletions have separate counts.
+The command supports redirected or piped output. Exit codes are 0 for success, 1 for validation/dependency/I/O failure, and 130 for cancellation. The complete plan is validated before target writes; skipped copies and deletions have separate counts.
 
-- `verbosity` option
-	- `quiet` Displays only the necessary output information, usually only error messages.
-	- `normal` Displays warning and error messages, if this command option is not specified, it is the default.
-	- `detail` Displays all output messages, this option can be enabled when troubleshooting.
-- `overwrite` option
-	- `alway` Always copy and overwrite the destination file.
-	- `never` Copies the destination file only if it does not exist.
-	- `newest` Deploys file copying only if the last modification time of the source file is later than or equal to the last modification time of the destination file. if this command option is not specified, it is the default.
-- `destination` option
-	> The specified deployment destination directory. If this command option is not specified, it defaults to the current directory.
+```text
+dotnet deploy [--option:value ...] [manifest-or-directory ...]
+dotnet-deploy [--option:value ...] [manifest-or-directory ...]
+```
+
+The two entry points are equivalent and have no subcommands. With no positional arguments, the tool reads `.deploy` in the current directory. Multiple manifests are processed in order; a directory selects its immediate `.deploy`. Relative manifest paths use the working directory, sources inside a manifest use that manifest's directory, and destinations use `destination`. `--key=value` also works; quote values with spaces according to the shell. Any other `--name:value` becomes a user variable for manifests and configuration. The table lists only options interpreted by the tool. Manifest `path`, `nuget`, and `delete`/`remove` entries are resolvers, not subcommands.
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `--destination:<directory>` | Current directory | Target root; resolve using command options and environment variables before loading its `appsettings.json`. |
+| `--verbosity:<level>` | `normal` | `quiet`, `normal`, or `detail`; unconvertible values fail. |
+| `--overwrite:<policy>` | `newest` | `alway` (the existing enum spelling), `never`, or `newest`. This is not a Boolean switch. |
+| `--expansion[:boolean]` | `false` | Preserve matched relative directory levels in target paths for directory wildcards; `false` keeps only wildcard captures. |
+| `--ignoreDeploymentFile[:boolean]` | `false` | Copy a source `.deploy` as a regular file instead of recursively executing it. |
+| `--ignoreDependentPrefix:<prefixes>` | Built-in prefixes | Skip dependency edges with matching prefixes; separate with `,`, `;`, or `|`. |
+| `--offline[:boolean]` | `false` | Use only the local NuGet cache. |
+| `--prerelease[:boolean]` | `false` | Include prereleases when selecting latest. |
+| `--dry-run[:boolean]` | `false` | Build and validate the plan without modifying the target. |
+| `--explain[:boolean]` | `false` | Print per-item plan and execution results. |
+| `--report:<file>` | None | Atomically write the JSON plan and result. |
+| `--lockFile:<file>` | None | Save a lock plan after successful deployment; read it with `locked`. |
+| `--locked[:boolean]` | `false` | Require an existing lock plan to match this run. |
+| `--previous:<file>` | None | Read the previous report to identify no-longer-selected files. |
+| `--prune[:boolean]` | `false` | With `previous`, remove unchanged stale files; preserve modified files. |
+
+Boolean options accept a bare switch, `true/false`, `1/0`, `yes/no`, `on/off`, or `enable(d)/disable(d)`, case-insensitively; other values are false under Core's `Switch` convention. `$(name)` and `%name%` support names containing dots, hyphens, and indices. Values expand lazily and recursively; missing, cyclic, or over-64-level references fail when used, before type conversion. Enum options follow Core conversion rules without an additional check that the enum member is defined; callers must supply a valid member. Unselected deployment branches are not expanded.
+
+`NuGet_Server` and `NuGet_Packages` may be supplied as command or environment variables. `Framework`, `Platform`, `Architecture`, and `edition` are ordinary variables used by resolvers and manifests. Example:
+
+```powershell
+dotnet deploy --destination:'bin/$(edition)/$(framework)' --edition:Release --framework:net10.0 --dry-run --report:deploy-plan.json .deploy extra.deploy
+```
 
 ### NuGet Packages
 
@@ -298,7 +321,7 @@ However, the above package library directory does not contains the `net9.0` fram
 
 ### Plans, locks, and cleanup
 
-The default overwrite policy is `newest`. Invalid overwrite values, invalid filters, and undefined variables in active paths cause errors. Writes must stay within `destination`, and linked write paths are rejected. Both nested manifests and `#@import` detect cycles. Combined filters use left-to-right evaluation. `**` matches zero or more directory levels; directory copies preserve their internal relative structure.
+The default overwrite policy is `newest`. Unconvertible overwrite values, invalid filters, and undefined variables in active paths cause errors. Writes must stay within `destination`, and linked write paths are rejected. Both nested manifests and `#@import` detect cycles. Combined filters use left-to-right evaluation. `**` matches zero or more directory levels; directory copies preserve their internal relative structure.
 
 | Option | Behavior |
 | --- | --- |
@@ -312,7 +335,7 @@ The default overwrite policy is `newest`. Invalid overwrite values, invalid filt
 | `--previous:./previous.json` | Compares a successful prior report for the same target root and lists obsolete files as Stale; keeps them by default. |
 | `--prune:true` | Requires previous. Deletes only files whose last effective prior operation copied them, whose hashes are unchanged, and which are no longer selected. Modified, unowned and outside-root files are not automatically removed. |
 
-Boolean options accept a bare name or `true/false`. Locks, reports, and cleanup are opt-in. Give reports/locks independent paths: they cannot overwrite known source manifests, source files, or planned targets. An execution-time I/O error stops subsequent operations; completed writes are not rolled back.
+Boolean options accept a bare name or `true/false`. A lock file is useful when reproducing the same deployment plan, especially with floating NuGet versions or dependencies. `--locked` checks versions and content; it is not an interprocess lock. Ordinary deployments need no lock file. Locks, reports, and cleanup are opt-in. Give reports/locks independent paths: they cannot overwrite known source manifests, source files, or planned targets. An execution-time I/O error stops subsequent operations; completed writes are not rolled back.
 
 ```powershell
 dotnet deploy --framework:net10.0 --platform:win --architecture:x64 --offline:true --dry-run:true --report:./preview.json .deploy
@@ -332,7 +355,7 @@ Run regression tests without publishing:
 dotnet test test/Zongsoft.Tools.Deployer.Tests.csproj -f net10.0 -p:GeneratePackageOnBuild=false
 ```
 
-Profile imports use Core 7.59.0: ProfileReader handles imports and recursion directly; ProfileOptions.Importing records imported manifest hashes. See [implementation details](docs/implementation.md#profile-import-callbacks).
+Profile imports use Core: ProfileReader handles imports and recursion directly; ProfileOptions.Importing records imported manifest hashes. See [implementation details](docs/implementation.md#profile-import-callbacks).
 
 See [implementation details](docs/implementation.md#core-profile-declarations-and-saving) for Core Profile source/override rules and read/write responsibilities. Deployment does not save its manifests.
 

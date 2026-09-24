@@ -58,20 +58,21 @@ partial class Generator
 	#region 公共方法
 	public static void Rpm(this Package.Rpm package, string output, bool overwrite)
 	{
-		using var stream = new FileStream(
-			Path.Combine(output, package.FileName),
-			overwrite ? FileMode.Create : FileMode.CreateNew,
-			FileAccess.Write);
+		using var publisher = new ArtifactPublisher(output, overwrite, package.FileName);
+		using(var stream = new FileStream(publisher.StagePath(package.FileName), FileMode.CreateNew, FileAccess.Write))
+		{
+			using var payload = CreateCpioPayload(package.Entries, out var archiveSize);
+			var header = RpmHeader.Create(package, archiveSize, payload);
+			var signature = RpmSignature.Create(header, payload);
 
-		using var payload = CreateCpioPayload(package.Entries, out var archiveSize);
-		var header = RpmHeader.Create(package, archiveSize, payload);
-		var signature = RpmSignature.Create(header, payload);
+			WriteRpmLead(stream, package);
+			stream.Write(signature);
+			stream.Write(header);
+			payload.Position = 0;
+			payload.CopyTo(stream);
+		}
 
-		WriteRpmLead(stream, package);
-		stream.Write(signature);
-		stream.Write(header);
-		payload.Position = 0;
-		payload.CopyTo(stream);
+		publisher.Commit();
 	}
 	#endregion
 

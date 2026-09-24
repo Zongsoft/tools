@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 
 using Xunit;
 
@@ -25,14 +26,14 @@ public sealed class PackageInputTest
 			var command = new DebCommand();
 			var context = new CommandContext(new CommandExecutor(), CommandLine.Parse("deb --architecture:X64 --platform:Linux --framework:net10.0")[0], command, null);
 
-			var variables = PackCommand<Package.Deb>.GetVariables(context);
-			Normalizer.Initialize(variables);
+			var values = PackCommand<Package.Deb>.GetVariables(context);
+			var variables = new Variables(values);
 
-			Assert.Equal("X64", variables["architecture"]);
-			Assert.Equal("Debug", variables["compilation"]);
-			Assert.Equal("https://github.com/Zongsoft", variables["url"]);
-			Assert.Equal(System.Runtime.InteropServices.Architecture.X64, Normalizer.Variables.Architecture);
-			Assert.Equal("Debug", Normalizer.Variables.Compilation);
+			Assert.Equal("X64", values["architecture"]);
+			Assert.Equal("Debug", values["compilation"]);
+			Assert.Equal("https://github.com/Zongsoft", values["url"]);
+			Assert.Equal(System.Runtime.InteropServices.Architecture.X64, variables.Architecture);
+			Assert.Equal("Debug", variables.Compilation);
 		}
 		finally
 		{
@@ -43,9 +44,9 @@ public sealed class PackageInputTest
 	}
 
 	[Fact]
-	public void Initialize_UnusedInvalidVariables_DoesNotBlockUsedValues()
+	public void Variables_UnusedInvalidVariables_DoesNotBlockUsedValues()
 	{
-		Normalizer.Initialize(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+		var variables = new Variables(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
 		{
 			["name"] = "zongsoft.daemon",
 			["payload"] = "$(name)/bin",
@@ -53,10 +54,10 @@ public sealed class PackageInputTest
 			["loop"] = "$(loop)",
 		});
 
-		Assert.Equal("zongsoft.daemon/bin", Normalizer.Variables["payload"]);
-		Assert.Equal("zongsoft.daemon", Normalizer.Variables.Name);
-		Assert.Throws<InvalidOperationException>(() => Normalizer.Variables["unused"]);
-		Assert.Throws<InvalidOperationException>(() => Normalizer.Variables["loop"]);
+		Assert.Equal("zongsoft.daemon/bin", variables["payload"]);
+		Assert.Equal("zongsoft.daemon", variables.Name);
+		Assert.Throws<InvalidOperationException>(() => variables["unused"]);
+		Assert.Throws<InvalidOperationException>(() => variables["loop"]);
 	}
 
 	[Fact]
@@ -74,6 +75,40 @@ public sealed class PackageInputTest
 		Assert.True(result.Succeed);
 		Assert.Equal("default/zongsoft.daemon/zongsoft.daemon-zongsoft.daemon", result.Value);
 		Assert.Equal("$(scheme)/%NAME%", variables["root"]);
+	}
+
+	[Fact]
+	public void Normalize_OrdinaryDictionaryIgnoresVariableNameCase()
+	{
+		var variables = new Dictionary<string, string>
+		{
+			["Root"] = "$(service.name)",
+			["Service.Name"] = "worker",
+		};
+
+		var result = Normalizer.Normalize("$(ROOT)/%SERVICE.NAME%", variables);
+		Assert.True(result.Succeed);
+		Assert.Equal("worker/worker", result.Value);
+	}
+
+	[Fact]
+	public void Variables_WinPlatformAliasMapsToWindows()
+	{
+		var variables = new Variables(new Dictionary<string, string> { ["platform"] = "win" });
+		Assert.Equal(Platform.Windows, variables.Platform);
+	}
+
+	[Theory]
+	[InlineData("0", (Architecture)0)]
+	[InlineData("999", (Architecture)999)]
+	public void Variables_NumericArchitectureUsesCoreConversionAfterExpansion(string architecture, Architecture expected)
+	{
+		var variables = new Variables(new Dictionary<string, string>
+		{
+			["architecture"] = "$(target)",
+			["target"] = architecture,
+		});
+		Assert.Equal(expected, variables.Architecture);
 	}
 
 	[Theory]
@@ -148,6 +183,31 @@ public sealed class PackageInputTest
 		Assert.False(beyondLimit.Succeed);
 		Assert.Equal("step64", beyondLimit.Value);
 	}
+
+	[Fact]
+	public void Variables_StructuredNamesAndSameKeysRemainInstanceScoped()
+	{
+		var first = new Variables(new Dictionary<string, string>
+		{
+			["channel.name"] = "alpha",
+			["settings[0]"] = "one",
+			["profile-key"] = "primary",
+			["route"] = "$(channel.name)/%settings[0]%/$(profile-key)",
+		});
+		var second = new Variables(new Dictionary<string, string>
+		{
+			["channel.name"] = "beta",
+			["settings[0]"] = "two",
+			["profile-key"] = "secondary",
+			["route"] = "$(channel.name)/%settings[0]%/$(profile-key)",
+		});
+
+		Assert.Equal("alpha/one/primary", first["route"]);
+		Assert.Equal("beta/two/secondary", second["route"]);
+		first["channel.name"] = "updated";
+		Assert.Equal("updated/one/primary", first["route"]);
+		Assert.Equal("beta/two/secondary", second["route"]);
+	}
 	#endregion
 
 	#region 文本来源
@@ -158,13 +218,13 @@ public sealed class PackageInputTest
 		const string FILE_NAME = "install.sh";
 		directory.Write("working/" + FILE_NAME, "working-directory-content");
 		directory.Write("source/" + FILE_NAME, "source-only-content");
-		Normalizer.Initialize(new Dictionary<string, string>());
+		var variables = new Variables();
 		var previous = Environment.CurrentDirectory;
 		try
 		{
 			Environment.CurrentDirectory = Path.Combine(directory.Path, "working");
 
-			Assert.Equal("source-only-content", TextSource.Read(Path.Combine(directory.Path, "source"), FILE_NAME));
+			Assert.Equal("source-only-content", TextSource.Read(Path.Combine(directory.Path, "source"), FILE_NAME, variables));
 			Assert.Equal("working-directory-content", File.ReadAllText(FILE_NAME));
 		}
 		finally
@@ -179,9 +239,9 @@ public sealed class PackageInputTest
 	public void Read_EmptyExplicitFile_DoesNotBecomeLiteralText(string value)
 	{
 		using var directory = new MigrationTestDirectory();
-		Normalizer.Initialize(new Dictionary<string, string>());
+		var variables = new Variables();
 
-		Assert.Throws<FileNotFoundException>(() => TextSource.Read(directory.Path, value));
+		Assert.Throws<FileNotFoundException>(() => TextSource.Read(directory.Path, value, variables));
 	}
 
 	[Theory]
@@ -192,10 +252,10 @@ public sealed class PackageInputTest
 		using var directory = new MigrationTestDirectory();
 		const string CONTENT = "echo source-specific-content";
 		directory.Write("scripts/setup script.sh", CONTENT);
-		Normalizer.Initialize(new Dictionary<string, string>());
+		var variables = new Variables();
 
 		Assert.NotEqual(Environment.CurrentDirectory, directory.Path);
-		Assert.Equal(CONTENT, TextSource.Read(directory.Path, value));
+		Assert.Equal(CONTENT, TextSource.Read(directory.Path, value, variables));
 	}
 
 	[Fact]
@@ -203,9 +263,9 @@ public sealed class PackageInputTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var file = directory.Write("scripts/install.sh", "echo absolute-file");
-		Normalizer.Initialize(new Dictionary<string, string>());
+		var variables = new Variables();
 
-		Assert.Equal("echo absolute-file", TextSource.Read(Path.Combine(directory.Path, "another-source"), file));
+		Assert.Equal("echo absolute-file", TextSource.Read(Path.Combine(directory.Path, "another-source"), file, variables));
 	}
 
 	[Fact]
@@ -213,18 +273,18 @@ public sealed class PackageInputTest
 	{
 		using var directory = new MigrationTestDirectory();
 		const string CONTENT = "  echo $(name) %name% ${HOME}\n echo /opt/zongsoft/web  ";
-		Normalizer.Initialize(new Dictionary<string, string> { ["name"] = "zongsoft.web" });
+		var variables = new Variables(new Dictionary<string, string> { ["name"] = "zongsoft.web" });
 
-		Assert.Equal(CONTENT, TextSource.Read(directory.Path, "text:" + CONTENT));
+		Assert.Equal(CONTENT, TextSource.Read(directory.Path, "text:" + CONTENT, variables));
 	}
 
 	[Fact]
 	public void Read_SingleLineShellCommand_IsLiteralText()
 	{
 		using var directory = new MigrationTestDirectory();
-		Normalizer.Initialize(new Dictionary<string, string>());
+		var variables = new Variables();
 
-		Assert.Equal("echo /opt/zongsoft/web", TextSource.Read(directory.Path, "echo /opt/zongsoft/web"));
+		Assert.Equal("echo /opt/zongsoft/web", TextSource.Read(directory.Path, "echo /opt/zongsoft/web", variables));
 	}
 
 	[Theory]
@@ -235,9 +295,9 @@ public sealed class PackageInputTest
 		using var directory = new MigrationTestDirectory();
 		directory.Write("scripts/first.sh", content);
 		directory.Write("scripts/second.sh", "echo must-not-be-read");
-		Normalizer.Initialize(new Dictionary<string, string> { ["name"] = "zongsoft.web" });
+		var variables = new Variables(new Dictionary<string, string> { ["name"] = "zongsoft.web" });
 
-		Assert.Equal(content, TextSource.Read(directory.Path, "scripts/first.sh"));
+		Assert.Equal(content, TextSource.Read(directory.Path, "scripts/first.sh", variables));
 	}
 
 	[Theory]
@@ -246,9 +306,9 @@ public sealed class PackageInputTest
 	public void Read_MissingFile_ReportsResolvedPath(string value)
 	{
 		using var directory = new MigrationTestDirectory();
-		Normalizer.Initialize(new Dictionary<string, string>());
+		var variables = new Variables();
 
-		var error = Assert.Throws<FileNotFoundException>(() => TextSource.Read(directory.Path, value));
+		var error = Assert.Throws<FileNotFoundException>(() => TextSource.Read(directory.Path, value, variables));
 
 		Assert.Equal(Path.Combine(directory.Path, "scripts", "missing.sh"), error.FileName);
 	}
@@ -257,9 +317,9 @@ public sealed class PackageInputTest
 	public void Read_FileOnly_DoesNotAcceptLiteralText()
 	{
 		using var directory = new MigrationTestDirectory();
-		Normalizer.Initialize(new Dictionary<string, string>());
+		var variables = new Variables();
 
-		Assert.Throws<FileNotFoundException>(() => TextSource.Read(directory.Path, "echo installed", true));
+		Assert.Throws<FileNotFoundException>(() => TextSource.Read(directory.Path, "echo installed", variables, true));
 	}
 
 	[Fact]
@@ -267,9 +327,9 @@ public sealed class PackageInputTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("scripts/installed", "echo installed");
-		Normalizer.Initialize(new Dictionary<string, string>());
+		var variables = new Variables();
 
-		Assert.Equal("echo installed", TextSource.Read(directory.Path, "scripts/installed", true));
+		Assert.Equal("echo installed", TextSource.Read(directory.Path, "scripts/installed", variables, true));
 	}
 	#endregion
 }

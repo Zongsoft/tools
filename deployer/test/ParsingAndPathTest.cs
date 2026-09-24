@@ -65,11 +65,24 @@ public class ParsingAndPathTest
 	}
 
 	[Fact]
-	public void Normalize_MissingVariableReportsName()
+	public void Normalize_MissingVariableReportsNameAndThrows()
 	{
 		var failures = new List<string>();
-		Assert.Equal("before-$(Missing)-after", Normalizer.Normalize("before-$(Missing)-after", new Dictionary<string, string>(), failures.Add));
+		var error = Assert.Throws<FormatException>(() => Normalizer.Normalize("before-$(Missing)-after", new Dictionary<string, string>(), failures.Add));
+		Assert.Contains("Missing", error.Message, StringComparison.Ordinal);
 		Assert.Equal(["Missing"], failures);
+	}
+
+	[Fact]
+	public void Normalize_OrdinaryDictionaryIgnoresVariableNameCase()
+	{
+		var variables = new Dictionary<string, string>
+		{
+			["Root"] = "$(service.name)",
+			["Service.Name"] = "worker",
+		};
+
+		Assert.Equal("worker/worker", Normalizer.Normalize("$(ROOT)/%SERVICE.NAME%", variables));
 	}
 
 	[Fact]

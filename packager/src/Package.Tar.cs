@@ -42,7 +42,7 @@ partial class Package
 	{
 		internal const string EXTENSION = ".tar.gz";
 
-		public Tar(string name, string edition, Version version, Platform platform, Architecture architecture) : base(name, edition, version, platform, architecture)
+		public Tar(string name, string edition, Version version, Platform platform, Architecture architecture, Variables variables = null) : base(name, edition, version, platform, architecture, variables)
 		{
 			this.Scriptor = new Scriptor.Systemd(this);
 			this.InstallPath = Utility.Unix.GetInstallPath(this.PackageIdentity);

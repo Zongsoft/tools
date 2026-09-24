@@ -46,7 +46,7 @@ namespace Zongsoft.Tools.Packager;
 public abstract partial class Package
 {
 	#region 构造函数
-	protected Package(string name, string edition, Version version, Platform platform, Architecture architecture)
+	protected Package(string name, string edition, Version version, Platform platform, Architecture architecture, Variables variables = null)
 	{
 		ArgumentException.ThrowIfNullOrEmpty(name);
 
@@ -58,18 +58,19 @@ public abstract partial class Package
 		this.Version = version;
 		this.Platform = platform;
 		this.Architecture = architecture;
+		this.Variables = variables ?? new Variables();
 		this.Runtime = Utility.GetRuntimeIdentifier(platform, architecture);
-		this.PackageIdentity = GetPackageIdentity(name);
+		this.PackageIdentity = GetPackageIdentity(name, this.Variables);
 		this.PackageName = GetPackageName(this.PackageIdentity, edition);
-		this.Framework = Normalizer.Variables.Framework;
-		this.Title = Normalizer.Variables.Title;
-		this.Summary = Normalizer.Variables.Summary;
-		this.Description = Normalizer.Variables.Description;
-		this.Url = Normalizer.Variables.Url;
-		this.Category = Normalizer.Variables.Category;
-		this.License = Normalizer.Variables.License;
-		this.Maintainer = Normalizer.Variables.Maintainer;
-		this.Dependencies = Normalizer.Variables.Dependencies;
+		this.Framework = this.Variables.Framework;
+		this.Title = this.Variables.Title;
+		this.Summary = this.Variables.Summary;
+		this.Description = this.Variables.Description;
+		this.Url = this.Variables.Url;
+		this.Category = this.Variables.Category;
+		this.License = this.Variables.License;
+		this.Maintainer = this.Variables.Maintainer;
+		this.Dependencies = this.Variables.Dependencies;
 		this.Entries = new(this);
 	}
 	#endregion
@@ -99,6 +100,7 @@ public abstract partial class Package
 	#endregion
 
 	#region 内部属性
+	internal Variables Variables { get; }
 	internal abstract string FileName { get; }
 	public IScriptor Scriptor { get; protected set; }
 	internal virtual string EntryPrefix => this.InstallPath.TrimStart('/');
@@ -141,9 +143,9 @@ public abstract partial class Package
 	#region 私有方法
 	private static string GetPackageName(string name, string edition) => string.IsNullOrEmpty(edition) ? name : $"{name}-{edition}";
 
-	private static string GetPackageIdentity(string name)
+	private static string GetPackageIdentity(string name, Variables variables)
 	{
-		var daemon = Normalizer.Variables.Daemon;
+		var daemon = variables.Daemon;
 
 		if(daemon.Disabled || string.IsNullOrWhiteSpace(daemon.Identifier))
 			return name;
@@ -226,9 +228,18 @@ public abstract partial class Package
 			_entries.Add(key, new(source, entryName, file.Length, Utility.Unix.GetTimestamp(file.LastWriteTimeUtc), mode, rooted));
 		}
 
+		internal void AddGeneratedContent(string name, string content, UnixFileMode mode)
+		{
+			var entryName = Utility.NormalizePath(Path.Combine(_package.EntryPrefix ?? "", name));
+			if(_entries.ContainsKey(entryName))
+				throw new InvalidOperationException(string.Format(Properties.Resources.GeneratedEntryConflicted_Message, entryName));
+
+			_entries.Add(entryName, new(System.Text.Encoding.UTF8.GetBytes(content), entryName, Utility.Unix.GetTimestamp(DateTime.UtcNow), mode, false));
+		}
+
 		internal void Add(string source, string argument)
 		{
-			var text = Normalizer.Normalize(argument);
+			var text = Normalizer.Normalize(argument, _package.Variables, null);
 			var index = text.LastIndexOf(':');
 
 			if(OperatingSystem.IsWindows() && index == 1)
@@ -242,7 +253,7 @@ public abstract partial class Package
 
 		internal void Load(string source, IReadOnlyCollection<string> arguments, IEnumerable<string> exclusions = null)
 		{
-			var exclusion = EntryExclusion.Create(source, exclusions);
+			var exclusion = EntryExclusion.Create(source, exclusions, _package.Variables);
 
 			if(arguments == null || arguments.Count == 0)
 			{
@@ -252,7 +263,7 @@ public abstract partial class Package
 
 			foreach(var argument in arguments)
 			{
-				var text = Normalizer.Normalize(argument);
+				var text = Normalizer.Normalize(argument, _package.Variables, null);
 				var index = text.LastIndexOf(':');
 
 				if(OperatingSystem.IsWindows() && index == 1)
@@ -418,7 +429,7 @@ public abstract partial class Package
 				_patterns = patterns;
 			}
 
-			public static EntryExclusion Create(string source, IEnumerable<string> exclusions)
+			public static EntryExclusion Create(string source, IEnumerable<string> exclusions, Variables variables)
 			{
 				if(exclusions == null)
 					return null;
@@ -430,7 +441,7 @@ public abstract partial class Package
 					if(string.IsNullOrWhiteSpace(exclusion))
 						continue;
 
-					var text = Normalizer.Normalize(exclusion);
+					var text = Normalizer.Normalize(exclusion, variables, null);
 					if(string.IsNullOrWhiteSpace(text))
 						continue;
 

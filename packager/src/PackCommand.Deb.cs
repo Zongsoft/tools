@@ -46,21 +46,22 @@ namespace Zongsoft.Tools.Packager;
 public sealed class DebCommand : PackCommand<Package.Deb>
 {
 	#region 重写方法
-	protected override Package.Deb CreatePackage(CommandContext context)
+	protected override Package.Deb CreatePackage(CommandContext context, Variables variables)
 	{
 		var package = new Package.Deb(
-			Normalizer.Variables.Name,
-			Normalizer.Variables.Edition,
-			Normalizer.Variables.Version,
-			Normalizer.Variables.Platform,
-			Normalizer.Variables.Architecture)
+			variables.Name,
+			variables.Edition,
+			variables.Version,
+			variables.Platform,
+			variables.Architecture,
+			variables)
 		{
-			Provides = ReadRelationship("provides"),
-			Replaces = ReadRelationship("replaces"),
-			Breaks = ReadRelationship("breaks"),
-			Conflicts = ReadRelationship("conflicts"),
-			Recommends = ReadRelationship("recommends"),
-			Suggests = ReadRelationship("suggests"),
+			Provides = ReadRelationship("provides", variables),
+			Replaces = ReadRelationship("replaces", variables),
+			Breaks = ReadRelationship("breaks", variables),
+			Conflicts = ReadRelationship("conflicts", variables),
+			Recommends = ReadRelationship("recommends", variables),
+			Suggests = ReadRelationship("suggests", variables),
 		};
 
 		Configure(package, context);
@@ -70,9 +71,9 @@ public sealed class DebCommand : PackCommand<Package.Deb>
 	#endregion
 
 	#region 私有方法
-	private static string[] ReadRelationship(string name)
+	private static string[] ReadRelationship(string name, Variables variables)
 	{
-		var value = Normalizer.Variables[name];
+		var value = variables[name];
 		return string.IsNullOrWhiteSpace(value) ? [] : value.Split([';', ','], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 	}
 	#endregion

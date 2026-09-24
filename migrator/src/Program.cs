@@ -32,7 +32,6 @@
  */
 
 using System;
-using System.Text;
 using System.Threading.Tasks;
 
 using Zongsoft.Terminals;
@@ -47,62 +46,37 @@ internal class Program
 	#endregion
 
 	#region 入口方法
-	public static async Task Main(string[] args)
+	public static async Task<int> Main(string[] args)
 	{
 		if(args == null || args.Length == 0)
 		{
 			Terminal.WriteLine(CommandOutletColor.DarkRed, Properties.Resources.CommandLineEmpty_Message);
-			Environment.ExitCode = -1;
-			return;
+			return 2;
 		}
 
 		//初始化
 		Executor.Root.Children.Clear();
 		Executor.Root.Children.Add(new MigrateCommand());
-		Executor.Failed += (_, _) => Environment.ExitCode = 1;
+		var failed = false;
+		void OnFailed(object sender, CommandExecutorFailureEventArgs e) => failed = true;
+		Executor.Failed += OnFailed;
 
 		try
 		{
 			//执行命令
-			if(await Executor.ExecuteAsync(GetCommandLine(args)) == null)
-				Environment.ExitCode = 1;
+			return await Executor.ExecuteAsync(GetCommandLine(args)) == null || failed ? 1 : 0;
 		}
 		catch(Exception ex)
 		{
-			Environment.ExitCode = 1;
 			//打印异常消息
 			Terminal.WriteLine(CommandOutletColor.DarkRed, ex.Message + Environment.NewLine + ex.StackTrace);
+			return 1;
 		}
+		finally { Executor.Failed -= OnFailed; }
 	}
 	#endregion
 
 	#region 内部方法
-	internal static string GetCommandLine(string[] arguments)
-	{
-		var text = new StringBuilder("migrate");
-
-		foreach(var argument in arguments)
-		{
-			text.Append(' ');
-			var value = argument;
-			if(argument.StartsWith('-'))
-			{
-				var index = argument.IndexOfAny([':', '=']);
-				if(index < 0)
-				{
-					text.Append(argument);
-					continue;
-				}
-
-				text.Append(argument.AsSpan(0, index + 1));
-				value = argument[(index + 1)..];
-			}
-
-			//保留进程参数边界，并转义 Core 命令行引号内的反斜杠。
-			text.Append('"').Append(value.Replace("\\", "\\\\").Replace("\"", "\\\"")).Append('"');
-		}
-
-		return text.ToString();
-	}
+	internal static string GetCommandLine(string[] arguments) => Utility.FormatCommand("migrate", arguments);
 	#endregion
 }

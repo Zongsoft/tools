@@ -33,18 +33,12 @@
 
 using System;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
 
 namespace Zongsoft.Tools.Deployer;
 
 /// <summary>展开部署文本中的 $(name) 和 %name% 变量引用。</summary>
 public static class Normalizer
 {
-	#region 常量定义
-	//变量解析的正则表达式（变量包括两种语法：$(variable) 或 %variable%）
-	private static readonly Regex _variableRegex = new(@"(?<opt>\$\((?<name>[\w.\[\]-]+)\))|(?<env>\%(?<name>[\w.\[\]-]+)\%)", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.IgnorePatternWhitespace);
-	#endregion
-
 	#region 公共方法
 	public static string Normalize(string text, IDictionary<string, string> variables, Action<string> failure = null)
 	{
@@ -59,7 +53,7 @@ public static class Normalizer
 			Dictionary<string, string> dictionary when dictionary.Comparer.Equals(StringComparer.OrdinalIgnoreCase) => dictionary,
 			_ => new Dictionary<string, string>(variables, StringComparer.OrdinalIgnoreCase),
 		};
-		var result = VariableExpander.Expand(text, raw, _variableRegex, preserveMissing: true, missing: failure);
+		var result = VariableExpander.Expand(text, raw, failure);
 
 		if(!result.Succeed)
 			throw new FormatException(string.Format(Properties.Resources.Review_UndefinedVariable, result.Variable));

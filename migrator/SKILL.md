@@ -11,7 +11,7 @@ description: 修改独立升迁输入、SQL 批次、原生执行、产物命名
 
 先阅读 [AGENTS.md](AGENTS.md)、[README](README.zh-Hans.md)、[升迁指南](README.zh-Hans.md#package-phase)和[实现说明](docs/implementation.zh-Hans.md)。
 
-命令身份先由 MigrateCommand.Version.cs 的私有 VersionSource 解析：--version 可为版本号、文件或现有目录，省略/空白只读当前目录直属 .version，不能由环境 version 代替。ApplicationVersion 选择 Edition，保留文件拼写；name 保持独立必填。最终值回填后再初始化变量，源版本文件始终不写入，失败不能修改已有产物。
+命令身份先由 MigrateCommand.Version.cs 的私有 VersionSource 解析：--version 可为版本号、文件或现有目录，省略/空白只读当前目录直属 .version，不能由环境 version 代替。ApplicationVersion 选择 Edition，保留文件拼写；name 保持独立必填。最终值回填后建立本次命令独立的变量视图，按需展开、再转换；源版本文件始终不写入，失败不能修改已有产物。
 
 输入处理在 src/MigrationLoader* 与 MigrationProfile，生成文件集在 MigrationBundle，归档和脚本在 Generator。协议及参数描述在 .shared。数据库/Amazon S3/锁/状态在 executor/src。保持这些边界；packager 只消费产物。
 

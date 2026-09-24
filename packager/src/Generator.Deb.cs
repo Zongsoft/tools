@@ -47,19 +47,20 @@ partial class Generator
 	#region 公共方法
 	public static void Deb(this Package package, string output, bool overwrite)
 	{
-		using var stream = new FileStream(
-			Path.Combine(output, package.FileName),
-			overwrite ? FileMode.Create : FileMode.CreateNew,
-			FileAccess.Write);
+		using var publisher = new ArtifactPublisher(output, overwrite, package.FileName);
+		using(var stream = new FileStream(publisher.StagePath(package.FileName), FileMode.CreateNew, FileAccess.Write))
+		{
+			var control = GetDebControl(package);
 
-		var control = GetDebControl(package);
+			WriteArHeader(stream);
+			WriteArEntry(stream, "debian-binary", Encoding.ASCII.GetBytes("2.0\n"));
+			using var controlStream = CreateControlTarball(control, package);
+			WriteArEntry(stream, "control.tar.gz", controlStream);
+			using var dataStream = CreateDataTarball(package.Entries);
+			WriteArEntry(stream, "data.tar.gz", dataStream);
+		}
 
-		WriteArHeader(stream);
-		WriteArEntry(stream, "debian-binary", Encoding.ASCII.GetBytes("2.0\n"));
-		using var controlStream = CreateControlTarball(control, package);
-		WriteArEntry(stream, "control.tar.gz", controlStream);
-		using var dataStream = CreateDataTarball(package.Entries);
-		WriteArEntry(stream, "data.tar.gz", dataStream);
+		publisher.Commit();
 	}
 	#endregion
 

@@ -444,7 +444,6 @@ public sealed partial class MigrateCommandTest
 			File.Copy(file, target, true);
 		}
 
-		var previousVariables = Normalizer.Variables?.Raw;
 		var previousDirectory = Environment.CurrentDirectory;
 		var previousBase = AppContext.GetData("APP_CONTEXT_BASE_DIRECTORY");
 		// Reading Terminal.Default would initialize the console even when no input handle exists.
@@ -466,7 +465,6 @@ public sealed partial class MigrateCommandTest
 		finally
 		{
 			Terminal.Default = previousTerminal;
-			Normalizer.Initialize(previousVariables ?? new Dictionary<string, string>());
 			AppContext.SetData("APP_CONTEXT_BASE_DIRECTORY", previousBase);
 			Environment.CurrentDirectory = previousDirectory;
 		}

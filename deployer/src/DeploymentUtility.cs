@@ -68,7 +68,7 @@ public static class DeploymentUtility
 			yield break;
 
 		var directoryName = Path.GetDirectoryName(filePath);
-		var expansion = variables.ContainsKey(Deployer.EXPANSION_OPTION);
+		var expansion = Deployer.Flag(variables, Deployer.EXPANSION_OPTION);
 		var selected = new HashSet<string>(DeploymentPath.Comparer);
 		var expanded = new List<string>();
 
@@ -219,7 +219,7 @@ public static class DeploymentUtility
 			if(!Directory.Exists(directory))
 				Directory.CreateDirectory(directory);
 
-			File.Copy(source, destination, true);
+			ArtifactPublisher.Copy(source, destination);
 		}
 
 		return copyRequired;

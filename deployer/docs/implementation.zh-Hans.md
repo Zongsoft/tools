@@ -11,6 +11,7 @@
 | 文件/类型 | 职责 |
 | --- | --- |
 | `Deployer.Command.cs` | 组合变量，定位目标应用配置。 |
+| `tools/.shared` 链接源码 | `Utility.cs` 与本项目的 `partial Utility` 合并编译，共用递归变量与命令辅助方法；`ArtifactPublisher` 统一管理暂存与发布，部署复制和报告写入使用其单文件原子替换。变量字典中的布尔值沿用 Core `Switch` 语义，枚举使用 Core 转换。 |
 | `Deployer.cs` | 管理一次调用、遍历清单、收集请求及预检查错误。 |
 | `DeploymentSession.cs` | 持有本次计数、活动清单栈、包请求、选中版本和展开暂存列表。 |
 | `DeploymentPlan.cs`、`DeploymentOperation.cs`、`PackageSelection.cs` | 保存计划、操作来源、包版本与哈希；每种类型独立维护。 |
@@ -26,7 +27,7 @@
 
 ## 复用现有库
 
-Release 引用 Zongsoft.Core 7.59.0，Debug 配置引用本地 Core 程序集；NuGet.* 使用 7.9.0，在本工具项目中通过 VersionOverride 维护；Core、测试和分析器版本由仓库根 Directory.Packages.props 统一管理。
+Release 引用 Zongsoft.Core NuGet 包，Debug 配置引用本地 Core 程序集；NuGet.* 版本在本工具项目中通过 VersionOverride 维护；Core、测试和分析器版本由仓库根 Directory.Packages.props 统一管理。
 
 | 能力 | 复用接口与本工具保留部分 |
 | --- | --- |
@@ -38,7 +39,7 @@ Release 引用 Zongsoft.Core 7.59.0，Debug 配置引用本地 Core 程序集；
 | TFM | NuGetFramework 表达框架身份，其框架/平台版本使用 System.Version；NuGetVersion 和 VersionRange 表达包版本与约束。包括 ^ 在内的显式框架过滤规则与资产的最近兼容组选择分别处理。 |
 | RID | NuGet `JsonRuntimeFormat.ReadRuntimeGraph` 加载图谱，`RuntimeGraph.ExpandRuntime` 提供回退候选。 |
 
-Core 7.59.0 由 ProfileReader 内置处理导入，提供循环/深度保护；ProfileOptions 提供两个 Action<ProfileContext> 导入回调。deployer 使用 Importing 登记导入文件哈希，根描述文件单独登记。appsettings 点号键、目标边界、链接拒绝和文件所有权仍由部署工具处理。
+Core 由 ProfileReader 内置处理导入，提供循环/深度保护；ProfileOptions 提供两个 Action<ProfileContext> 导入回调。deployer 使用 Importing 登记导入文件哈希，根描述文件单独登记。appsettings 点号键、目标边界、链接拒绝和文件所有权仍由部署工具处理。
 
 ## 从清单到执行
 
@@ -55,7 +56,7 @@ Core 7.59.0 由 ProfileReader 内置处理导入，提供循环/深度保护；P
 
 `DeploymentEntry.Get` 在变量展开前以源条目的第一个冒号拆分解析器名与参数。没有冒号的条目直接使用 `path` 名称。`DeploymentResolverManager.GetResolver` 将 null、空字符串及纯空白名称解析为默认路径解析器；`path`、`nuget` 和 `delete`/`remove` 按不区分大小写的方式匹配，未知名称返回 null。空名称选择默认路径解析器是其功能约定。默认路径解析器自身的 Name 为空字符串，`path` 是选择该实例的解析器名。Windows 字面绝对源路径使用 `path:D:\dir\files.ext` 或 `path:D:/dir/files.ext`，避免盘符被解析为解析器名；相对路径可以省略前缀或显式使用 `path:`。
 
-变量名不区分大小写，覆盖顺序为环境变量、目标应用 `appsettings.json`、命令选项。先用环境变量和全部命令选项递归展开 `destination`，定位目标目录后加载其配置；最终变量保留原始值并按需递归展开，不受选项遍历顺序影响。缺失、循环或超过 64 层的已引用变量失败，未使用的变量不提前解析。JSON 支持注释和尾随逗号；嵌套对象和数组生成 `Database.Name`、`Items[0].Name` 等键。
+变量名支持点号、连字符和索引，不区分大小写，覆盖顺序为环境变量、目标应用 `appsettings.json`、命令选项。先用环境变量和全部命令选项递归展开 `destination`，定位目标目录后加载其配置；最终变量保留原始值并按需递归展开，不受选项遍历顺序影响。缺失、循环或超过 64 层的已引用变量失败，未使用的变量不提前解析。先展开布尔、枚举等选项值再转换；`expansion` 按实际布尔值工作，无法转换的 `verbosity` 会报错。枚举选项沿用 Core 的转换规则，不额外检查枚举成员是否已定义；调用方应提供有效枚举项。JSON 支持注释和尾随逗号；嵌套对象和数组生成 `Database.Name`、`Items[0].Name` 等键。
 
 `Normalizer` 处理 `$(name)` 和 `%name%`，保留 URL 中的斜线。部署路径展开发现未定义变量时报错；被过滤掉的分支无需提供变量。过滤组合保持从左到右求值，源过滤与目标过滤都必须满足。
 
@@ -145,7 +146,7 @@ ProfileOptions 的 Importing/Imported 均为 Action<ProfileContext>。上下文�
 
 ## Core Profile 声明与保存
 
-Core 7.59.0 将本地有序声明与合并后的有效视图区分，导入覆盖替换引用，条目来源指向实际声明文件；同文件重复键仍报错，本地与导入按读取顺序覆盖。ProfileReader 管理读取，ProfileWriter 管理保存。
+Core 将本地有序声明与合并后的有效视图区分，导入覆盖替换引用，条目来源指向实际声明文件；同文件重复键仍报错，本地与导入按读取顺序覆盖。ProfileReader 管理读取，ProfileWriter 管理保存。
 
 Core 的无显式目标 Save() 仅将自身及导入子树中修改的声明写回各自来源；显式路径、Stream、TextWriter 只输出当前文件声明。未修改文件不重写。多文件输出先全部准备、再逐个提交，不是跨文件事务。deployer 只读取描述文件并使用 Importing 记录哈希，不调用这些保存入口。
 

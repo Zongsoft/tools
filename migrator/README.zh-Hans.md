@@ -30,7 +30,14 @@ dotnet-migrate 制作可移交的升迁归档和启动脚本。制作阶段描�
 dotnet tool install -g Zongsoft.Tools.Migrator
 ```
 
-本地源码测试：在 migrator 目录执行 `dotnet cake --edition Release --target build`，准备三个 RID 并生成工具包。已有原生产物时可执行 `dotnet cake --edition Release --target compile`。首次本地安装使用 `dotnet tool install -g Zongsoft.Tools.Migrator --version 0.3.0 --source ./src/bin/Release --no-http-cache`；替换相同版本前先卸载该全局工具。Cake `pack` 会推送 NuGet，不用于本地测试。
+本地源码测试：在 migrator 目录执行 `dotnet cake --edition Release --target build`，准备三个 RID 并生成工具包。已有原生产物时可执行 `dotnet cake --edition Release --target compile`。构建完成后，在 PowerShell 中从项目文件自动读取版本号并安装本地工具包：
+
+```powershell
+$toolVersion = dotnet msbuild src/Zongsoft.Tools.Migrator.csproj -getProperty:Version -nologo
+dotnet tool install -g Zongsoft.Tools.Migrator --version "$toolVersion" --source ./src/bin/Release --no-http-cache
+```
+
+替换相同版本前先卸载该全局工具。Cake `pack` 会推送 NuGet，不用于本地测试。
 
 ### 命令选项和示例
 
@@ -41,7 +48,27 @@ $env:scheme = 'default'
 dotnet-migrate --name:zongsoft --version:1.0.0 --platform:linux --output:packages '.deploy/$(scheme)/migration/$(version)/*.migration'
 ```
 
-必填选项为 name、platform；可选 version、edition、architecture（默认 x64）、output（默认当前目录）、overwrite（默认 false）、title（默认输入名称）、summary 和 description。summary/description 采用 `file:`、`text:` 文本来源规则，文件相对当前目录。至少一个位置参数；每个参数支持变量、通配符及 `;`/`|` 列表，显式选项优先于环境变量。路径按参数位置展开，各模式按固定前缀下的相对路径 Ordinal 排序。缺失路径逐项警告，全缺失或无任务则失败；存在但无效的输入仍报错。只接受 `.migration`（INI 内容），导入同样检查扩展名；参数仍为 `.env`。SQL 内容不展开变量。
+```text
+dotnet-migrate --name:<名称> --platform:<平台> [选项...] <输入.migration|模式> [更多输入...]
+```
+
+制作命令没有子命令。选项可写 `--key:value` 或 `--key=value`；含空格的值按终端语法加引号。显式选项覆盖环境变量，再覆盖描述符默认值；版本文件阶段另有下述规则。
+制作成功返回 `0`，无参数返回 `2`，参数、输入或制作失败返回 `1`。
+
+| 选项 | 必填/默认值 | 说明 |
+| --- | --- | --- |
+| `--name:<名称>` | 必填 | 升迁名称，独立于版本文件中的应用名称。 |
+| `--platform:<平台>` | 必填 | `linux` 或 `win`/`windows`；`unix` 不够明确，macOS 尚无运行器。 |
+| `--version:<版本或路径>` | 当前目录直属 `.version` | 非零版本号、版本文件或含 `.version` 的目录；版本文件只读。 |
+| `--edition:<名称>` | 文件决定或空 | 选择版本文件 Edition；名称不区分大小写，保留文件拼写。 |
+| `--architecture:<架构>` | `x64` | `x64` 或 `arm64`；`win` 仅有 x64 执行器。 |
+| `--output:<目录>` | 当前目录 | 产物目录，相对当前工作目录。 |
+| `--overwrite[:布尔值]` | `false` | 覆盖同名归档和启动器；两文件成组提交，失败恢复旧文件。 |
+| `--title:<文本>` | `name` | 计划标题。 |
+| `--summary:<文本或文件>` | 空 | 摘要，支持 `text:` 字面文本或 `file:` 文件来源。 |
+| `--description:<文本或文件>` | 空 | 描述，来源规则同摘要。 |
+
+至少一个位置参数；每个参数支持变量、通配符及 `;`/`|` 列表。路径按参数位置展开，各模式按固定前缀下的相对路径 Ordinal 排序。缺失路径逐项警告，全缺失或无任务则失败；存在但无效的输入仍报错。只接受 `.migration`（INI 内容），导入同样检查扩展名；参数仍为 `.env`。SQL 内容和 `text:` 字面文本不展开变量。摘要与描述的文件相对当前目录。
 
 > - Linux 支持 glibc x64/arm64；
 > - Windows 规范化为 win，仅支持 x64。
@@ -66,9 +93,7 @@ dotnet-migrate --name:zongsoft --version:web/default --platform:linux --output:p
 dotnet-migrate --name:zongsoft --platform:linux --output:../../packages '../../.deploy/$(scheme)/migration/$(version)/*.migration'
 ```
 
-版本路径支持变量；数字形式优先作为版本号，文件名为 `1.0.0` 时可用 `./1.0.0` 明确指定文件。命令选项先保留原始文本，版本来源确定后，`architecture`、`overwrite` 等值按需递归展开，再转换为对应类型；裸 `--overwrite` 仍表示 true。最终版本和 Edition 用于 `$(version)`/`$(edition)`、计划身份及产物名称。升迁输入和输出的相对路径始终基于当前目录，不随版本文件目录改变。完整展开规则见[版本来源与变量](README.zh-Hans.md#package-phase)。
-
-数字版本优先于路径，全零版本无效。指定数字时不会读取 .version。要选择名称类似版本号的文件，请加 ./，例如 ./1.0.0。省略 version 或传入空白时，只读取当前工作目录中的 .version，忽略环境变量 version。目录值读取直属 .version；其他路径展开后以当前目录为基准。未知或循环变量会报错，最终 version 变量不能用于定位自身来源。
+版本路径支持变量；数字形式优先作为版本号，文件名为 `1.0.0` 时可用 `./1.0.0` 明确指定文件。命令选项先保留原始文本，版本来源确定后，`architecture`、`overwrite` 等值按需递归展开，再转换为对应类型；裸 `--overwrite` 仍表示 true。布尔值还支持 `true/false`、`1/0`、`yes/no`、`on/off`、`enable(d)/disable(d)`；其他值按 Core `Switch` 约定视为 false。枚举选项沿用 Core 的转换规则，不额外检查枚举成员是否已定义；调用方应提供有效枚举项。变量名不区分大小写，支持点号、连字符和索引；用到的值遇缺失、循环或超过 64 层会报错。最终版本和 Edition 用于 `$(version)`/`$(edition)`、计划身份及产物名称。升迁输入和输出的相对路径始终基于当前目录，不随版本文件目录改变。
 
 ### 升迁输入与执行顺序
 
@@ -370,7 +395,21 @@ packages/zongsoft-migrate@1.0.0_linux-x64.sh
 ## 执行阶段
 
 ### 在目标机运行升迁包
-将二者放在目标机同一目录，执行 `sh zongsoft-migrate@1.0.0_linux-x64.sh [apply|status|check] [状态目录]`。Windows 执行同名前缀的 cmd。状态默认位于脚本目录 `.migration/<升迁名称>[-edition]/`，不含版本和 RID。不同版本共享执行锁、ready、status 和 pending 文件；执行失败不会写成功标记。
+将归档和同名前缀启动器放在目标机同一目录：
+
+```text
+sh <名称>@<版本>_linux-x64.sh [apply|status|check] [状态目录]
+<名称>@<版本>_win-x64.cmd [apply|status|check] [状态目录]
+```
+
+状态默认位于脚本目录 `.migration/<升迁名称>[-edition]/`，不含版本和 RID；显式状态目录相对调用时的工作目录。不同版本共享执行锁、ready、status 和 pending 文件；执行失败不会写成功标记。没有动作时默认 `apply`；动作非法返回 `2`。
+
+以 `zongsoft-migrate@1.0.0_linux-x64.sh` 为例，查看最近执行报告或只检查完成标记：
+
+```sh
+sh zongsoft-migrate@1.0.0_linux-x64.sh status ./migration-state
+sh zongsoft-migrate@1.0.0_linux-x64.sh check ./migration-state
+```
 
 apply/status 每次创建独立临时目录，解压后调用原生执行器，结束清理并返回退出码。成功返回 0，执行失败返回 1，动作或参数无效返回 2。
 

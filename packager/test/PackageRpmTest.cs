@@ -241,12 +241,12 @@ public sealed class PackageRpmTest
 		var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["framework"] = "net10.0", ["source"] = source, ["daemon"] = daemon };
 		if(installed != null)
 			variables["installed"] = installed;
-		Normalizer.Initialize(variables);
+		var resolved = new Variables(variables);
 		Package package = format switch
 		{
-			"tar" => new Package.Tar("Zongsoft.Migration.TestHost", null, new Version(1, 1, 0), Platform.Linux, Architecture.X64),
-			"deb" => new Package.Deb("Zongsoft.Migration.TestHost", null, new Version(1, 1, 0), Platform.Linux, Architecture.X64),
-			"rpm" => new Package.Rpm("Zongsoft.Migration.TestHost", null, new Version(1, 1, 0), Platform.Linux, Architecture.X64),
+			"tar" => new Package.Tar("Zongsoft.Migration.TestHost", null, new Version(1, 1, 0), Platform.Linux, Architecture.X64, resolved),
+			"deb" => new Package.Deb("Zongsoft.Migration.TestHost", null, new Version(1, 1, 0), Platform.Linux, Architecture.X64, resolved),
+			"rpm" => new Package.Rpm("Zongsoft.Migration.TestHost", null, new Version(1, 1, 0), Platform.Linux, Architecture.X64, resolved),
 			_ => throw new ArgumentOutOfRangeException(nameof(format)),
 		};
 		package.InstallPath = "/opt/zongsoft/migration-test";

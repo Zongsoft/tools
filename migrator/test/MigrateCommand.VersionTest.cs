@@ -7,6 +7,8 @@ using System.Collections.Generic;
 
 using Xunit;
 
+using Zongsoft.Components;
+
 namespace Zongsoft.Tools.Migrator.Tests;
 
 public sealed partial class MigrateCommandTest
@@ -362,11 +364,27 @@ public sealed partial class MigrateCommandTest
 			using var plan = JsonDocument.Parse(Assert.Single(entries, entry => entry.Name == ".migration/migration.json").Content);
 			Assert.Equal("linux-arm64", plan.RootElement.GetProperty("Runtime").GetString());
 
+			var publishedArchive = File.ReadAllBytes(archive);
+			var publishedLauncher = File.ReadAllBytes(launcher);
+			Environment.SetEnvironmentVariable("zongsoft_migrate_overwrite", "no");
+			var denied = await RunAsync(directory, arguments);
+			Assert.NotEqual(0, denied.Code);
+			Assert.Equal(publishedArchive, File.ReadAllBytes(archive));
+			Assert.Equal(publishedLauncher, File.ReadAllBytes(launcher));
+
+			Environment.SetEnvironmentVariable("zongsoft_migrate_overwrite", "yes");
+			File.WriteAllText(archive, "previous archive");
+			File.WriteAllText(launcher, "previous launcher");
+			var allowed = await RunAsync(directory, arguments);
+			Assert.True(allowed.Code == 0, allowed.Output);
+			Assert.True(File.ReadAllBytes(archive).Length > "previous archive".Length);
+			Assert.Contains(Path.GetFileName(archive), File.ReadAllText(launcher));
+
 			Environment.SetEnvironmentVariable("zongsoft_migrate_architecture", "invalid-architecture");
 			var invalidArguments = arguments.Select(argument => argument == "--output:out" ? "--output:invalid-out" : argument).ToArray();
 			var invalid = await RunAsync(directory, invalidArguments);
 			Assert.NotEqual(0, invalid.Code);
-			Assert.IsType<ArgumentException>(invalid.Error);
+			Assert.IsType<InvalidOperationException>(invalid.Error);
 			Assert.False(Directory.Exists(Path.Combine(directory.Path, "invalid-out")));
 		}
 		finally
@@ -374,6 +392,44 @@ public sealed partial class MigrateCommandTest
 			foreach(var name in names)
 				Environment.SetEnvironmentVariable(name, previous[name]);
 		}
+	}
+
+	[Fact]
+	public async Task Execute_FormattedEqualsOptionsPreserveSpacesAndCommandOverwriteWinsAsync()
+	{
+		using var directory = new MigrationTestDirectory();
+		PrepareMigration(directory, "/data/hosting.db");
+		var arguments = Arguments("zongsoft.daemon", "Linux", "X64");
+		arguments.Remove("--output:out");
+		arguments.Add("--output=out with spaces");
+		arguments.Add("--title=Release Candidate");
+		arguments.Add("db.migration");
+		var line = CommandLine.Parse(Program.GetCommandLine(arguments.Skip(1).ToArray()))[0];
+		Assert.Equal("out with spaces", Assert.Single(line.Options, option => option.Name == "output").Value);
+		Assert.Equal("Release Candidate", Assert.Single(line.Options, option => option.Name == "title").Value);
+		var previousOverwrite = Environment.GetEnvironmentVariable("overwrite");
+
+		try
+		{
+			var invalid = arguments.Select(argument => argument == "--architecture:X64" ? "--architecture=invalid" : argument).ToArray();
+			var failed = await RunAsync(directory, invalid);
+			Assert.Equal(1, failed.Code);
+			Assert.IsType<InvalidOperationException>(failed.Error);
+			Assert.False(Directory.Exists(Path.Combine(directory.Path, "out with spaces")));
+
+			var succeeded = await RunAsync(directory, arguments);
+			Assert.Equal(0, succeeded.Code);
+			var archive = Assert.Single(Directory.GetFiles(Path.Combine(directory.Path, "out with spaces"), "*.tar.gz"));
+			using(var plan = JsonDocument.Parse(Assert.Single(ReadArchive(archive), entry => entry.Name == ".migration/migration.json").Content))
+				Assert.Equal("Release Candidate", plan.RootElement.GetProperty("Title").GetString());
+
+			File.WriteAllText(archive, "existing archive");
+			Environment.SetEnvironmentVariable("overwrite", "true");
+			var blocked = await RunAsync(directory, [.. arguments, "--overwrite=false"]);
+			Assert.Equal(1, blocked.Code);
+			Assert.Equal("existing archive", File.ReadAllText(archive));
+		}
+		finally { Environment.SetEnvironmentVariable("overwrite", previousOverwrite); }
 	}
 	#endregion
 

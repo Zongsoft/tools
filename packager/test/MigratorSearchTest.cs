@@ -21,7 +21,7 @@ public sealed partial class MigratorPackageTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var package = Create("tar", directory);
-		var source = SetSearchSource(directory);
+		var source = SetSearchSource(directory, package);
 		var selected = Pair(directory, Path.Combine(selectedDirectory, "bootstrap"), null, "2.7.1", "linux-x64");
 
 		if(selectedDirectory.Length > 0)
@@ -38,7 +38,7 @@ public sealed partial class MigratorPackageTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var package = Create("tar", directory, "Enterprise");
-		var source = SetSearchSource(directory);
+		var source = SetSearchSource(directory, package);
 		var name = "absent-" + Guid.NewGuid().ToString("N");
 		Pair(directory, name, null, "2.7.1", "linux-x64");
 		Pair(directory, name, "Enterprise", "1.0.0", "linux-x64");
@@ -65,7 +65,7 @@ public sealed partial class MigratorPackageTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var package = Create("tar", directory);
-		SetSearchSource(directory);
+		SetSearchSource(directory, package);
 		Pair(directory, "bootstrap", null, "2.7.1", "linux-x64");
 		var near = Pair(directory, "hosting/bootstrap", null, "2.7.1", "linux-x64");
 		var missingPath = missing == "archive" ? near.Archive : near.Script;
@@ -86,7 +86,7 @@ public sealed partial class MigratorPackageTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var package = Create("tar", directory);
-		SetSearchSource(directory);
+		SetSearchSource(directory, package);
 		Pair(directory, "bootstrap", null, "2.7.1", "linux-x64");
 		var near = Pair(directory, "hosting/bootstrap", null, "2.7.1", "linux-x64", failure);
 		if(failure == "malformed-gzip")
@@ -109,7 +109,7 @@ public sealed partial class MigratorPackageTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var package = Create("tar", directory);
-		var source = SetSearchSource(directory);
+		var source = SetSearchSource(directory, package);
 		Pair(directory, "hosting/bootstrap", null, "2.7.1", "linux-x64");
 		if(input == "absolute")
 			input = Path.Combine(source, "bootstrap");
@@ -139,7 +139,7 @@ public sealed partial class MigratorPackageTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var package = Create(format, directory, "Enterprise");
-		var source = SetSearchSource(directory);
+		var source = SetSearchSource(directory, package);
 		directory.Write("hosting/web/zongsoft.daemon.service", "[Unit]\nDescription=Hosting\n[Service]\nExecStart=/bin/true\n");
 		var pair = Pair(directory, "bootstrap", "Enterprise", "2.7.1", "linux-x64");
 		package.Migrator = Migrator.Load(package, "bootstrap");
@@ -165,17 +165,13 @@ public sealed partial class MigratorPackageTest
 	#endregion
 
 	#region 辅助方法
-	private static string SetSearchSource(MigrationTestDirectory directory)
+	private static string SetSearchSource(MigrationTestDirectory directory, Package package)
 	{
 		var source = Directory.CreateDirectory(Path.Combine(directory.Path, "hosting", "web")).FullName;
-		var variables = new Dictionary<string, string>(Normalizer.Variables.Raw, StringComparer.OrdinalIgnoreCase)
-		{
-			["source"] = source,
-			["migrationName"] = "bootstrap",
-			["migrationDirectory"] = ".",
-			["qualifiedMigration"] = "./bootstrap",
-		};
-		Normalizer.Initialize(variables);
+		package.Variables["source"] = source;
+		package.Variables["migrationName"] = "bootstrap";
+		package.Variables["migrationDirectory"] = ".";
+		package.Variables["qualifiedMigration"] = "./bootstrap";
 		return source;
 	}
 

@@ -22,7 +22,7 @@ description: 修改或审查 Zongsoft tools/deployer 的 .deploy 描述语法、
 - 显式 NuGet 缓存路径由 NugetAssets.ResolveLibraryPath 调整 lib 框架目录，路径内框架优先于 Framework 变量，保留后续路径和通配符后缀；仅检查缓存根以内的路径，根外或无匹配时保留原路径。普通包资产已选择框架，枚举时使用 resolveLibrary: false，内容中的 lib 子目录按普通目录处理。
 - `DeploymentEntry.Get` 在变量展开前取第一个冒号划分解析器；没有冒号时名称为 `path`。GetResolver 对 null、空字符串和纯空白名称返回默认路径解析器，这是功能约定；未知名称返回 null。Windows 字面绝对路径使用 `path:D:/...` 或 `path:D:\dir\files.ext`，也可用变量/相对路径，不要把盘符误当解析器。
 - 条目过滤支持变量存在、否定、候选值、`&`/`|` 组合以及目标框架版本比较。
-- 变量支持 `$(name)` 与 `%name%`，名称不区分大小写；环境、`appsettings.json`、命令选项按既有覆盖顺序合并。
+- 变量支持 `$(name)` 与 `%name%`，名称允许点号、连字符和索引且不区分大小写；环境、`appsettings.json`、命令选项按既有覆盖顺序合并。
 - 变量值按需递归展开，循环、缺失及超过 64 层失败；`destination` 先只用全部命令选项和环境变量定位，再加载目标配置，不受选项遍历顺序影响。
 - 未指定 NuGet 包内路径时优先处理根 `.deploy`；否则先统一求解普通根包依赖闭包，再选择目标 RID/TFM 的托管、原生和内容资产。默认/自定义依赖忽略前缀不区分大小写，明确根请求不受过滤。
 - 普通 NuGet 根请求在一次命令内统一求解，根版本固定，依赖选择满足全部范围的最低可用版本；无解与循环失败。同目标同内容的包资产去重，不同内容报冲突；显式 delete 保留顺序。该求解不等于完整 MSBuild restore。用最终文件版本和宿主首次调用验证。
@@ -54,7 +54,7 @@ dry-run/offline/explain/report、lockFile/locked、previous/prune 的行为见�
 
 类型的 XML 注释说明主要功能与职责边界；流程注释重点解释回溯、状态隔离、执行顺序和所有权等不直观约定。访问级别遵循最小可见性，类内实现保持 private，跨类型生产协作才使用相应入口，不为测试扩大访问范围。
 
-实现细节见 [中文](docs/implementation.zh-Hans.md) / [English](docs/implementation.md)。优先复用已引用的 Zongsoft.Core 和 NuGet API：CommandLine、Profile/集合、DictionaryExtension，以及 NuspecReader.GetContentFiles、NuGet.Frameworks、JsonRuntimeFormat/RuntimeGraph。Core 7.59.0 的 ProfileReader 内置导入，递归共享读取器并保护循环及 ProfileOptions.MaximumDepth 指定的层数上限（默认 64，正整数，根文件计一层）。ProfileOptions.Importing/Imported 均为 Action<ProfileContext>，上下文提供 FilePath、Depth、Referer、Profile；前置 Profile 为 null，后置为合并后的子文件，前后分别构造。deployer 通过 Importing 的 context.FilePath 记录导入文件哈希，根文件单独记录。回调抛异常终止整个加载，不提供禁用或跳过导入。合并按读取顺序替换有效引用并保留本地声明；ProfileWriter 按来源保存，deployer 不调用保存入口。
+实现细节见 [中文](docs/implementation.zh-Hans.md) / [English](docs/implementation.md)。优先复用已引用的 Zongsoft.Core 和 NuGet API：CommandLine、Profile/集合、DictionaryExtension，以及 NuspecReader.GetContentFiles、NuGet.Frameworks、JsonRuntimeFormat/RuntimeGraph。Core 的 ProfileReader 内置导入，递归共享读取器并保护循环及 ProfileOptions.MaximumDepth 指定的层数上限（默认 64，正整数，根文件计一层）。ProfileOptions.Importing/Imported 均为 Action<ProfileContext>，上下文提供 FilePath、Depth、Referer、Profile；前置 Profile 为 null，后置为合并后的子文件，前后分别构造。deployer 通过 Importing 的 context.FilePath 记录导入文件哈希，根文件单独记录。回调抛异常终止整个加载，不提供禁用或跳过导入。合并按读取顺序替换有效引用并保留本地声明；ProfileWriter 按来源保存，deployer 不调用保存入口。
 
 RID 资源使用 src/Resources/ 中固定的 dotnet/runtime v10.0.0 图谱，禁止从 MSBuildToolsPath 或运行机器 SDK 目录取图谱。图谱及许可证等第三方文件保留上游原始字节，不转换换行、编码或缩进；.gitattributes 的 -text 防止 Git 自动转换。更新快照时同步双语实现文档的版本/哈希及上游许可证，核对上游原件哈希并验证竞争候选顺序。通用包版本在仓库根 Directory.Packages.props 维护，NuGet.* 专用依赖在本项目通过 VersionOverride 维护。
 

@@ -56,10 +56,13 @@ public sealed class DeploymentPlan
 	public void Save(string path)
 	{
 		path = Path.GetFullPath(path);
-		Directory.CreateDirectory(Path.GetDirectoryName(path));
-
 		var content = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
-		File.WriteAllText(path, content.Replace("\r\n", "\n").Replace("\n", "\r\n"));
+
+		ArtifactPublisher.Write(path, stream =>
+		{
+			using var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(false), leaveOpen: true);
+			writer.Write(content.Replace("\r\n", "\n").Replace("\n", "\r\n"));
+		});
 	}
 	#endregion
 }

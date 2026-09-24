@@ -39,14 +39,15 @@ namespace Zongsoft.Tools.Packager;
 
 public sealed class TarCommand : PackCommand<Package.Tar>
 {
-	protected override Package.Tar CreatePackage(CommandContext context)
+	protected override Package.Tar CreatePackage(CommandContext context, Variables variables)
 	{
 		var package = new Package.Tar(
-			Normalizer.Variables.Name,
-			Normalizer.Variables.Edition,
-			Normalizer.Variables.Version,
-			Normalizer.Variables.Platform,
-			Normalizer.Variables.Architecture);
+			variables.Name,
+			variables.Edition,
+			variables.Version,
+			variables.Platform,
+			variables.Architecture,
+			variables);
 
 		Configure(package, context);
 		return package;

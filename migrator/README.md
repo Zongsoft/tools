@@ -30,7 +30,14 @@ Package creation prepares inputs without contacting the target. Only execution c
 dotnet tool install -g Zongsoft.Tools.Migrator
 ```
 
-For a local source installation, run `dotnet cake --edition Release --target build` from migrator to prepare all three RIDs and create the NuGet tool package. With native artifacts already prepared, use `--target compile`. Install with `dotnet tool install -g Zongsoft.Tools.Migrator --version 0.3.0 --source ./src/bin/Release --no-http-cache`; uninstall first when replacing the same version. Cake `pack` pushes to NuGet and is not for local testing.
+For a local source installation, run `dotnet cake --edition Release --target build` from migrator to prepare all three RIDs and create the NuGet tool package. With native artifacts already prepared, use `--target compile`. After building, read the version from the project file and install the local package with PowerShell:
+
+```powershell
+$toolVersion = dotnet msbuild src/Zongsoft.Tools.Migrator.csproj -getProperty:Version -nologo
+dotnet tool install -g Zongsoft.Tools.Migrator --version "$toolVersion" --source ./src/bin/Release --no-http-cache
+```
+
+Uninstall first when replacing the same version. Cake `pack` pushes to NuGet and is not for local testing.
 
 ### Command options and example
 
@@ -41,7 +48,27 @@ $env:scheme = 'default'
 dotnet-migrate --name:zongsoft --version:1.0.0 --platform:linux --output:packages '.deploy/$(scheme)/migration/$(version)/*.migration'
 ```
 
-Required options: name and platform. Optional: version, edition, architecture (x64), output (current directory), overwrite (false), title (input name), summary and description. Summary/description support existing file:/text: sources relative to the current directory. At least one positional path is required; each supports variables, wildcards and semicolon/pipe lists. Explicit options override environment variables. Expand each argument at its position, sorting relative matches ordinally within that pattern. Missing paths warn and skip; no valid inputs/tasks fails. Existing invalid inputs fail. Only .migration files are accepted, including imports; contents remain INI, with .env parameters. SQL contents are not variable-expanded.
+```text
+dotnet-migrate --name:<name> --platform:<platform> [options...] <input.migration|pattern> [more inputs...]
+```
+
+The package command has no subcommands. Options accept `--key:value` or `--key=value`; quote values with spaces according to the shell. Explicit options override environment variables and then descriptor defaults; version-file selection has the separate rules below.
+Successful generation returns `0`; no arguments return `2`; invalid options, inputs, or generation failures return `1`.
+
+| Option | Required/default | Description |
+| --- | --- | --- |
+| `--name:<name>` | Required | Migration name, independent of the application name in a version file. |
+| `--platform:<platform>` | Required | `linux` or `win`/`windows`; `unix` is ambiguous and macOS has no runner. |
+| `--version:<version-or-path>` | Immediate `.version` in current directory | Nonzero version, version file, or directory containing `.version`; version files are read-only. |
+| `--edition:<name>` | File selection or empty | Select a version-file Edition, case-insensitively, preserving file spelling. |
+| `--architecture:<arch>` | `x64` | `x64` or `arm64`; only x64 is available for `win`. |
+| `--output:<directory>` | Current directory | Artifact directory, relative to the working directory. |
+| `--overwrite[:boolean]` | `false` | Replace archive and launcher together; restore old files on commit failure. |
+| `--title:<text>` | `name` | Plan title. |
+| `--summary:<text-or-file>` | Empty | Summary using literal `text:` or file `file:` sources. |
+| `--description:<text-or-file>` | Empty | Description with the same source rule. |
+
+At least one positional argument is required. Each argument supports variables, wildcards, and `;`/`|` lists. Paths expand at their argument position, with each pattern sorted by relative path using Ordinal order under its fixed prefix. Missing paths warn individually; all missing paths or no tasks fail. Existing but invalid inputs still fail. Only `.migration` (INI content) is accepted, including imports; parameters remain `.env`. SQL content and literal `text:` values are not expanded. Summary/description files are relative to the current directory.
 
 > - Linux supports glibc x64/arm64.
 > - Windows normalize to win, x64 only.
@@ -66,9 +93,7 @@ To omit `--version`, run from `D:/Zongsoft/hosting/web/default`:
 dotnet-migrate --name:zongsoft --platform:linux --output:../../packages '../../.deploy/$(scheme)/migration/$(version)/*.migration'
 ```
 
-Version paths support variables. Numeric values take precedence over paths; use `./1.0.0` for a file named `1.0.0`. Command options remain raw text until needed; after choosing the version source, values such as `architecture` and `overwrite` expand recursively before type conversion. A bare `--overwrite` still means true. The resolved version and Edition populate `$(version)`/`$(edition)`, plan identity and artifact names. Migration inputs and output paths stay relative to the working directory, even when the version file is elsewhere. See [version sources](README.md#package-phase) for expansion rules.
-
-Numeric versions take precedence over paths; all-zero versions are rejected. Numeric values do not open .version. Prefix a numeric-looking filename with ./, such as ./1.0.0. If version is omitted or blank, only the .version file directly inside the current working directory is read; the version environment variable is ignored. Directories select their own .version. Other paths are expanded and resolved from the working directory. Unknown or cyclic variables fail, and the final version variable cannot locate its own source.
+Version paths support variables. Numeric values take precedence over paths; use `./1.0.0` for a file named `1.0.0`. Command options remain raw text until needed; after choosing the version source, values such as `architecture` and `overwrite` expand recursively before type conversion. A bare `--overwrite` still means true. Boolean values also accept `true/false`, `1/0`, `yes/no`, `on/off`, and `enable(d)/disable(d)`; other values are false under Core's `Switch` convention. Enum options follow Core conversion rules without an additional check that the enum member is defined; callers must supply a valid member. Variable names are case-insensitive and may contain dots, hyphens, and indices; referenced missing, cyclic, or over-64-level values fail. The resolved version and Edition populate `$(version)`/`$(edition)`, plan identity and artifact names. Migration inputs and output paths stay relative to the working directory, even when the version file is elsewhere.
 
 ### Migration inputs and ordering
 
@@ -370,7 +395,21 @@ The archive contains .migration/migration.json, prepared SQL under .migration/.a
 ## Execution phase
 
 ### Run the package
-Keep both files together on the target. Run `sh zongsoft-migrate@1.0.0_linux-x64.sh [apply|status|check] [state-directory]`, or the corresponding cmd on Windows. The default state directory is `.migration/<migration-name>[-edition]/` beside the script, without version or RID. Versions share the lock, ready, status and database/Amazon S3 pending files.
+Place the archive and matching launcher in the same directory:
+
+```text
+sh <name>@<version>_linux-x64.sh [apply|status|check] [state-directory]
+<name>@<version>_win-x64.cmd [apply|status|check] [state-directory]
+```
+
+The default state directory is `.migration/<migration-name>[-edition]/` beside the launcher, without version or RID; an explicit state directory is relative to the caller's working directory. Versions share the lock, ready, status and database/Amazon S3 pending files. With no action, `apply` is the default; an invalid action returns `2`.
+
+For an artifact named `zongsoft-migrate@1.0.0_linux-x64.sh`, display the last report or only check the completion marker:
+
+```sh
+sh zongsoft-migrate@1.0.0_linux-x64.sh status ./migration-state
+sh zongsoft-migrate@1.0.0_linux-x64.sh check ./migration-state
+```
 
 Apply/status extract into a unique temporary directory, invoke the native executor, clean up and return its exit code. Exit codes are 0 for success, 1 for failure and 2 for invalid actions or arguments.
 

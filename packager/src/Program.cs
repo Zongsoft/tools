@@ -44,13 +44,12 @@ internal class Program
 {
 	public static ITerminalExecutor Executor => Terminal.Console.Executor;
 
-	public static async Task Main(string[] args)
+	public static async Task<int> Main(string[] args)
 	{
 		if(args == null || args.Length == 0)
 		{
 			Terminal.WriteLine(CommandOutletColor.DarkRed, Properties.Resources.CommandLineEmpty_Message);
-			Environment.ExitCode = -1;
-			return;
+			return 2;
 		}
 
 		//初始化
@@ -58,19 +57,21 @@ internal class Program
 		Executor.Root.Children.Add(new TarCommand());
 		Executor.Root.Children.Add(new DebCommand());
 		Executor.Root.Children.Add(new RpmCommand());
-		Executor.Failed += (_, _) => Environment.ExitCode = 1;
+		var failed = false;
+		void OnFailed(object sender, CommandExecutorFailureEventArgs e) => failed = true;
+		Executor.Failed += OnFailed;
 
 		try
 		{
 			//执行命令
-			if(await Executor.ExecuteAsync(CommandLine.Get(args)) == null)
-				Environment.ExitCode = 1;
+			return await Executor.ExecuteAsync(Utility.FormatCommand(args[0], args.AsSpan(1))) == null || failed ? 1 : 0;
 		}
 		catch(Exception ex)
 		{
-			Environment.ExitCode = 1;
 			//打印异常消息
 			Terminal.WriteLine(CommandOutletColor.DarkRed, ex.Message + Environment.NewLine + ex.StackTrace);
+			return 1;
 		}
+		finally { Executor.Failed -= OnFailed; }
 	}
 }

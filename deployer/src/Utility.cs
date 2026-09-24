@@ -39,7 +39,7 @@ using System.Collections.Generic;
 namespace Zongsoft.Tools.Deployer;
 
 /// <summary>提供部署语法所需的路径、框架过滤及条件表达式辅助功能。</summary>
-internal static class Utility
+internal static partial class Utility
 {
 	#region 常量定义
 	internal const string FRAMEWORK_VARIABLE = "Framework";

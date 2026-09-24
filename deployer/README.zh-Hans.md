@@ -202,10 +202,11 @@ dotnet tool uninstall -g zongsoft.tools.deployer
 dotnet build src/Zongsoft.Tools.Deployer.csproj -c Release
 ```
 
-确认构建成功且 `src/bin/Release/Zongsoft.Tools.Deployer.7.13.0.nupkg` 已生成后，首次安装执行：
+确认构建成功且 `src/bin/Release/Zongsoft.Tools.Deployer.<version>.nupkg` 已生成后，首次安装执行：
 
 ```powershell
-dotnet tool install -g Zongsoft.Tools.Deployer --version 7.13.0 --source ./src/bin/Release --no-http-cache
+$toolVersion = dotnet msbuild src/Zongsoft.Tools.Deployer.csproj -getProperty:Version -nologo
+dotnet tool install -g Zongsoft.Tools.Deployer --version "$toolVersion" --source ./src/bin/Release --no-http-cache
 ```
 
 若已安装该工具，尤其是重新编译了同一版本，先卸载，再执行上面的本地安装命令：
@@ -214,7 +215,7 @@ dotnet tool install -g Zongsoft.Tools.Deployer --version 7.13.0 --source ./src/b
 dotnet tool uninstall -g Zongsoft.Tools.Deployer
 ```
 
-示例版本 `7.13.0` 对应当前项目版本，请随实际 `.nupkg` 调整。`--source` 限定本次安装只使用本地目录，避免选中 NuGet.org 的同名包；`--no-http-cache` 禁用下载缓存，选项说明见 [.NET 工具安装文档](https://learn.microsoft.com/zh-cn/dotnet/core/tools/dotnet-tool-install)。安装后使用 `dotnet tool list -g` 核对版本。这里的“本地”指包来源，`-g` 仍会替换当前用户的全局工具。只做本地测试不要运行 Cake 的 `pack` 任务，它会推送到 NuGet.org。
+安装命令从项目文件自动读取版本号；包文件名中的 `<version>` 表示该值。`--source` 限定本次安装只使用本地目录，避免选中 NuGet.org 的同名包；`--no-http-cache` 禁用下载缓存，选项说明见 [.NET 工具安装文档](https://learn.microsoft.com/zh-cn/dotnet/core/tools/dotnet-tool-install)。安装后使用 `dotnet tool list -g` 核对版本。这里的“本地”指包来源，`-g` 仍会替换当前用户的全局工具。只做本地测试不要运行 Cake 的 `pack` 任务，它会推送到 NuGet.org。
 
 ## 执行
 
@@ -236,18 +237,40 @@ dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:
 
 ### 命令选项
 
-命令支持普通终端和重定向/管道执行，无需 PTY。成功返回 `0`，解析、依赖或文件操作失败返回 `1`，取消返回 `130`。默认先生成完整计划，预检查失败时不写入目标；正常覆盖跳过和删除有独立统计。
+命令支持普通终端和重定向/管道执行。成功返回 `0`，解析、依赖或文件操作失败返回 `1`，取消返回 `130`。默认先生成完整计划，预检查失败时不写入目标；正常覆盖跳过和删除有独立统计。
 
-- `verbosity` 选项
-	- `quiet` 只显示必要的输出信息，通常只显示错误信息。
-	- `normal` 显示警示和错误信息，如果未指定该选项，其为默认值。
-	- `detail` 显示所有的输出信息，在排查问题时可以启用该选项。
-- `overwrite` 选项
-	- `alway` 始终复制并覆盖目标文件。
-	- `never` 只有当目标文件不存在才复制。
-	- `newest` 只有当源文件的最后修改时间晚于或等于目标文件的最后修改时间才执行文件复制部署，如果未指定该参数，其为默认值。
-- `destination` 选项
-	> 指定的部署目的目录，如果未指定该选项则默认为当前目录。
+```text
+dotnet deploy [--选项:值 ...] [部署文件或目录 ...]
+dotnet-deploy [--选项:值 ...] [部署文件或目录 ...]
+```
+
+两个入口等价，没有子命令。无位置参数时读取当前目录的 `.deploy`；可按顺序传入多个部署文件，目录参数使用其直属 `.deploy`。相对清单路径基于当前工作目录，清单内相对源路径基于所在清单，目标路径基于 `destination`。选项亦可写为 `--key=value`，含空格的值应按终端语法加引号。任意其他 `--name:value` 也会成为用户变量，供清单和配置引用；下表仅列出工具自己识别的控制选项。部署文件中的 `path`、`nuget`、`delete`/`remove` 是解析器，不是子命令。
+
+| 选项 | 默认值 | 用途 |
+| --- | --- | --- |
+| `--destination:<目录>` | 当前目录 | 目标根目录；先用命令选项与环境变量解析，再加载该目录的 `appsettings.json`。 |
+| `--verbosity:<级别>` | `normal` | `quiet`、`normal`、`detail`；无法转换的值报错。 |
+| `--overwrite:<策略>` | `newest` | `alway`（保持现有枚举拼写）、`never`、`newest`。这不是布尔开关。 |
+| `--expansion[:布尔值]` | `false` | 目录通配匹配时，将匹配到的相对目录层级保留到目标路径；`false` 只保留通配捕获部分。 |
+| `--ignoreDeploymentFile[:布尔值]` | `false` | 遇到源 `.deploy` 文件时按普通文件复制，不递归执行该清单。 |
+| `--ignoreDependentPrefix:<前缀列表>` | 内置前缀 | 跳过匹配前缀的依赖边；用 `,`、`;` 或 `|` 分隔。 |
+| `--offline[:布尔值]` | `false` | 只使用本地 NuGet 缓存。 |
+| `--prerelease[:布尔值]` | `false` | 选择 latest 时允许预发布版本。 |
+| `--dry-run[:布尔值]` | `false` | 生成并校验计划，不修改目标。 |
+| `--explain[:布尔值]` | `false` | 输出逐项计划/执行结果。 |
+| `--report:<文件>` | 无 | 将计划及结果原子写入 JSON 文件。 |
+| `--lockFile:<文件>` | 无 | 成功部署后保存锁定计划；`locked` 时读取它。 |
+| `--locked[:布尔值]` | `false` | 要求现有锁定计划与本次计划匹配。 |
+| `--previous:<文件>` | 无 | 读取上次报告，识别不再选中的目标文件。 |
+| `--prune[:布尔值]` | `false` | 配合 `previous` 删除内容未变的旧文件；改动过的文件保留。 |
+
+所有布尔选项支持裸开关，以及 `true/false`、`1/0`、`yes/no`、`on/off`、`enable(d)/disable(d)`，大小写不敏感；其他值按 Core `Switch` 约定视为 false。可用 `$(name)` 或 `%name%` 引用变量，名称支持点号、连字符与索引，按需递归展开；用到的值缺失、循环或超过 64 层即报错，先展开再转换类型。枚举选项沿用 Core 的转换规则，不额外检查枚举成员是否已定义；调用方应提供有效枚举项。未选中的部署分支不展开。
+
+NuGet 相关的 `NuGet_Server` 与 `NuGet_Packages` 既可作为命令变量也可作为环境变量；`Framework`、`Platform`、`Architecture`、`edition` 等是供解析器和部署文件使用的普通变量。示例：
+
+```powershell
+dotnet deploy --destination:'bin/$(edition)/$(framework)' --edition:Release --framework:net10.0 --dry-run --report:deploy-plan.json .deploy extra.deploy
+```
 
 ### NuGet 包
 
@@ -294,7 +317,7 @@ dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:
 
 ### 计划、锁定与清理
 
-默认覆盖策略为 `newest`；非法覆盖值、无效过滤条件和有效路径中的未定义变量均报错。目标写入限制在 `destination` 内且拒绝链接路径；清单及 `#@import` 都检测循环。过滤组合从左到右求值。`**` 匹配零层或多层目录，复制目录会保留其内部相对结构。
+默认覆盖策略为 `newest`；无法转换的覆盖值、无效过滤条件和有效路径中的未定义变量均报错。目标写入限制在 `destination` 内且拒绝链接路径；清单及 `#@import` 都检测循环。过滤组合从左到右求值。`**` 匹配零层或多层目录，复制目录会保留其内部相对结构。
 
 | 选项 | 行为 |
 | --- | --- |
@@ -308,7 +331,7 @@ dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:
 | `--previous:./previous.json` | 对照同一目标根的前次成功报告，将不再选中的旧文件列为 Stale，默认保留。 |
 | `--prune:true` | 必须同时指定 previous；仅删除其末次有效操作确认为已复制、内容哈希未变且本次不再选中的文件。用户修改、未拥有文件和跨根路径不会被自动清理。 |
 
-布尔选项可以只写名称，也可显式使用 `true/false`。未设置锁定/清理/报告选项时不会隐式创建这些文件或清理旧内容。报告/锁文件不能覆盖已知源清单、源文件或计划目标文件；应为它们指定独立路径。执行中发生 I/O 错误会停止后续操作；已完成的写入不自动回滚。
+布尔选项可以只写名称，也可显式使用 `true/false`。锁文件用于需要重现同一部署计划的场景，尤其有浮动 NuGet 版本或依赖时；`--locked` 会核对版本与内容，但不是进程互斥锁。普通部署不需要锁文件。未设置锁定/清理/报告选项时不会隐式创建这些文件或清理旧内容。报告/锁文件不能覆盖已知源清单、源文件或计划目标文件；应为它们指定独立路径。执行中发生 I/O 错误会停止后续操作；已完成的写入不自动回滚。
 
 ```powershell
 dotnet deploy --framework:net10.0 --platform:win --architecture:x64 --offline:true --dry-run:true --report:./preview.json .deploy
@@ -328,7 +351,7 @@ RID 回退通过 NuGet.RuntimeModel 使用仓库内固定的 dotnet/runtime v10.
 dotnet test test/Zongsoft.Tools.Deployer.Tests.csproj -f net10.0 -p:GeneratePackageOnBuild=false
 ```
 
-Profile 导入复用 Core 7.59.0：Reader 内置导入及递归保护，通过 ProfileOptions.Importing 登记导入文件哈希。详见[实现细节](docs/implementation.zh-Hans.md#profile-导入回调)。
+Profile 导入复用 Core：Reader 内置导入及递归保护，通过 ProfileOptions.Importing 登记导入文件哈希。详见[实现细节](docs/implementation.zh-Hans.md#profile-导入回调)。
 
 Core Profile 的来源与覆盖规则，以及读取和保存职责，见[实现说明](docs/implementation.zh-Hans.md#core-profile-声明与保存)。部署过程不保存描述文件。
 
