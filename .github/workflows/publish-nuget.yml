@@ -13,6 +13,7 @@ on:
           - deployer
           - migrator
           - packager
+          - regular
 
 concurrency:
   group: nuget-publishing
@@ -81,7 +82,7 @@ jobs:
       always() && github.ref == 'refs/heads/main' &&
       (inputs.project != 'migrator' ||
       (needs.native-linux.result == 'success' && needs.native-windows.result == 'success'))
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.project == 'regular' && 'windows-latest' || 'ubuntu-24.04' }}
     environment: release
     timeout-minutes: 120
     permissions:
@@ -115,7 +116,7 @@ jobs:
         run: |
           chmod 755 executor/src/bin/Release/net10.0/linux-*/publish/Zongsoft.Tools.Migrator.Executor
           dotnet cake --edition Release --target compile
-      - name: Build other tool package
+      - name: Build tool package
         if: inputs.project != 'migrator'
         run: dotnet cake --edition Release --target build
       - name: NuGet login

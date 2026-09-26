@@ -20,9 +20,9 @@
 
 ## NuGet 发布
 
-手动工作流 [Publish NuGet Packages](.github/workflows/publish-nuget.yml) 支持 deployer、packager、migrator，仅 main 分支运行。release 环境配置 NUGET_USER，并为该工作流配置 NuGet Trusted Publishing；取得临时密钥后仅推送已构建的包。
+手动工作流 [Publish NuGet Packages](.github/workflows/publish-nuget.yml) 支持 deployer、packager、migrator、regular，仅 main 分支运行。release 环境配置 NUGET_USER，并为该工作流配置 NuGet Trusted Publishing；取得临时密钥后仅推送已构建的包。
 
-packager 独立构建。migrator 分别由 Linux 和 Windows 作业准备三种原生产物，汇集后执行 Cake compile 制包。普通构建/回归不发布原生执行器。各工具本地制包方法见其 README；Cake pack 会推送 NuGet，不能用于仅本地测试。
+packager 独立构建。migrator 分别由 Linux 和 Windows 作业准备三种原生产物，汇集后执行 Cake compile 制包。regular 在 Windows 作业中构建，将 WinForms 可执行文件放入 Windows x64 .NET 工具包。普通构建/回归不发布原生执行器。各工具本地制包方法见其 README；Cake pack 会推送 NuGet，不能用于仅本地测试。
 
 ## 包版本管理
 

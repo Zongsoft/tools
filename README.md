@@ -20,9 +20,9 @@ Provides a suite of tools to assist in development, including:
 
 ## NuGet publishing
 
-The manual [Publish NuGet Packages](.github/workflows/publish-nuget.yml) workflow selects deployer, packager or migrator and runs only on main. Configure NUGET_USER in the release environment and a NuGet trusted publishing policy for this workflow; publishing obtains a temporary key after building.
+The manual [Publish NuGet Packages](.github/workflows/publish-nuget.yml) workflow selects deployer, packager, migrator or regular and runs only on main. Configure NUGET_USER in the release environment and a NuGet trusted publishing policy for this workflow; publishing obtains a temporary key after building.
 
-Packager builds independently. Migrator builds Linux and Windows native artifacts in separate jobs, merges all three RIDs, then uses Cake compile to create the tool package. Ordinary build/test does not publish native executors. See each tool README for local packaging; Cake pack pushes packages and is not for local testing.
+Packager builds independently. Migrator builds Linux and Windows native artifacts in separate jobs, merges all three RIDs, then uses Cake compile to create the tool package. Regular builds on a Windows runner and publishes its WinForms executable into a Windows x64 .NET tool package. Ordinary build/test does not publish native executors. See each tool README for local packaging; Cake pack pushes packages and is not for local testing.
 
 ## Package versions
 

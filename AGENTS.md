@@ -12,9 +12,9 @@
 - `deployer`：读取 `.deploy` 描述文件，将本地文件或 NuGet 包内容部署到目标目录；命令为 `dotnet-deploy`/`dotnet deploy`。
 - `packager`：生成 `.tar.gz`、`.deb`、`.rpm` 和安装生命周期脚本；命令为 `dotnet-pack`。
 - `migrator`：独立制作升迁归档和脚本，并提供 Native AOT 执行器；命令为 `dotnet-migrate`。
-- `regular`：面向 Windows 的正则表达式 WinForms 测试器。
+- `regular`：面向 Windows 的正则表达式 WinForms 测试器，并通过独立启动器提供 `dotnet-regular` 工具命令。
 
-`deployer`、`packager` 与 `migrator` 支持 .NET 8、9、10；deployer 在构建时生成 NuGet 工具包，packager 独立构建，migrator 先准备三平台原生执行器再生成工具包；`regular` 目标为 `net10.0-windows`。
+`deployer`、`packager` 与 `migrator` 支持 .NET 8、9、10；deployer 在构建时生成 NuGet 工具包，packager 独立构建，migrator 先准备三平台原生执行器再生成工具包。`regular` 的 GUI 目标为 `net10.0-windows`，Windows x64 工具包由 `net10.0` 启动器携带 GUI 发布产物生成；开发时仍直接运行 GUI `.exe`。
 
 ## 操作边界
 
@@ -27,6 +27,7 @@
 
 - 文档改动检查相对链接、CRLF、`git diff --check` 和实际差异，不必构建。
 - 代码改动从对应工具的 `.slnx` 或 `.csproj` 开始；不要因单工具改动构建其他工具。
+- `regular` 的 Cake `build` 任务仅本地制包，`pack` 依赖 `build` 并推送主包和 Windows RID 包；本地测试使用隔离 `--tool-path`。
 - 文件系统行为使用临时源目录、临时目标目录和本地包缓存验证。
 - 跨平台包格式要在适用平台验证元数据与归档内容；检查包不等于安装包，默认禁止 `sudo`、`dpkg -i`、`rpm -U` 和服务启停。
 
