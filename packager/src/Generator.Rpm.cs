@@ -451,7 +451,7 @@ partial class Generator
 			builder.AddString(1021, "linux");
 			builder.AddString(1022, GetRpmArchitecture(package.Architecture));
 			builder.AddScript(1023, package.Scripts.Installing);
-			builder.AddScript(1024, package.Scripts.Installed);
+			builder.AddScript(1024, string.Join('\n', package.Scripts.Delivered, package.Scripts.Installed));
 			builder.AddScript(1025, GuardRpmUninstallScript(package.Scripts.Uninstalling));
 			builder.AddScript(1026, GuardRpmUninstallScript(package.Scripts.Uninstalled));
 			builder.AddInt32Array(1028, rpmEntries.ConvertAll(entry => (int)Math.Min(int.MaxValue, entry.Size)));

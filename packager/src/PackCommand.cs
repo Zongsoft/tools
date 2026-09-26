@@ -55,6 +55,7 @@ namespace Zongsoft.Tools.Packager;
 [CommandOption(OUTPUT_OPTION, typeof(string))]
 [CommandOption(EXCLUDE_OPTION, typeof(string))]
 [CommandOption(MIGRATOR_OPTION, typeof(string))]
+[CommandOption(WEB_OPTION, typeof(string))]
 [CommandOption(OVERWRITE_OPTION, typeof(string), "False")]
 [CommandOption(URL_OPTION, typeof(string), DEFAULT_URL)]
 [CommandOption(TITLE_OPTION, typeof(string))]
@@ -102,6 +103,7 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	protected const string DEPENDENCIES_OPTION = Variables.DEPENDENCIES;
 	protected const string EXCLUDE_OPTION = Variables.EXCLUDE;
 	protected const string MIGRATOR_OPTION = "migrator";
+	protected const string WEB_OPTION = "web";
 	protected const string OVERWRITE_OPTION = "overwrite";
 	protected const string INSTALL_PATH_OPTION = "install-path";
 	protected const string LISTEN_OPTION = Variables.LISTEN;
@@ -199,8 +201,8 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		if(!string.IsNullOrWhiteSpace(migrator))
 			package.Migrator = Migrator.Load(package, migrator);
 
-		//生成安装脚本
-		package.Scriptor.Script();
+		//服务与 Web 配置器共用本次宿主解析结果。
+		package.Host = ApplicationHost.Resolve(package);
 
 		//加载安装条目
 		package.Entries.Load(source,
@@ -208,6 +210,24 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 			[resolved.Exclude]);
 
 		package.Migrator?.Attach(package);
+
+		var web = Web.Configurator.Parse(context.Options.GetValue<string>(WEB_OPTION), source, resolved);
+		if(web.Enabled)
+		{
+			var configurator = Web.Configurator.Get(web.Hoster);
+			var definition = Web.Definition.Load(web.FilePath);
+			var configuration = new Web.Configurator.Context(package.PackageName, package.InstallPath, resolved.Raw,
+				package.Host.Kind == ApplicationHost.HostKind.Generated ? package.Host.Listen : null, package.Architecture);
+			var result = configurator.Configure(definition, configuration);
+			Web.Installation.Attach(package, result);
+
+			foreach(var diagnostic in result.Diagnostics)
+				Terminal.WriteLine(CommandOutletColor.Yellow, diagnostic.ToString());
+		}
+
+		//交付、应用服务、升迁和 Web 步骤按各格式的生命周期组合。
+		package.Scriptor.Script();
+		Web.Installation.Validate(package);
 
 		//直接添加内存版本条目，替换载荷中的旧版本文件。
 		package.Entries.SetVersion(versionFile.Identifier);

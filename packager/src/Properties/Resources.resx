@@ -214,4 +214,18 @@
   <data name="MigratorArtifactsNotFound.Message" xml:space="preserve">
     <value>The migrator artifacts &quot;{0}&quot; and &quot;{1}&quot; were not found.{3}Searched directories:{2}</value>
   </data>
+  <data name="Web.Field.Message" xml:space="preserve"><value>Unknown or malformed Web field: {0}.</value></data>
+  <data name="Web.Scope.Message" xml:space="preserve"><value>Web field or section is not allowed at this scope: {0}.</value></data>
+  <data name="Web.MixedServers.Message" xml:space="preserve"><value>Scalar server and named server members cannot coexist in the same source scope: {0}.</value></data>
+  <data name="Web.Option.Message" xml:space="preserve"><value>Invalid --web option or input path: {0}.</value></data>
+  <data name="Web.Hoster.Message" xml:space="preserve"><value>Unknown or unimplemented Web hoster: {0}.</value></data>
+  <data name="Web.Variable.Message" xml:space="preserve"><value>Unable to resolve Web variable: {0}.</value></data>
+  <data name="Web.Value.Message" xml:space="preserve"><value>Invalid Web value: {0}.</value></data>
+  <data name="Web.Duplicate.Message" xml:space="preserve"><value>Duplicate effective Web setting: {0}.</value></data>
+  <data name="Web.Required.Message" xml:space="preserve"><value>Required Web setting or application host information is missing: {0}.</value></data>
+  <data name="Web.Directive.Message" xml:space="preserve"><value>Invalid Nginx directive, context or arguments: {0}.</value></data>
+  <data name="Web.Conflict.Message" xml:space="preserve"><value>Generated Web content conflicts with another package entry: {0}.</value></data>
+  <data name="Web.Load.Message" xml:space="preserve"><value>Unable to load Web profile: {0}.</value></data>
+  <data name="Web.Capability.Message" xml:space="preserve"><value>The Web hoster cannot represent this setting exactly: {0}.</value></data>
+  <data name="Web.Override.Message" xml:space="preserve"><value>The native setting overrides the common setting: {0}.</value></data>
 </root>

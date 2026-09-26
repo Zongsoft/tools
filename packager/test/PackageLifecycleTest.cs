@@ -162,7 +162,9 @@ public sealed class PackageLifecycleTest
 
 		Assert.Contains("rm -rf \"$TARGET\"", script);
 		Assert.DoesNotContain($"rm -rf '{INSTALL_PATH}'", script);
-		Assert.Equal(1, CountOccurrences(script, "rm -rf"));
+		Assert.Equal(1, CountOccurrences(script, "rm -rf \"$TARGET\""));
+		Assert.Contains("rm -rf -- \"$HOSTER_WEB_TARGET/.web\"", script);
+		Assert.Equal(2, CountOccurrences(script, "rm -rf"));
 		Assert.DoesNotContain("${1:-0}", script);
 	}
 

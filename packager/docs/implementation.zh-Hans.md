@@ -6,7 +6,7 @@
 
 面向使用者的安装、配置和发布操作说明见[打包器 README](../README.zh-Hans.md)。
 
-本文的应用示例引用 hosting 中真实的 [Zongsoft.Hosting.Web](https://github.com/Zongsoft/hosting/tree/main/web/default) 宿主，暂存目录、Bash 工作目录和版本约定见 [README 快速开始](../README.zh-Hans.md#快速开始)。宿主 DLL 为 `Zongsoft.Hosting.Web.dll`，`--daemon:zongsoft.web` 指定包和服务标识；根路径配置示例引用 hosting 的 `.deploy/default/nginx/zongsoft.web.conf`。
+本文的应用示例引用 hosting 中真实的 [Zongsoft.Hosting.Web](https://github.com/Zongsoft/hosting/tree/main/web/default) 宿主，暂存目录、Bash 工作目录和版本约定见 [README 快速开始](../README.zh-Hans.md#快速开始)。宿主 DLL 为 `Zongsoft.Hosting.Web.dll`，`--daemon:zongsoft.web` 指定包和服务标识。自动 Web 配置使用宿主的 web.profile；根路径别名一节另以用户自备的 manual.conf 演示普通载荷。
 
 ## 设计目标
 
@@ -39,7 +39,11 @@
 | `Generator.Deb.cs` | 写入 Debian `ar` 容器、`control.tar.gz`、`data.tar.gz`。 |
 | `Generator.Rpm.cs` | 写入 RPM lead、signature/header、metadata header、gzip cpio payload。 |
 | `Migrator.cs` | 按最终应用身份定位外部升迁产物，验证 PAX，原样收录并提供安装协调脚本。 |
-| `Scriptor.Systemd.cs` | 生成或收集 systemd 单元文件，生成安装/卸载脚本。 |
+| `ApplicationHost.cs` | 一次解析应用宿主、已有或待生成服务及最终 listen，服务生成和 Web 的 ~ 共用此结果。 |
+| `Scriptor.Systemd.cs` | 生成或收集 systemd 单元文件，组合应用、升迁和 Web 生命周期。 |
+| `Web/Definition*.cs` | 用 Core Profile 收集来源声明，处理整体后端覆盖、继承、变量及字段校验。 |
+| `Web/Configurator*.cs` | 配置器契约、Nginx 指令树与校验、稳定序列化、可重定位内容片段。 |
+| `Web/Installation*.cs` | 生成载荷冲突校验、交付重定位、激活与卸载脚本。 |
 | `Normalizer.cs` / `TextSource.cs` | 按需展开变量；统一解析源目录文件与直接文本。 |
 | `Utility.Search` / `Generator.Entries.cs` | 路径段匹配、目录元数据、受控临时载荷流。 |
 | `Variables.cs` | 变量集合和常用变量的强类型访问器。 |
@@ -68,10 +72,12 @@ flowchart TD
     D --> E["Normalize source/output paths"]
     E --> F["Create Package.Tar/Deb/Rpm"]
     F --> M["Locate and validate optional migrator artifacts"]
-    M --> G["Generate systemd scripts and service entry"]
-    G --> H["Load package entries"]
+    M --> G["Resolve application host and final listen"]
+    G --> H["Load ordinary package entries"]
     H --> N["Attach unchanged migrator archive and launcher"]
-    N --> V["Replace installation root .version with memory entry"]
+    N --> W["Load Web Profile, generate and attach hoster configuration"]
+    W --> L["Generate service and lifecycle scripts; validate targets"]
+    L --> V["Replace installation root .version with memory entry"]
     V --> I["Call package.Pack(output, overwrite)"]
     I --> J["Generator stages and commits package output"]
     J --> S["Atomically save source/.version"]
@@ -81,7 +87,7 @@ flowchart TD
 `PackCommand<TPackage>` 做通用工作，子类只负责创建具体 `Package`：
 
 ```csharp
-protected override Package.Deb CreatePackage(CommandContext context)
+protected override Package.Deb CreatePackage(CommandContext context, Variables variables)
 ```
 
 `RpmCommand` 额外读取：
@@ -117,7 +123,7 @@ hosting 的 `web/default` 宿主不区分 Edition 时可写为 `Zongsoft.Hosting
 
 `EntryCollection.SetVersion` 在载荷和升迁资源收集后写入唯一版本条目，并删除指向同一安装根路径的根别名条目。子目录中的其他 `.version` 不受影响。`VersionFile.Load(source, name, edition, version)` 直接依据值判断是否提供选项，不另传存在性布尔标记：空白名称按未提供处理，`version == null` 时从源文件所选版本补全。`VersionFile` 在内存准备完整的待保存模型，不在加载时写盘。源文件由打包器显式 `File.OpenRead` / `File.Create`，交给 `ApplicationVersion.Load(Stream)` / `Save(Stream)` 解析和序列化：确保只访问直属 `.version`，缺失时创建、目录占位或 I/O 故障时失败，不使用 Core 路径重载的目录识别和缺失路径跳过行为。`Pack` 返回后才调用 `Save`，包括 tar 附属安装入口的生成也必须成功；保存失败抛出包含包路径和源路径的 I/O 异常，命令返回非零且不打印整体成功。
 
-本地验证使用当前 Core 源码制作相同版本号的 NuGet 包，通过隔离缓存和包源映射还原 `Zongsoft.Core`；不增加跨仓库项目引用或修改 Core API。
+本地验证按项目版本制作当前 Core 源码的 NuGet 包，通过隔离缓存和包源映射还原。Web 加载依赖新增的 `ProfileOptions.RequireImports`；正式发布工具前须先提供包含此 API 的 Core 包。Debug 保持本地程序集引用，Release 保持 NuGet 引用。
 
 ## 命令选项模型
 
@@ -135,7 +141,7 @@ hosting 的 `web/default` 宿主不区分 Edition 时可写为 `Zongsoft.Hosting
 | 选项 | 默认值 | 说明 |
 | --- | --- | --- |
 | `--source` | 当前目录 | 输入目录。 |
-| `--migrator` | 空 | 升迁制作时的输入名称，可带目录；裸名称从源目录向父目录查找，按最终 Edition、Version、Runtime 匹配。 |
+| `--migrator` | 空 | 升迁制作时的输入名称，可带目录；裸名称从源目录向父目录查找，每层还查直属 `.migration/`，按最终 Edition、Version、Runtime 匹配。 |
 | `--output` | `source` | 始终作为输出目录；相对路径基于 `source`，不支持指定文件名。 |
 | `--exclude` | 空 | 加载打包项时跳过的文件模式列表，多个模式用逗号或分号分隔。 |
 | `--edition` | 空 | 包版本/渠道标识，参与包名；RPM 中也作为 release。 |
@@ -357,7 +363,7 @@ path:alias
 
 如果 alias 以 `/` 或 `\` 开头，则条目标记为 `Rooted`。
 
-示例：
+以下示例假设 `publish/manual.conf` 已由用户准备，仅演示自备配置的根路径别名，不启用 `--web`：
 
 ```bash
 dotnet-pack deb \
@@ -368,7 +374,7 @@ dotnet-pack deb \
   --framework:net10.0 \
   --source:./publish \
   --output:../packages/ \
-  ../.deploy/default/nginx/zongsoft.web.conf:/etc/nginx/conf.d/zongsoft.web.conf
+  manual.conf:/etc/nginx/conf.d/zongsoft.web.conf
 ```
 
 三种格式的处理方式：
@@ -485,13 +491,41 @@ http://127.0.0.1:<port>
 - 卸载前禁用并停止服务。
 - 卸载后删除服务符号链接、重载 systemd，并删除安装目录。
 
-禁用 systemd 时，默认脚本退化为 no-op，卸载后仍会删除安装目录。
+禁用 systemd 时，应用服务操作退化为 no-op；升迁以及 Web 交付、激活、卸载步骤保持独立，卸载后仍会删除安装目录。
 
 不同包格式会在写入生命周期脚本时应用各自的卸载保护：
 
 - Debian 的 `prerm` 仅在 `remove` 或 `deconfigure` 时执行 `Uninstalling`，`postrm` 仅在 `remove` 或 `purge` 时执行 `Uninstalled`；`upgrade`、`failed-upgrade`、`abort-install`、`abort-upgrade` 和 `disappear` 不执行卸载清理。
 - RPM 的 `%preun` 和 `%postun` 仅在 `$1=0`（最后一个已安装实例被删除）时执行卸载脚本；当 `$1>0` 时保留安装载荷。
 - Tar 包只有显式执行 `uninstall.sh` 才进入卸载生命周期；生成器统一删除解析后的 `TARGET`，默认 `Uninstalled` 脚本无额外目录删除操作。
+
+## Web 配置与安装集成
+
+使用语法及部署要求见 [Web 指南](web.zh-Hans.md)。Web 类型位于同一项目的 Web 子命名空间，采用 Definition 输入/有效模型、Configurator.Context/Result 和嵌套 Configurator.Nginx，不添加动态插件加载。
+
+Definition.cs 提供 Load/Resolve 入口；Definition.Loader.cs 收集声明、组织段落并校验结构；Definition.Resolver.cs 集中合并声明、求值和生成有效模型，按绑定与资源、后端策略、健康检查、请求头、原始指令及基础值解析分区。字段值转换属于 Resolver，不单独拆分 Values 文件；Definition.Model.cs 保存模型类型。
+
+加载通过 Core Profile.Load（RequireImports=true），用 Importing/Imported 收集尚未被覆盖的声明及 Profile 实例身份。同一层级的后端池按输入实例整组替换，不能直接枚举最终合并条目。公共字段及层级先校验，随后确定所选托管器覆盖关系，最后仅展开实际消费的值。共享 VariableEvaluator 的 allowEscapes 由 Web 显式启用；其他调用保留原模式。
+
+Resolver 生成不可变站点、路径及策略记录；Nginx 生成器建立指令树，校验原始叶指令上下文/基数、静态监听冲突和正则 proxy_pass，再序列化为 UTF-8、Tab、CRLF。安装根是有类型的 ContentPart，不是可被用户文本碰撞的占位符。公共字面值不被当作 Nginx 运行时表达式；不能安全表示的值明确报错。
+
+ApplicationHost 在普通载荷加载前解析一次，服务与 ~ 共享最终 listen。Web 生成条目经 Entry.OpenRead 编码；Installation.Validate/ValidateEntry 在最终目标空间检查普通条目、别名、祖先/子路径冲突，检查与加入顺序无关。输出失败不保存源版本，Profile 输入从不写回。
+
+Package.InstallScripts 的 Delivered 独立于四个生命周期。Tar 复制载荷后先执行 Delivered，再按 DESTDIR 门禁执行 Installed；Debian postinst 仅在 configure 中执行 Delivered/Installed；RPM 在 %post 中执行。生成 .conf 是普通可覆盖载荷，不具有 DEB conffile 或 RPM config 标志。
+
+阶段组合如下：
+
+- 交付：清理弃用生成文件及目标归属匹配的链接，Tar 按 INSTALL_PATH 重建含安装根引用的配置。DESTDIR 只改变写入位置，不改变配置内路径，不操作系统链接。
+- 安装完成：preinstalled → 升迁准备/apply（若指定）→ installed → Web 激活 → postinstalled；前项失败阻止后项。自定义主钩子及 daemon:none 不取消 Web 步骤。
+- 卸载前：preuninstalling → Web 解除加载/按开关校验与重载 → uninstalling → postuninstalling。
+- 卸载后：载荷删除 → preuninstalled → uninstalled → .web 清理 → postuninstalled；升级旧版本卸载由现有格式门禁跳过。
+
+激活使用 HOSTER_WEB_ACTIVATION，读取安装时值。固定默认 nginx.conf/nginx.service；nginx -T 确认所生成链接确实被加载。停止状态只校验，运行状态才重载。安装严格失败；普通卸载中的 Nginx 失败警告继续，文件操作失败仍报错。开关关闭不阻止真实文件交付、弃用清理或最终卸载清理。
+
+无新 Web 结果也生成旧产物清理片段，避免取消 --web 后遗留站点。只有当前或旧产物实际涉及 Web 时才调用 Nginx。默认 .web 布局本身就是容器化发现契约，不生成 .hoster 或额外模板。
+
+测试分为声明/有效模型、原生输出、三格式实际解包及隔离 Shell 替身。Shell 夹具把所有系统路径替换为临时目录，并使用假的 nginx/systemctl；不安装包、不操作真实服务。这些测试不等于真实安装验证；目标 Linux、Nginx 模块、证书加载和重载应在具备实际依赖的隔离环境中验证。配置契约、模块要求和部署行为见 [Web 配置指南](web.zh-Hans.md)。
+
 
 ## 打包器版本元数据
 
@@ -592,6 +626,7 @@ DESTDIR 为空时执行 Installing 生命周期内容
 复制普通归档文件到 TARGET
 复制 uninstall.sh 到 TARGET
 复制 rooted 文件到 DESTDIR + /<root-path>
+执行 Delivered 内容，包括 Web 弃用清理和路径重定位
 DESTDIR 为空时执行 Installed 生命周期内容
 ```
 
@@ -1010,7 +1045,7 @@ Debian 的 control/data gzip tar 分别写入受控临时文件，ar 依据实�
 
 `--migrator` 指定制作升迁时的输入名称，可带目录，例如 `--migrator:../../packages/zongsoft`。
 
-先展开变量，再判断是否包含目录分隔符 `/` 或 `\`：不包含时，从最终打包源目录（`--source`）逐级向父目录查找，直到文件系统根目录，不遍历子目录；包含时，相对路径基于源目录，绝对路径直接使用，均不向上查找。`--migrator:zongsoft` 启用向上查找，`--migrator:./zongsoft` 仅限定在源目录；查找起点不是运行命令时的工作目录。
+先展开变量，再判断是否包含目录分隔符 `/` 或 `\`：不包含时，从最终打包源目录（`--source`）逐级向父目录查找，直到文件系统根目录；每层先查目录本身，再查直属 `.migration/`，不遍历其他子目录。包含分隔符时只定位显式目录：相对路径基于源目录，绝对路径直接使用，既不向上查找，也不隐式检查 `.migration/`。源目录为 `hosting/web/default/`、产物位于 `hosting/.migration/` 时，`--migrator:zongsoft` 即可找到；`--migrator:./zongsoft` 只查源目录。查找起点不是运行命令时的工作目录。
 
 既有 `-migrate`、`-migration`、`.migrate`、`.migration` 后缀忽略大小写识别，未带后缀时追加 `-migrate`。不能填写 Edition、版本、RID、扩展名、通配符或路径列表。
 
@@ -1021,11 +1056,11 @@ zongsoft-migrate-enterprise@1.0.0_linux-x64.tar.gz
 zongsoft-migrate-enterprise@1.0.0_linux-x64.sh
 ```
 
-名称可以不同于宿主名称，但 Edition、版本和 RID 必须匹配。每一级目录只有在压缩包和脚本都不存在时才继续向上；只找到其中一份立即报错并指出缺失文件的完整路径。找到完整配套后立即校验归档元数据和 RID，校验失败不再向上查找。两份文件必须来自同一目录，不拼配不同目录、不选择其他版本、Edition 或架构。到根目录仍未找到时，错误将预期文件名与已检查目录分行显示，目录按查找顺序逐行缩进列出。共享 `Utility.Indent` 使用平台换行并保留嵌套详情的缩进。未指定选项，或选项值为空、空字符串、全空白字符时，均不启用升迁，也不收录升迁产物。
+名称可以不同于宿主名称，但 Edition、版本和 RID 必须匹配。每个查找位置只有在压缩包和脚本都不存在时才继续下一位置；只找到其中一份立即报错并指出缺失文件的完整路径。找到完整配套后立即校验归档元数据和 RID，校验失败不再继续查找。两份文件必须来自同一目录，不拼配不同目录、不选择其他版本、Edition 或架构。到根目录仍未找到时，错误将预期文件名与已检查目录分行显示，各级目录及其 `.migration/` 按查找顺序逐行缩进列出。共享 `Utility.Indent` 使用平台换行并保留嵌套详情的缩进。未指定选项，或选项值为空、空字符串、全空白字符时，均不启用升迁，也不收录升迁产物。
 
 两个文件原样存入安装根 `.migration/`，不展开归档；脚本为 0755，压缩包为 0600。与载荷目标冲突时报错。安装时调用脚本 `apply` 并传入 `/var/lib/<包名>/packager`；失败阻止启动。systemd 的 `ExecStartPre` 调用同一脚本 `check`，只比较完成标记，不解压、不连接服务。无 daemon 时仍执行升迁，DESTDIR 暂存不执行钩子，卸载保留状态与数据库/桶。目标机需要 POSIX sh、tar/gzip、cmp 和运行器所需系统库；详见升迁指南。
 
-定位与归档校验在 `Migrator.Load` 中分离：私有 `Locate` 方法沿 `DirectoryInfo.Parent` 遍历目录，包含根目录并记录检查顺序；选中同目录配套后由 `Validate` 检查 PAX 元数据。显式目录只检查一次。所有定位与校验均先于产物收录和制包。
+定位与归档校验在 `Migrator.Load` 中分离：私有 `Locate` 方法沿 `DirectoryInfo.Parent` 遍历目录，包含根目录，按目录本身、直属 `.migration/` 的顺序记录检查位置；选中同目录配套后由 `Validate` 检查 PAX 元数据。显式目录只检查一次，不隐式查找子目录。所有定位与校验均先于产物收录和制包。
 
 ## 验证建议
 

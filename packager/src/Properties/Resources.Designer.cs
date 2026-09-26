@@ -410,5 +410,131 @@ namespace Zongsoft.Tools.Packager.Properties {
                 return ResourceManager.GetString("VariableUndefined.Message", resourceCulture);
             }
         }
+        /// <summary>
+        ///   查找类似 The Web hoster cannot represent this setting exactly: {0}. 的本地化字符串。
+        /// </summary>
+        internal static string Web_Capability_Message {
+            get {
+                return ResourceManager.GetString("Web.Capability.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Generated Web content conflicts with another package entry: {0}. 的本地化字符串。
+        /// </summary>
+        internal static string Web_Conflict_Message {
+            get {
+                return ResourceManager.GetString("Web.Conflict.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Invalid Nginx directive, context or arguments: {0}. 的本地化字符串。
+        /// </summary>
+        internal static string Web_Directive_Message {
+            get {
+                return ResourceManager.GetString("Web.Directive.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Duplicate effective Web setting: {0}. 的本地化字符串。
+        /// </summary>
+        internal static string Web_Duplicate_Message {
+            get {
+                return ResourceManager.GetString("Web.Duplicate.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Unknown or malformed Web field: {0}. 的本地化字符串。
+        /// </summary>
+        internal static string Web_Field_Message {
+            get {
+                return ResourceManager.GetString("Web.Field.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Unknown or unimplemented Web hoster: {0}. 的本地化字符串。
+        /// </summary>
+        internal static string Web_Hoster_Message {
+            get {
+                return ResourceManager.GetString("Web.Hoster.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Unable to load Web profile: {0}. 的本地化字符串。
+        /// </summary>
+        internal static string Web_Load_Message {
+            get {
+                return ResourceManager.GetString("Web.Load.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Scalar server and named server members cannot coexist in the same source scope: {0}. 的本地化字符串。
+        /// </summary>
+        internal static string Web_MixedServers_Message {
+            get {
+                return ResourceManager.GetString("Web.MixedServers.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Invalid --web option or input path: {0}. 的本地化字符串。
+        /// </summary>
+        internal static string Web_Option_Message {
+            get {
+                return ResourceManager.GetString("Web.Option.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 The native setting overrides the common setting: {0}. 的本地化字符串。
+        /// </summary>
+        internal static string Web_Override_Message {
+            get {
+                return ResourceManager.GetString("Web.Override.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Required Web setting or application host information is missing: {0}. 的本地化字符串。
+        /// </summary>
+        internal static string Web_Required_Message {
+            get {
+                return ResourceManager.GetString("Web.Required.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Web field or section is not allowed at this scope: {0}. 的本地化字符串。
+        /// </summary>
+        internal static string Web_Scope_Message {
+            get {
+                return ResourceManager.GetString("Web.Scope.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Invalid Web value: {0}. 的本地化字符串。
+        /// </summary>
+        internal static string Web_Value_Message {
+            get {
+                return ResourceManager.GetString("Web.Value.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Unable to resolve Web variable: {0}. 的本地化字符串。
+        /// </summary>
+        internal static string Web_Variable_Message {
+            get {
+                return ResourceManager.GetString("Web.Variable.Message", resourceCulture);
+            }
+        }
+
     }
 }

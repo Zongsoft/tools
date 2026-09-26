@@ -1,4 +1,4 @@
-﻿/*
+/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -32,59 +32,42 @@
  */
 
 using System;
-using System.IO;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Runtime.InteropServices;
 
-namespace Zongsoft.Tools.Packager;
+namespace Zongsoft.Tools.Packager.Web;
 
-public static class Normalizer
+partial class Configurator
 {
-	#region 公共方法
-	public static string Normalize(string text, IReadOnlyDictionary<string, string> variables, string fallback)
+	internal sealed class Context
 	{
-		if(string.IsNullOrWhiteSpace(text))
-			return fallback;
-
-		var result = Normalize(text, variables);
-		if(!result.Succeed)
-			throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed_Message, result.Value));
-
-		return string.IsNullOrWhiteSpace(result.Value) ? fallback : result.Value.Trim();
-	}
-
-	public static Result Normalize(string text, IReadOnlyDictionary<string, string> variables)
-	{
-		if(string.IsNullOrWhiteSpace(text))
-			return Result.Success(string.Empty);
-
-		ArgumentNullException.ThrowIfNull(variables);
-		if(variables is Variables collection)
-			variables = collection.Raw;
-
-		var result = VariableEvaluator.Evaluate(text, variables);
-		return result.Succeed ? Result.Success(result.Value) : Result.Failure(result.Variable);
-	}
-
-	#endregion
-
-	#region 嵌套结构
-	public readonly struct Result
-	{
-		private Result(string value, bool succeed)
+		internal Context(string packageName, string installPath, IReadOnlyDictionary<string, string> variables, string applicationAddress = null, Architecture architecture = Architecture.X64)
 		{
-			this.Value = value;
-			this.Succeed = succeed;
+			ArgumentException.ThrowIfNullOrEmpty(packageName);
+			ArgumentException.ThrowIfNullOrEmpty(installPath);
+
+			this.PackageName = packageName;
+			this.InstallPath = installPath;
+			this.ApplicationAddress = applicationAddress;
+			this.MaximumInteger = architecture is Architecture.X86 or Architecture.Arm ? int.MaxValue : long.MaxValue;
+			this.Variables = new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(variables, StringComparer.OrdinalIgnoreCase));
 		}
 
-		public readonly string Value;
-		public readonly bool Succeed;
+		internal string PackageName { get; }
+		internal string InstallPath { get; }
+		internal long MaximumInteger { get; }
+		internal string ApplicationAddress { get; }
+		internal IReadOnlyDictionary<string, string> Variables { get; }
 
-		public override string ToString() => this.Value;
-		public static implicit operator bool(Result result) => result.Succeed;
-		public static implicit operator string(Result result) => result.Value;
+		internal string Expand(string value, Diagnostic.Location source)
+		{
+			var result = VariableEvaluator.Evaluate(value, this.Variables, allowEscapes: true);
 
-		public static Result Failure(string value) => new(value, false);
-		public static Result Success(string value) => new(value, true);
+			if(!result.Succeed)
+				throw DefinitionException.Create("Variable", source, result.Variable);
+
+			return result.Value;
+		}
 	}
-	#endregion
 }

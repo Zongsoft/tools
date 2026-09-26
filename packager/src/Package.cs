@@ -40,6 +40,7 @@ using System.Text.RegularExpressions;
 using System.Runtime.InteropServices;
 
 using Zongsoft.Services;
+using Zongsoft.Tools.Packager.Web;
 
 namespace Zongsoft.Tools.Packager;
 
@@ -101,6 +102,8 @@ public abstract partial class Package
 
 	#region 内部属性
 	internal Variables Variables { get; }
+	internal ApplicationHost Host { get; set; }
+	internal Web.Configurator.Result Web { get; set; }
 	internal abstract string FileName { get; }
 	public IScriptor Scriptor { get; protected set; }
 	internal virtual string EntryPrefix => this.InstallPath.TrimStart('/');
@@ -170,7 +173,8 @@ public abstract partial class Package
 		string Installing,
 		string Installed,
 		string Uninstalling,
-		string Uninstalled);
+		string Uninstalled,
+		string Delivered = null);
 
 	public readonly struct Entry(string source, string entryName, long size, long modifiedTime, UnixFileMode mode, bool rooted, bool isDirectory = false)
 	{
@@ -228,13 +232,13 @@ public abstract partial class Package
 			_entries.Add(key, new(source, entryName, file.Length, Utility.Unix.GetTimestamp(file.LastWriteTimeUtc), mode, rooted));
 		}
 
-		internal void AddGeneratedContent(string name, string content, UnixFileMode mode)
+		internal void AddGeneratedContent(string name, string content, UnixFileMode mode, bool overwrite = false)
 		{
 			var entryName = Utility.NormalizePath(Path.Combine(_package.EntryPrefix ?? "", name));
-			if(_entries.ContainsKey(entryName))
+			if(_entries.TryGetValue(entryName, out var existing) && (!overwrite || existing.IsDirectory))
 				throw new InvalidOperationException(string.Format(Properties.Resources.GeneratedEntryConflicted_Message, entryName));
 
-			_entries.Add(entryName, new(System.Text.Encoding.UTF8.GetBytes(content), entryName, Utility.Unix.GetTimestamp(DateTime.UtcNow), mode, false));
+			_entries[entryName] = new(System.Text.Encoding.UTF8.GetBytes(content), entryName, Utility.Unix.GetTimestamp(DateTime.UtcNow), mode, false);
 		}
 
 		internal void Add(string source, string argument)
@@ -352,6 +356,7 @@ public abstract partial class Package
 			if(string.IsNullOrEmpty(name))
 				name = ".";
 			ValidatePath(name);
+			Installation.ValidateEntry(_package, name, rooted, path, true);
 			var key = rooted ? "/" + name : name;
 			if(_entries.TryGetValue(key, out var existing) && !existing.IsDirectory)
 				throw new InvalidOperationException(string.Format(Properties.Resources.PackageEntryTypeConflict_Message, name));
@@ -401,6 +406,7 @@ public abstract partial class Package
 				return;
 
 			var key = rooted ? $"/{entryName}" : entryName;
+			Installation.ValidateEntry(_package, entryName, rooted, source, false);
 
 			if(_entries.TryGetValue(key, out var existing))
 			{

@@ -193,6 +193,7 @@ partial class Generator
 			install -m 0755 "$SOURCE_DIR/uninstall.sh" "$TARGET/uninstall.sh"
 			{{rootInstallScript}}
 			{{rootMode}}
+			{{NormalizeScript(package.Scripts.Delivered)}}
 			if [ -z "$DESTDIR" ]; then
 				{{installedScript}}
 			fi

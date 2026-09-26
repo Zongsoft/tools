@@ -32,6 +32,7 @@ It is designed for .NET services and command-line applications that need repeata
 - [Commands](#commands)
 - [Package Entries](#package-entries)
 - [systemd Services](#systemd-services)
+- [Web hosting configuration](docs/web.md)
 - [Lifecycle Scripts](#lifecycle-scripts)
 - [Migrator artifact integration](#migrator-artifact-integration)
 - [Variables](#variables)
@@ -138,6 +139,7 @@ cp -a ./web/default/bin/Release/net10.0/. ./publish/
 cp -a ./web/default/plugins ./publish/
 cp -a ./web/default/wwwroot ./publish/
 cp ./web/default/appsettings.json ./web/default/web.config ./web/default/web*.option ./publish/
+cp ./web/default/web.profile ./publish/
 cp ./mime ./publish/
 ```
 
@@ -214,7 +216,7 @@ dotnet-pack tar \
   --output:../packages/
 ```
 
-Create a Debian package that includes the host's real [Nginx configuration](https://github.com/Zongsoft/hosting/blob/main/.deploy/default/nginx/zongsoft.web.conf) under `/etc/nginx/conf.d`. This configuration forwards requests to the generated service's port `8069`; adjust its site settings for your environment:
+Create a Debian package from the host's [web.profile](https://github.com/Zongsoft/hosting/blob/main/web/default/web.profile), placing generated Nginx configuration under the installation root's `.web/nginx/`. Its `server=~` uses the generated service's port `8069`; adjust the sites for your environment. Bare-metal installation creates the system loading link; container builds can disable activation. See the [Web configuration guide](docs/web.md):
 
 ```bash
 dotnet-pack deb \
@@ -229,8 +231,8 @@ dotnet-pack deb \
   --source:./publish \
   --output:../packages/ \
   --category:utils \
-  . \
-  ../.deploy/default/nginx/zongsoft.web.conf:/etc/nginx/conf.d/zongsoft.web.conf
+  --web:nginx \
+  --exclude:*.profile
 ```
 
 Create an RPM package with dependency metadata:
@@ -299,7 +301,8 @@ After all package output is successfully generated, the source file is saved usi
 | Option | Default | Description |
 | --- | --- | --- |
 | `--source:<path>` | Current directory | Source directory whose files are packaged. |
-| `--migrator:<name>` | Empty | Original migration input name with optional directory; bare names search source and ancestors using the final Edition, version and RID. |
+| `--web:<hoster[:filepath]>` | Empty | Generate Web hoster configuration; nginx is supported and defaults to source/web.profile. |
+| `--migrator:<name>` | Empty | Original migration input name with optional directory; bare names search source and ancestors, including each direct `.migration/` child, using the final Edition, version and RID. |
 | `--output:<path>` | Source directory | Output directory, with or without a trailing separator. This option does not select a file name. Relative paths are resolved under `--source`. |
 | `--exclude:<patterns>` | Empty | Comma- or semicolon-separated file patterns to skip while loading package entries. |
 | `--edition:<name>` | Empty | Optional edition. Appended to package name; used as RPM release when present. |
@@ -407,7 +410,7 @@ dotnet-pack deb \
   --output:../packages/ \
   ../web/README.md:docs/hosting-web.md \
   ../zongsoft-logo.png:assets/logo.png \
-  ../.deploy/default/nginx/zongsoft.web.conf:/etc/nginx/conf.d/zongsoft.web.conf
+  ../web/default/web.profile:docs/web.profile
 ```
 
 Entry rules:
@@ -513,6 +516,21 @@ dotnet-pack deb \
   --ASPNETCORE_ENVIRONMENT:Production
 ```
 
+## Web hosting configuration
+
+`--web:nginx[:filepath]` loads INI web.profile through Core Profile with strict imports and generates `.web/nginx/<PackageName>.conf` below the installation root. The [Web configuration guide](docs/web.md) documents each field's scope, default, empty-value and inheritance rules, with complete examples and caveats for matching, certificates, balancing, health checks, native settings, variables, container builds, and lifecycle behavior.
+
+```ini
+[api]
+host = api.example.com
+bind!legacy = http://*,http://[::]
+server = http://app:8069
+```
+
+`--web` does not select input Profile payloads; positional arguments and `--exclude` retain that responsibility. For example, `--exclude:*.profile` excludes input payloads without preventing conversion. Omitted, empty or none disables generation; iis is reserved but not implemented.
+
+Bare-metal installs create the loading link and validate configuration, reloading only a running Nginx. Container builds pass `HOSTER_WEB_ACTIVATION=0` into installation, then collect `.web/nginx/*.conf` below the known root. The switch accepts 0/1 and case-insensitive false/true; explicit emptiness is invalid. Disabled activation still delivers files; ordinary removal deletes `.web`. Target modules and minimum versions for active checks and cookie affinity are listed in the guide.
+
 ## Lifecycle Scripts
 
 Lifecycle scripts can be source-relative file paths, absolute file paths, or inline script text. The four main hooks run at these points:
@@ -539,11 +557,11 @@ Debian `prerm` runs the uninstall lifecycle only for `remove` or `deconfigure`, 
 
 ## Migrator artifact integration
 
-Prepare migrations with the independent [migrator tool](../migrator/README.md). Packager does not parse `.migration`/`.ini`, SQL or execution plans, and does not distribute a native executor. Set `--migrator:<name-or-path>` to include an already generated migration archive and its matching launcher, for example `--migrator:../../packages/zongsoft`.
+Prepare migrations with the independent [migrator tool](../migrator/README.md). Packager does not parse `.migration`/`.ini`, SQL or execution plans, and does not distribute a native executor. Set `--migrator:<name-or-path>` to include an already generated migration archive and its matching launcher. For artifacts in `hosting/.migration/` and a source at `hosting/web/default/`, use `--migrator:zongsoft`.
 
 Lookup starts from the final `--source` directory, not the command working directory:
 
-- A bare name such as `zongsoft` searches that directory and each parent through the filesystem root; it does not search child directories.
+- A bare name such as `zongsoft` checks each directory from source through the filesystem root. At each level it checks the directory itself, then its direct `.migration/` child, before moving to the parent. It does not search other child directories.
 - A value containing `/` or `\` is treated as an explicit location. Relative paths resolve from `--source`, and absolute paths are used directly. For example, `--migrator:./zongsoft` searches only inside the source directory.
 - Existing `-migrate`, `-migration`, `.migrate` or `.migration` suffixes are recognized without case sensitivity; otherwise `-migrate` is appended. Do not include an Edition, version, RID, file extension, wildcard or list.
 
@@ -554,7 +572,7 @@ zongsoft-migrate-enterprise@1.0.0_linux-x64.tar.gz
 zongsoft-migrate-enterprise@1.0.0_linux-x64.sh
 ```
 
-The migration name may differ from the host name, but Edition, version and RID must match. Search moves to a parent only when both files are absent. Finding only one file fails immediately with the full path of the missing companion. A complete pair is validated immediately; invalid archive metadata or a mismatched RID fails without checking higher directories. The files must come from the same directory; other versions, Editions and architectures are never substituted. If the search reaches the root without a pair, the error lists the expected names and checked directories. Omitting the option or supplying an empty value disables migration integration.
+The migration name may differ from the host name, but Edition, version and RID must match. Search moves to the next location only when both files are absent. Finding only one file fails immediately with the full path of the missing companion. A complete pair is validated immediately; invalid archive metadata or a mismatched RID stops lookup. The files must come from the same directory; other versions, Editions and architectures are never substituted. If the search reaches the root without a pair, the error lists the expected names and checked directories, including the `.migration/` locations. Omitting the option or supplying an empty value disables migration integration.
 
 Both files are copied unchanged into the installation root's `.migration/`; the archive is not unpacked while packaging. The launcher has mode 0755 and the archive mode 0600. Payload collisions fail. At installation, the generated hook runs `apply` with `/var/lib/<package-name>/packager` as its state directory. systemd `ExecStartPre` runs `check`, which compares the package plan fingerprint with the local `ready` completion marker; it does not inspect live database or bucket state. Migration also runs without a daemon. DESTDIR staging skips lifecycle hooks, and uninstall preserves migration state and databases/buckets. Targets require POSIX sh, tar/gzip, cmp and the executor's native system libraries; see the migration guide.
 

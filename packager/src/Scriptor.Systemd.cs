@@ -35,7 +35,6 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
 
 namespace Zongsoft.Tools.Packager;
 
@@ -53,9 +52,10 @@ partial class Scriptor
 			var installed = TextSource.Read(source, scripts.Installed, _package.Variables);
 			var uninstalling = TextSource.Read(source, scripts.Uninstalling, _package.Variables);
 			var uninstalled = TextSource.Read(source, scripts.Uninstalled, _package.Variables);
-			var daemon = _package.Variables.Daemon;
+			var host = _package.Host ??= ApplicationHost.Resolve(_package);
+			var web = Web.Installation.CreateScripts(_package);
 
-			if(daemon.Disabled)
+			if(host.Kind == ApplicationHost.HostKind.None)
 			{
 				if(string.IsNullOrWhiteSpace(installing))
 					installing = ":";
@@ -73,42 +73,18 @@ partial class Scriptor
 
 				_package.Scripts = new(
 					Combine(Migrator.ContextScript(_package), this.ReadFiles(source, scripts.PreInstalling), installing, Migrator.InvalidateScript(_package), this.ReadFiles(source, scripts.PostInstalling)),
-					Combine(Migrator.ContextScript(_package), Migrator.InvalidateScript(_package), this.ReadFiles(source, scripts.PreInstalled), Migrator.ApplyScript(_package), installed, this.ReadFiles(source, scripts.PostInstalled)),
-					Combine(this.ReadFiles(source, scripts.PreUninstalling), uninstalling, this.ReadFiles(source, scripts.PostUninstalling)),
-					Combine(this.ReadFiles(source, scripts.PreUninstalled), uninstalled, this.ReadFiles(source, scripts.PostUninstalled)));
+					Combine(Migrator.ContextScript(_package), Migrator.InvalidateScript(_package), this.ReadFiles(source, scripts.PreInstalled), Migrator.ApplyScript(_package), installed, web.Activate, this.ReadFiles(source, scripts.PostInstalled)),
+					Combine(this.ReadFiles(source, scripts.PreUninstalling), web.Deactivate, uninstalling, this.ReadFiles(source, scripts.PostUninstalling)),
+					Combine(this.ReadFiles(source, scripts.PreUninstalled), uninstalled, web.Cleanup, this.ReadFiles(source, scripts.PostUninstalled)), web.Delivered);
 
 				return;
 			}
 
-			var identifier = string.IsNullOrEmpty(daemon.Identifier) ? _package.Name.ToLowerInvariant() : daemon.Identifier;
-			var fileInfo = new FileInfo(Path.GetFullPath(Path.Combine(source, identifier)));
-			string serviceName;
-
-			if(fileInfo.Exists)
-			{
-				serviceName = fileInfo.Name;
-				if(!IsServiceName(serviceName))
-					throw new InvalidDataException(string.Format(Properties.Resources.PackageEntryTypeConflict_Message, serviceName));
-
-				_package.Entries.Add(source, fileInfo.FullName);
-			}
+			var serviceName = host.ServiceName;
+			if(host.Kind == ApplicationHost.HostKind.Existing)
+				_package.Entries.Add(source, host.ServiceSource);
 			else
-			{
-				var generated = GenerateDaemon(identifier, _package);
-				if(generated == null)
-				{
-					if(_package.Migrator != null)
-						throw new InvalidOperationException(Properties.Resources.MigrationHostRequired_Message);
-
-					return;
-				}
-
-				serviceName = generated.Value.Name;
-				if(!IsServiceName(serviceName))
-					throw new InvalidDataException(string.Format(Properties.Resources.PackageEntryTypeConflict_Message, serviceName));
-
-				_package.Entries.AddGeneratedContent(serviceName, generated.Value.Content, Utility.Unix.Mode644);
-			}
+				_package.Entries.AddGeneratedContent(serviceName, GenerateDaemon(host, _package), Utility.Unix.Mode644, true);
 
 			var servicePath = $"{_package.InstallPath}/{serviceName}";
 			var serviceLink = $"/etc/systemd/system/{serviceName}";
@@ -184,12 +160,11 @@ partial class Scriptor
 
 			_package.Scripts = new(
 				Combine(Migrator.ContextScript(_package), this.ReadFiles(source, scripts.PreInstalling), installing, Migrator.InvalidateScript(_package), this.ReadFiles(source, scripts.PostInstalling)),
-				Combine(Migrator.ContextScript(_package), Migrator.InvalidateScript(_package), this.ReadFiles(source, scripts.PreInstalled), migrationPreparation, Migrator.ApplyScript(_package), installed, this.ReadFiles(source, scripts.PostInstalled)),
-				Combine(this.ReadFiles(source, scripts.PreUninstalling), uninstalling, this.ReadFiles(source, scripts.PostUninstalling)),
-				Combine(this.ReadFiles(source, scripts.PreUninstalled), _package.Migrator == null ? null : $"rm -f '/etc/systemd/system/{serviceName}.d/20-packager-migration.conf'", uninstalled, this.ReadFiles(source, scripts.PostUninstalled)));
+				Combine(Migrator.ContextScript(_package), Migrator.InvalidateScript(_package), this.ReadFiles(source, scripts.PreInstalled), migrationPreparation, Migrator.ApplyScript(_package), installed, web.Activate, this.ReadFiles(source, scripts.PostInstalled)),
+				Combine(this.ReadFiles(source, scripts.PreUninstalling), web.Deactivate, uninstalling, this.ReadFiles(source, scripts.PostUninstalling)),
+				Combine(this.ReadFiles(source, scripts.PreUninstalled), _package.Migrator == null ? null : $"rm -f '/etc/systemd/system/{serviceName}.d/20-packager-migration.conf'", uninstalled, web.Cleanup, this.ReadFiles(source, scripts.PostUninstalled)), web.Delivered);
 		}
 
-		static bool IsServiceName(string value) => Regex.IsMatch(value, @"^[A-Za-z0-9][A-Za-z0-9._@-]*\.service$");
 		string[] ReadFiles(string source, string paths)
 		{
 			if(string.IsNullOrWhiteSpace(paths))
@@ -223,60 +198,10 @@ partial class Scriptor
 			return items.Length == 0 ? null : string.Join(Environment.NewLine + Environment.NewLine, items);
 		}
 
-		static string GetHostFile(string source, Package package)
+		static string GenerateDaemon(ApplicationHost application, Package package)
 		{
-			if(string.IsNullOrWhiteSpace(source) || !Directory.Exists(source))
-				return null;
-
-			var path = Path.Combine(source, package.Name + ".dll");
-			if(File.Exists(path))
-				return Path.GetFileName(path);
-
-			var files = Directory.GetFiles(source, "*.exe", SearchOption.TopDirectoryOnly);
-			if(files != null && files.Length == 1)
-				return Path.GetFileNameWithoutExtension(files[0]) + ".dll";
-
-			if(string.IsNullOrWhiteSpace(package.Variables.Compilation) || string.IsNullOrWhiteSpace(package.Variables.Framework))
-				return null;
-
-			var directory = Path.Combine(source, "bin", package.Variables.Compilation, package.Variables.Framework);
-			path = Path.Combine(directory, package.Name + ".dll");
-			if(File.Exists(path))
-				return Path.GetFileName(path);
-
-			files = Directory.Exists(directory) ? Directory.GetFiles(directory, "*.exe", SearchOption.TopDirectoryOnly) : [];
-			if(files != null && files.Length == 1)
-				return Path.GetFileNameWithoutExtension(files[0]) + ".dll";
-
-			return null;
-		}
-
-		static (string Name, string Content)? GenerateDaemon(string daemon, Package package)
-		{
-			const string SERVICE_SUFFIX = ".service";
-
-			if(daemon.IndexOfAny(['/', '\\']) >= 0)
-				throw new InvalidDataException(string.Format(Properties.Resources.PackageEntryTypeConflict_Message, daemon));
-
-			if(!daemon.EndsWith(SERVICE_SUFFIX))
-				daemon += SERVICE_SUFFIX;
-
-			if(package.Variables.Daemon.Disabled)
-				return null;
-
-			var source = package.Variables.Source;
-			var listen = package.Variables.Listen;
-			var host = GetHostFile(source, package);
-
-			if(string.IsNullOrEmpty(host))
-			{
-				if(package.Migrator != null)
-					throw new InvalidOperationException(Properties.Resources.MigrationHostRequired_Message);
-
-				Dumper.HostLocateFailed();
-				return null;
-			}
-
+			var listen = application.Listen;
+			var host = application.Entry;
 			var environments = new string[package.Variables.Daemon.Environments.Length];
 
 			for(int i = 0; i < environments.Length; i++)
@@ -316,9 +241,6 @@ partial class Scriptor
 					""");
 			else
 			{
-				if(ushort.TryParse(listen, out var port))
-					listen = $"http://127.0.0.1:{port}";
-
 				writer.Write($"""
 					[Unit]
 					Description={(string.IsNullOrEmpty(package.Title) ? package.Name : package.Title)}
@@ -344,7 +266,7 @@ partial class Scriptor
 					""");
 			}
 
-			return (daemon, writer.ToString().ReplaceLineEndings("\n"));
+			return writer.ToString().ReplaceLineEndings("\n");
 		}
 	}
 }

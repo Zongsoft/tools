@@ -464,7 +464,7 @@ public sealed class PackageArtifactTest
 		return package;
 	}
 
-	private static List<ArchiveEntry> ReadArchive(string path, string format)
+	internal static List<ArchiveEntry> ReadArchive(string path, string format)
 	{
 		var bytes = File.ReadAllBytes(path);
 		if(format == "tar")
@@ -509,7 +509,7 @@ public sealed class PackageArtifactTest
 		throw new InvalidDataException("Missing Debian member: " + target);
 	}
 
-	private static string ReadControl(string path, string name) => Encoding.UTF8.GetString(Assert.Single(ReadTar(ReadAr(File.ReadAllBytes(path), "control.tar.gz")), entry => entry.Name == name).Content);
+	internal static string ReadControl(string path, string name) => Encoding.UTF8.GetString(Assert.Single(ReadTar(ReadAr(File.ReadAllBytes(path), "control.tar.gz")), entry => entry.Name == name).Content);
 
 	private static List<ArchiveEntry> ReadTar(byte[] bytes)
 	{
@@ -527,6 +527,26 @@ public sealed class PackageArtifactTest
 			entries.Add(new(NormalizeName(entry.Name), copy.ToArray(), entry.Mode, entry.Length, entry.EntryType == TarEntryType.Directory));
 		}
 		return entries;
+	}
+
+	internal static void AssertOrdinaryConfiguration(string path, string format, string target)
+	{
+		var bytes = File.ReadAllBytes(path);
+		if(format == "deb")
+		{
+			var configuration = ReadTar(ReadAr(bytes, "control.tar.gz")).FirstOrDefault(entry => entry.Name == "conffiles");
+			if(configuration != null)
+				Assert.DoesNotContain(target, Encoding.UTF8.GetString(configuration.Content).Split('\n'));
+		}
+		else if(format == "rpm")
+		{
+			var header = HeaderEnd(bytes, 96, true);
+			var names = Strings(bytes, header, 1117);
+			var directories = Strings(bytes, header, 1118);
+			var indexes = TagOffset(bytes, header, 1116);
+			var index = Assert.Single(Enumerable.Range(0, names.Length), index => directories[ReadInt(bytes, indexes.Offset + index * 4)] + names[index] == target);
+			Assert.Equal(0, ReadInt(bytes, TagOffset(bytes, header, 1037).Offset + index * 4));
+		}
 	}
 
 	private static void AssertRpmDigest(string path, string directory, string name, byte[] content)
@@ -582,6 +602,6 @@ public sealed class PackageArtifactTest
 	#endregion
 
 	#region 嵌套类型
-	private sealed record ArchiveEntry(string Name, byte[] Content, UnixFileMode Mode, long Size, bool IsDirectory);
+	internal sealed record ArchiveEntry(string Name, byte[] Content, UnixFileMode Mode, long Size, bool IsDirectory);
 	#endregion
 }

@@ -1,4 +1,4 @@
-﻿/*
+/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -32,59 +32,51 @@
  */
 
 using System;
-using System.IO;
 using System.Collections.Generic;
 
-namespace Zongsoft.Tools.Packager;
+namespace Zongsoft.Tools.Packager.Web;
 
-public static class Normalizer
+internal sealed partial class Definition
 {
-	#region 公共方法
-	public static string Normalize(string text, IReadOnlyDictionary<string, string> variables, string fallback)
-	{
-		if(string.IsNullOrWhiteSpace(text))
-			return fallback;
-
-		var result = Normalize(text, variables);
-		if(!result.Succeed)
-			throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed_Message, result.Value));
-
-		return string.IsNullOrWhiteSpace(result.Value) ? fallback : result.Value.Trim();
-	}
-
-	public static Result Normalize(string text, IReadOnlyDictionary<string, string> variables)
-	{
-		if(string.IsNullOrWhiteSpace(text))
-			return Result.Success(string.Empty);
-
-		ArgumentNullException.ThrowIfNull(variables);
-		if(variables is Variables collection)
-			variables = collection.Raw;
-
-		var result = VariableEvaluator.Evaluate(text, variables);
-		return result.Succeed ? Result.Success(result.Value) : Result.Failure(result.Variable);
-	}
-
+	#region 成员字段
+	private readonly Scope _root;
+	private readonly IReadOnlyList<Scope> _sites;
 	#endregion
 
-	#region 嵌套结构
-	public readonly struct Result
+	#region 构造函数
+	private Definition(string filePath, Scope root, IReadOnlyList<Scope> sites)
 	{
-		private Result(string value, bool succeed)
-		{
-			this.Value = value;
-			this.Succeed = succeed;
-		}
+		this.FilePath = filePath;
+		_root = root;
+		_sites = sites;
+	}
+	#endregion
 
-		public readonly string Value;
-		public readonly bool Succeed;
+	#region 公共属性
+	public string FilePath { get; }
+	#endregion
 
-		public override string ToString() => this.Value;
-		public static implicit operator bool(Result result) => result.Succeed;
-		public static implicit operator string(Result result) => result.Value;
+	#region 公共方法
+	public static Definition Load(string filePath) => new Loader().Load(filePath);
+	#endregion
 
-		public static Result Failure(string value) => new(value, false);
-		public static Result Success(string value) => new(value, true);
+	#region 内部方法
+	internal Model Resolve(Configurator.Context context, Rules rules) => new Resolver(context, rules).Resolve(_root, _sites);
+	#endregion
+
+	#region 嵌套类型
+	private sealed class Scope(string name, int depth, Diagnostic.Location source)
+	{
+		internal string Name { get; } = name;
+		internal int Depth { get; } = depth;
+		internal Diagnostic.Location Source { get; } = source;
+		internal List<Declaration> Declarations { get; } = [];
+		internal List<Scope> Children { get; } = [];
+	}
+
+	private sealed record Declaration(string Name, string Value, Diagnostic.Location Source, object Owner)
+	{
+		internal bool IsServer => this.Name.Equals("server", StringComparison.OrdinalIgnoreCase) || this.Name.StartsWith("server!", StringComparison.OrdinalIgnoreCase);
 	}
 	#endregion
 }

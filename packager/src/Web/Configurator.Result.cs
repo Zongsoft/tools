@@ -1,4 +1,4 @@
-﻿/*
+/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -33,58 +33,33 @@
 
 using System;
 using System.IO;
+using System.Linq;
+using System.Text;
 using System.Collections.Generic;
 
-namespace Zongsoft.Tools.Packager;
+namespace Zongsoft.Tools.Packager.Web;
 
-public static class Normalizer
+partial class Configurator
 {
-	#region 公共方法
-	public static string Normalize(string text, IReadOnlyDictionary<string, string> variables, string fallback)
+	internal sealed record Result(string Hoster, IReadOnlyList<Result.File> Files, IReadOnlyList<Diagnostic> Diagnostics)
 	{
-		if(string.IsNullOrWhiteSpace(text))
-			return fallback;
-
-		var result = Normalize(text, variables);
-		if(!result.Succeed)
-			throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed_Message, result.Value));
-
-		return string.IsNullOrWhiteSpace(result.Value) ? fallback : result.Value.Trim();
-	}
-
-	public static Result Normalize(string text, IReadOnlyDictionary<string, string> variables)
-	{
-		if(string.IsNullOrWhiteSpace(text))
-			return Result.Success(string.Empty);
-
-		ArgumentNullException.ThrowIfNull(variables);
-		if(variables is Variables collection)
-			variables = collection.Raw;
-
-		var result = VariableEvaluator.Evaluate(text, variables);
-		return result.Succeed ? Result.Success(result.Value) : Result.Failure(result.Variable);
-	}
-
-	#endregion
-
-	#region 嵌套结构
-	public readonly struct Result
-	{
-		private Result(string value, bool succeed)
+		internal sealed record File(string Path, Content Content, UnixFileMode Mode);
+		internal sealed class Content(IReadOnlyList<ContentPart> parts)
 		{
-			this.Value = value;
-			this.Succeed = succeed;
+			internal IReadOnlyList<ContentPart> Parts { get; } = parts.ToArray();
+			internal bool Relocatable => this.Parts.Any(part => part.InstallRoot);
+
+			internal string Render(string installPath)
+			{
+				var text = new StringBuilder();
+
+				foreach(var part in this.Parts)
+					text.Append(part.InstallRoot ? Nginx.Writer.Escape(installPath.TrimEnd('/')) : part.Text);
+
+				return text.ToString();
+			}
 		}
 
-		public readonly string Value;
-		public readonly bool Succeed;
-
-		public override string ToString() => this.Value;
-		public static implicit operator bool(Result result) => result.Succeed;
-		public static implicit operator string(Result result) => result.Value;
-
-		public static Result Failure(string value) => new(value, false);
-		public static Result Success(string value) => new(value, true);
+		internal readonly record struct ContentPart(string Text, bool InstallRoot = false);
 	}
-	#endregion
 }

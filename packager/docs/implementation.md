@@ -6,7 +6,7 @@ This document is for maintainers. It describes the source structure, command pip
 
 For installation, configuration, and release workflows, see the [packager README](../README.md).
 
-Application examples use the real [Zongsoft.Hosting.Web](https://github.com/Zongsoft/hosting/tree/main/web/default) host. Staging directories, the Bash working directory, and example versions follow the [README quick start](../README.md#quick-start). The host DLL is `Zongsoft.Hosting.Web.dll`; `--daemon:zongsoft.web` selects the package and service identity. Root-path examples use hosting's `.deploy/default/nginx/zongsoft.web.conf`.
+Application examples use the real [Zongsoft.Hosting.Web](https://github.com/Zongsoft/hosting/tree/main/web/default) host. Staging directories, the Bash working directory, and example versions follow the [README quick start](../README.md#quick-start). The host DLL is `Zongsoft.Hosting.Web.dll`; `--daemon:zongsoft.web` selects the package and service identity. Automatic Web configuration uses the host's web.profile; the root-alias section separately demonstrates ordinary payload with a user-supplied manual.conf.
 
 ## Design goals
 
@@ -39,7 +39,11 @@ The main design choices are:
 | `Generator.Deb.cs` | Write the Debian `ar` container, `control.tar.gz`, and `data.tar.gz`. |
 | `Generator.Rpm.cs` | Write the RPM lead, signature/header, metadata header, and gzip cpio payload. |
 | `Migrator.cs` | Locate external migration artifacts by final application identity, validate PAX metadata, attach unchanged files, and provide installation coordination scripts. |
-| `Scriptor.Systemd.cs` | Generate or collect systemd units and generate installation/uninstallation scripts. |
+| `ApplicationHost.cs` | Resolve the application host, service and final listen once, shared by systemd generation and Web ~. |
+| `Scriptor.Systemd.cs` | Generate/collect systemd units and compose application, migration and Web lifecycle scripts. |
+| `Web/Definition*.cs` | Collect Core Profile declarations and resolve replacement, inheritance, variables and validation. |
+| `Web/Configurator*.cs` | Configurator contract, Nginx directive model/validation, deterministic serialization and relocatable content. |
+| `Web/Installation*.cs` | Validate generated targets and provide delivery, relocation, activation and removal scripts. |
 | `Normalizer.cs` / `TextSource.cs` | Expand variables on demand and resolve files under the source directory or literal text. |
 | `Utility.Search` / `Generator.Entries.cs` | Match path segments, handle directory metadata, and manage temporary payload streams. |
 | `Variables.cs` | Variable collection and typed accessors for common variables. |
@@ -68,10 +72,12 @@ flowchart TD
     D --> E["Normalize source/output paths"]
     E --> F["Create Package.Tar/Deb/Rpm"]
     F --> M["Locate and validate optional migrator artifacts"]
-    M --> G["Generate systemd scripts and service entry"]
-    G --> H["Load package entries"]
+    M --> G["Resolve application host and final listen"]
+    G --> H["Load ordinary package entries"]
     H --> N["Attach unchanged migrator archive and launcher"]
-    N --> V["Replace installation root .version with memory entry"]
+    N --> W["Load Web Profile, generate and attach hoster configuration"]
+    W --> L["Generate service and lifecycle scripts; validate targets"]
+    L --> V["Replace installation root .version with memory entry"]
     V --> I["Call package.Pack(output, overwrite)"]
     I --> J["Generator stages and commits package output"]
     J --> S["Atomically save source/.version"]
@@ -81,7 +87,7 @@ flowchart TD
 `PackCommand<TPackage>` performs common work; subclasses create the concrete `Package`:
 
 ```csharp
-protected override Package.Deb CreatePackage(CommandContext context)
+protected override Package.Deb CreatePackage(CommandContext context, Variables variables)
 ```
 
 `RpmCommand` also reads:
@@ -117,7 +123,7 @@ If an output artifact already exists and `--overwrite` is disabled, the publishe
 
 `EntryCollection.SetVersion` runs after payload and migration collection, writes the unique version entry, and removes rooted aliases targeting the same installation-root path. Other `.version` files in subdirectories are unaffected. `VersionFile.Load(source, name, edition, version)` determines option presence from values, without separate Boolean flags: blank names count as absent; `version == null` uses the selected source version. It prepares the full save model in memory without writing during load. The packager explicitly opens/creates the source file and passes streams to `ApplicationVersion.Load(Stream)` / `Save(Stream)`, ensuring only the immediate `.version` is accessed. A missing file is created on save; a directory at that path or an I/O failure is rejected. Core path-overload directory detection and missing-path skipping are not used. `Save` runs only after `Pack` returns, including successful generation of the companion tar installer. A save failure throws an I/O exception containing package and source paths, returns a nonzero exit code, and suppresses overall success output.
 
-Local validation can package current Core source at the same version and restore `Zongsoft.Core` through an isolated cache and package-source mapping, without adding cross-repository project references or changing Core APIs.
+Local validation can package current Core source at the project version and restore `Zongsoft.Core` through an isolated cache and package-source mapping. Web loading requires the new `ProfileOptions.RequireImports` API; publish a Core package containing this API before releasing the tool. Debug retains local assembly references and Release retains NuGet references.
 
 ## Command option model
 
@@ -135,7 +141,7 @@ Common optional settings:
 | Option | Default | Description |
 | --- | --- | --- |
 | `--source` | Current directory | Input directory. |
-| `--migrator` | Empty | Original migration input name, optionally with a directory; bare names search source and ancestors using final Edition, Version, and Runtime. |
+| `--migrator` | Empty | Original migration input name, optionally with a directory; bare names search source and ancestors plus each direct `.migration/` child using final Edition, Version, and Runtime. |
 | `--output` | `source` | Always an output directory; relative paths use `source`. A filename cannot be specified. |
 | `--exclude` | Empty | Comma- or semicolon-separated patterns skipped during entry collection. |
 | `--edition` | Empty | Package Edition/channel, included in the package name and used as RPM release. |
@@ -357,7 +363,7 @@ Parsing rules:
 
 An alias beginning with `/` or `\` marks an entry as `Rooted`.
 
-Example:
+The following example assumes the user has prepared `publish/manual.conf`. It demonstrates a root-path alias for supplied configuration without enabling `--web`:
 
 ```bash
 dotnet-pack deb \
@@ -368,7 +374,7 @@ dotnet-pack deb \
   --framework:net10.0 \
   --source:./publish \
   --output:../packages/ \
-  ../.deploy/default/nginx/zongsoft.web.conf:/etc/nginx/conf.d/zongsoft.web.conf
+  manual.conf:/etc/nginx/conf.d/zongsoft.web.conf
 ```
 
 Handling by format:
@@ -485,13 +491,41 @@ Without supplied scripts, defaults are:
 - Disable and stop the service before uninstallation.
 - Remove the service link, reload systemd, and remove the installation directory after uninstallation.
 
-With systemd disabled, default scripts become no-ops except that uninstallation still removes the installation directory.
+With systemd disabled, application service operations become no-ops. Migration and Web delivery/activation/removal steps remain independent; uninstallation still removes the installation directory.
 
 Each format guards uninstallation differently:
 
 - Debian `prerm` runs `Uninstalling` only for `remove` or `deconfigure`; `postrm` runs `Uninstalled` only for `remove` or `purge`. `upgrade`, `failed-upgrade`, `abort-install`, `abort-upgrade`, and `disappear` do not run uninstall cleanup.
 - RPM `%preun` and `%postun` run uninstall scripts only when `$1=0`, meaning the last installed instance is being removed. `$1>0` preserves the installed payload.
 - Tar enters uninstallation only through explicit `uninstall.sh` execution. The generator removes the resolved `TARGET`; the default `Uninstalled` script performs no additional directory deletion.
+
+## Web configuration and installation integration
+
+See the [Web guide](web.md) for syntax and deployment requirements. Types remain in this project's Web namespace: Definition for declarations/effective models, Configurator.Context/Result and nested Configurator.Nginx. No dynamic plugin loader is introduced.
+
+Definition.cs provides the Load/Resolve entry points. Definition.Loader.cs collects declarations, arranges sections and validates structure. Definition.Resolver.cs merges declarations, evaluates values and builds the effective model, with regions for bindings/resources, backend policies, health checks, headers, native directives and basic value parsing. Value conversion belongs to Resolver rather than a separate Values file. Definition.Model.cs holds the model types.
+
+Loading uses Core Profile.Load with RequireImports=true. Importing/Imported collect declarations before replacement and retain Profile instance identity. Backend pools replace whole groups by input instance rather than enumerating all final merged entries. Structure is validated first, selected-hoster overrides next, and only consumed values are expanded. Web explicitly enables shared VariableEvaluator.allowEscapes; other callers retain their existing mode.
+
+Resolver produces immutable site, route and policy records. Nginx builds a directive tree, validates native context/cardinality, static listener conflicts and regex proxy_pass, then emits UTF-8, Tab and CRLF. Installation-root references are typed ContentPart values, not text placeholders that can collide with input. Common literal values never silently become runtime expressions; unrepresentable values fail.
+
+ApplicationHost resolves once before ordinary payload collection, sharing final listen with service generation and ~. Generated entries use Entry.OpenRead. Installation.Validate/ValidateEntry check normalized destination conflicts, aliases and ancestor/descendant paths in either insertion order. Failed publication does not save source versions; Profile input is never saved.
+
+Package.InstallScripts.Delivered is separate from the four lifecycle phases. Tar runs it after payload copying and before the DESTDIR-gated Installed stage. Debian runs Delivered/Installed only in postinst configure; RPM runs them in %post. Generated .conf files are replaceable payloads without DEB conffile or RPM config flags.
+
+Phase composition:
+
+- Delivery: prune obsolete generated files and matching owned links; Tar reconstructs installation-root references with INSTALL_PATH. DESTDIR changes only write locations, never configuration paths or system links.
+- Post-install: preinstalled → migration preparation/apply (if selected) → installed → Web activation → postinstalled. Failure stops later steps. Custom main hooks and daemon:none do not suppress Web steps.
+- Pre-remove: preuninstalling → Web unlink/optional validation and reload → uninstalling → postuninstalling.
+- Post-remove: payload removal → preuninstalled → uninstalled → .web cleanup → postuninstalled. Existing format guards skip old-version upgrade removal.
+
+HOSTER_WEB_ACTIVATION is read at installation time. Activation targets default nginx.conf/nginx.service; nginx -T confirms inclusion. Stopped services are validated without starting; running services reload. Installation failures propagate. During ordinary removal, Nginx errors warn and continue, while file-operation failures still fail. Disabled activation never suppresses payload delivery, obsolete-file pruning or final removal.
+
+Cleanup fragments are also generated when the new package has no Web result, so omitting --web can remove obsolete sites. Nginx is called only when current or old Web artifacts are involved. The .web layout itself is the container discovery contract, with no .hoster or extra templates.
+
+Tests cover declarations/models, native output, actual three-format archive decoding and isolated Shell doubles. Shell fixtures replace system paths with temporary directories and use fake nginx/systemctl commands, without installing packages or touching real services. These tests do not establish real installation validation; target Linux, Nginx modules, certificate loading, and reload behavior require an isolated environment with actual dependencies. See the [Web configuration guide](web.md) for configuration contracts, module requirements, and deployment behavior.
+
 
 ## Packager version metadata
 
@@ -592,6 +626,7 @@ Create TARGET
 Copy ordinary archive files to TARGET
 Copy uninstall.sh to TARGET
 Copy rooted files to DESTDIR + /<root-path>
+Run Delivered content, including Web pruning and relocation
 Run Installed content when DESTDIR is empty
 ```
 
@@ -1010,7 +1045,7 @@ The independent [migrator tool](../../migrator/README.md) prepares migrations. P
 
 `--migrator` selects the original input name used during migration generation, optionally with a directory, such as `--migrator:../../packages/zongsoft`.
 
-After variable expansion, a value without `/` or `\` searches from the final packaging source (`--source`) through parents to the filesystem root, without searching child directories. A value containing either separator selects an explicit directory: relative paths use source, absolute paths are used directly, and neither searches parents. `--migrator:zongsoft` enables ancestor lookup; `--migrator:./zongsoft` restricts lookup to source. Lookup starts at source, not the command's working directory.
+After variable expansion, a value without `/` or `\` searches from the final packaging source (`--source`) through parents to the filesystem root. Each level checks that directory first, then its direct `.migration/` child; other child directories are not searched. A value containing either separator selects an explicit directory: relative paths use source, absolute paths are used directly, and neither searches parents or an implicit `.migration/` child. With source `hosting/web/default/` and artifacts in `hosting/.migration/`, `--migrator:zongsoft` finds them; `--migrator:./zongsoft` checks only source. Lookup starts at source, not the command's working directory.
 
 Existing `-migrate`, `-migration`, `.migrate`, and `.migration` suffixes are recognized case-insensitively; otherwise `-migrate` is appended. Do not include Edition, version, RID, extension, wildcards, or path lists.
 
@@ -1021,11 +1056,11 @@ zongsoft-migrate-enterprise@1.0.0_linux-x64.tar.gz
 zongsoft-migrate-enterprise@1.0.0_linux-x64.sh
 ```
 
-The migration name may differ from the host name, but Edition, version, and RID must match. Search continues to a parent only when both archive and script are absent. A partial pair fails immediately with the missing file's full path. A complete pair is immediately validated for archive metadata and RID; invalid metadata stops lookup. Both files must come from the same directory: no cross-directory pairing or substitution of versions, Editions, or architectures. When lookup reaches the root without a match, the diagnostic separates expected filenames from searched directories and lists directories on individually indented lines in search order. Shared `Utility.Indent` uses platform line endings and preserves nested indentation. An omitted, empty, or whitespace-only option disables migration integration and attaches no artifacts.
+The migration name may differ from the host name, but Edition, version, and RID must match. Search continues to the next location only when both archive and script are absent. A partial pair fails immediately with the missing file's full path. A complete pair is immediately validated for archive metadata and RID; invalid metadata stops lookup. Both files must come from the same directory: no cross-directory pairing or substitution of versions, Editions, or architectures. When lookup reaches the root without a match, the diagnostic separates expected filenames from searched directories and lists every directory and `.migration/` child on individually indented lines in search order. Shared `Utility.Indent` uses platform line endings and preserves nested indentation. An omitted, empty, or whitespace-only option disables migration integration and attaches no artifacts.
 
 The unchanged files enter `.migration/` under the installation root without archive extraction; the script uses 0755 and archive 0600. Payload target conflicts fail. Installation calls the launcher with `apply` and `/var/lib/<package-name>/packager`; failure prevents startup. Systemd `ExecStartPre` calls the same launcher with `check`, which only compares completion markers without extraction or service connections. Migration runs even without a daemon; DESTDIR staging skips hooks. Uninstallation preserves state and databases/buckets. Targets need POSIX sh, tar/gzip, cmp, and the executor's system libraries; see the migration guide.
 
-`Migrator.Load` separates location from archive validation. Private `Locate` follows `DirectoryInfo.Parent`, includes the root, and records search order. After selecting a same-directory pair, `Validate` checks PAX metadata. Explicit directories are checked once. All lookup and validation precede artifact attachment and package generation.
+`Migrator.Load` separates location from archive validation. Private `Locate` follows `DirectoryInfo.Parent`, includes the root, and records each direct directory followed by its `.migration/` child in search order. After selecting a same-directory pair, `Validate` checks PAX metadata. Explicit directories are checked once without an implicit child lookup. All lookup and validation precede artifact attachment and package generation.
 
 ## Validation guidance
 

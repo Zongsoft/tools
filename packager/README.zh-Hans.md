@@ -32,6 +32,7 @@
 - [命令](#命令)
 - [打包项](#打包项)
 - [systemd 服务](#systemd-服务)
+- [Web 托管配置](docs/web.zh-Hans.md)
 - [生命周期脚本](#生命周期脚本)
 - [升迁产物集成](#升迁产物集成)
 - [变量](#变量)
@@ -139,6 +140,7 @@ cp -a ./web/default/bin/Release/net10.0/. ./publish/
 cp -a ./web/default/plugins ./publish/
 cp -a ./web/default/wwwroot ./publish/
 cp ./web/default/appsettings.json ./web/default/web.config ./web/default/web*.option ./publish/
+cp ./web/default/web.profile ./publish/
 cp ./mime ./publish/
 ```
 
@@ -215,7 +217,7 @@ dotnet-pack tar \
   --output:../packages/
 ```
 
-生成 Debian 安装包，将宿主真实的 [Nginx 配置](https://github.com/Zongsoft/hosting/blob/main/.deploy/default/nginx/zongsoft.web.conf)放到 `/etc/nginx/conf.d`。该配置将请求转发到生成服务的 `8069` 端口；站点设置应按实际环境调整：
+生成 Debian 安装包，读取宿主的 [web.profile](https://github.com/Zongsoft/hosting/blob/main/web/default/web.profile)，将 Nginx 配置放在安装根的 `.web/nginx/`。其中 `server=~` 使用生成服务的 `8069` 端口；站点设置应按实际环境调整。裸机安装时创建系统加载链接，容器构建可关闭激活；详见 [Web 配置指南](docs/web.zh-Hans.md)：
 
 ```bash
 dotnet-pack deb \
@@ -230,8 +232,8 @@ dotnet-pack deb \
   --source:./publish \
   --output:../packages/ \
   --category:utils \
-  . \
-  ../.deploy/default/nginx/zongsoft.web.conf:/etc/nginx/conf.d/zongsoft.web.conf
+  --web:nginx \
+  --exclude:*.profile
 ```
 
 生成带依赖元数据的 RPM 安装包：
@@ -300,7 +302,8 @@ hosting 的 `web/default` 宿主不区分 Edition 时可写为 `Zongsoft.Hosting
 | 选项 | 默认值 | 说明 |
 | --- | --- | --- |
 | `--source:<path>` | 当前目录 | 待打包的源目录。 |
-| `--migrator:<name>` | 空 | 升迁制作时的输入名称，可带目录；裸名称从源目录向父目录查找，按最终 Edition、版本和 RID 匹配。 |
+| `--web:<hoster[:filepath]>` | 空 | 生成 Web 托管器配置；当前支持 nginx，默认读取 source/web.profile。 |
+| `--migrator:<name>` | 空 | 升迁制作时的输入名称，可带目录；裸名称从源目录向父目录查找，每层还查直属 `.migration/`，按最终 Edition、版本和 RID 匹配。 |
 | `--output:<path>` | 源目录 | 安装包输出目录，无论是否以目录分隔符结尾都作为目录处理；不支持通过此选项指定文件名。相对路径基于 `--source` 解析。 |
 | `--exclude:<patterns>` | 空 | 加载打包项时跳过的文件模式列表，多个模式用逗号或分号分隔。 |
 | `--edition:<name>` | 空 | 可选发行/版本标识。会追加到包名；对 RPM 而言，有值时也作为 release。 |
@@ -408,7 +411,7 @@ dotnet-pack deb \
   --output:../packages/ \
   ../web/README.md:docs/hosting-web.md \
   ../zongsoft-logo.png:assets/logo.png \
-  ../.deploy/default/nginx/zongsoft.web.conf:/etc/nginx/conf.d/zongsoft.web.conf
+  ../web/default/web.profile:docs/web.profile
 ```
 
 打包项规则：
@@ -514,6 +517,21 @@ dotnet-pack deb \
   --ASPNETCORE_ENVIRONMENT:Production
 ```
 
+## Web 托管配置
+
+`--web:nginx[:filepath]` 读取 INI 格式的 web.profile，通过 Core Profile 的严格导入生成安装根下的 `.web/nginx/<PackageName>.conf`。[Web 配置指南](docs/web.zh-Hans.md)逐项说明作用域、默认值、空值和继承规则，并提供路径匹配、证书、负载均衡、健康检查、原始设置、变量、容器构建与生命周期的完整范例和注意事项。
+
+```ini
+[api]
+host = api.example.com
+bind!legacy = http://*,http://[::]
+server = http://app:8069
+```
+
+`--web` 不控制输入 Profile 是否入包，仍由位置参数和 `--exclude` 决定。例如 `--exclude:*.profile` 排除输入载荷但不阻止转换。省略、留空或 none 禁用；iis 保留但尚未实现。
+
+裸机默认创建加载链接并校验，Nginx 运行中则重载，停止时不启动。容器构建把 `HOSTER_WEB_ACTIVATION=0` 传入安装进程，再从已知安装根查找 `.web/nginx/*.conf`。开关支持 0/1 和不区分大小写的 false/true，显式空值非法。关闭激活仍交付配置，普通卸载删除 `.web`。主动检查及 Cookie 保持所需的目标模块和最低版本见指南。
+
 ## 生命周期脚本
 
 生命周期脚本可以是源目录相对文件路径、绝对文件路径，也可以是内联脚本文本。四个主钩子的执行时机如下：
@@ -540,11 +558,11 @@ Debian 的 `prerm` 仅在 `remove` 或 `deconfigure` 时进入卸载生命周期
 
 ## 升迁产物集成
 
-升迁由独立的 [migrator 工具](../migrator/README.zh-Hans.md) 预先制作。packager 不解析 `.migration`/`.ini`、SQL 或执行计划，也不携带原生执行器。设置 `--migrator:<名称或路径>` 可收录已制作的升迁归档和配套启动脚本，例如 `--migrator:../../packages/zongsoft`。
+升迁由独立的 [migrator 工具](../migrator/README.zh-Hans.md) 预先制作。packager 不解析 `.migration`/`.ini`、SQL 或执行计划，也不携带原生执行器。设置 `--migrator:<名称或路径>` 可收录已制作的升迁归档和配套启动脚本。例如源目录为 `hosting/web/default/`、产物在 `hosting/.migration/` 时，只需指定 `--migrator:zongsoft`。
 
 查找从最终的 `--source` 目录开始，而不是从运行命令时的工作目录开始：
 
-- 只写名称（如 `zongsoft`）时，从源目录向父目录逐级查找，直到文件系统根目录；不会查找子目录。
+- 只写名称（如 `zongsoft`）时，从源目录向父目录逐级查找，直到文件系统根目录。每层先查目录本身，再查直属 `.migration/`，然后才向上；不遍历其他子目录。
 - 值中包含 `/` 或 `\` 时按显式路径处理。相对路径基于 `--source`，绝对路径直接使用。例如 `--migrator:./zongsoft` 只查源目录。
 - 已有的 `-migrate`、`-migration`、`.migrate` 或 `.migration` 后缀不区分大小写；未带后缀时追加 `-migrate`。不要在值中包含 Edition、版本、RID、扩展名、通配符或路径列表。
 
@@ -555,7 +573,7 @@ zongsoft-migrate-enterprise@1.0.0_linux-x64.tar.gz
 zongsoft-migrate-enterprise@1.0.0_linux-x64.sh
 ```
 
-升迁名称可以不同于宿主名称，但 Edition、版本和 RID 必须匹配。只有压缩包和脚本都不存在时才继续向父目录查找；只找到其中一份就立即报错，并指出缺失配套文件的完整路径。找到完整配套后立即校验归档元数据和 RID，校验失败不会继续向上查找。两份文件必须来自同一目录，不会拼配不同目录，也不会替换成其他版本、Edition 或架构。一直查到根目录仍未找到时，错误会列出预期文件名和已检查目录。不指定选项或提供空值时，不启用升迁集成。
+升迁名称可以不同于宿主名称，但 Edition、版本和 RID 必须匹配。只有压缩包和脚本都不存在时才继续查找下一位置；只找到其中一份就立即报错，并指出缺失配套文件的完整路径。找到完整配套后立即校验归档元数据和 RID，校验失败不会继续查找。两份文件必须来自同一目录，不会拼配不同目录，也不会替换成其他版本、Edition 或架构。一直查到根目录仍未找到时，错误会列出预期文件名和已检查目录，包括各级 `.migration/`。不指定选项或提供空值时，不启用升迁集成。
 
 两个文件原样放入安装根目录的 `.migration/`，打包时不展开归档；启动脚本权限为 0755，压缩包为 0600。载荷与目标冲突时制包失败。安装时生成的钩子会以 `/var/lib/<包名>/packager` 作为状态目录运行 `apply`。systemd 的 `ExecStartPre` 会运行 `check`，比较包的计划指纹与本地 `ready` 成功标记；它不会读取数据库或桶的当前状态。无 daemon 时仍会执行升迁；DESTDIR 暂存不会执行生命周期钩子；卸载会保留升迁状态、数据库和桶。目标机需要 POSIX sh、tar/gzip、cmp 和执行器所需系统库，详见升迁指南。
 
