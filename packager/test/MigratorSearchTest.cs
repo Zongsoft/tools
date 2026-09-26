@@ -34,6 +34,60 @@ public sealed partial class MigratorPackageTest
 	}
 
 	[Fact]
+	public void AncestorSearch_ChecksEachDirectoryBeforeItsMigrationChild()
+	{
+		using var directory = new MigrationTestDirectory();
+		var package = Create("tar", directory);
+		package.Variables["source"] = Directory.CreateDirectory(Path.Combine(directory.Path, "hosting", "web", "default")).FullName;
+		var rootMigration = Pair(directory, ".migration/zongsoft", null, "2.7.1", "linux-x64");
+		var hostingMigration = Pair(directory, "hosting/.migration/zongsoft", null, "2.7.1", "linux-x64");
+		var hosting = Pair(directory, "hosting/zongsoft", null, "2.7.1", "linux-x64");
+		var localMigration = Pair(directory, "hosting/web/default/.migration/zongsoft", null, "2.7.1", "linux-x64");
+		var local = Pair(directory, "hosting/web/default/zongsoft", null, "2.7.1", "linux-x64");
+
+		Assert.Equal(local.Archive, Migrator.Load(package, "zongsoft").Archive);
+		File.Delete(local.Archive);
+		File.Delete(local.Script);
+		Assert.Equal(localMigration.Archive, Migrator.Load(package, "zongsoft").Archive);
+		File.Delete(localMigration.Archive);
+		File.Delete(localMigration.Script);
+		Assert.Equal(hosting.Archive, Migrator.Load(package, "zongsoft").Archive);
+		File.Delete(hosting.Archive);
+		File.Delete(hosting.Script);
+		Assert.Equal(hostingMigration.Archive, Migrator.Load(package, "zongsoft").Archive);
+		File.Delete(hostingMigration.Archive);
+		File.Delete(hostingMigration.Script);
+		Assert.Equal(rootMigration.Archive, Migrator.Load(package, "zongsoft").Archive);
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void AncestorSearch_PartialPairStopsBeforeOtherLocations(bool migrationChild)
+	{
+		using var directory = new MigrationTestDirectory();
+		var package = Create("tar", directory);
+		SetSearchSource(directory, package);
+		var input = migrationChild ? "hosting/web/.migration/zongsoft" : "hosting/web/zongsoft";
+		var partial = Pair(directory, input, null, "2.7.1", "linux-x64");
+		Pair(directory, "hosting/.migration/zongsoft", null, "2.7.1", "linux-x64");
+		File.Delete(partial.Script);
+
+		var error = Assert.Throws<FileNotFoundException>(() => Migrator.Load(package, "zongsoft"));
+		Assert.Equal(partial.Script, error.FileName);
+	}
+
+	[Fact]
+	public void AncestorSearch_ExplicitPathDoesNotSearchMigrationChild()
+	{
+		using var directory = new MigrationTestDirectory();
+		var package = Create("tar", directory);
+		Pair(directory, ".migration/zongsoft", null, "2.7.1", "linux-x64");
+
+		Assert.Throws<FileNotFoundException>(() => Migrator.Load(package, "./zongsoft"));
+	}
+
+	[Fact]
 	public void AncestorSearch_AllMissingReportsEveryDirectoryThroughRoot()
 	{
 		using var directory = new MigrationTestDirectory();
@@ -53,7 +107,10 @@ public sealed partial class MigratorPackageTest
 		var lines = error.Message.Split(["\r\n", "\n"], StringSplitOptions.None);
 		var expected = new List<string>();
 		for(var current = new DirectoryInfo(source); current != null; current = current.Parent)
+		{
 			expected.Add(current.FullName);
+			expected.Add(Path.Combine(current.FullName, ".migration"));
+		}
 		Assert.Equal(expected.Select(path => "\t" + path), lines.Where(line => line.StartsWith('\t')));
 		Assert.Empty(package.Entries);
 	}

@@ -87,6 +87,7 @@ public sealed class Migrator
 
 		var prefix = name + (string.IsNullOrEmpty(package.Edition) ? "" : "-" + package.Edition) + "@" + package.Version + "_" + package.Runtime;
 		var migrator = Locate(Path.GetDirectoryName(path), prefix, searchParents);
+
 		Validate(migrator.Archive, package.Runtime);
 		return migrator;
 	}
@@ -114,19 +115,25 @@ public sealed class Migrator
 
 		for(var current = new DirectoryInfo(directory); current != null; current = searchParents ? current.Parent : null)
 		{
-			searched.Add(current.FullName);
-			var archive = Path.Combine(current.FullName, archiveName);
-			var script = Path.Combine(current.FullName, scriptName);
-			var hasArchive = File.Exists(archive);
-			var hasScript = File.Exists(script);
+			string[] locations = searchParents ? [current.FullName, Path.Combine(current.FullName, ".migration")] : [current.FullName];
 
-			if(hasArchive && hasScript)
-				return new(archive, script);
-
-			if(hasArchive || hasScript || !searchParents)
+			foreach(var location in locations)
 			{
-				var missing = hasArchive ? script : archive;
-				throw new FileNotFoundException(string.Format(Properties.Resources.MigratorArtifactMissing_Message, missing), missing);
+				searched.Add(location);
+
+				var archive = Path.Combine(location, archiveName);
+				var script = Path.Combine(location, scriptName);
+				var hasArchive = File.Exists(archive);
+				var hasScript = File.Exists(script);
+
+				if(hasArchive && hasScript)
+					return new(archive, script);
+
+				if(hasArchive || hasScript || !searchParents)
+				{
+					var missing = hasArchive ? script : archive;
+					throw new FileNotFoundException(string.Format(Properties.Resources.MigratorArtifactMissing_Message, missing), missing);
+				}
 			}
 		}
 
@@ -157,12 +164,14 @@ public sealed class Migrator
 	private static string MessageScript(Func<string> message)
 	{
 		var culture = System.Globalization.CultureInfo.CurrentUICulture;
+
 		try
 		{
 			//同步读取两种资源后恢复当前执行上下文，不修改生成资源类的全局 Culture。
 			System.Globalization.CultureInfo.CurrentUICulture = System.Globalization.CultureInfo.GetCultureInfo("zh-Hans");
 			var chinese = message();
 			System.Globalization.CultureInfo.CurrentUICulture = System.Globalization.CultureInfo.InvariantCulture;
+
 			return $$$$"""
 				case "${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}" in
 					zh*) printf '%s\n' {{{{Quote(chinese)}}}} ;;
