@@ -52,6 +52,8 @@ Core 由 ProfileReader 内置处理导入，提供循环/深度保护；ProfileO
 
 解析和在线求解阶段可能下载到 NuGet 缓存，因此 dry-run 不表示完全不写磁盘。`offline=true` 使用已解压且有有效 nuspec 的本地缓存；缺包失败。
 
+缺失的普通源文件和清单视为可选输入。`DeploymentPath.IsMissing` 区分文件/目录不存在、访问错误与失效链接。`PlanManifestAsync` 跳过缺失清单（包括显式参数及目录直属的默认 `.deploy`）；`PlanSourcesAsync` 跳过缺失源文件，包括包内清单引用的文件。每项增加 Skipped，并将本地化警告写入输出和 Diagnostics，quiet 模式也显示。缺失项不登记复制操作或清单哈希，不阻止有效操作执行；dry-run 沿用同样的警告语义。包解析失败、无效输入和计划生成后的源变化仍然失败。
+
 ## 变量、清单与路径
 
 `DeploymentEntry.Get` 在变量展开前以源条目的第一个冒号拆分解析器名与参数。没有冒号的条目直接使用 `path` 名称。`DeploymentResolverManager.GetResolver` 将 null、空字符串及纯空白名称解析为默认路径解析器；`path`、`nuget` 和 `delete`/`remove` 按不区分大小写的方式匹配，未知名称返回 null。空名称选择默认路径解析器是其功能约定。默认路径解析器自身的 Name 为空字符串，`path` 是选择该实例的解析器名。Windows 字面绝对源路径使用 `path:D:\dir\files.ext` 或 `path:D:/dir/files.ext`，避免盘符被解析为解析器名；相对路径可以省略前缀或显式使用 `path:`。

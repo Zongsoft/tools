@@ -115,20 +115,20 @@ public class DeploymentPlanTest
 	}
 
 	[Theory]
-	[InlineData(false)]
-	[InlineData(true)]
-	public async Task Deploy_FailedPlanWritesUnsuccessfulReportWithDiagnosticsAsync(bool missingManifest)
+	[InlineData("unknown:input", "unknown")]
+	[InlineData("$(MissingVariable)", "MissingVariable")]
+	public async Task Deploy_FailedPlanWritesUnsuccessfulReportWithDiagnosticsAsync(string entry, string diagnostic)
 	{
 		using var fixture = new DeploymentFixture();
 		var report = Path.Combine(fixture.Root, "failed.json");
 		fixture.Variables["report"] = report;
-		var manifest = missingManifest ? Path.Combine(fixture.Root, "absent.deploy") : fixture.Manifest("unknown:input");
+		var manifest = fixture.Manifest(entry);
 		var result = await fixture.CreateDeployer().DeployAsync(manifest, fixture.Destination, TestContext.Current.CancellationToken);
 		Assert.True(result.Failures > 0);
 		var plan = DeploymentPlan.Load(report);
 		Assert.False(plan.Succeeded);
 		Assert.NotEmpty(plan.Diagnostics);
-		Assert.Contains(plan.Diagnostics, message => message.Contains(missingManifest ? "absent.deploy" : "unknown", StringComparison.OrdinalIgnoreCase));
+		Assert.Contains(plan.Diagnostics, message => message.Contains(diagnostic, StringComparison.OrdinalIgnoreCase));
 		Assert.Empty(Directory.GetFiles(fixture.Destination));
 	}
 

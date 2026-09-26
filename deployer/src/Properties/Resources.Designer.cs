@@ -151,6 +151,15 @@ namespace Zongsoft.Tools.Deployer.Properties {
         }
 
         /// <summary>
+        ///   查找类似 Warning: file not found; skipped: {0} 的本地化字符串。
+        /// </summary>
+        internal static string Review_MissingFile {
+            get {
+                return ResourceManager.GetString("Review.MissingFile", resourceCulture);
+            }
+        }
+
+        /// <summary>
         ///   查找类似 Package is not available in offline cache: {0} 的本地化字符串。
         /// </summary>
         internal static string Review_Offline {

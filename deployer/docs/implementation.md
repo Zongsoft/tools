@@ -52,6 +52,8 @@ Core handles imports directly in ProfileReader with cycle/depth checks. ProfileO
 
 Online parsing/resolution can populate the NuGet cache, so dry-run does not mean zero disk writes. Offline mode requires unpacked local packages with valid nuspec metadata and fails on missing packages.
 
+Missing ordinary source files and manifests are optional inputs. `DeploymentPath.IsMissing` distinguishes file/directory-not-found from access errors and broken links. `PlanManifestAsync` skips absent manifests (including explicit arguments and a directory's default `.deploy`); `PlanSourcesAsync` skips absent source files, including files referenced by a package manifest. Each increments Skipped and writes a localized warning to output and Diagnostics, even in quiet mode. Missing inputs add no copy operations or manifest hashes and do not prevent valid operations from executing. Dry-run uses the same warnings. Package resolution failures, invalid inputs, and source changes after planning remain fatal.
+
 ## Variables, manifests, and paths
 
 `DeploymentEntry.Get` splits the source at the first colon before expanding variables. Entries without a colon use the name `path`. `DeploymentResolverManager.GetResolver` selects the default path resolver for null, empty, or whitespace-only names. It matches `path`, `nuget`, and `delete`/`remove` case-insensitively; unknown names return null. Default selection for an empty name is part of the resolver API contract. The default resolver has an empty Name; `path` is a lookup name selecting that instance. Use `path:D:\dir\files.ext` or `path:D:/dir/files.ext` for a literal Windows absolute source path so the drive letter is not parsed as a resolver name. Relative paths may omit the prefix or use `path:`.

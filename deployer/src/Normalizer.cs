@@ -53,7 +53,7 @@ public static class Normalizer
 			Dictionary<string, string> dictionary when dictionary.Comparer.Equals(StringComparer.OrdinalIgnoreCase) => dictionary,
 			_ => new Dictionary<string, string>(variables, StringComparer.OrdinalIgnoreCase),
 		};
-		var result = VariableExpander.Expand(text, raw, failure);
+		var result = VariableEvaluator.Evaluate(text, raw, failure);
 
 		if(!result.Succeed)
 			throw new FormatException(string.Format(Properties.Resources.Review_UndefinedVariable, result.Variable));

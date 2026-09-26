@@ -147,6 +147,9 @@
   <data name="Review.Missing" xml:space="preserve">
     <value>文件或包不存在：{0}</value>
   </data>
+  <data name="Review.MissingFile" xml:space="preserve">
+    <value>警告：文件不存在，已跳过：{0}</value>
+  </data>
   <data name="Review.Offline" xml:space="preserve">
     <value>离线缓存中没有包：{0}</value>
   </data>

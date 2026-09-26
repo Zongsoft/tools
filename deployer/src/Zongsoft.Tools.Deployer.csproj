@@ -3,7 +3,7 @@
 		<OutputType>Exe</OutputType>
 		<TargetFrameworks>net8.0;net9.0;net10.0;</TargetFrameworks>
 		<DefineConstants>$(DefineConstants);DEPLOYER</DefineConstants>
-		<Version>7.15.1</Version>
+		<Version>7.15.2</Version>
 		<PackAsTool>true</PackAsTool>
 		<ToolCommandName>dotnet-deploy</ToolCommandName>
 		<PackageDescription>The Zongsoft Deployment .NET Tool.</PackageDescription>
@@ -16,7 +16,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<Compile Include="..\..\.shared\VariableExpander.cs" Link="Shared\VariableExpander.cs" />
+		<Compile Include="..\..\.shared\VariableEvaluator.cs" Link="Shared\VariableEvaluator.cs" />
 		<Compile Include="..\..\.shared\Utility.cs" Link="Shared\Utility.cs" />
 		<Compile Include="..\..\.shared\ArtifactPublisher.cs" Link="Shared\ArtifactPublisher.cs" />
 		<None Remove="Resources/dotnet-runtime-LICENSE.txt" />

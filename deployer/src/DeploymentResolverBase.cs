@@ -65,6 +65,18 @@ public abstract class DeploymentResolverBase : IDeploymentResolver
 		{
 			cancellation.ThrowIfCancellationRequested();
 
+			// 缺失的可选源不进入计划，避免阻止其他有效文件部署。
+			if(DeploymentPath.IsMissing(source.Path))
+			{
+				context.Counter.Skip();
+
+				var warning = string.Format(Properties.Resources.Review_MissingFile, source.Path);
+				context.Deployer.Plan.Diagnostics.Add(warning);
+				context.Deployer.Output.WriteLine(warning);
+
+				continue;
+			}
+
 			if(!source.Exists())
 				throw new FileNotFoundException(string.Format(Properties.Resources.Review_Missing, source.Path));
 

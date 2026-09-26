@@ -22,7 +22,8 @@ public sealed class ProgramEntryTest
 			Environment.SetEnvironmentVariable("overwrite", "alway");
 			var destination = "--destination=" + Path.GetDirectoryName(target);
 
-			Assert.Equal(1, await RunAsync([destination, "missing.deploy"]));
+			Assert.Equal(1, await RunAsync([destination, fixture.Manifest("unknown:input", "source/invalid.deploy")]));
+			Assert.Equal(0, await RunAsync([destination, "missing.deploy"]));
 			Assert.Equal(0, await RunAsync(["--overwrite=never", destination, manifest]));
 			Assert.Equal("original content", File.ReadAllText(target));
 			Assert.Equal(0, await RunAsync([destination, "--overwrite=alway", manifest]));

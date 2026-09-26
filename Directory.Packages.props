@@ -4,7 +4,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageVersion Include="Zongsoft.Core" Version="7.59.1" />
+		<PackageVersion Include="Zongsoft.Core" Version="7.60.0" />
 		<PackageVersion Include="Zongsoft.CodeAnalysis" Version="1.2.1" />
 	</ItemGroup>
 

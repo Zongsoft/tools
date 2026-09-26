@@ -220,6 +220,15 @@ public partial class Deployer
 
 		try
 		{
+			if(DeploymentPath.IsMissing(path))
+			{
+				this.Session.Counter.Skip();
+				var warning = string.Format(Properties.Resources.Review_MissingFile, path);
+				this.Plan.Diagnostics.Add(warning);
+				this.Output.WriteLine(warning);
+				return;
+			}
+
 			if(!File.Exists(path))
 				throw new FileNotFoundException(string.Format(Properties.Resources.Review_Missing, path));
 

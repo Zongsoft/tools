@@ -241,6 +241,45 @@ public sealed class LocalSearchTest
 		Assert.Equal(suffix, match.Suffix.Replace('\\', '/'));
 	}
 
+	[Fact]
+	public async Task Deploy_MissingFileInsideValidDirectoryLink_WarnsAndContinuesAsync()
+	{
+		using var fixture = new DeploymentFixture();
+		fixture.Write("source/ordinary.txt", "ordinary source");
+		var physical = Path.Combine(fixture.Root, "physical");
+		Directory.CreateDirectory(physical);
+		Directory.CreateSymbolicLink(Path.Combine(fixture.Root, "source/linked"), physical);
+		var deployer = fixture.CreateDeployer();
+
+		var result = await deployer.DeployAsync(fixture.Manifest("linked/missing.txt\nordinary.txt"), fixture.Destination, TestContext.Current.CancellationToken);
+
+		Assert.Equal(0, result.Failures);
+		Assert.Equal(1, result.Skipped);
+		Assert.Equal(1, result.Successes);
+		Assert.Equal("ordinary source", File.ReadAllText(Path.Combine(fixture.Destination, "ordinary.txt")));
+		Assert.Single(deployer.Plan.Diagnostics);
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public async Task Deploy_MissingSourceInsideDanglingDirectoryLink_FailsBeforeAnyCopyAsync(bool manifestArgument)
+	{
+		using var fixture = new DeploymentFixture();
+		fixture.Write("source/ordinary.txt", "must not copy");
+		Directory.CreateSymbolicLink(Path.Combine(fixture.Root, "source/linked"), Path.Combine(fixture.Root, "absent"));
+		var deployer = fixture.CreateDeployer();
+		var manifest = fixture.Manifest(manifestArgument ? "ordinary.txt" : "ordinary.txt\nlinked/missing.txt");
+		var paths = manifestArgument ? new[] { manifest, Path.Combine(fixture.Root, "source/linked/.deploy") } : [manifest];
+
+		var result = await deployer.DeployManyAsync(paths, fixture.Destination, TestContext.Current.CancellationToken);
+
+		Assert.Equal(1, result.Failures);
+		Assert.Equal(0, result.Successes);
+		Assert.False(deployer.Plan.Succeeded);
+		Assert.Empty(Directory.GetFiles(fixture.Destination));
+	}
+
 	private sealed class CallbackWriter(Action callback) : StringWriter
 	{
 		public override void WriteLine(string value)

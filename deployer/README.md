@@ -245,6 +245,8 @@ dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:
 
 The command supports redirected or piped output. Exit codes are 0 for success, 1 for validation/dependency/I/O failure, and 130 for cancellation. The complete plan is validated before target writes; skipped copies and deletions have separate counts.
 
+Missing source files (including optional files referenced by package manifests) and missing deployment manifests are warnings: each is counted as skipped, and remaining inputs continue. This also applies to the default `.deploy`, explicit manifest arguments, and a directory without `.deploy`, so scripts can pass the same optional inputs across environments. Warnings are printed even with `--verbosity:quiet` and retained in report diagnostics; they do not cause a nonzero exit code. Missing NuGet packages, invalid variables or syntax, broken source links, access errors, and files lost after planning remain failures.
+
 ```text
 dotnet deploy [--option:value ...] [manifest-or-directory ...]
 dotnet-deploy [--option:value ...] [manifest-or-directory ...]

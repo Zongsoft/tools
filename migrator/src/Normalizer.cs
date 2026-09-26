@@ -60,7 +60,7 @@ public static class Normalizer
 		if(variables is Variables collection)
 			variables = collection.Raw;
 
-		var result = VariableExpander.Expand(text, variables);
+		var result = VariableEvaluator.Evaluate(text, variables);
 		return result.Succeed ? Result.Success(result.Value) : Result.Failure(result.Variable);
 	}
 

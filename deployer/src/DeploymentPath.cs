@@ -58,12 +58,8 @@ internal static class DeploymentPath
 				if((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
 					throw new IOException(string.Format(Properties.Resources.Review_LinkedPath, current));
 			}
-			catch(FileNotFoundException)
-			{
-			}
-			catch(DirectoryNotFoundException)
-			{
-			}
+			catch(FileNotFoundException) { }
+			catch(DirectoryNotFoundException) { }
 		}
 
 		return path;
@@ -85,6 +81,27 @@ internal static class DeploymentPath
 	#endregion
 
 	#region 路径标识
+	/// <summary>仅将普通路径不存在视为可选缺失，链接失效和访问错误仍交由调用方处理。</summary>
+	public static bool IsMissing(string path)
+	{
+		path = Path.GetFullPath(path);
+
+		for(var current = path; !string.IsNullOrEmpty(current); current = Path.GetDirectoryName(current))
+		{
+			FileSystemInfo info = Directory.Exists(current) ? new DirectoryInfo(current) : new FileInfo(current);
+			if(info.LinkTarget != null && info.ResolveLinkTarget(true) is not { Exists: true })
+				throw new IOException(string.Format(Properties.Resources.Review_LinkedPath, current));
+		}
+
+		try
+		{
+			File.GetAttributes(path);
+			return false;
+		}
+		catch(FileNotFoundException) { return true; }
+		catch(DirectoryNotFoundException) { return true; }
+	}
+
 	public static string Identity(string path)
 	{
 		path = Path.GetFullPath(path);

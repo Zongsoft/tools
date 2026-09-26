@@ -63,8 +63,8 @@ public class DeploymentTest
 	}
 
 	[Theory]
-	[InlineData("en", "File or package not found: ")]
-	[InlineData("zh-Hans", "文件或包不存在：")]
+	[InlineData("en", "Warning: file not found; skipped: ")]
+	[InlineData("zh-Hans", "警告：文件不存在，已跳过：")]
 	public async Task Deploy_MissingManifestUsesLocalizedTemplateAndPathAsync(string culture, string expectedPrefix)
 	{
 		var originalCulture = CultureInfo.CurrentCulture;
@@ -80,8 +80,10 @@ public class DeploymentTest
 
 			var result = await deployer.DeployAsync(manifest, fixture.Destination, TestContext.Current.CancellationToken);
 
-			Assert.Equal(1, result.Failures);
+			Assert.Equal(0, result.Failures);
 			Assert.Equal(0, result.Successes);
+			Assert.Equal(1, result.Skipped);
+			Assert.True(deployer.Plan.Succeeded);
 			Assert.Equal(expectedPrefix + manifest, Assert.Single(deployer.Plan.Diagnostics));
 			Assert.Equal(expectedPrefix + manifest + Environment.NewLine, fixture.Log.ToString());
 			Assert.Empty(Directory.GetFiles(fixture.Destination));
@@ -231,20 +233,21 @@ public class DeploymentTest
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Variables["verbosity"] = "detail";
-		var report = Path.Combine(fixture.Root, "failed-report.json");
+		var report = Path.Combine(fixture.Root, "warning-report.json");
 		fixture.Variables["report"] = report;
 		var manifest = Path.Combine(fixture.Root, "token=synthetic-token", "password=synthetic-password", "missing.deploy");
 		var deployer = fixture.CreateDeployer();
 
 		var result = await deployer.DeployAsync(manifest, fixture.Destination, TestContext.Current.CancellationToken);
 
-		Assert.Equal(1, result.Failures);
+		Assert.Equal(0, result.Failures);
 		Assert.Equal(0, result.Successes);
+		Assert.Equal(1, result.Skipped);
 		var diagnostic = Assert.Single(deployer.Plan.Diagnostics);
 		Assert.Contains(manifest, diagnostic, StringComparison.Ordinal);
 		Assert.Equal(diagnostic + Environment.NewLine, fixture.Log.ToString());
 		var saved = DeploymentPlan.Load(report);
-		Assert.False(saved.Succeeded);
+		Assert.True(saved.Succeeded);
 		Assert.Equal([diagnostic], saved.Diagnostics);
 		Assert.Empty(Directory.GetFiles(fixture.Destination));
 	}
@@ -342,8 +345,7 @@ public class DeploymentTest
 
 	[Theory]
 	[InlineData("unknown:input", "unknown")]
-	[InlineData("missing.txt", "missing.txt")]
-	public async Task Deploy_UnknownResolverOrMissingSourceCountsFailureAsync(string entry, string diagnostic)
+	public async Task Deploy_UnknownResolverCountsFailureAsync(string entry, string diagnostic)
 	{
 		using var fixture = new DeploymentFixture();
 		var result = await fixture.CreateDeployer().DeployAsync(fixture.Manifest(entry), fixture.Destination, TestContext.Current.CancellationToken);
@@ -353,13 +355,78 @@ public class DeploymentTest
 		Assert.Contains(diagnostic, fixture.Log.ToString(), StringComparison.OrdinalIgnoreCase);
 	}
 
-	[Fact]
-	public async Task Deploy_MissingManifestCountsFailureAsync()
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public async Task Deploy_MissingManifestsDoNotPreventRemainingManifestsAsync(bool dryRun)
 	{
 		using var fixture = new DeploymentFixture();
-		var result = await fixture.CreateDeployer().DeployAsync(Path.Combine(fixture.Root, "absent.deploy"), fixture.Destination, TestContext.Current.CancellationToken);
-		Assert.Equal(1, result.Failures);
-		Assert.Equal(0, result.Successes);
+		fixture.Variables["dry-run"] = dryRun.ToString();
+		fixture.Write("source/file.txt", "required content");
+		var emptyDirectory = Path.Combine(fixture.Root, "empty");
+		Directory.CreateDirectory(emptyDirectory);
+		var missing = Path.Combine(fixture.Root, "absent.deploy");
+		var deployer = fixture.CreateDeployer();
+
+		var result = await deployer.DeployManyAsync([missing, fixture.Manifest("file.txt"), emptyDirectory], fixture.Destination, TestContext.Current.CancellationToken);
+
+		Assert.Equal(0, result.Failures);
+		Assert.Equal(dryRun ? 0 : 1, result.Successes);
+		Assert.Equal(2, result.Skipped);
+		Assert.True(deployer.Plan.Succeeded);
+		Assert.Single(deployer.Plan.Manifests);
+		Assert.Single(deployer.Plan.Operations);
+		Assert.Equal(2, deployer.Plan.Diagnostics.Count);
+		Assert.Contains(missing, fixture.Log.ToString(), StringComparison.Ordinal);
+		Assert.Contains(Path.Combine(emptyDirectory, ".deploy"), fixture.Log.ToString(), StringComparison.Ordinal);
+		Assert.Equal(!dryRun, File.Exists(Path.Combine(fixture.Destination, "file.txt")));
+	}
+
+	[Theory]
+	[InlineData("missing.txt")]
+	[InlineData("missing/directory/file.txt")]
+	[InlineData("optional.deploy")]
+	public async Task Deploy_MissingSourceWarnsAndContinuesAsync(string missing)
+	{
+		using var fixture = new DeploymentFixture();
+		fixture.Write("source/before.txt", "before");
+		fixture.Write("source/after.txt", "after");
+		fixture.Write("target/retained.txt", "preserved");
+		var report = Path.Combine(fixture.Root, "result.json");
+		fixture.Variables["report"] = report;
+		var deployer = fixture.CreateDeployer();
+
+		var result = await deployer.DeployAsync(fixture.Manifest($"before.txt\n{missing} = retained.txt\nafter.txt"), fixture.Destination, TestContext.Current.CancellationToken);
+
+		Assert.Equal(0, result.Failures);
+		Assert.Equal(2, result.Successes);
+		Assert.Equal(1, result.Skipped);
+		Assert.Equal("before", File.ReadAllText(Path.Combine(fixture.Destination, "before.txt")));
+		Assert.Equal("after", File.ReadAllText(Path.Combine(fixture.Destination, "after.txt")));
+		Assert.Equal("preserved", File.ReadAllText(Path.Combine(fixture.Destination, "retained.txt")));
+		var plan = DeploymentPlan.Load(report);
+		Assert.True(plan.Succeeded);
+		Assert.Equal(2, plan.Operations.Count);
+		Assert.Contains(Path.GetFullPath(Path.Combine(fixture.Root, "source", missing)), Assert.Single(plan.Diagnostics), StringComparison.Ordinal);
+		Assert.Contains(plan.Diagnostics[0], fixture.Log.ToString(), StringComparison.Ordinal);
+	}
+
+	[Fact]
+	public async Task Deploy_PackageManifestMissingOptionalSourceContinuesAsync()
+	{
+		using var fixture = new DeploymentFixture();
+		fixture.Package("Optional.Assets");
+		fixture.Manifest("artifacts/optional.option\nlib/$(Framework)/Optional.Assets.dll", "packages/optional.assets/1.0.0/.deploy");
+		var deployer = fixture.CreateDeployer();
+
+		var result = await deployer.DeployAsync(fixture.Manifest("nuget:Optional.Assets@1.0.0"), fixture.Destination, TestContext.Current.CancellationToken);
+
+		Assert.Equal(0, result.Failures);
+		Assert.Equal(1, result.Successes);
+		Assert.Equal(1, result.Skipped);
+		Assert.True(deployer.Plan.Succeeded);
+		Assert.Equal("Optional.Assets@1.0.0", File.ReadAllText(Path.Combine(fixture.Destination, "Optional.Assets.dll")));
+		Assert.Contains("optional.option", Assert.Single(deployer.Plan.Diagnostics), StringComparison.Ordinal);
 	}
 
 	[Theory]

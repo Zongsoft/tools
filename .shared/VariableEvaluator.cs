@@ -39,15 +39,16 @@ using System.Text.RegularExpressions;
 namespace Zongsoft.Tools;
 
 /// <summary>递归展开变量值，不修改原始变量集合。</summary>
-internal static class VariableExpander
+internal static class VariableEvaluator
 {
 	#region 常量定义
 	internal const int MAXIMUM_DEPTH = 64;
 	private static readonly Regex _pattern = new(@"(?<opt>\$\((?<name>[\w.\[\]-]+)\))|(?<env>\%(?<name>[\w.\[\]-]+)\%)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+	private static readonly Regex _escapedPattern = new(@"(?<escaped>\$\$\([\w.\[\]-]+\)|%%[\w.\[\]-]+%%)|(?<opt>\$\((?<name>[\w.\[\]-]+)\))|(?<env>%(?<name>[\w.\[\]-]+)%)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 	#endregion
 
 	#region 公共方法
-	internal static Result Expand(string text, IReadOnlyDictionary<string, string> variables, Action<string> missing = null)
+	internal static Result Evaluate(string text, IReadOnlyDictionary<string, string> variables, Action<string> missing = null, bool allowEscapes = false)
 	{
 		if(string.IsNullOrWhiteSpace(text))
 			return Result.Success(string.Empty);
@@ -68,15 +69,19 @@ internal static class VariableExpander
 
 		try
 		{
-			return Result.Success(ExpandValue(text));
+			return Result.Success(EvaluateValue(text));
 		}
 		catch(ResolutionException exception)
 		{
 			return Result.Failure(exception.Name, exception.Reason);
 		}
 
-		string ExpandValue(string value) => _pattern.Replace(value ?? string.Empty, match =>
+		string EvaluateValue(string value) => (allowEscapes ? _escapedPattern : _pattern).Replace(value ?? string.Empty, match =>
 		{
+			//Replace 不会再次扫描替换结果；递归返回的转义文本同样保持字面含义。
+			if(allowEscapes && match.Groups["escaped"].Success)
+				return match.Value[0] == '$' ? match.Value[1..] : match.Value[1..^1];
+
 			var name = match.Groups["name"].Value;
 
 			if(!variables.TryGetValue(name, out var replacement))
@@ -93,7 +98,7 @@ internal static class VariableExpander
 
 			try
 			{
-				return ExpandValue(replacement);
+				return EvaluateValue(replacement);
 			}
 			finally
 			{
