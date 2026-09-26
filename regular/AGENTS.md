@@ -1,6 +1,6 @@
 ## 概述
 
-本目录遵循 [../AGENTS.md](../AGENTS.md)。`src/` 是 `net10.0-windows` WinForms 正则表达式测试器，使用 `System.Text.RegularExpressions` 展示 Match、Group 和 Capture 结果；`tool/` 是 `net10.0` 的 Windows x64 .NET 工具启动器。
+本目录遵循 [../AGENTS.md](../AGENTS.md)。`src/` 是 `net10.0-windows` WinForms 正则表达式测试器，使用 `System.Text.RegularExpressions` 展示 Match、Group 和 Capture 结果；`tool/` 是 `net10.0` 的 .NET 工具启动器，工具包中携带 Windows x64 的 GUI 文件。
 
 ## 工作边界
 
@@ -8,7 +8,7 @@
 - `AboutDialog.cs` 读取程序集元数据；对应 `*.Designer.cs` 与 `.resx` 由设计器维护。
 - `Program.cs` 是 Windows 桌面入口。不要为跨平台复用而在本工具中引入与其职责无关的框架抽象。
 - `tool/Program.cs` 只定位并启动随包分发的界面程序；开发时仍直接运行 `src/` 产生的 `.exe`，不可在 WinForms 项目中设置 `PackAsTool`。
-- `build.cake` 的 `build` 先以工具版本发布 GUI，再打出主包和 `win-x64` 包；`pack` 依赖 `build` 并推送 NuGet。工具包必须包含 README、图标、GUI 运行配置和卫星资源。
+- `build.cake` 的 `build` 先以工具版本发布 GUI，再打出单个工具包；`pack` 依赖 `build` 并推送 NuGet。工具包必须包含 README、图标、GUI 运行配置和卫星资源。
 - 两个项目继承根 `Directory.Packages.props` 的中央包管理；通用分析器由根 `Directory.Build.props` 引用并集中定版，工具自身的 NuGet 包版本留在 `tool/` 项目文件中。
 
 ## 高风险契约

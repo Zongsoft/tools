@@ -2,11 +2,10 @@
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
 		<TargetFramework>net10.0</TargetFramework>
-		<RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
 		<PackAsTool>true</PackAsTool>
 		<ToolCommandName>dotnet-regular</ToolCommandName>
 		<PackageId>Zongsoft.Tools.Regular</PackageId>
-		<Version>1.0.0</Version>
+		<Version>1.1.0</Version>
 		<PackageDescription>The Zongsoft Regular Expression .NET Tool.</PackageDescription>
 		<Product>Zongsoft Regular Expression Tool</Product>
 		<Description>A Windows regular expression tester for matches, groups, and captures.</Description>
@@ -20,11 +19,11 @@
 		<None Include="..\README.zh-Hans.md" Pack="true" PackagePath="\" />
 	</ItemGroup>
 
-	<ItemGroup Condition="'$(RegularPublishDir)' != '' and '$(RuntimeIdentifier)' == 'win-x64'">
-		<None Include="$(RegularPublishDir)\**\*" Pack="true" PackagePath="tools/net10.0/win-x64/gui/" />
+	<ItemGroup Condition="'$(RegularPublishDir)' != ''">
+		<None Include="$(RegularPublishDir)\**\*" Pack="true" PackagePath="tools/net10.0/any/gui/" />
 	</ItemGroup>
 
-	<Target Name="ValidateRegularPublish" BeforeTargets="PackTool" Condition="'$(RuntimeIdentifier)' == 'win-x64'">
+	<Target Name="ValidateRegularPublish" BeforeTargets="PackTool">
 		<Error Condition="'$(RegularPublishDir)' == ''" Text="Specify RegularPublishDir when packing the Regular tool." />
 		<Error Condition="!Exists('$(RegularPublishDir)\Zongsoft.Tools.Regular.exe')" Text="Regular GUI executable was not found in RegularPublishDir." />
 		<Error Condition="!Exists('$(RegularPublishDir)\Zongsoft.Tools.Regular.runtimeconfig.json')" Text="Regular GUI runtime configuration was not found in RegularPublishDir." />

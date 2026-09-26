@@ -61,11 +61,7 @@ Task("pack")
 {
 	var version = XmlPeek(toolProject, "/Project/PropertyGroup/Version");
 	var packageDirectory = $"tool/bin/{edition}";
-	var runtimePackage = $"{packageDirectory}/Zongsoft.Tools.Regular.win-x64.{version}.nupkg";
 	var package = $"{packageDirectory}/Zongsoft.Tools.Regular.{version}.nupkg";
-
-	if(!FileExists(runtimePackage))
-		throw new Exception($"NuGet package does not exist: {runtimePackage}");
 
 	if(!FileExists(package))
 		throw new Exception($"NuGet package does not exist: {package}");
@@ -77,7 +73,6 @@ Task("pack")
 		SkipDuplicate = true,
 	};
 
-	DotNetNuGetPush(runtimePackage, settings);
 	DotNetNuGetPush(package, settings);
 });
 
