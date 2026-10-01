@@ -55,9 +55,15 @@ internal static partial class Utility
 {
 	#region 命令方法
 	/// <summary>将详细信息另起一行并整体缩进，保留已有的多行层级。</summary>
+	/// <param name="text">需要缩进的多行文本。</param>
+	/// <returns>另起一行并以 Tab 缩进后的文本。</returns>
 	internal static string Indent(string text) => Environment.NewLine + "\t" + text.ReplaceLineEndings(Environment.NewLine + "\t");
 
 	/// <summary>将工具的绝对输入适配为 Core 本地搜索，结果保留逻辑名称。</summary>
+	/// <param name="path">要搜索的绝对路径或路径表达式。</param>
+	/// <param name="files">是否只匹配文件；为假时同时匹配文件和目录。</param>
+	/// <param name="sourceDirectory">解析相对搜索模式的基准目录；为空时根据输入路径确定。</param>
+	/// <returns>保留逻辑名称的文件系统匹配项。</returns>
 	public static IEnumerable<Zongsoft.IO.Searcher.Match> Search(string path, bool files = false, string sourceDirectory = null)
 	{
 		path = Path.GetFullPath(path);
@@ -140,6 +146,8 @@ internal static partial class Utility
 
 	#region 环境文件
 	/// <summary>从文件系统根目录到指定目录依次加载 .env，将段落和条目以下划线拼接为变量名。</summary>
+	/// <param name="variables">接收环境文件变量的字典，已有同名项会被覆盖。</param>
+	/// <param name="directory">加载环境文件的目标目录，包含其祖先目录。</param>
 	internal static void LoadEnvironmentVariables(IDictionary<string, string> variables, string directory)
 	{
 		ArgumentNullException.ThrowIfNull(variables);

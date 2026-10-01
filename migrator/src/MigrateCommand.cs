@@ -44,6 +44,7 @@ using Zongsoft.Tools.Migrator.Migration;
 
 namespace Zongsoft.Tools.Migrator;
 
+/// <summary>制作独立的升迁执行包和启动脚本，不执行目标数据库或存储操作。</summary>
 [CommandOption("name", typeof(string), Required = true)]
 [CommandOption("version", typeof(string))]
 [CommandOption("platform", typeof(string), Required = true)]
@@ -54,7 +55,6 @@ namespace Zongsoft.Tools.Migrator;
 [CommandOption("title", typeof(string))]
 [CommandOption("summary", typeof(string))]
 [CommandOption("description", typeof(string))]
-/// <summary>制作独立的升迁执行包和启动脚本，不执行目标数据库或存储操作。</summary>
 public sealed partial class MigrateCommand : CommandBase<CommandContext>
 {
 	#region 执行方法
@@ -87,6 +87,7 @@ public sealed partial class MigrateCommand : CommandBase<CommandContext>
 		};
 		var runtime = platform + "-" + variables.Architecture.ToString().ToLowerInvariant();
 		MigrationRuntime.Validate(runtime);
+
 		if(context.Arguments.Count == 0)
 			throw new InvalidOperationException(Properties.Resources.MigrationPathsRequired_Message);
 

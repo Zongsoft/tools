@@ -464,6 +464,7 @@ partial class Generator
 			payload.Position = 0;
 			var buffer = new byte[65536];
 			int count;
+
 			while((count = payload.Read(buffer)) > 0)
 				hash.AppendData(buffer.AsSpan(0, count));
 

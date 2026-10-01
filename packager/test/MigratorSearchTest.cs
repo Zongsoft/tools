@@ -106,11 +106,13 @@ public sealed partial class MigratorPackageTest
 		Assert.Contains(prefix + ".sh", error.Message);
 		var lines = error.Message.Split(["\r\n", "\n"], StringSplitOptions.None);
 		var expected = new List<string>();
+
 		for(var current = new DirectoryInfo(source); current != null; current = current.Parent)
 		{
 			expected.Add(current.FullName);
 			expected.Add(Path.Combine(current.FullName, ".migration"));
 		}
+
 		Assert.Equal(expected.Select(path => "\t" + path), lines.Where(line => line.StartsWith('\t')));
 		Assert.Empty(package.Entries);
 	}
@@ -146,6 +148,7 @@ public sealed partial class MigratorPackageTest
 		SetSearchSource(directory, package);
 		Pair(directory, "bootstrap", null, "2.7.1", "linux-x64");
 		var near = Pair(directory, "hosting/bootstrap", null, "2.7.1", "linux-x64", failure);
+
 		if(failure == "malformed-gzip")
 			File.WriteAllText(near.Archive, "invalid gzip archive");
 
@@ -168,6 +171,7 @@ public sealed partial class MigratorPackageTest
 		var package = Create("tar", directory);
 		var source = SetSearchSource(directory, package);
 		Pair(directory, "hosting/bootstrap", null, "2.7.1", "linux-x64");
+
 		if(input == "absolute")
 			input = Path.Combine(source, "bootstrap");
 
@@ -236,15 +240,20 @@ public sealed partial class MigratorPackageTest
 	{
 		var file = Directory.GetFiles(directory, format == "tar" ? "*.tar.gz" : "*." + format).Single();
 		var result = new Dictionary<string, UnixFileMode>();
+
 		if(format != "rpm")
 		{
 			using var memory = new MemoryStream(format == "deb" ? ReadAr(file)["data.tar.gz"] : File.ReadAllBytes(file));
 			using var gzip = new GZipStream(memory, CompressionMode.Decompress);
 			using var reader = new TarReader(gzip);
 			TarEntry entry;
+
 			while((entry = reader.GetNextEntry()) != null)
+			{
 				if(entry.DataStream != null)
 					result.Add(entry.Name, entry.Mode);
+			}
+
 			return result;
 		}
 
@@ -253,6 +262,7 @@ public sealed partial class MigratorPackageTest
 		var names = RpmStrings(bytes, header, 1117);
 		var modes = RpmIndex(bytes, header, 1030);
 		Assert.Equal(names.Length, modes.Count);
+
 		for(var index = 0; index < names.Length; index++)
 			result.Add(names[index], (UnixFileMode)(System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(modes.Offset + index * 2, 2)) & 0xFFF));
 		return result;

@@ -22,6 +22,7 @@ public sealed class EnvironmentVariablesTest
 		directory.Write(".env", "manufacturer=File Manufacturer\nhomepage=https://file.example/product\ncompany=Referenced Manufacturer\nsite=https://reference.example/product\n");
 		var previousManufacturer = Environment.GetEnvironmentVariable("manufacturer");
 		var previousHomepage = Environment.GetEnvironmentVariable("homepage");
+
 		try
 		{
 			Environment.SetEnvironmentVariable("manufacturer", "Process Manufacturer");
@@ -54,6 +55,7 @@ public sealed class EnvironmentVariablesTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var previous = Environment.GetEnvironmentVariable("framework");
+
 		try
 		{
 			Environment.SetEnvironmentVariable("framework", "net8.0");
@@ -62,6 +64,7 @@ public sealed class EnvironmentVariablesTest
 				directory.Write(".env", "framework=net8.0\n");
 				directory.Write("source/.env", "Framework=net9.0\n");
 			}
+
 			var context = new CommandContext(new CommandExecutor(), CommandLine.Parse(commandLine)[0], new TarCommand(), null);
 			var values = PackCommand<Package.Tar>.GetVariables(context, Path.Combine(directory.Path, "source"));
 
@@ -99,6 +102,7 @@ public sealed class EnvironmentVariablesTest
 		directory.Write("source/missing/leaf/.env", "COMPILATION=source\narchitecture=Arm64\nzongsoft_env_empty=inherited\nzongsoft_env_blank=\nzongsoft_env_flag\n");
 		directory.Write("source/missing/leaf/child/.env", "compilation=child\n");
 		var previous = Environment.GetEnvironmentVariable("compilation");
+
 		try
 		{
 			Environment.SetEnvironmentVariable("compilation", "process");

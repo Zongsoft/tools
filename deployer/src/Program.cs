@@ -45,13 +45,6 @@ internal class Program
 	public static async Task<int> Main(string[] args)
 	{
 		using var cancellation = new CancellationTokenSource();
-
-		void Handler(object sender, ConsoleCancelEventArgs e)
-		{
-			e.Cancel = true;
-			cancellation.Cancel();
-		}
-
 		Console.CancelKeyPress += Handler;
 
 		try
@@ -82,6 +75,12 @@ internal class Program
 		finally
 		{
 			Console.CancelKeyPress -= Handler;
+		}
+
+		void Handler(object sender, ConsoleCancelEventArgs e)
+		{
+			e.Cancel = true;
+			cancellation.Cancel();
 		}
 	}
 }

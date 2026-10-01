@@ -286,6 +286,7 @@ public class DeploymentTest
 		var timestamp = new DateTime(2025, 1, 1, 12, 0, 0, DateTimeKind.Utc);
 		File.SetLastWriteTimeUtc(source, timestamp.AddHours(offset));
 		File.SetLastWriteTimeUtc(target, timestamp);
+
 		if(overwrite != null)
 			fixture.Variables["overwrite"] = overwrite;
 		var result = await fixture.CreateDeployer().DeployAsync(fixture.Manifest("file.txt"), fixture.Destination, TestContext.Current.CancellationToken);
@@ -321,6 +322,7 @@ public class DeploymentTest
 		fixture.Write("source/file.txt", "filtered source");
 		fixture.Variables["application"] = "Business";
 		fixture.Variables["preview"] = "B";
+
 		if(hasX)
 			fixture.Variables["x"] = "";
 		var result = await fixture.CreateDeployer().DeployAsync(fixture.Manifest($"file.txt = {condition}"), fixture.Destination, TestContext.Current.CancellationToken);

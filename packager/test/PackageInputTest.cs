@@ -20,6 +20,7 @@ public sealed class PackageInputTest
 		var homepage = Environment.GetEnvironmentVariable("homepage");
 		var maintainer = Environment.GetEnvironmentVariable("maintainer");
 		var manufacturer = Environment.GetEnvironmentVariable("manufacturer");
+
 		try
 		{
 			Environment.SetEnvironmentVariable("architecture", "Arm64");
@@ -228,6 +229,7 @@ public sealed class PackageInputTest
 		directory.Write("source/" + FILE_NAME, "source-only-content");
 		var variables = new Variables();
 		var previous = Environment.CurrentDirectory;
+
 		try
 		{
 			Environment.CurrentDirectory = Path.Combine(directory.Path, "working");

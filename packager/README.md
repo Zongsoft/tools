@@ -981,7 +981,7 @@ Root-level entries under `/etc/` are marked as RPM configuration files.
 
 | Format | Homepage | Manufacturer | Maintainer |
 | --- | --- | --- | --- |
-| tar.gz | — | PAX global extended attribute `manufacturer` | — |
+| tar.gz | — | PAX global extended attribute `Manufacturer` | — |
 | deb | `Homepage` | Custom control field `Manufacturer` | `Maintainer` |
 | rpm | `URL` (1020) | `VENDOR` (1011) | `PACKAGER` (1015) |
 

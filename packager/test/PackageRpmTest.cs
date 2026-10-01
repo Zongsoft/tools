@@ -69,6 +69,7 @@ public sealed class PackageRpmTest
 		Assert.Equal(expectedVersion, versions[3]);
 		Assert.Equal(expectedFlags, ReadInt(bytes, flags.Offset + 12));
 		Assert.Equal(rich ? 5 : 4, names.Length);
+
 		if(rich)
 		{
 			Assert.Equal("rpmlib(RichDependencies)", names[4]);
@@ -181,6 +182,7 @@ public sealed class PackageRpmTest
 		Assert.Equal(3, modes.Type);
 		var archive = ReadPayload(directory.Path, "rpm");
 		var regularFiles = 0;
+
 		for(var index = 0; index < baseNames.Length; index++)
 		{
 			var mode = BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(modes.Offset + index * 2, 2));
@@ -189,11 +191,13 @@ public sealed class PackageRpmTest
 				Assert.Empty(digests[index]);
 				continue;
 			}
+
 			Assert.Equal(0x8000, mode & 0xF000);
 			var name = directories[ReadInt(bytes, indexes.Offset + index * 4)] + baseNames[index];
 			Assert.Equal(Convert.ToHexString(SHA256.HashData(archive[name.TrimStart('/')])).ToLowerInvariant(), digests[index]);
 			regularFiles++;
 		}
+
 		Assert.Equal(package.Entries.Count(entry => !entry.IsDirectory), regularFiles);
 		var empty = Array.IndexOf(baseNames, "empty.sql");
 		Assert.True(empty >= 0);
@@ -217,6 +221,7 @@ public sealed class PackageRpmTest
 			Assert.Equal(tags.Order(), tags);
 			Assert.Equal(count, tags.Distinct().Count());
 			var cursor = 0;
+
 			for(var index = 1; index < count; index++)
 			{
 				var entry = offset + 16 + index * 16;
@@ -229,6 +234,7 @@ public sealed class PackageRpmTest
 				Assert.All(bytes[(store + cursor)..(store + expected)], value => Assert.Equal((byte)0, value));
 				Assert.InRange(position, 0, size - 16);
 				Assert.True(items >= 0);
+
 				if(type is 6 or 8 or 9)
 				{
 					if(type == 6)
@@ -246,8 +252,10 @@ public sealed class PackageRpmTest
 					var width = type switch { 1 or 2 or 7 => 1, 3 => 2, 4 => 4, 5 => 8, _ => throw new InvalidDataException("Unexpected RPM field type.") };
 					cursor = position + items * width;
 				}
+
 				Assert.InRange(cursor, position, size - 16);
 			}
+
 			Assert.Equal(size - 16, cursor);
 			var region = RpmIndex(bytes, offset, expectedTag);
 			Assert.Equal(7, region.Type);
@@ -289,6 +297,7 @@ public sealed class PackageRpmTest
 			var entry = Assert.Single(payload, pair => pair.Key.EndsWith("/" + SERVICE_NAME, StringComparison.Ordinal));
 			Assert.Equal(File.ReadAllBytes(source), entry.Value);
 		}
+
 		Assert.Contains(4, observedAlignment);
 		Assert.True(observedHeaderSizes.Count > 1, "Metadata variants must exercise multiple declared header lengths.");
 	}
@@ -344,6 +353,7 @@ public sealed class PackageRpmTest
 			var offset = store + ReadInt(bytes, entry + 8);
 			return Encoding.UTF8.GetString(bytes, offset, Array.IndexOf(bytes, (byte)0, offset) - offset);
 		}
+
 		throw new InvalidDataException("RPM post-install tag missing.");
 	}
 
@@ -377,6 +387,7 @@ public sealed class PackageRpmTest
 			entries.Add(name, bytes[offset..(offset + size)]);
 			offset = (offset + size + 3) & ~3;
 		}
+
 		return entries;
 	}
 
@@ -386,6 +397,7 @@ public sealed class PackageRpmTest
 		var result = new Dictionary<string, byte[]>();
 		var offset = 8;
 		Assert.Equal("!<arch>\n", Encoding.ASCII.GetString(bytes, 0, 8));
+
 		while(offset + 60 <= bytes.Length)
 		{
 			var name = Encoding.ASCII.GetString(bytes, offset, 16).Trim().TrimEnd('/');
@@ -393,6 +405,7 @@ public sealed class PackageRpmTest
 			result.Add(name, bytes[(offset + 60)..(offset + 60 + size)]);
 			offset += 60 + size + (size & 1);
 		}
+
 		return result;
 	}
 
@@ -403,6 +416,7 @@ public sealed class PackageRpmTest
 		using var reader = new TarReader(gzip);
 		var result = new Dictionary<string, byte[]>(StringComparer.Ordinal);
 		TarEntry entry;
+
 		while((entry = reader.GetNextEntry()) != null)
 		{
 			if(entry.DataStream == null)
@@ -411,6 +425,7 @@ public sealed class PackageRpmTest
 			entry.DataStream.CopyTo(content);
 			result.Add(entry.Name, content.ToArray());
 		}
+
 		return result;
 	}
 
@@ -427,6 +442,7 @@ public sealed class PackageRpmTest
 		Assert.Contains(entry.Type, new[] { 6, 8 });
 		var result = new string[entry.Count];
 		var offset = entry.Offset;
+
 		for(var index = 0; index < result.Length; index++)
 		{
 			var end = Array.IndexOf(bytes, (byte)0, offset);
@@ -434,6 +450,7 @@ public sealed class PackageRpmTest
 			result[index] = Encoding.UTF8.GetString(bytes, offset, end - offset);
 			offset = end + 1;
 		}
+
 		return result;
 	}
 

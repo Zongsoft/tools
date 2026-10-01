@@ -38,11 +38,13 @@ public sealed class PackageCommandTest
 			format, "--name:example", "--version:1.0.0", "--source:" + Path.Combine(directory.Path, "hosting", "daemon"),
 			"--output:out", "--platform:Linux", "--install-path:/opt/example", "--compilation:Release",
 		};
+
 		if(option != null)
 			arguments.Add(option);
 		arguments.Add("bin/$(compilation)/$(framework):~");
 		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
 		var terminal = (ITerminal)terminalField.GetValue(null);
+
 		try
 		{
 			Terminal.Default = DispatchProxy.Create<ITerminal, MigratorPackageTest.RecordingTerminal>();
@@ -80,6 +82,7 @@ public sealed class PackageCommandTest
 	{
 		using var directory = new MigrationTestDirectory();
 		const string SERVICE = "[Service]\nExecStart=/usr/bin/example\n";
+
 		if(sourceKind is "files" or "service")
 		{
 			directory.Write("index.html", "<html>frontend</html>");
@@ -92,6 +95,7 @@ public sealed class PackageCommandTest
 
 		CommandBase<CommandContext> command = format switch { "tar" => new TarCommand(), "deb" => new DebCommand(), _ => new RpmCommand() };
 		var arguments = new List<string> { format, "--name:example", "--version:1.0.0", "--source:" + directory.Path, "--output:out", "--platform:Linux", "--install-path:/opt/example" };
+
 		if(sourceKind == "files")
 			arguments.Add("--daemon:none");
 		else if(sourceKind == "service")
@@ -106,6 +110,7 @@ public sealed class PackageCommandTest
 		var compilation = Environment.GetEnvironmentVariable("compilation");
 		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
 		var terminal = (ITerminal)terminalField.GetValue(null);
+
 		try
 		{
 			Environment.SetEnvironmentVariable("framework", null);
@@ -172,6 +177,7 @@ public sealed class PackageCommandTest
 		};
 		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
 		var terminal = (ITerminal)terminalField.GetValue(null);
+
 		try
 		{
 			Terminal.Default = DispatchProxy.Create<ITerminal, MigratorPackageTest.RecordingTerminal>();

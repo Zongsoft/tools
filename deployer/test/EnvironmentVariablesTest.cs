@@ -19,6 +19,7 @@ public sealed class EnvironmentVariablesTest
 	{
 		using var fixture = new DeploymentFixture();
 		var previous = Environment.GetEnvironmentVariable("framework");
+
 		try
 		{
 			Environment.SetEnvironmentVariable("framework", "net8.0");
@@ -27,6 +28,7 @@ public sealed class EnvironmentVariablesTest
 				fixture.Write(".env", "framework=net8.0\n");
 				fixture.Write("source/.env", "FRAMEWORK=net9.0\n");
 			}
+
 			var options = new Dictionary<string, string> { ["destination"] = "$(framework)" };
 			if(specified)
 				options["FrAmEwOrK"] = option;
@@ -112,6 +114,7 @@ public sealed class EnvironmentVariablesTest
 		using var fixture = new DeploymentFixture();
 		const string KEY = "zongsoft_env_priority";
 		var previous = Environment.GetEnvironmentVariable(KEY);
+
 		try
 		{
 			Environment.SetEnvironmentVariable(KEY, "process");
@@ -166,6 +169,7 @@ public sealed class EnvironmentVariablesTest
 	{
 		using var fixture = new DeploymentFixture();
 		var path = Path.Combine(fixture.Root, ".env");
+
 		if(unreadable)
 			Directory.CreateDirectory(path);
 		else

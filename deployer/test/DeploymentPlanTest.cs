@@ -256,6 +256,7 @@ public class DeploymentPlanTest
 		fixture.Variables["report"] = report;
 		Assert.Equal(0, (await fixture.CreateDeployer().DeployAsync(fixture.Manifest("old.txt"), fixture.Destination, TestContext.Current.CancellationToken)).Failures);
 		var oldPath = Path.Combine(fixture.Destination, "old.txt");
+
 		if(modified)
 			File.WriteAllText(oldPath, "user modified");
 		fixture.Variables.Remove("report");
@@ -264,6 +265,7 @@ public class DeploymentPlanTest
 		var result = await fixture.CreateDeployer().DeployAsync(fixture.Manifest("current.txt", "source/next.deploy"), fixture.Destination, TestContext.Current.CancellationToken);
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(retained, File.Exists(oldPath));
+
 		if(retained)
 			Assert.Equal(modified ? "user modified" : "owned content", File.ReadAllText(oldPath));
 		Assert.Equal("user owned", File.ReadAllText(Path.Combine(fixture.Destination, "user.txt")));

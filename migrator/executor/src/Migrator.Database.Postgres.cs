@@ -102,6 +102,7 @@ partial class Migrator
 				{
 					var target = Quote(user.Name);
 					var privileges = MigrationPrivileges.Resolve(user);
+
 					foreach(var role in user.Roles)
 					{
 						var scope = await QueryAsync(connection, RoleScope(role), timeout, cancellation);

@@ -149,6 +149,7 @@ public sealed class MigrationTDengineTest
 		});
 		var step = Step(directory, server);
 		server.Database.Users.Add(new() { Name = "application", Password = "initial-password", Permission = "none", Privileges = ["Select", "Insert"] });
+
 		if(bootstrap != null)
 			server.Database.Settings["Bootstrap"] = bootstrap;
 		var plan = new MigrationPlan { Name = "test", Version = "1.0.0", Runtime = "linux-x64", Databases = [server.Database], Steps = [step] };
@@ -218,6 +219,7 @@ public sealed class MigrationTDengineTest
 				probe.Start();
 				this.Port = ((IPEndPoint)probe.LocalEndpoint).Port;
 			}
+
 			_listener.Prefixes.Add($"http://127.0.0.1:{this.Port}/");
 			_listener.Start();
 			_pump = this.PumpAsync(reply);
@@ -241,6 +243,7 @@ public sealed class MigrationTDengineTest
 					var context = await _listener.GetContextAsync().WaitAsync(_stop.Token);
 					this.RequestPath = context.Request.Url.AbsolutePath;
 					_socket = (await context.AcceptWebSocketAsync(null)).WebSocket;
+
 					try { await this.HandleAsync(reply); }
 					catch(WebSocketException) { }
 					finally { _socket.Dispose(); }
@@ -257,6 +260,7 @@ public sealed class MigrationTDengineTest
 			{
 				using var message = new MemoryStream();
 				WebSocketReceiveResult received;
+
 				do
 				{
 					received = await _socket.ReceiveAsync(new ArraySegment<byte>(buffer), _stop.Token);
@@ -264,10 +268,12 @@ public sealed class MigrationTDengineTest
 						return;
 					message.Write(buffer, 0, received.Count);
 				} while(!received.EndOfMessage);
+
 				using var document = JsonDocument.Parse(message.ToArray());
 				var request = document.RootElement.Clone();
 				this.Requests.Add(request);
 				var response = reply(request);
+
 				if(response == null)
 					continue;
 				var bytes = JsonSerializer.SerializeToUtf8Bytes(response);
@@ -281,6 +287,7 @@ public sealed class MigrationTDengineTest
 			_stop.Cancel();
 			_socket?.Abort();
 			_listener.Close();
+
 			try { await _pump; }
 			finally { _socket?.Dispose(); _stop.Dispose(); }
 		}

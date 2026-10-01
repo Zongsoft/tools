@@ -49,6 +49,9 @@ internal static class NugetAssets
 {
 	#region 框架路径
 	/// <summary>调整包缓存中的库目录；无需调整或没有适用框架时返回原路径。</summary>
+	/// <param name="directory">包含目标框架子目录的库目录。</param>
+	/// <param name="variables">包含目标框架配置的部署变量。</param>
+	/// <returns>调整后的目标框架路径；无需调整或没有适用框架时为原路径。</returns>
 	internal static string ResolveLibraryPath(string directory, IDictionary<string, string> variables)
 	{
 		if(string.IsNullOrEmpty(directory) || !Utility.TryGetTargetFramework(variables, out var framework))
@@ -94,6 +97,11 @@ internal static class NugetAssets
 
 	#region 资产选择
 	/// <summary>展开已选资产组并应用内容复制规则，按目标相对路径合并同一包的文件。</summary>
+	/// <param name="path">已解包的本地包目录。</param>
+	/// <param name="framework">选择资产时使用的目标框架。</param>
+	/// <param name="variables">包含平台、架构及资产选择配置的部署变量。</param>
+	/// <param name="cancellation">用于取消资产遍历的令牌。</param>
+	/// <returns>应用资产选择和内容复制规则后的路径项。</returns>
 	internal static IEnumerable<DeploymentUtility.PathToken> GetPackageFiles(string path, string framework, IDictionary<string, string> variables, CancellationToken cancellation)
 	{
 		cancellation.ThrowIfCancellationRequested();

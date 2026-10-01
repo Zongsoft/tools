@@ -133,6 +133,7 @@ partial class Generator
 	static Buffer CreateDataTarball(IReadOnlyCollection<Package.Entry> entries)
 	{
 		var buffer = new Buffer();
+
 		try
 		{
 			using(var gzip = new GZipStream(buffer, CompressionLevel.Optimal, true))
@@ -158,6 +159,7 @@ partial class Generator
 	static Buffer CreateControlTarball(string control, Package package)
 	{
 		var buffer = new Buffer();
+
 		try
 		{
 			using(var gzip = new GZipStream(buffer, CompressionLevel.Optimal, true))

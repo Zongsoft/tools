@@ -3,7 +3,7 @@
  *   钟峰(Popeye Zhong) <zongsoft@gmail.com>
  *
  * The MIT License (MIT)
- * 
+ *
  * Copyright (C) 2015 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -12,10 +12,10 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -31,6 +31,7 @@ using System.Text.RegularExpressions;
 
 namespace Zongsoft.Regular;
 
+/// <summary>提供正则表达式编辑、匹配及选项设置界面。</summary>
 public partial class MainForm : Form
 {
 	#region 私有变量
@@ -40,6 +41,7 @@ public partial class MainForm : Form
 	#endregion
 
 	#region 构造函数
+	/// <summary>初始化正则表达式工具的主窗口。</summary>
 	public MainForm()
 	{
 		this.InitializeComponent();

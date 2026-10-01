@@ -53,6 +53,7 @@ partial class Migrator
 								throw new InvalidDataException(string.Format(MigrationResources.ParameterValueInvalid_Message, "Collation"));
 							sql += " COLLATE " + Quote(collation);
 						}
+
 						return sql;
 					}, cancellation);
 
@@ -62,6 +63,7 @@ partial class Migrator
 					return;
 
 				var timeout = database.Options.Seconds("CommandTimeout", 300);
+
 				await using(var connection = this.Connect(database, database.Settings.Get("Bootstrap")))
 				{
 					await connection.OpenAsync(cancellation);
@@ -150,12 +152,16 @@ partial class Migrator
 					}
 
 					if(MigrationPrivileges.UsesSequences(privileges) || privileges.Any(value => value is "CreateTable" or "CreateIndex"))
+					{
 						foreach(var sequence in sequences)
 							await ExecuteAsync(connection, "GRANT UPDATE ON OBJECT::" + Quote(sequence[0]) + "." + Quote(sequence[1]) + " TO " + Quote(user.Name), timeout, cancellation);
+					}
 
 					if(privileges.Contains("Execute", StringComparer.Ordinal))
+					{
 						foreach(var function in functions)
 							await ExecuteAsync(connection, "GRANT SELECT ON OBJECT::" + Quote(function[0]) + "." + Quote(function[1]) + " TO " + Quote(user.Name), timeout, cancellation);
+					}
 				}
 			}
 			#endregion

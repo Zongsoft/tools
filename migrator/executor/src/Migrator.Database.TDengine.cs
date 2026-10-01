@@ -257,6 +257,7 @@ partial class Migrator
 				private ValueTask SendAsync(string action, Action<Utf8JsonWriter> arguments, CancellationToken cancellation)
 				{
 					var buffer = new System.Buffers.ArrayBufferWriter<byte>();
+
 					using(var writer = new Utf8JsonWriter(buffer))
 					{
 						writer.WriteStartObject();

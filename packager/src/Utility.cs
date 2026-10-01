@@ -10,7 +10,7 @@
  *   钟峰(Popeye Zhong) <zongsoft@gmail.com>
  *
  * The MIT License (MIT)
- * 
+ *
  * Copyright (C) 2020-2026 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -43,6 +43,8 @@ internal static partial class Utility
 {
 	#region 公共方法
 	/// <summary>解析单个来源；显式文件路径允许其祖先是链接。</summary>
+	/// <param name="path">要解析的单个来源路径。</param>
+	/// <returns>唯一匹配的文件系统项；匹配数量不为一时抛出异常。</returns>
 	public static FileSystemInfo Resolve(string path) => Search(path).Single().Result;
 
 	public static string GetRuntimeIdentifier(Platform platform, Architecture? architecture) => platform == Platform.Windows ?

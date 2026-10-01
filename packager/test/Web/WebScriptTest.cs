@@ -72,6 +72,7 @@ public class WebScriptTest
 		Assert.NotEqual(0, result.Code);
 		Assert.DoesNotContain("later", result.Output);
 		Assert.True(File.Exists(fixture.Configuration));
+
 		if(failure != "reload")
 			Assert.DoesNotContain("reload", fixture.Calls);
 	}
@@ -136,6 +137,7 @@ public class WebScriptTest
 		Assert.Equal(0, result.Code);
 		Assert.False(File.Exists(fixture.Link));
 		Assert.False(Directory.Exists(Path.Combine(fixture.Root, ".web")));
+
 		if(activation == "0")
 			Assert.Empty(fixture.Calls);
 	}
@@ -167,6 +169,7 @@ public class WebScriptTest
 		var result = await fixture.RunAsync(package.Scripts.Delivered + "\n" + package.Scripts.Installed, "1");
 		var calls = fixture.Calls;
 		Assert.True(calls.IndexOf("pre", StringComparison.Ordinal) < calls.IndexOf("main", StringComparison.Ordinal));
+
 		if(failMain)
 		{
 			Assert.Equal(19, result.Code);

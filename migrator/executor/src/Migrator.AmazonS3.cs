@@ -90,6 +90,7 @@ partial class Migrator
 						throw;
 					}
 				}
+
 				await ConfigureAsync(client, bucket, cancellation);
 
 				if(bucket.Public)

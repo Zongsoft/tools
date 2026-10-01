@@ -18,7 +18,7 @@
 - 三格式的安装/升级/覆盖/卸载阶段不同，保留 Debian configure 和 RPM 剩余实例语义。根路径别名、符号链接与安装目录必须规范化，避免越界目标。
 - [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Searcher 处理本地通配与链接，按逻辑来源定位相对路径。变量依次加载默认值、环境、从根到最终 source 的 `.env`、显式选项；共享 Utility 用 Profile.Load 加载，多级段落与条目以下划线拼名。先解析并固定 source，再加载 `.env`，不反向推导源目录；身份仍仅来自显式选项与源版本文件。TextSource 的 file:/text: 只解释一次。
 - --listen 生成宿主 --urls，完整地址保留；已有服务 ExecStart 不改写。--dependencies 统一使用 name[:range]：NuGet 风格区间及 [v) 下限简写，区间外逗号/分号为 AND、| 为 OR；Dependency 保留原生版本端点。Debian 展开为关系组，RPM 双边范围用 with、替代用 or，并声明相应 rpmlib 能力。其他关系选项保留原生语法。
-- 主页选项及变量为 homepage；manufacturer 未定义、null 或空字符串默认 Zongsoft，纯空白不触发默认值。厂家分别写入 tar PAX 全局 manufacturer、Debian 自定义 Manufacturer、RPM VENDOR(1011)，与 maintainer 独立；maintainer 选项默认 Zongsoft。
+- 主页选项及变量为 homepage；manufacturer 未定义、null 或空字符串默认 Zongsoft，纯空白不触发默认值。厂家分别写入 tar PAX 全局 Manufacturer、Debian 自定义 Manufacturer、RPM VENDOR(1011)，与 maintainer 独立；maintainer 选项默认 Zongsoft。
 - 安装包来源元数据使用 Packager:程序集名@版本，独立于应用 .version。大载荷使用 DeleteOnClose 临时流和增量摘要，不分配完整包体。
 
 ## 验证与边界

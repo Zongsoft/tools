@@ -50,6 +50,7 @@ internal static class Program
 		try
 		{
 			var plan = MigrationPlan.Load(args[1]);
+
 			try
 			{
 				MigrationRuntime.EnsureCurrent(plan.Runtime);

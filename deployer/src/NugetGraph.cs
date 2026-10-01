@@ -70,6 +70,9 @@ internal sealed class NugetGraph
 
 	#region 依赖查询
 	/// <summary>取得最适合目标框架的依赖组；此处不应用部署忽略规则。</summary>
+	/// <param name="package">要查询依赖的包元数据。</param>
+	/// <param name="framework">匹配依赖组的目标框架。</param>
+	/// <returns>最适合目标框架的依赖集合；无匹配组时为空集合。</returns>
 	public static IEnumerable<PackageDependency> GetDependencies(NugetUtility.PackageMetadata package, string framework) =>
 		GetDependencies(package, NuGetFramework.Parse(framework));
 
@@ -77,6 +80,9 @@ internal sealed class NugetGraph
 		NuGetFrameworkExtensions.GetNearest(package.DependencySets, framework)?.Packages ?? [];
 
 	/// <summary>按默认和自定义前缀判断是否忽略传递依赖，不用于过滤显式根请求。</summary>
+	/// <param name="variables">包含自定义忽略前缀的部署变量。</param>
+	/// <param name="name">要检查的传递依赖包名。</param>
+	/// <returns>包名匹配默认或自定义忽略前缀时为真，否则为假。</returns>
 	public static bool ShouldIgnoreDependency(IDictionary<string, string> variables, string name)
 	{
 		var prefixes = new List<string> { "System.", "Microsoft.Extensions.", "Zongsoft." };
@@ -90,6 +96,11 @@ internal sealed class NugetGraph
 
 	#region 求解入口
 	/// <summary>固定根包版本并求解满足全部约束的依赖；指定锁定记录时仅使用锁内候选版本。</summary>
+	/// <param name="variables">包含包源和依赖求解选项的部署变量。</param>
+	/// <param name="requests">包含根包元数据及其目标框架的请求。</param>
+	/// <param name="cancellation">用于取消依赖求解的令牌。</param>
+	/// <param name="locked">可选的锁定包记录，提供时限制候选版本。</param>
+	/// <returns>完成依赖求解并返回按包名索引的元数据字典的任务。</returns>
 	public static Task<Dictionary<string, NugetUtility.PackageMetadata>> ResolveAsync(IDictionary<string, string> variables,
 		IEnumerable<(NugetUtility.PackageMetadata Metadata, string Framework)> requests, CancellationToken cancellation, IReadOnlyList<PackageSelection> locked = null) =>
 		new NugetGraph(variables, requests, cancellation, locked).ResolveAsync();
@@ -112,6 +123,8 @@ internal sealed class NugetGraph
 
 	#region 版本搜索
 	/// <summary>尝试完成当前分支的版本选择；约束冲突或循环时返回空以便上层回溯。</summary>
+	/// <param name="selected">当前搜索分支已选定的包版本。</param>
+	/// <returns>返回完整版本选择的任务；约束冲突或循环时结果为空。</returns>
 	private async Task<Dictionary<string, NugetUtility.PackageMetadata>> SearchAsync(Dictionary<string, NugetUtility.PackageMetadata> selected)
 	{
 		_cancellation.ThrowIfCancellationRequested();
@@ -176,6 +189,9 @@ internal sealed class NugetGraph
 
 	#region 约束收集
 	/// <summary>根据当前已选版本重建各框架的依赖约束，并检测活动依赖链上的循环。</summary>
+	/// <param name="selected">当前已选定的包版本。</param>
+	/// <param name="requirements">输出各包的版本范围及父包约束。</param>
+	/// <returns>成功收集依赖约束时为真；发现依赖循环时为假。</returns>
 	private bool TryGetRequirements(Dictionary<string, NugetUtility.PackageMetadata> selected, out Dictionary<string, List<(VersionRange Range, string Parent)>> requirements)
 	{
 		var collected = new Dictionary<string, List<(VersionRange Range, string Parent)>>(StringComparer.OrdinalIgnoreCase);

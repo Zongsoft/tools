@@ -19,7 +19,7 @@
 
 ## 验证
 
-- Cake 的 `restore` 显式传递 `--edition` 对应的 `Configuration`，与编译和测试一致；测试项目只从 `test/*.csproj` 收集，不递归扫描构建输出中的副本。测试通过主项目获得 Core 依赖，不单独添加本地 Release DLL 引用。
+- Cake 的 `restore` 显式传递 `--edition` 对应的 `Configuration`，与编译和测试一致；测试项目只从 `test/*.csproj` 收集，不递归扫描构建输出中的副本。Release 测试通过主项目获得 Core 包依赖；Debug 测试直接断言 Core 的 ProfileException 类型，因此还显式引用与主项目相同配置和目标框架的本地 Core 输出，不添加本地 Release DLL 引用。
 
 - 最小构建：`dotnet build Zongsoft.Tools.Deployer.slnx -f net10.0`。
 - 解析行为使用临时 `.deploy`、临时源/目标和本地 NuGet 缓存覆盖路径、变量、过滤、覆盖、删除和失败分支。

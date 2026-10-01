@@ -129,12 +129,14 @@ public sealed class MigrationPlanTest
 		Assert.Equal(hasMetadata, root.TryGetProperty("Title", out var title));
 		Assert.Equal(hasMetadata, root.TryGetProperty("Summary", out var summary));
 		Assert.Equal(hasMetadata, root.TryGetProperty("Description", out var description));
+
 		if(hasMetadata)
 		{
 			Assert.Equal("", title.GetString());
 			Assert.Equal("summary", summary.GetString());
 			Assert.Equal("description", description.GetString());
 		}
+
 		var user = root.GetProperty("Databases")[0].GetProperty("Users")[0];
 		Assert.False(user.TryGetProperty("Host", out _));
 		Assert.Equal(0, user.GetProperty("Roles").GetArrayLength());
@@ -144,6 +146,7 @@ public sealed class MigrationPlanTest
 		Assert.False(steps[1].TryGetProperty("DatabaseIndex", out _));
 		Assert.Equal(0, steps[1].GetProperty("Scripts").GetArrayLength());
 		Assert.False(steps[1].GetProperty("Buckets")[0].GetProperty("Public").GetBoolean());
+
 		using var stream = new MemoryStream();
 		using(var writer = new Utf8JsonWriter(stream))
 			root.WriteTo(writer);

@@ -42,6 +42,7 @@ public sealed class MigrationBundleTest
 		var content = File.ReadAllText(launcher.Source);
 		Assert.Contains("Zongsoft.Tools.Migrator.Executor", content);
 		Assert.DoesNotContain("dotnet", content);
+
 		if(runtime == "win-x64")
 			Assert.Contains("\r\n", content);
 		else
@@ -66,10 +67,12 @@ public sealed class MigrationBundleTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var runtimeRoot = directory.CreateRuntime();
+
 		foreach(var runtime in new[] { "linux-x64", "linux-arm64" })
 		{
 			var parameters = provider == "amazon.s3" ? new Dictionary<string, string> { ["Server"] = "http://localhost:9000", ["Region"] = "us-east-1", ["AccessKey"] = "test", ["SecretKey"] = "test" } : provider is "sqlite" or "duckdb" ? new() { ["Database"] = "/var/lib/zongsoft/test.db" } : new() { ["Server"] = "localhost", ["Database"] = "hosting", ["UserName"] = "operator", ["Password"] = "" };
 			var plan = new MigrationPlan { Name = "zongsoft.daemon", Version = "1.1.0", Runtime = runtime, Steps = [new() { Provider = provider }] };
+
 			if(provider == "amazon.s3")
 				plan.Steps[0].Settings = parameters;
 			else
@@ -77,6 +80,7 @@ public sealed class MigrationBundleTest
 				plan.Steps[0].DatabaseIndex = 0;
 				plan.Databases.Add(new() { Provider = provider, Name = "hosting", Settings = provider is "sqlite" or "duckdb" ? new() : parameters, Options = provider is "sqlite" or "duckdb" ? new() { ["Path"] = "/var/lib/zongsoft/test.db" } : new() });
 			}
+
 			using var bundle = MigrationBundle.Build(plan, null, runtimeRoot);
 			var native = Assert.Single(bundle.Entries, entry => entry.EntryName == "Zongsoft.Tools.Migrator.Executor");
 			Assert.Equal(runtime == "linux-x64" ? (byte)62 : (byte)183, File.ReadAllBytes(native.Source)[18]);
@@ -133,6 +137,7 @@ public sealed class MigrationBundleTest
 		var expected = new[] { "CREATE TABLE samples (title NVARCHAR(100));", "SELECT N'GO';", "INSERT INTO samples VALUES (N'附件');", "SELECT N'other task';" };
 		Assert.Equal(expected.Length, scripts.Length);
 		Assert.Equal(expected.Length, bundle.Entries.Count(entry => entry.EntryName.EndsWith(".sql", StringComparison.Ordinal)));
+
 		for(var index = 0; index < expected.Length; index++)
 		{
 			var path = $".artifacts/mssql/{index + 1}.sql";

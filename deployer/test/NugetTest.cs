@@ -63,6 +63,7 @@ public class NugetTest
 		Assert.Equal(0, result.Failures);
 		var path = Path.Combine(fixture.Destination, flatten ? "config.txt" : "nested/config.txt");
 		Assert.Equal(exists, File.Exists(path));
+
 		if(exists)
 			Assert.Equal("selected content", File.ReadAllText(path));
 		Assert.DoesNotContain(Directory.GetFiles(fixture.Destination, "*", SearchOption.AllDirectories), file => Path.GetFileName(file) == "excluded.txt");

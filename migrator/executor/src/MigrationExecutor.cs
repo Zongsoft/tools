@@ -79,6 +79,7 @@ public sealed class MigrationExecutor(Func<string, Migrator> resolve = null)
 
 			context.StepNumber = 0;
 			phase = "databases";
+
 			for(var index = 0; index < plan.Databases.Count; index++)
 			{
 				current = index.ToString(System.Globalization.CultureInfo.InvariantCulture);

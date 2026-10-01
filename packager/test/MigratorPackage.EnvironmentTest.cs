@@ -30,6 +30,7 @@ public sealed partial class MigratorPackageTest
 		var previousSource = Environment.GetEnvironmentVariable("zongsoft_env_source");
 		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
 		var previousTerminal = (ITerminal)terminalField.GetValue(null);
+
 		try
 		{
 			Environment.CurrentDirectory = Path.Combine(directory.Path, "working");
@@ -66,6 +67,7 @@ public sealed partial class MigratorPackageTest
 		var previousSource = Environment.GetEnvironmentVariable("zongsoft_env_only_source");
 		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
 		var previousTerminal = (ITerminal)terminalField.GetValue(null);
+
 		try
 		{
 			Environment.CurrentDirectory = directory.Path;
@@ -98,6 +100,7 @@ public sealed partial class MigratorPackageTest
 		var artifact = directory.Write("out/zongsoft.daemon@1.0.0-x64.tar.gz", "previous archive");
 		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
 		var previousTerminal = (ITerminal)terminalField.GetValue(null);
+
 		try
 		{
 			Terminal.Default = DispatchProxy.Create<ITerminal, RecordingTerminal>();

@@ -34,6 +34,7 @@ public sealed class PackageArtifactTest
 		var configuration = directory.Write("source/config/settings.conf", "hosting configuration");
 		Directory.CreateDirectory(Path.Combine(source, "config", "empty"));
 		var mode = OperatingSystem.IsWindows() ? (UnixFileMode)493 : (UnixFileMode)488;
+
 		if(!OperatingSystem.IsWindows())
 			File.SetUnixFileMode(empty.FullName, mode);
 		var package = CreatePackage(format, source);
@@ -59,6 +60,7 @@ public sealed class PackageArtifactTest
 		Assert.True(Assert.Single(entries, item => item.Name == rootPrefix + "etc/zongsoft-artifact/empty").IsDirectory);
 		Assert.Equal(File.ReadAllBytes(configuration), Assert.Single(entries, item => item.Name == rootPrefix + "etc/zongsoft-artifact/settings.conf").Content);
 		Assert.Equal(entries.Count, entries.Select(item => item.Name).Distinct(StringComparer.Ordinal).Count());
+
 		if(format == "rpm")
 			AssertRpmDigest(archivePath, "/opt/zongsoft/web/data/", "payload.bin", content);
 
@@ -78,6 +80,7 @@ public sealed class PackageArtifactTest
 		using var directory = new MigrationTestDirectory();
 		var targetFile = directory.Write("targets/actual-name.dat", "linked file content");
 		File.SetLastWriteTimeUtc(targetFile, DateTimeOffset.FromUnixTimeSeconds(1700000000).UtcDateTime);
+
 		if(!OperatingSystem.IsWindows())
 			File.SetUnixFileMode(targetFile, (UnixFileMode)416);
 		directory.Write("targets/resources/ordinary/data.txt", "directory target content");
@@ -180,12 +183,14 @@ public sealed class PackageArtifactTest
 
 		var entries = ReadArchive(Path.Combine(output, package.FileName), format);
 		var prefix = format == "tar" ? "" : "opt/zongsoft/web/";
+
 		foreach(var name in new[] { "nested", "nested/deep" })
 		{
 			var entry = Assert.Single(entries, item => item.Name == prefix + name);
 			Assert.True(entry.IsDirectory);
 			Assert.Equal((UnixFileMode)493, entry.Mode);
 		}
+
 		Assert.Equal("generated ancestors", Encoding.UTF8.GetString(Assert.Single(entries, item => item.Name == prefix + "nested/deep/payload.txt").Content));
 	}
 
@@ -278,6 +283,7 @@ public sealed class PackageArtifactTest
 		var package = CreatePackage(format, directory.Path);
 		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
 		var previousTerminal = (ITerminal)terminalField.GetValue(null);
+
 		try
 		{
 			Terminal.Default = DispatchProxy.Create<ITerminal, MigratorPackageTest.RecordingTerminal>();
@@ -310,11 +316,13 @@ public sealed class PackageArtifactTest
 		const int SIZE = 64 * 1024 * 1024;
 		var block = new byte[1024 * 1024];
 		new Random(1751).NextBytes(block);
+
 		using(var stream = File.Create(file))
 		{
 			for(var offset = 0; offset < SIZE; offset += block.Length)
 				stream.Write(block);
 		}
+
 		var package = CreatePackage(format, source);
 		package.Entries.Load(source, ["payload.bin"]);
 
@@ -330,6 +338,7 @@ public sealed class PackageArtifactTest
 		Assert.Equal(SIZE, payload.Content.Length);
 		using var original = File.OpenRead(file);
 		Assert.Equal(SHA256.HashData(original), SHA256.HashData(payload.Content));
+
 		if(format == "rpm")
 			AssertRpmDigest(archivePath, "/opt/zongsoft/web/", "payload.bin", payload.Content);
 	}
@@ -469,6 +478,7 @@ public sealed class PackageArtifactTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var package = (Package.Deb)CreatePackage("deb", directory.Path);
+
 		switch(field)
 		{
 			case "Provides":
@@ -531,6 +541,7 @@ public sealed class PackageArtifactTest
 		gzip.CopyTo(copy);
 		bytes = copy.ToArray();
 		var entries = new List<ArchiveEntry>();
+
 		for(var offset = 0; offset + 110 <= bytes.Length;)
 		{
 			Assert.Equal("070701", Encoding.ASCII.GetString(bytes, offset, 6));
@@ -545,6 +556,7 @@ public sealed class PackageArtifactTest
 			entries.Add(new(name, bytes[offset..(offset + size)], (UnixFileMode)(mode & 0xFFF), size, (mode & 0xF000) == 0x4000));
 			offset = (offset + size + 3) & ~3;
 		}
+
 		return entries;
 	}
 
@@ -559,6 +571,7 @@ public sealed class PackageArtifactTest
 				return bytes[(offset + 60)..(offset + 60 + size)];
 			offset += 60 + size + (size & 1);
 		}
+
 		throw new InvalidDataException("Missing Debian member: " + target);
 	}
 
@@ -571,6 +584,7 @@ public sealed class PackageArtifactTest
 		using var reader = new TarReader(gzip);
 		var entries = new List<ArchiveEntry>();
 		TarEntry entry;
+
 		while((entry = reader.GetNextEntry()) != null)
 		{
 			if(entry.EntryType == TarEntryType.GlobalExtendedAttributes)
@@ -579,6 +593,7 @@ public sealed class PackageArtifactTest
 			entry.DataStream?.CopyTo(copy);
 			entries.Add(new(NormalizeName(entry.Name), copy.ToArray(), entry.Mode, entry.Length, entry.EntryType == TarEntryType.Directory));
 		}
+
 		return entries;
 	}
 
@@ -633,6 +648,7 @@ public sealed class PackageArtifactTest
 			result[index] = Encoding.UTF8.GetString(bytes, offset, end - offset);
 			offset = end + 1;
 		}
+
 		return result;
 	}
 

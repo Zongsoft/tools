@@ -526,7 +526,7 @@ Package.InstallScripts 的 Delivered 独立于四个生命周期。Tar 复制载
 
 主页的选项名和变量名为 `homepage`；`Package.Homepage` 提供 Debian `Homepage` 与 RPM `URL`（1020）的值。`manufacturer` 提供 `Package.Manufacturer`，未定义、null 或展开后为空字符串时使用共享默认值 `Zongsoft`。访问器在通用规范化把纯空白归为空字符串之前保留该原始值。`maintainer` 选项的默认值也为 `Zongsoft`，两者独立保存。
 
-tar 以 PAX 全局属性 `manufacturer` 保存厂家，Debian 写入自定义 control 字段 `Manufacturer`，RPM 写入标准 `VENDOR` 字符串标签（1011）。Debian 沿用既有文本规范化，包括不写入纯空白的厂家字段；这些元数据不增加载荷条目。参见 [Debian 自定义字段](https://www.debian.org/doc/debian-policy/ch-controlfields.html#user-defined-fields)与 [RPM 标签说明](https://rpm.org/docs/latest/manual/tags.html)。
+tar 以 PAX 全局属性 `Manufacturer` 保存厂家，Debian 写入自定义 control 字段 `Manufacturer`，RPM 写入标准 `VENDOR` 字符串标签（1011）。Debian 沿用既有文本规范化，包括不写入纯空白的厂家字段；这些元数据不增加载荷条目。参见 [Debian 自定义字段](https://www.debian.org/doc/debian-policy/ch-controlfields.html#user-defined-fields)与 [RPM 标签说明](https://rpm.org/docs/latest/manual/tags.html)。
 
 ## 打包器版本元数据
 

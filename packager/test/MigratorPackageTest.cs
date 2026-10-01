@@ -43,6 +43,7 @@ public sealed partial class MigratorPackageTest
 		var context = new CommandContext(new CommandExecutor(), CommandLine.Parse(CommandLine.Get(arguments))[0], command, null);
 		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
 		var terminal = (ITerminal)terminalField.GetValue(null);
+
 		try
 		{
 			Terminal.Default = DispatchProxy.Create<ITerminal, RecordingTerminal>();
@@ -256,6 +257,7 @@ public sealed partial class MigratorPackageTest
 		var context = new CommandContext(new CommandExecutor(), CommandLine.Parse(CommandLine.Get(arguments) + " " + option)[0], command, null);
 		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
 		var terminal = (ITerminal)terminalField.GetValue(null);
+
 		try
 		{
 			Terminal.Default = DispatchProxy.Create<ITerminal, RecordingTerminal>();
@@ -306,6 +308,7 @@ public sealed partial class MigratorPackageTest
 		Assert.Contains(Migrator.StateDirectory(package), script);
 		Assert.Contains("set -e", script);
 		Assert.DoesNotContain("apply || true", script);
+
 		if(format == "deb")
 			AssertOrdered(script, "configure)", Path.GetFileName(pair.Script) + "\" apply");
 		if(format == "tar")
@@ -440,6 +443,7 @@ public sealed partial class MigratorPackageTest
 		var references = assembly.GetReferencedAssemblies().Select(reference => reference.Name).ToArray();
 		Assert.DoesNotContain(references, name => name.StartsWith("Zongsoft.Tools.Migrator", StringComparison.Ordinal) || name.StartsWith("AWSSDK.", StringComparison.Ordinal));
 		Assert.DoesNotContain(assembly.GetTypes(), type => type.Name is "MigrationPlan" or "MigrationLoader" or "MigrationBundle" or "MigrateCommand");
+
 		foreach(var name in new[] { "Microsoft.Data.SqlClient", "MySqlConnector", "Npgsql", "Microsoft.Data.Sqlite", "DuckDB.NET.Data", "TDengine" })
 			Assert.DoesNotContain(name, references);
 	}
@@ -525,6 +529,7 @@ public sealed partial class MigratorPackageTest
 			var offset = store + ReadInt(bytes, entry + 8);
 			return Encoding.UTF8.GetString(bytes, offset, Array.IndexOf(bytes, (byte)0, offset) - offset);
 		}
+
 		throw new InvalidDataException("RPM post-install tag missing.");
 	}
 
@@ -558,6 +563,7 @@ public sealed partial class MigratorPackageTest
 			entries.Add(name, bytes[offset..(offset + size)]);
 			offset = (offset + size + 3) & ~3;
 		}
+
 		return entries;
 	}
 
@@ -567,6 +573,7 @@ public sealed partial class MigratorPackageTest
 		var result = new Dictionary<string, byte[]>();
 		var offset = 8;
 		Assert.Equal("!<arch>\n", Encoding.ASCII.GetString(bytes, 0, 8));
+
 		while(offset + 60 <= bytes.Length)
 		{
 			var name = Encoding.ASCII.GetString(bytes, offset, 16).Trim().TrimEnd('/');
@@ -574,6 +581,7 @@ public sealed partial class MigratorPackageTest
 			result.Add(name, bytes[(offset + 60)..(offset + 60 + size)]);
 			offset += 60 + size + (size & 1);
 		}
+
 		return result;
 	}
 
@@ -584,6 +592,7 @@ public sealed partial class MigratorPackageTest
 		using var reader = new TarReader(gzip);
 		var result = new Dictionary<string, byte[]>(StringComparer.Ordinal);
 		TarEntry entry;
+
 		while((entry = reader.GetNextEntry()) != null)
 		{
 			if(entry.DataStream == null)
@@ -592,6 +601,7 @@ public sealed partial class MigratorPackageTest
 			entry.DataStream.CopyTo(content);
 			result.Add(entry.Name, content.ToArray());
 		}
+
 		return result;
 	}
 
@@ -608,6 +618,7 @@ public sealed partial class MigratorPackageTest
 		Assert.Contains(entry.Type, new[] { 6, 8 });
 		var result = new string[entry.Count];
 		var offset = entry.Offset;
+
 		for(var index = 0; index < result.Length; index++)
 		{
 			var end = Array.IndexOf(bytes, (byte)0, offset);
@@ -615,6 +626,7 @@ public sealed partial class MigratorPackageTest
 			result[index] = Encoding.UTF8.GetString(bytes, offset, end - offset);
 			offset = end + 1;
 		}
+
 		return result;
 	}
 

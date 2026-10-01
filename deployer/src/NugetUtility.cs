@@ -70,9 +70,11 @@ public static class NugetUtility
 
 	#region 初始方法
 	/// <summary>清除指定变量上下文的包访问缓存，供新的部署调用重新读取包信息。</summary>
+	/// <param name="variables">标识本次部署会话的变量字典。</param>
 	internal static void ResetCache(IDictionary<string, string> variables) => _caches.Remove(variables);
 
 	/// <summary>为部署变量补入缺少的包源、用户目录和包缓存目录。</summary>
+	/// <param name="variables">接收默认包源、用户目录及包缓存目录的部署变量。</param>
 	public static void Initialize(IDictionary<string, string> variables)
 	{
 		if(!variables.ContainsKey(NUGET_SERVER_ENVIRONMENT))
@@ -88,6 +90,8 @@ public static class NugetUtility
 
 	#region 包源路径
 	/// <summary>获取配置的 NuGet 包源；未指定时使用官方 V3 包源。</summary>
+	/// <param name="variables">包含包源地址的部署变量。</param>
+	/// <returns>配置的包源地址；未指定时为官方 NuGet V3 地址。</returns>
 	public static string GetNugetServer(IDictionary<string, string> variables)
 	{
 		if(!variables.TryGetValue(NUGET_SERVER_ENVIRONMENT, out var server) || string.IsNullOrWhiteSpace(server))
@@ -97,12 +101,18 @@ public static class NugetUtility
 	}
 
 	/// <summary>获取配置的包缓存目录；未指定时使用 NuGet 用户目录下的 packages 目录。</summary>
+	/// <param name="variables">包含包缓存及 NuGet 用户目录的部署变量。</param>
+	/// <returns>配置的包缓存目录；未指定时为 NuGet 用户目录下的 packages 目录。</returns>
 	public static string GetPackagesDirectory(IDictionary<string, string> variables)
 	{
 		return variables.TryGetValue(NUGET_PACKAGES_ENVIRONMENT, out var directory) && !string.IsNullOrEmpty(directory) ? directory : DEFAULT_PACKAGES_DIRECTORY;
 	}
 
 	/// <summary>按 NuGet 缓存布局生成绝对目录；未指定版本时返回该包的版本列表目录，不执行文件系统访问。</summary>
+	/// <param name="packagesDirectory">本地包缓存根目录。</param>
+	/// <param name="name">包名称。</param>
+	/// <param name="version">可选的包版本；为空时只生成包的版本列表目录。</param>
+	/// <returns>符合 NuGet 缓存布局的绝对目录路径。</returns>
 	public static string GetFolderPath(string packagesDirectory, string name, NuGetVersion version = null)
 	{
 		var folder = new VersionFolderPathResolver(Path.GetFullPath(packagesDirectory));
@@ -112,6 +122,10 @@ public static class NugetUtility
 
 	#region 包访问
 	/// <summary>优先从本地读取包元数据，必要时访问包源；空版本或 latest 按预发布策略选择最高可用版本。</summary>
+	/// <param name="variables">包含包源、缓存和预发行选项的部署变量。</param>
+	/// <param name="name">包名称。</param>
+	/// <param name="version">包版本文本，空值或 latest 表示选择最高可用版本。</param>
+	/// <param name="cancellation">用于取消元数据查询的令牌。</param>
 	/// <returns>找到的包元数据；版本格式无效或找不到对应包时返回空。</returns>
 	public static async Task<PackageMetadata> GetPackageMetadataAsync(IDictionary<string, string> variables, string name, string version, CancellationToken cancellation)
 	{
@@ -161,6 +175,10 @@ public static class NugetUtility
 	}
 
 	/// <summary>合并本地与包源中的版本并按升序返回；离线模式仅查询本地目录，预发布筛选由调用方决定。</summary>
+	/// <param name="variables">包含包源、缓存及离线选项的部署变量。</param>
+	/// <param name="name">包名称。</param>
+	/// <param name="cancellation">用于取消版本查询的令牌。</param>
+	/// <returns>返回合并并排序后的包版本数组的任务。</returns>
 	internal static async Task<NuGetVersion[]> GetVersionsAsync(IDictionary<string, string> variables, string name, CancellationToken cancellation)
 	{
 		cancellation.ThrowIfCancellationRequested();
@@ -175,9 +193,13 @@ public static class NugetUtility
 		var path = GetFolderPath(GetPackagesDirectory(variables), name);
 
 		if(Directory.Exists(path))
+		{
 			foreach(var directory in Directory.EnumerateDirectories(path))
+			{
 				if(NuGetVersion.TryParse(Path.GetFileName(directory), out var version))
 					versions.Add(version);
+			}
+		}
 
 		if(!Deployer.Flag(variables, "offline"))
 		{
@@ -190,6 +212,10 @@ public static class NugetUtility
 	}
 
 	/// <summary>复用本地包或下载指定版本并返回缓存目录；离线缺包时报错。</summary>
+	/// <param name="variables">包含包源及本地缓存目录的部署变量。</param>
+	/// <param name="name">包名称。</param>
+	/// <param name="version">要下载的包版本。</param>
+	/// <param name="cancellation">用于取消下载的令牌。</param>
 	/// <returns>包的本地目录；未提供包名或版本，或者下载结果不可用时返回空。</returns>
 	public static async Task<string> DownloadPackageAsync(IDictionary<string, string> variables, string name, NuGetVersion version, CancellationToken cancellation)
 	{
@@ -217,7 +243,10 @@ public static class NugetUtility
 	#endregion
 
 	#region 包校验
-	/// <summary>按固定顺序汇总包内相对路径和文件内容摘要，排除链接项、包归档和缓存记账文件。/summary>
+	/// <summary>按固定顺序汇总包内相对路径和文件内容摘要，排除链接项、包归档和缓存记账文件。</summary>
+	/// <param name="variables">包含本地包缓存目录的部署变量。</param>
+	/// <param name="metadata">标识待计算摘要的包及其版本的元数据。</param>
+	/// <returns>按固定顺序汇总包内路径与内容的 SHA-256 十六进制摘要。</returns>
 	internal static string PackageHash(IDictionary<string, string> variables, PackageMetadata metadata)
 	{
 		var root = GetFolderPath(GetPackagesDirectory(variables), metadata.Identity.Id, metadata.Identity.Version);
@@ -281,18 +310,14 @@ public static class NugetUtility
 	#endregion
 
 	#region 嵌套子类
-	/// <summary>
-	/// 保存一个变量字典对应的元数据与版本查询缓存，不延长该字典的生命周期。
-	/// </summary>
+	/// <summary>保存一个变量字典对应的元数据与版本查询缓存，不延长该字典的生命周期。</summary>
 	private sealed class PackageCache
 	{
 		public readonly Dictionary<string, PackageMetadata> Metadata = new(StringComparer.OrdinalIgnoreCase);
 		public readonly Dictionary<string, NuGetVersion[]> Versions = new(StringComparer.OrdinalIgnoreCase);
 	}
 
-	/// <summary>
-	/// 保存依赖求解所需的包身份和框架依赖组，使调用方不依赖元数据来自包源、nuspec 或包归档。
-	/// </summary>
+	/// <summary>保存依赖求解所需的包身份和框架依赖组，使调用方不依赖元数据来自包源、nuspec 或包归档。</summary>
 	public sealed class PackageMetadata
 	{
 		private PackageMetadata(PackageIdentity identity, IEnumerable<PackageDependencyGroup> dependencySets)

@@ -409,6 +409,7 @@ public abstract partial class Package
 			entryName = Utility.NormalizePath(Path.Combine(prefix ?? string.Empty, entryName));
 			ValidatePath(entryName);
 			var manifest = Utility.NormalizePath(Path.Combine(rooted ? _package.InstallPath.TrimStart('/') : _package.EntryPrefix ?? string.Empty, ".edition"));
+
 			if(string.Equals(entryName, manifest, StringComparison.Ordinal))
 				return;
 

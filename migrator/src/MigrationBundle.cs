@@ -119,6 +119,7 @@ public sealed class MigrationBundle : IDisposable
 				{
 					stream.Position = 60;
 					var offset = reader.ReadInt32();
+
 					if(offset >= 64 && offset <= stream.Length - 6)
 					{
 						stream.Position = offset;
@@ -191,6 +192,7 @@ public sealed class MigrationBundle : IDisposable
 	private static string MessageScript(Func<string> message)
 	{
 		var culture = System.Globalization.CultureInfo.CurrentUICulture;
+
 		try
 		{
 			//同步读取两种资源后恢复当前执行上下文，不修改生成资源类的全局 Culture。

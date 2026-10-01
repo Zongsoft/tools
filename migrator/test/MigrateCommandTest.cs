@@ -42,6 +42,7 @@ public sealed partial class MigrateCommandTest
 		var arguments = Arguments(name, platform, architecture);
 		arguments.Add("--summary:Initial bootstrap");
 		arguments.Add("--description:Zongsoft hosting migration");
+
 		if(edition != null)
 			arguments.Add("--edition:" + edition);
 		arguments.Add("db.migration");
@@ -51,6 +52,7 @@ public sealed partial class MigrateCommandTest
 		Assert.True(result.Code == 0, result.Output);
 		var archive = Path.Combine(directory.Path, "out", Path.GetFileNameWithoutExtension(launcher) + ".tar.gz");
 		Assert.True(File.Exists(archive), archive);
+
 		using(var input = File.OpenRead(archive))
 		using(var gzip = new GZipStream(input, CompressionMode.Decompress))
 		using(var reader = new TarReader(gzip))
@@ -66,6 +68,7 @@ public sealed partial class MigrateCommandTest
 		var script = File.ReadAllText(Path.Combine(directory.Path, "out", launcher));
 		Assert.Contains(Path.GetFileName(archive), script);
 		Assert.DoesNotContain("systemctl", script);
+
 		if(runtime == "win-x64")
 			Assert.Contains("\r\n", script);
 		else
@@ -155,6 +158,7 @@ public sealed partial class MigrateCommandTest
 		PrepareMigration(directory, "/data/hosting.db");
 		var values = new Dictionary<string, string> { ["name"] = "wrong-name", ["version"] = "9.9.9", ["platform"] = "windows", ["architecture"] = "Arm64", ["output"] = "wrong-output", ["zongsoft_test_input"] = "db" };
 		var previous = values.ToDictionary(pair => pair.Key, pair => Environment.GetEnvironmentVariable(pair.Key));
+
 		try
 		{
 			foreach(var pair in values)
@@ -245,6 +249,7 @@ public sealed partial class MigrateCommandTest
 		var extension = windows ? ".cmd" : ".sh";
 		var launcher = Path.Combine(directory.Path, prefix + extension);
 		var state = Path.GetDirectoryName(directory.Write("state with spaces/marker", "unchanged"));
+
 		// Replace only the isolated execution boundary with a recording script; no native database process runs.
 		using(var file = File.Create(archive))
 		using(var gzip = new GZipStream(file, CompressionLevel.Optimal))
@@ -276,6 +281,7 @@ public sealed partial class MigrateCommandTest
 		Assert.True(generated.Code == 0, generated.Output);
 		var prefix = "out/zongsoft.daemon(migrate)@1.2.3_" + runtime;
 		var script = File.ReadAllText(Path.Combine(directory.Path, prefix + (runtime == "win-x64" ? ".cmd" : ".sh")));
+
 		if(runtime == "win-x64")
 		{
 			Assert.Contains("set \"MIGRATION_STATE=%~2\"", script);
@@ -413,9 +419,11 @@ public sealed partial class MigrateCommandTest
 			if(state != null)
 				process.StartInfo.ArgumentList.Add(state);
 		}
+
 		Assert.True(process.Start());
 		var output = process.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
 		var error = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
+
 		try
 		{
 			await process.WaitForExitAsync(TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
@@ -442,6 +450,7 @@ public sealed partial class MigrateCommandTest
 		var tool = Path.Combine(directory.Path, "tool");
 		Directory.CreateDirectory(tool);
 		var runtime = directory.CreateRuntime();
+
 		foreach(var file in Directory.EnumerateFiles(runtime, "*", SearchOption.AllDirectories))
 		{
 			var target = Path.Combine(tool, ".migrator", Path.GetRelativePath(runtime, file));
@@ -456,6 +465,7 @@ public sealed partial class MigrateCommandTest
 		Assert.NotNull(terminalField);
 		var previousTerminal = (ITerminal)terminalField.GetValue(null);
 		var terminal = DispatchProxy.Create<ITerminal, RecordingTerminal>();
+
 		try
 		{
 			Environment.CurrentDirectory = workingDirectory ?? directory.Path;
@@ -482,6 +492,7 @@ public sealed partial class MigrateCommandTest
 		using var reader = new TarReader(gzip);
 		var result = new List<(string, UnixFileMode, byte[])>();
 		TarEntry entry;
+
 		while((entry = reader.GetNextEntry()) != null)
 		{
 			if(entry.DataStream == null)
@@ -490,6 +501,7 @@ public sealed partial class MigrateCommandTest
 			entry.DataStream.CopyTo(content);
 			result.Add((entry.Name, entry.Mode, content.ToArray()));
 		}
+
 		return result;
 	}
 	#endregion

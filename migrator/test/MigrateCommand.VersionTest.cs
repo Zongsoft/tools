@@ -26,6 +26,7 @@ public sealed partial class MigrateCommandTest
 		var timestamp = File.GetLastWriteTimeUtc(path);
 		PrepareMigration(directory, "/data/hosting.db");
 		var previous = Environment.GetEnvironmentVariable("version");
+
 		try
 		{
 			Environment.SetEnvironmentVariable("version", "9.9.9");
@@ -88,6 +89,7 @@ public sealed partial class MigrateCommandTest
 		var timestamp = File.GetLastWriteTimeUtc(path);
 		PrepareMigration(directory, "/data/hosting.db");
 		File.SetAttributes(path, File.GetAttributes(path) | FileAttributes.ReadOnly);
+
 		try
 		{
 			var result = await RunAsync(directory, VersionArguments(absolute ? Path.Combine(directory.Path, value) : value));
@@ -140,9 +142,11 @@ public sealed partial class MigrateCommandTest
 		directory.Write(".env", "edition=Missing\nchosen_edition=community\n");
 		PrepareMigration(directory, "/data/hosting.db");
 		var arguments = VersionArguments(option);
+
 		if(edition != null)
 			arguments.Add("--edition:" + edition);
 		var previous = Environment.GetEnvironmentVariable("edition");
+
 		try
 		{
 			Environment.SetEnvironmentVariable("edition", "Wrong");
@@ -180,6 +184,7 @@ public sealed partial class MigrateCommandTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var manifest = Path.Combine(directory.Path, ".edition");
+
 		if(directoryPath)
 			Directory.CreateDirectory(manifest);
 		else
@@ -218,6 +223,7 @@ public sealed partial class MigrateCommandTest
 		var original = File.ReadAllBytes(path);
 		PrepareMigration(directory, "/data/hosting.db");
 		var arguments = VersionArguments(null);
+
 		if(edition != null)
 			arguments.Add("--edition:" + edition);
 
@@ -243,6 +249,7 @@ public sealed partial class MigrateCommandTest
 		var launcher = directory.Write("out/zongsoft.daemon(migrate)@2.3.4_linux-x64.sh", "previous launcher");
 		var arguments = VersionArguments(null);
 		arguments.Add("--overwrite");
+
 		if(edition != null)
 			arguments.Add("--edition:" + edition);
 
@@ -292,6 +299,7 @@ public sealed partial class MigrateCommandTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var previous = Environment.GetEnvironmentVariable("version");
+
 		try
 		{
 			Environment.SetEnvironmentVariable("version", "2.3.4");
@@ -369,6 +377,7 @@ public sealed partial class MigrateCommandTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var path = directory.Write(".version", "Zongsoft.Hosting@2.3.4");
+
 		using(var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
 		{
 			var result = await RunAsync(directory, VersionArguments(null));
@@ -378,6 +387,7 @@ public sealed partial class MigrateCommandTest
 			Assert.IsAssignableFrom<IOException>(result.Error.InnerException);
 			Assert.False(Directory.Exists(Path.Combine(directory.Path, "out")));
 		}
+
 		Assert.Equal("Zongsoft.Hosting@2.3.4", File.ReadAllText(path));
 	}
 
@@ -391,6 +401,7 @@ public sealed partial class MigrateCommandTest
 		var path = directory.Write("versions/app.release", "Other.Application@2.3.4");
 		PrepareMigration(directory, "/data/hosting.db");
 		var previous = Environment.GetEnvironmentVariable("zongsoft_version_path");
+
 		try
 		{
 			Environment.SetEnvironmentVariable("zongsoft_version_path", value);
@@ -407,6 +418,7 @@ public sealed partial class MigrateCommandTest
 				Assert.Contains("zongsoft_version_path", Assert.IsType<InvalidOperationException>(result.Error).Message);
 				Assert.False(Directory.Exists(Path.Combine(directory.Path, "out")));
 			}
+
 			Assert.Equal("Other.Application@2.3.4", File.ReadAllText(path));
 		}
 		finally { Environment.SetEnvironmentVariable("zongsoft_version_path", previous); }
@@ -504,6 +516,7 @@ public sealed partial class MigrateCommandTest
 			var succeeded = await RunAsync(directory, arguments);
 			Assert.Equal(0, succeeded.Code);
 			var archive = Assert.Single(Directory.GetFiles(Path.Combine(directory.Path, "out with spaces"), "*.tar.gz"));
+
 			using(var plan = JsonDocument.Parse(Assert.Single(ReadArchive(archive), entry => entry.Name == "migration.json").Content))
 				Assert.Equal("Release Candidate", plan.RootElement.GetProperty("Title").GetString());
 

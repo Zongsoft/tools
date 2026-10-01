@@ -56,9 +56,7 @@ public sealed class DeploymentOperation
 	#endregion
 
 	#region 内部属性
-	/// <summary>
-	/// 获取或设置包占位操作的延迟展开回调；只在本次部署会话中使用，不写入报告。
-	/// </summary>
+	/// <summary>获取或设置包占位操作的延迟展开回调；只在本次部署会话中使用，不写入报告。</summary>
 	[System.Text.Json.Serialization.JsonIgnore]
 	internal Func<CancellationToken, Task> Expand { get; set; }
 	#endregion

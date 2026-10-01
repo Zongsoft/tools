@@ -94,8 +94,10 @@ partial class Deployer
 				selection.RequiredBy.Add("manifest");
 
 			foreach(var root in this.Session.Roots)
+			{
 				if(root.Metadata.Identity.Equals(package.Identity))
 					selection.RequiredBy.Add("root");
+			}
 
 			foreach(var parent in this.Session.Packages.Values)
 			{
@@ -113,11 +115,13 @@ partial class Deployer
 		}
 
 		foreach(var key in new[] { "report", "lockFile" })
+		{
 			if(this.Variables.TryGetValue(key, out var output) && !string.IsNullOrEmpty(output))
 			{
 				var path = Path.GetFullPath(this.Normalize(output));
 				this.ValidateOutput(path, key == "report");
 			}
+		}
 
 		if(Flag(this.Variables, "locked"))
 		{

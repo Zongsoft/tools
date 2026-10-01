@@ -28,6 +28,7 @@ public sealed class MigrationRuntimeTest
 		};
 		var context = new MigrationContext(directory.Path, Path.Combine(directory.Path, "state"), logs.Add);
 		var migrator = Migrator.Create(migration.Provider);
+
 		try
 		{
 			await RunAsync(database, migration, context);
@@ -61,6 +62,7 @@ public sealed class MigrationRuntimeTest
 			DatabaseIndex = 0,
 			Scripts = [directory.Script(".artifacts/failure.sql", "CREATE TABLE samples (id INTEGER); INSERT INTO absent_table VALUES (1); INSERT INTO samples VALUES (2);")],
 		};
+
 		try
 		{
 			await Assert.ThrowsAnyAsync<DbException>(() => RunAsync(database, migration, new(directory.Path, Path.Combine(directory.Path, "state"))));
@@ -99,6 +101,7 @@ public sealed class MigrationRuntimeTest
 			DatabaseIndex = 0,
 			Scripts = [directory.Script(".artifacts/trigger.sql", "CREATE TABLE samples (id INTEGER); CREATE TABLE audit (message TEXT); CREATE TRIGGER sample_added AFTER INSERT ON samples BEGIN INSERT INTO audit VALUES ('first;part'); INSERT INTO audit VALUES ('second'); END; INSERT INTO samples VALUES (1);")],
 		};
+
 		try
 		{
 			await RunAsync(database, migration, new(directory.Path, Path.Combine(directory.Path, "state")));
@@ -129,6 +132,7 @@ public sealed class MigrationRuntimeTest
 			],
 		};
 		var context = new MigrationContext(directory.Path, Path.Combine(directory.Path, "state"));
+
 		try
 		{
 			await Assert.ThrowsAnyAsync<DbException>(() => RunAsync(database, migration, context));

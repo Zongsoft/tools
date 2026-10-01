@@ -103,6 +103,7 @@ public static class DeploymentUtility
 					{
 						expanded.Add(match.Path);
 						var prefix = CombineSuffix(suffix, Path.GetFileName(match.Path));
+
 						foreach(var child in Zongsoft.IO.Searcher.Search(new DirectoryInfo(match.Path), "**/*", Zongsoft.IO.Searcher.Target.Files, cancellation))
 						{
 							var relative = Path.GetDirectoryName(Path.GetRelativePath(match.Path, child.Path));

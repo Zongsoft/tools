@@ -66,6 +66,9 @@ internal static class DeploymentPath
 	}
 
 	/// <summary>验证显式源的逻辑范围；源链接允许读取目标，不能套用写入路径的链接禁令。</summary>
+	/// <param name="root">允许源路径所在的根目录。</param>
+	/// <param name="path">要验证的源路径。</param>
+	/// <returns>验证后的绝对源路径。</returns>
 	public static string ValidateSource(string root, string path)
 	{
 		root = Path.GetFullPath(root);
@@ -82,6 +85,8 @@ internal static class DeploymentPath
 
 	#region 路径标识
 	/// <summary>仅将普通路径不存在视为可选缺失，链接失效和访问错误仍交由调用方处理。</summary>
+	/// <param name="path">要检查的文件或目录路径。</param>
+	/// <returns>普通路径不存在时为真；存在时为假，链接失效或访问错误会抛出异常。</returns>
 	public static bool IsMissing(string path)
 	{
 		path = Path.GetFullPath(path);

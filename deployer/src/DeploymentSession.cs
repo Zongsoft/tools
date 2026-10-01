@@ -59,9 +59,7 @@ internal sealed class DeploymentSession
 	public Dictionary<string, NugetUtility.PackageMetadata> Packages { get; set; }
 	public DeploymentPlan LockedPlan { get; set; }
 	public Dictionary<string, NugetUtility.PackageMetadata> Requested { get; } = new(StringComparer.OrdinalIgnoreCase);
-	/// <summary>
-	/// 获取或设置包占位展开时的临时输出集合；为空时直接向最终计划登记操作。
-	/// </summary>
+	/// <summary>获取或设置包占位展开时的临时输出集合；为空时直接向最终计划登记操作。</summary>
 	public List<DeploymentOperation> Output { get; set; }
 	#endregion
 

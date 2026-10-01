@@ -10,7 +10,7 @@ description: 修改打包命令、应用版本管理、载荷路径、三种包�
 - 命令与版本：PackCommand*、Variables、Normalizer。直属 .edition/ApplicationManifest 优先，缺失才读 .version/ApplicationIdentifier；清单选择显式 Edition、Current、唯一 Edition 或顶层版本。成功后清单输入成组回写 .edition 和 .version（缺失则创建），持久化本次 Current 和最终标识；仅标识输入只保存 .version；两者均无则成组创建，不覆盖并发创建的文件。双文件失败回滚。源清单不入包，包内只生成最终单行标识。
 - 变量依次加载默认值、系统环境、从根到 source 的直属 `.env`、显式选项；共用 Utility/Profile.Load，多级段落与条目以下划线拼名。先用环境和选项固定 source，再加载 `.env`；不搜索子目录、不以 `.env` 重定位 source，保留显式身份与源版本文件规则。
 - `--framework` 未指定或原始值为 null/空字符串时保留合并变量集中已有的非空值；源目录预解析和最终合并均适用。无非空变量时保留原赋值，纯空白、表达式展开为空及其他空选项保持原行为。
-- 主页使用 `--homepage`/`homepage`；厂家使用 `--manufacturer`/`manufacturer`，null/空字符串默认 `Zongsoft`，保留纯空白边界。三格式分别写 tar PAX `manufacturer`、Debian `Manufacturer`、RPM `VENDOR`(1011)；维护者独立保存，`--maintainer` 默认 `Zongsoft`。
+- 主页使用 `--homepage`/`homepage`；厂家使用 `--manufacturer`/`manufacturer`，null/空字符串默认 `Zongsoft`，保留纯空白边界。三格式分别写 tar PAX `Manufacturer`、Debian `Manufacturer`、RPM `VENDOR`(1011)；维护者独立保存，`--maintainer` 默认 `Zongsoft`。
 - 包模型与编码：Package*、Generator*；长度、对齐、校验和、字节序为精确契约。
 - 依赖：Dependency 解析统一 name[:range]，保留原生端点、开闭边界及 OR 分组；[v) 等同 [v,)，区间内逗号不可分组。Debian 用分配律展开替代项（单组最多 1024 个关系组），RPM 用 with/or 与 RichDependencies 能力；~ /^ 端点声明 TildeInVersions / CaretInVersions。版本比较交给目标系统，虚拟提供者按各平台原生语义；其他关系字段不复用区间转换。
 - 安装及服务：ApplicationHost 固定共享的宿主/listen 结果，Scriptor.Systemd 组合生命周期；推演安装、升级、覆盖和最终卸载，保留 Debian/RPM 阶段差异。

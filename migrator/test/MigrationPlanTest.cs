@@ -144,6 +144,7 @@ public sealed class MigrationPlanTest
 		Assert.False(user.TryGetProperty("Host", out _));
 		Assert.Equal(0, user.GetProperty("Roles").GetArrayLength());
 		Assert.Equal(5, user.GetProperty("Privileges").GetArrayLength());
+
 		foreach(var property in new[] { "Title", "Summary", "Description" })
 			Assert.Equal(metadata, root.TryGetProperty(property, out _));
 
@@ -153,6 +154,7 @@ public sealed class MigrationPlanTest
 			Assert.Equal("summary", root.GetProperty("Summary").GetString());
 			Assert.Equal("description", root.GetProperty("Description").GetString());
 		}
+
 		Assert.Equal(Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(root))), plan.Fingerprint());
 	}
 
@@ -216,6 +218,7 @@ public sealed class MigrationPlanTest
 		Assert.Equal(assembly, typeof(MigrationPlan).Assembly);
 		Assert.DoesNotContain(references, name => name.StartsWith("Zongsoft.Tools.Migrator.Executor", StringComparison.Ordinal) || name.StartsWith("Zongsoft.Tools.Packager", StringComparison.Ordinal));
 		Assert.DoesNotContain(references, name => name.StartsWith("AWSSDK.", StringComparison.Ordinal));
+
 		foreach(var driver in new[] { "Microsoft.Data.SqlClient", "MySqlConnector", "Npgsql", "Microsoft.Data.Sqlite", "DuckDB.NET.Data", "TDengine" })
 			Assert.DoesNotContain(driver, references);
 	}
@@ -239,6 +242,7 @@ public sealed class MigrationPlanTest
 		var scripts = plan.Steps[0].Scripts;
 		Assert.Equal(".artifacts/sqlite/4.sql", Assert.Single(plan.Steps[1].Scripts).Path);
 		Assert.Equal(new[] { ".artifacts/sqlite/1.sql", ".artifacts/sqlite/2.sql", ".artifacts/sqlite/3.sql" }, scripts.Select(script => script.Path));
+
 		foreach(var script in plan.Steps.SelectMany(task => task.Scripts))
 			directory.Write(script.Path, script.Content);
 		var file = directory.Write("migration.json", plan.Serialize());
@@ -268,18 +272,21 @@ public sealed class MigrationPlanTest
 		using var directory = new MigrationTestDirectory();
 		directory.Write("db.migration", "[sqlite]\nsql/*.sql\n");
 		directory.Write("db.ini", "[sqlite]\nDatabase=" + Path.Combine(directory.Path, "ordered.db") + "\n");
+
 		for(var number = 1; number <= 11; number++)
 		{
 			var schema = number == 1 ? "CREATE TABLE sequence (value INTEGER, previous INTEGER CHECK (previous = value - 1)); " : "";
 			var verify = number == 11 ? " CREATE TABLE verified (total INTEGER CHECK(total = 11)); INSERT INTO verified SELECT COUNT(*) FROM sequence;" : "";
 			directory.Write($"sql/{number:D2}.sql", schema + $"INSERT INTO sequence SELECT {number}, COUNT(*) FROM sequence;" + verify);
 		}
+
 		var plan = new MigrationLoader(null).Load("db.migration", directory.Path, "test", "1.0.0", MigrationTestDirectory.CurrentRuntime);
 		var scripts = Assert.Single(plan.Steps).Scripts;
 		Assert.Equal(Enumerable.Range(1, 11).Select(number => $".artifacts/sqlite/{number}.sql"), scripts.Select(script => script.Path));
 		Assert.Single(plan.Databases);
 		Assert.Equal(0, Assert.Single(plan.Steps).DatabaseIndex);
 		Assert.NotEqual(scripts.Select(script => script.Path), scripts.Select(script => script.Path).Order(StringComparer.Ordinal));
+
 		foreach(var script in scripts)
 			directory.Write(script.Path, script.Content);
 		var file = directory.Write("migration.json", plan.Serialize());
@@ -315,6 +322,7 @@ public sealed class MigrationPlanTest
 		process.StartInfo.ArgumentList.Add(state);
 		Assert.True(process.Start());
 		var error = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
+
 		try
 		{
 			await process.WaitForExitAsync(TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);

@@ -52,6 +52,12 @@ public sealed partial class MigrationLoader(Func<string, string> expand, Action<
 
 	#region 公共方法
 	/// <summary>按分隔路径顺序加载升迁输入；全部缺失时返回空值。</summary>
+	/// <param name="paths">用 <c>;</c> 或 <c>|</c> 分隔的输入路径表达式，支持变量及通配符。</param>
+	/// <param name="source">解析相对路径的基准目录。</param>
+	/// <param name="name">生成计划使用的规范迁移名称。</param>
+	/// <param name="version">生成计划使用的迁移版本。</param>
+	/// <param name="runtime">目标运行时，用于校验目标平台及数据库路径。</param>
+	/// <returns>合并后的迁移计划；全部输入缺失时为空。</returns>
 	public MigrationPlan Load(string paths, string source, string name, string version, string runtime = "linux-x64") =>
 		this.Load([paths], source, name, version, runtime);
 

@@ -159,6 +159,7 @@ public sealed class MigrationImportTest
 		directory.Write("sqlite.ini", "[sqlite]\nDatabase=/data/logical.db\n");
 		directory.Write("schema.sql", "SELECT 'logical';");
 		var link = Path.Combine(directory.Path, directoryLink ? "linked" : "linked.migration");
+
 		if(directoryLink)
 			Directory.CreateSymbolicLink(link, Path.GetDirectoryName(source));
 		else

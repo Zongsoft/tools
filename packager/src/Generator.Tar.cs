@@ -52,6 +52,7 @@ partial class Generator
 	public static void Tar(this Package package, string output, bool overwrite)
 	{
 		var installer = GetInstallerFileName(package);
+
 		using var publisher = new ArtifactPublisher(output, overwrite, package.FileName, installer);
 		using(var stream = new FileStream(publisher.StagePath(package.FileName), FileMode.CreateNew, FileAccess.Write))
 		using(var gzip = new GZipStream(stream, CompressionLevel.Optimal))
@@ -264,6 +265,7 @@ partial class Generator
 			builder.AppendLine($"\troot_source=\"$SOURCE_DIR/{TAR_ROOT_PREFIX}{path}\"");
 			builder.AppendLine($"\troot_target=\"${{DESTDIR%/}}/{path}\"");
 			builder.AppendLine("\t[ -d \"$(dirname -- \"$root_target\")\" ] || install -d \"$(dirname -- \"$root_target\")\"");
+
 			if(entry.IsDirectory)
 				builder.AppendLine($"\tinstall -d -m {mode} \"$root_target\"");
 			else

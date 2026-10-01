@@ -64,6 +64,7 @@ internal sealed record ApplicationHost(ApplicationHost.HostKind Kind, string Ent
 
 		ValidateServiceName(identifier);
 		var entry = GetEntry(source, package);
+
 		if(entry == null)
 		{
 			if(package.Migrator != null)

@@ -159,6 +159,7 @@ internal readonly struct Dependency
 
 		var body = range[1..^1];
 		var comma = body.IndexOf(',');
+
 		if(comma < 0)
 		{
 			var version = body.Trim();
@@ -171,6 +172,7 @@ internal readonly struct Dependency
 
 		var minimum = body[..comma].Trim();
 		var maximum = body[(comma + 1)..].Trim();
+
 		if(minimum.Length == 0)
 		{
 			if(range[0] != '(')

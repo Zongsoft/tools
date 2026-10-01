@@ -8,6 +8,10 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\src\Zongsoft.Tools.Deployer.csproj" />
+
+		<Reference Include="Zongsoft.Core" Condition="$(Configuration)=='Debug'">
+			<HintPath>..\..\..\framework\Zongsoft.Core\src\bin\$(Configuration)\$(TargetFramework)\Zongsoft.Core.dll</HintPath>
+		</Reference>
 	</ItemGroup>
 
 	<ItemGroup>

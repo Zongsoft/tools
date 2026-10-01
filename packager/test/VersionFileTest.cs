@@ -40,6 +40,7 @@ public sealed class VersionFileTest
 		Assert.Equal(file.Identifier, ApplicationIdentifier.Load(Path.Combine(directory.Path, ".version")));
 		var saved = ApplicationManifest.Load(Path.Combine(directory.Path, ".edition"));
 		Assert.Equal("Zongsoft.Daemon", saved.Name);
+
 		if(string.IsNullOrEmpty(edition))
 		{
 			Assert.Equal(new Version(1, 2, 0), saved.Version);

@@ -169,15 +169,6 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 
 		var versionFile = VersionFile.Load(source, name, edition,
 			string.IsNullOrWhiteSpace(versionText) ? null : Version.Parse(versionText));
-
-		string ResolveIdentity(string key)
-		{
-			var result = Normalizer.Normalize(variables.GetValueOrDefault(key), variables);
-			if(!result.Succeed)
-				throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed_Message, result.Value));
-			return result.Value;
-		}
-
 		//身份确定后初始化全部变量，输出、载荷与脚本均使用最终值。
 		variables[NAME_OPTION] = versionFile.Identifier.Name;
 		variables[EDITION_OPTION] = versionFile.Identifier.Edition;
@@ -247,6 +238,14 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		Terminal.WriteLine(CommandOutletColor.DarkGreen, string.Format(Properties.Resources.PackageGeneratedSuccessfully_Message, Path.Combine(output, package.FileName)));
 		//返回安装包的文件路径
 		return ValueTask.FromResult<object>(Path.Combine(output, package.FileName));
+
+		string ResolveIdentity(string key)
+		{
+			var result = Normalizer.Normalize(variables.GetValueOrDefault(key), variables);
+			if(!result.Succeed)
+				throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed_Message, result.Value));
+			return result.Value;
+		}
 	}
 	#endregion
 

@@ -320,6 +320,7 @@ public sealed class MigrationDatabaseTest
 		Assert.Equal(user, database.Settings["UserName"]);
 		Assert.Equal(bootstrap, database.Settings["Bootstrap"]);
 		Assert.Equal(port, database.Settings["Port"]);
+
 		if(option != null)
 			Assert.Equal(value, database.Options[option]);
 

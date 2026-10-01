@@ -30,6 +30,7 @@ public class WebPackageTest
 		var profile = files.Write("web.profile", "[api]\nhost=api.example.com\nbind!legacy=http://*,http://[::]\nserver=http://app:8069");
 		files.Write(".version", "example@1.0.0");
 		var args = new List<string> { "--web:nginx" };
+
 		if(exclude)
 			args.Add("--exclude:*.profile");
 
@@ -44,6 +45,7 @@ public class WebPackageTest
 		Assert.DoesNotContain(entries, item => item.Name.Contains("etc/nginx", StringComparison.Ordinal));
 		Assert.DoesNotContain(entries, item => item.Name.EndsWith(".hoster", StringComparison.Ordinal));
 		Assert.Equal("[api]\r\nhost=api.example.com\r\nbind!legacy=http://*,http://[::]\r\nserver=http://app:8069", File.ReadAllText(profile));
+
 		if(format == "deb")
 		{
 			var postinst = PackageArtifactTest.ReadControl(path, "postinst");

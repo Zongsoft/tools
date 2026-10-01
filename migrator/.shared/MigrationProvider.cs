@@ -65,8 +65,10 @@ public abstract partial class MigrationProvider
 	public static MigrationProvider Get(string name)
 	{
 		foreach(var provider in _providers)
+		{
 			if(provider.Aliases.Contains(name?.Trim(), StringComparer.OrdinalIgnoreCase))
 				return provider;
+		}
 
 		throw new InvalidDataException(string.Format(MigrationResources.MigratorUnknown_Message, name));
 	}
@@ -80,8 +82,10 @@ public abstract partial class MigrationProvider
 	{
 		ArgumentNullException.ThrowIfNull(parameters);
 		foreach(var key in parameters.Keys)
+		{
 			if(!allowed.Contains(key, StringComparer.OrdinalIgnoreCase))
 				throw new InvalidDataException(string.Format(MigrationResources.ParameterUnknown_Message, key, this.Name));
+		}
 
 		parameters.Seconds("Timeout", 30);
 	}

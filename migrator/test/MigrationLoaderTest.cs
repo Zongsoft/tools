@@ -96,6 +96,7 @@ public sealed class MigrationLoaderTest
 			directory.Write(name + ".migration", "[sqlite]\n./schema.sql\n");
 			directory.Write(name + ".ini", "[sqlite]\nDatabase=/data/" + name.Replace('/', '-') + ".db\n");
 		}
+
 		directory.Write("schema.sql", "SELECT 'root';");
 		directory.Write("parts/schema.sql", "SELECT 'parts';");
 		IEnumerable<string> inputs = new[] { "last.migration", "parts/*.migration", "last.migration" }.Select(value => value);
@@ -644,6 +645,7 @@ public sealed class MigrationLoaderTest
 		Assert.Equal(source, script.Source);
 		Assert.Equal(sql.ReplaceLineEndings("\r\n"), File.ReadAllText(script.Source));
 		Assert.Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(script.Content))), script.Checksum);
+
 		if(provider == "mysql")
 		{
 			Assert.DoesNotContain("DELIMITER", script.Content);
@@ -690,11 +692,13 @@ public sealed class MigrationLoaderTest
 		Assert.Equal(new[] { "SELECT N'附件';\r\n-- retained", "SELECT 2;", "SELECT 3;" }, step.Scripts.Select(script => script.Content));
 		Assert.Equal(new[] { first, first, later }, step.Scripts.Select(script => script.Source));
 		Assert.Equal(new[] { ".artifacts/mssql/1.sql", ".artifacts/mssql/2.sql", ".artifacts/mssql/3.sql" }, step.Scripts.Select(script => script.Path));
+
 		foreach(var script in step.Scripts)
 		{
 			Assert.Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(script.Content))), script.Checksum);
 			Assert.DoesNotContain('\uFEFF', script.Content);
 		}
+
 		Assert.DoesNotContain("Source", plan.Serialize());
 		Assert.DoesNotContain("Content", plan.Serialize());
 	}
@@ -802,6 +806,7 @@ internal sealed class MigrationTestDirectory : IDisposable
 			this.Write("runtime/" + runtime + "/libduckdb.so", "duckdb-" + runtime);
 			this.Write("runtime/" + runtime + "/assets/manifest.txt", runtime);
 		}
+
 		var windows = new byte[128];
 		windows[0] = (byte)'M';
 		windows[1] = (byte)'Z';

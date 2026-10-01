@@ -53,6 +53,8 @@ internal static class NugetRuntime
 
 	#region 公共方法
 	/// <summary>根据部署平台和架构获取有序 RID 回退链；缺少任一配置时不选择运行时专属资产。</summary>
+	/// <param name="variables">包含目标平台和架构的部署变量。</param>
+	/// <returns>从最具体到回退项排列的运行时标识符；未指定平台或架构时为空集合。</returns>
 	public static IEnumerable<string> GetIdentifiers(IDictionary<string, string> variables)
 	{
 		if(variables == null || !variables.TryGetValue("platform", out var platform) || string.IsNullOrWhiteSpace(platform)

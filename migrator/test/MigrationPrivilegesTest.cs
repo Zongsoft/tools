@@ -42,6 +42,7 @@ public sealed class MigrationPrivilegesTest
 		var privileges = Assert.Single(database.Users).Privileges;
 		Assert.Equal(count, privileges.Length);
 		Assert.Equal(count, privileges.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+
 		if(permission == "Admin")
 			Assert.Equal(new[] { "Select", "Insert", "Update", "Delete", "Execute", "CreateTable", "CreateIndex", "CreateView", "CreateProcedure", "CreateFunction", "AlterTable", "AlterIndex", "AlterView", "AlterProcedure", "AlterFunction", "DropTable", "DropIndex", "DropView", "DropProcedure", "DropFunction" }, privileges);
 	}

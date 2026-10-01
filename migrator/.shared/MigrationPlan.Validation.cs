@@ -96,8 +96,10 @@ partial class MigrationPlan
 			}
 
 			foreach(var script in step.Scripts)
+			{
 				if(script == null || string.IsNullOrWhiteSpace(script.Path) || string.IsNullOrWhiteSpace(script.Checksum))
 					throw new InvalidDataException(MigrationResources.PlanInvalid_Message);
+			}
 
 			foreach(var bucket in step.Buckets)
 			{

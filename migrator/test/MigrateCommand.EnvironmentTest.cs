@@ -25,17 +25,21 @@ public sealed partial class MigrateCommandTest
 	{
 		using var directory = new MigrationTestDirectory();
 		PrepareMigration(directory, "/data/hosting.db");
+
 		if(environmentFile)
 		{
 			directory.Write(".env", "framework=net8.0\n");
 			directory.Write("workspace/.env", "FRAMEWORK=net9.0\n");
 		}
+
 		var previous = Environment.GetEnvironmentVariable("framework");
+
 		try
 		{
 			Environment.SetEnvironmentVariable("framework", "net8.0");
 			var arguments = Arguments("zongsoft.daemon", "Linux", "X64");
 			arguments.Add("--title:tfm=$(framework)");
+
 			if(option != null)
 				arguments.Add(option);
 			arguments.Add("../db.migration");
@@ -96,6 +100,7 @@ public sealed partial class MigrateCommandTest
 		directory.Write("workspace/missing/current/fs.migration", "[amazon.s3]\nattachments=private\n");
 		directory.Write("workspace/missing/current/amazon.s3.ini", "Server=http://$(zongsoft_env_host):9000\nRegion=us-east-1\nAccessKey=$(io_rustfs_access_key)\nSecretKey=%io_rustfs_secret_key%\n");
 		var previous = Environment.GetEnvironmentVariable("zongsoft_env_secret");
+
 		try
 		{
 			Environment.SetEnvironmentVariable("zongsoft_env_secret", "process");
@@ -104,6 +109,7 @@ public sealed partial class MigrateCommandTest
 			arguments.Add("--version:$(zongsoft_env_version)");
 			arguments.Add("--title:$(zongsoft_env_title)");
 			arguments.Add("--zongsoft_env_host:command-host");
+
 			if(emptySecret)
 				arguments.Add("--zongsoft_env_secret:");
 			arguments.Add("db.migration");

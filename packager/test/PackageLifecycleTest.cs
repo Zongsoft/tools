@@ -55,6 +55,7 @@ public sealed class PackageLifecycleTest
 
 		var path = Path.Combine(directory.Path, package.FileName);
 		var expected = $"Zongsoft.Tools.Packager@{typeof(Package).Assembly.GetName().Version}";
+
 		switch(format)
 		{
 			case "tar":
@@ -64,7 +65,7 @@ public sealed class PackageLifecycleTest
 				{
 					var metadata = Assert.IsType<PaxGlobalExtendedAttributesTarEntry>(reader.GetNextEntry());
 					Assert.Equal(expected, metadata.GlobalExtendedAttributes["Packager"]);
-					Assert.Equal(expectedManufacturer, metadata.GlobalExtendedAttributes["manufacturer"]);
+					Assert.Equal(expectedManufacturer, metadata.GlobalExtendedAttributes["Manufacturer"]);
 					Assert.Null(metadata.DataStream);
 					Assert.Equal("install.sh", reader.GetNextEntry().Name);
 					Assert.Equal("uninstall.sh", reader.GetNextEntry().Name);
@@ -75,6 +76,7 @@ public sealed class PackageLifecycleTest
 				var control = PackageReader.ReadDebianControlScript(path, "control");
 				Assert.Contains($"\nPackager: {expected}\n", control);
 				Assert.Contains("\nMaintainer: Hosting Maintainer\n", control);
+
 				if(string.IsNullOrWhiteSpace(expectedManufacturer))
 					Assert.DoesNotContain("\nManufacturer:", control);
 				else

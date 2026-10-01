@@ -21,18 +21,6 @@ public sealed partial class MigrationDatabaseUsersTest
 		var database = Database(provider);
 		var exists = false;
 		var commands = new List<string>();
-		DbConnection Connect(MigrationPlan.Database _, string name) => new RecordingConnection(commands, sql =>
-		{
-			if(sql.Contains("FROM mysql.user", StringComparison.Ordinal) || sql == "SELECT rolname FROM pg_roles")
-				return exists ? [["application"]] : [];
-			if(sql.Contains("pg_namespace", StringComparison.Ordinal))
-				return [["public"]];
-			return [];
-		}, sql =>
-		{
-			if(sql.StartsWith("CREATE USER", StringComparison.Ordinal) || sql.StartsWith("CREATE ROLE", StringComparison.Ordinal))
-				exists = true;
-		});
 		Migrator.Database driver = provider == "mysql" ? new Migrator.Database.MySql(Connect) : new Migrator.Database.Postgres(Connect);
 		var context = new MigrationContext(directory.Path, Path.Combine(directory.Path, "state"));
 
@@ -47,11 +35,25 @@ public sealed partial class MigrationDatabaseUsersTest
 		Assert.DoesNotContain(commands, sql => sql.Contains("replacement-password", StringComparison.Ordinal));
 		Assert.DoesNotContain(commands, sql => sql.StartsWith("REVOKE", StringComparison.Ordinal) || sql.StartsWith("ALTER USER", StringComparison.Ordinal) || sql.StartsWith("ALTER ROLE", StringComparison.Ordinal));
 		Assert.Equal(2, commands.Count(sql => sql.StartsWith(provider == "mysql" ? "GRANT SELECT, INSERT, UPDATE, DELETE, EXECUTE ON" : "GRANT CONNECT ON DATABASE", StringComparison.Ordinal)));
+
 		if(provider == "postgres")
 		{
 			Assert.Equal(2, commands.Count(sql => sql.Contains("ON ALL TABLES IN SCHEMA \"public\"", StringComparison.Ordinal)));
 			Assert.Equal(2, commands.Count(sql => sql.StartsWith("ALTER DEFAULT PRIVILEGES FOR ROLE \"postgres\" IN SCHEMA \"public\" GRANT USAGE, SELECT ON SEQUENCES", StringComparison.Ordinal)));
 		}
+
+		DbConnection Connect(MigrationPlan.Database _, string name) => new RecordingConnection(commands, sql =>
+		{
+			if(sql.Contains("FROM mysql.user", StringComparison.Ordinal) || sql == "SELECT rolname FROM pg_roles")
+				return exists ? [["application"]] : [];
+			if(sql.Contains("pg_namespace", StringComparison.Ordinal))
+				return [["public"]];
+			return [];
+		}, sql =>
+		{
+			if(sql.StartsWith("CREATE USER", StringComparison.Ordinal) || sql.StartsWith("CREATE ROLE", StringComparison.Ordinal))
+				exists = true;
+		});
 	}
 
 	[Fact]
@@ -211,12 +213,13 @@ public sealed partial class MigrationDatabaseUsersTest
 		using var directory = new MigrationTestDirectory();
 		var database = Database(provider);
 		var commands = new List<string>();
-		DbConnection Connect(MigrationPlan.Database _, string name) => new RecordingConnection(commands, _ => throw new InvalidOperationException("permission denied"));
 		Migrator.Database driver = provider switch { "mysql" => new Migrator.Database.MySql(Connect), "postgres" => new Migrator.Database.Postgres(Connect), _ => new Migrator.Database.MsSql(Connect) };
 
 		await Assert.ThrowsAsync<InvalidOperationException>(() => driver.CreateUsersAsync(database, new(directory.Path, Path.Combine(directory.Path, "state")), TestContext.Current.CancellationToken));
 
 		Assert.DoesNotContain(commands, sql => sql.StartsWith("CREATE", StringComparison.Ordinal));
+
+		DbConnection Connect(MigrationPlan.Database _, string name) => new RecordingConnection(commands, _ => throw new InvalidOperationException("permission denied"));
 	}
 	[Theory]
 	[InlineData("admin", "SELECT")]
@@ -426,6 +429,7 @@ public sealed partial class MigrationDatabaseUsersTest
 			commands.Add(this.CommandText);
 			var rows = query(this.CommandText);
 			var table = new DataTable();
+
 			for(var column = 0; column < (rows.Length == 0 ? 1 : rows[0].Length); column++)
 				table.Columns.Add("c" + column, typeof(string));
 

@@ -61,9 +61,7 @@ public class DeploymentContext
 	#endregion
 }
 
-/// <summary>
-/// 提供部署环境选项的查询辅助方法。
-/// </summary>
+/// <summary>提供部署环境选项的查询辅助方法。</summary>
 public static class DeploymentContextUtility
 {
 	public static bool IsVerbosity(this Deployer deployer, Verbosity verbosity) =>

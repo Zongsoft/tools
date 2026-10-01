@@ -526,7 +526,7 @@ Tests cover declarations/models, native output, actual three-format archive deco
 
 The option and variable name for the home page is `homepage`; `Package.Homepage` supplies Debian `Homepage` and RPM `URL` (1020). `manufacturer` supplies `Package.Manufacturer`, with the shared default `Zongsoft` when absent, null, or empty after expansion. The accessor preserves literal whitespace before the normalizer can turn it into an empty string. The default for the `maintainer` option is also `Zongsoft`; the two values remain independent.
 
-Tar writes manufacturer as the PAX global attribute `manufacturer`, Debian writes the custom control field `Manufacturer`, and RPM writes the standard `VENDOR` string tag (1011). Debian keeps its existing text normalization, including omission of a whitespace-only manufacturer field. These fields add no payload entries. See [Debian user-defined fields](https://www.debian.org/doc/debian-policy/ch-controlfields.html#user-defined-fields) and the [RPM tag reference](https://rpm.org/docs/latest/manual/tags.html).
+Tar writes manufacturer as the PAX global attribute `Manufacturer`, Debian writes the custom control field `Manufacturer`, and RPM writes the standard `VENDOR` string tag (1011). Debian keeps its existing text normalization, including omission of a whitespace-only manufacturer field. These fields add no payload entries. See [Debian user-defined fields](https://www.debian.org/doc/debian-policy/ch-controlfields.html#user-defined-fields) and the [RPM tag reference](https://rpm.org/docs/latest/manual/tags.html).
 
 ## Packager version metadata
 

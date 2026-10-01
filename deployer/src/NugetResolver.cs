@@ -105,6 +105,12 @@ public class NugetResolver : DeploymentResolverBase
 
 	#region 资产展开
 	/// <summary>收集根包及已求解依赖的文件，再统一登记源操作；不在遍历过程中重新选择版本。</summary>
+	/// <param name="context">包含部署变量和已求解包版本的上下文。</param>
+	/// <param name="deployment">接收源文件操作的部署条目。</param>
+	/// <param name="root">开始展开资产的根包名称。</param>
+	/// <param name="framework">选择包资产使用的目标框架。</param>
+	/// <param name="cancellation">用于取消下载及资产展开的令牌。</param>
+	/// <returns>完成包资产收集及源操作登记的任务。</returns>
 	private async Task ExpandPackageAsync(DeploymentContext context, DeploymentEntry deployment, string root, string framework, CancellationToken cancellation)
 	{
 		var files = new List<DeploymentUtility.PathToken>();

@@ -232,6 +232,7 @@ public sealed class LocalSearchTest
 		using var fixture = new DeploymentFixture();
 		var selected = fixture.Write("source/plugins/orders/assets/config/site.json", "selected");
 		fixture.Write("source/plugins/orders/assets/ignored.txt", "excluded");
+
 		if(expansion)
 			fixture.Variables["expansion"] = "true";
 

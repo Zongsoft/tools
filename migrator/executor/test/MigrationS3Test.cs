@@ -48,6 +48,7 @@ public sealed class MigrationS3Test
 		Assert.Equal(isPublic ? new[] { "HEAD attachments", "CREATE attachments", "POLICY attachments" } : new[] { "HEAD attachments", "CREATE attachments" }, client.Calls);
 		Assert.True(client.Exists);
 		Assert.Empty(Directory.GetFiles(context.StateDirectory, "*.pending"));
+
 		if(isPublic)
 		{
 			using var policy = JsonDocument.Parse(client.Policy);

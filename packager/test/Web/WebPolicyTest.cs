@@ -67,6 +67,7 @@ public class WebPolicyTest
 		using var files = new MigrationTestDirectory();
 		var text = Generate(files, policy);
 		Assert.Contains("proxy_next_upstream " + expected, text);
+
 		if(expected == "off;")
 			Assert.DoesNotContain("proxy_next_upstream_tries", text);
 		else
@@ -85,6 +86,7 @@ public class WebPolicyTest
 		var text = Generate(files, servers);
 		Assert.Contains("proxy_ssl_verify off;", text);
 		Assert.Contains("proxy_ssl_server_name " + (name == null ? "off" : "on") + ";", text);
+
 		if(name == null)
 			Assert.Equal("Required", Assert.Throws<DefinitionException>(() => Generate(files, servers + "\nserver-tls-verify=true")).Diagnostic.Code);
 		else

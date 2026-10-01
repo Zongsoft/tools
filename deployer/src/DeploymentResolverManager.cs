@@ -55,9 +55,7 @@ public static class DeploymentResolverManager
 		};
 	}
 
-	/// <summary>
-	/// 将删除条目登记为待执行操作，实际删除由部署执行阶段完成。
-	/// </summary>
+	/// <summary>将删除条目登记为待执行操作，实际删除由部署执行阶段完成。</summary>
 	public class DeleteResolver : IDeploymentResolver
 	{
 		#region 单例字段
@@ -93,9 +91,7 @@ public static class DeploymentResolverManager
 		#endregion
 	}
 
-	/// <summary>
-	/// 使用本地文件和目录作为部署源的默认解析器。
-	/// </summary>
+	/// <summary>使用本地文件和目录作为部署源的默认解析器。</summary>
 	public class DefaultResolver : DeploymentResolverBase
 	{
 		#region 单例字段

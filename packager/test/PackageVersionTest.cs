@@ -58,8 +58,10 @@ public sealed class PackageVersionTest
 	public static IEnumerable<object[]> SelectionCases()
 	{
 		foreach(var format in new[] { "tar", "deb", "rpm" })
+		{
 			foreach(var selection in new[] { "recursive", "explicit", "excluded", "root-alias", "both-aliases" })
 				yield return [format, selection];
+		}
 	}
 
 	[Theory]
@@ -123,6 +125,7 @@ public sealed class PackageVersionTest
 		Assert.DoesNotContain(archive, item => item.Name == ".edition" || item.Name == "opt/zongsoft/web/.edition" || item.Name == ".root/opt/zongsoft/web/.edition");
 		Assert.Equal(sourceBytes, File.ReadAllBytes(original));
 		Assert.Contains(archive, item => item.Name.EndsWith("application.txt", StringComparison.Ordinal) && Encoding.UTF8.GetString(item.Content) == "payload retained");
+
 		if(selection == "recursive")
 		{
 			var nested = Assert.Single(archive, item => item.Name.EndsWith("nested/.version", StringComparison.Ordinal));
@@ -153,6 +156,7 @@ public sealed class PackageVersionTest
 					return ReadTar(bytes[(offset + 60)..(offset + 60 + size)]);
 				offset += 60 + size + (size & 1);
 			}
+
 			throw new InvalidDataException("Missing Debian payload.");
 		}
 
@@ -163,6 +167,7 @@ public sealed class PackageVersionTest
 		gzip.CopyTo(copy);
 		bytes = copy.ToArray();
 		var files = new List<ArchiveFile>();
+
 		for(var offset = 0; offset + 110 <= bytes.Length;)
 		{
 			Assert.Equal("070701", Encoding.ASCII.GetString(bytes, offset, 6));
@@ -178,6 +183,7 @@ public sealed class PackageVersionTest
 				files.Add(new(name, bytes[offset..(offset + size)], (UnixFileMode)(mode & 0xFFF), size));
 			offset = (offset + size + 3) & ~3;
 		}
+
 		return files;
 	}
 
@@ -188,6 +194,7 @@ public sealed class PackageVersionTest
 		using var reader = new TarReader(gzip);
 		var files = new List<ArchiveFile>();
 		TarEntry entry;
+
 		while((entry = reader.GetNextEntry()) != null)
 		{
 			if(entry.DataStream == null)
@@ -196,6 +203,7 @@ public sealed class PackageVersionTest
 			entry.DataStream.CopyTo(copy);
 			files.Add(new(NormalizeName(entry.Name), copy.ToArray(), entry.Mode, entry.Length));
 		}
+
 		return files;
 	}
 
@@ -225,6 +233,7 @@ public sealed class PackageVersionTest
 			result[index] = Encoding.UTF8.GetString(bytes, offset, end - offset);
 			offset = end + 1;
 		}
+
 		return result;
 	}
 

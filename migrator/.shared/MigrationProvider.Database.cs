@@ -145,8 +145,10 @@ partial class MigrationProvider
 						options.TryAdd("Collation", "utf8mb4_0900_ai_ci");
 
 					foreach(var key in new[] { "Charset", "Collation" })
+					{
 						if(options.TryGetValue(key, out var value) && !Regex.IsMatch(value, @"^[a-zA-Z0-9_]+$"))
 							throw Invalid(key);
+					}
 					break;
 				case "postgres":
 					options.TryAdd("Charset", "UTF8");
@@ -218,8 +220,10 @@ partial class MigrationProvider
 					throw Invalid("Host");
 
 				foreach(var role in user.Roles)
+				{
 					if(!Identifier(role))
 						throw Invalid("Roles");
+				}
 
 				MigrationPrivileges.Validate(database, user);
 			}

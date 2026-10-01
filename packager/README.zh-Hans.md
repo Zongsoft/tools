@@ -981,7 +981,7 @@ sudo rpm -Uvh ./.packages/zongsoft.web@1.0.0-x64.rpm
 
 | 格式 | 主页 | 生产厂家 | 维护者 |
 | --- | --- | --- | --- |
-| tar.gz | — | PAX 全局扩展属性 `manufacturer` | — |
+| tar.gz | — | PAX 全局扩展属性 `Manufacturer` | — |
 | deb | `Homepage` | 自定义 control 字段 `Manufacturer` | `Maintainer` |
 | rpm | `URL`（1020） | `VENDOR`（1011） | `PACKAGER`（1015） |
 

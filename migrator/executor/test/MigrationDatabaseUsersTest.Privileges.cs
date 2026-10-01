@@ -22,10 +22,11 @@ public sealed partial class MigrationDatabaseUsersTest
 		var database = Database(provider);
 		database.Users[0].Permission = "none";
 		var commands = new List<string>();
-		DbConnection Connect(MigrationPlan.Database _, string name) => new RecordingConnection(commands, _ => []);
 		Migrator.Database driver = provider switch { "mysql" => new Migrator.Database.MySql(Connect), "postgres" => new Migrator.Database.Postgres(Connect), _ => new Migrator.Database.MsSql(Connect) };
 		await driver.GrantAsync(database, new(directory.Path, Path.Combine(directory.Path, "state")), TestContext.Current.CancellationToken);
 		Assert.DoesNotContain(commands, sql => sql.StartsWith("GRANT", StringComparison.Ordinal) || sql.StartsWith("ALTER", StringComparison.Ordinal));
+
+		DbConnection Connect(MigrationPlan.Database _, string name) => new RecordingConnection(commands, _ => []);
 	}
 
 	[Theory]
@@ -92,8 +93,6 @@ public sealed partial class MigrationDatabaseUsersTest
 		database.Users[0].Permission = permission;
 		database.Users[0].Privileges = privilege == null ? [] : [privilege];
 		var commands = new List<string>();
-		string[][] Query(string sql) => sql.Contains("pg_namespace", StringComparison.Ordinal) ? [["public"]] :
-			sql.Contains("sys.sequences", StringComparison.Ordinal) ? [["dbo", "number"]] : [];
 		Migrator.Database driver = provider == "postgres" ? new Migrator.Database.Postgres((_, _) => new RecordingConnection(commands, Query)) : new Migrator.Database.MsSql((_, _) => new RecordingConnection(commands, Query));
 
 		await driver.GrantAsync(database, new(directory.Path, Path.Combine(directory.Path, "state")), TestContext.Current.CancellationToken);
@@ -102,6 +101,9 @@ public sealed partial class MigrationDatabaseUsersTest
 		Assert.DoesNotContain(commands, sql => sql.StartsWith("GRANT UPDATE ON DATABASE", StringComparison.Ordinal) || sql.Contains("GRANT SELECT, INSERT, UPDATE", StringComparison.Ordinal));
 		if(permission == "readonly")
 			Assert.DoesNotContain(commands, sql => sql.StartsWith("GRANT EXECUTE", StringComparison.Ordinal));
+
+		string[][] Query(string sql) => sql.Contains("pg_namespace", StringComparison.Ordinal) ? [["public"]] :
+			sql.Contains("sys.sequences", StringComparison.Ordinal) ? [["dbo", "number"]] : [];
 	}
 
 	[Theory]

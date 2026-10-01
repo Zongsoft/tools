@@ -58,7 +58,6 @@ internal class Program
 		Executor.Root.Children.Clear();
 		Executor.Root.Children.Add(new MigrateCommand());
 		var failed = false;
-		void OnFailed(object sender, CommandExecutorFailureEventArgs e) => failed = true;
 		Executor.Failed += OnFailed;
 
 		try
@@ -73,6 +72,8 @@ internal class Program
 			return 1;
 		}
 		finally { Executor.Failed -= OnFailed; }
+
+		void OnFailed(object sender, CommandExecutorFailureEventArgs e) => failed = true;
 	}
 	#endregion
 
