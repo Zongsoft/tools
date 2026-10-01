@@ -134,16 +134,18 @@ dotnet tool uninstall -g Zongsoft.Tools.Packager
 
 ### 第 1 步：准备应用
 
-按宿主的[部署流程](https://github.com/Zongsoft/hosting/blob/main/web/default/deploy.cmd)准备应用及其插件。在 Windows 控制台运行脚本，将远程调试设为 `off`（Release），然后选择 Linux、x64、net10.0；如果只准备宿主，在打包提示处输入 `exit`：
+按宿主的[部署流程](https://github.com/Zongsoft/hosting/blob/main/web/default/deploy.cmd)准备应用及其插件。在 hosting 根目录 `.env` 的根层定义 `framework=net10.0`，并在当前 Windows 控制台设置同值的 `framework` 环境变量供 Cake 构建使用。脚本已不再询问目标框架；将远程调试设为 `off`（Release），然后选择 Linux、x64。如果只准备宿主，在打包提示处输入 `exit`（当前脚本此分支返回 `1`，不代表前面的部署失败）：
 
 ```cmd
+set "framework=net10.0"
+set "Environment=production"
 cd /d D:\Zongsoft\hosting\web\default
 deploy.cmd
 ```
 
 ### 第 2 步：生成安装包
 
-直接在宿主目录中制包，未指定 `--source` 时源目录就是当前目录，位置参数从中挑选载荷。以下命令即宿主 [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd) 在选择 `deb` 格式、版本号 `1.0.0`、`production` 环境并采用其余默认值时实际执行的命令：
+直接在宿主目录中制包，未指定 `--source` 时源目录就是当前目录，位置参数从中挑选载荷。也可运行宿主 [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd)：独立脚本默认 tar、Release、x64，只打包已有文件。当前 Web 脚本的环境提示未将输入值赋回 `environment`，因此运行前设置 `Environment=production`，选择 `deb`、版本 `1.0.0`，升迁提示留空。下面是对应的核心制包命令（省略空的 Edition 和 migrator 选项）：
 
 ```cmd
 dotnet-pack deb ^
@@ -151,15 +153,15 @@ dotnet-pack deb ^
 	--title:Zongsoft.Web ^
 	--version:1.0.0 ^
 	--compilation:Release ^
-	--framework:net10.0 ^
 	--platform:linux ^
 	--architecture:x64 ^
 	--Environment:production ^
+	--DOTNET_ENVIRONMENT:production ^
 	--ASPNETCORE_ENVIRONMENT:production ^
 	--listen:8069 ^
 	--daemon:zongsoft.web ^
 	--web:nginx ^
-	--daemon-environments:Environment,ASPNETCORE_ENVIRONMENT ^
+	--daemon-environments:Environment,DOTNET_ENVIRONMENT,ASPNETCORE_ENVIRONMENT ^
 	--exclude:**/logs/;bin/$(compilation)/$(framework)/*.staticwebassets.* ^
 	--output:.packages ^
 	../../mime ^
@@ -176,8 +178,8 @@ dotnet-pack deb ^
 | `--name:Zongsoft.Hosting.Web` | 应用名称，入口程序集为 `Zongsoft.Hosting.Web.dll`。 |
 | `--title:Zongsoft.Web` | 人类可读标题，也作为服务描述。 |
 | `--version:1.0.0` | 示例发行版本号，请按实际版本号设置。 |
-| `--compilation`、`--framework` | 同时作为变量，供 `--exclude` 和载荷参数中的 `$(compilation)`、`$(framework)` 引用。 |
-| `--Environment`、`--ASPNETCORE_ENVIRONMENT` | 自定义变量，经 `--daemon-environments` 写入生成服务的环境变量。 |
+| `--compilation`、`framework` | 编译配置由选项传入，框架从合并 Variables（本例为 hosting `.env`）读取；供 `--exclude` 和载荷参数中的 `$(compilation)`、`$(framework)` 引用。 |
+| `--Environment`、`--DOTNET_ENVIRONMENT`、`--ASPNETCORE_ENVIRONMENT` | 自定义变量，经 `--daemon-environments` 写入生成服务的环境变量。 |
 | `--listen:8069` | 生成的服务监听 `http://127.0.0.1:8069`。 |
 | `--daemon:zongsoft.web` | 软件包和服务标识为 `zongsoft.web`，安装目录为 `/opt/zongsoft/web`。 |
 | `--web:nginx` | 依据宿主的 `web.profile` 生成 Nginx 站点配置。 |
@@ -187,6 +189,8 @@ dotnet-pack deb ^
 | `bin/$(compilation)/$(framework):~` | 目录别名 `~` 把编译输出的内容直接放到安装根目录。 |
 
 > 💡 提示：把 `deb` 换成 `tar` 或 `rpm` 即可生成其他格式。重复生成同一格式时，请更换输出目录或添加 `--overwrite`。
+
+daemon 的脚本生成 `zongsoft.daemon.service`，传入 `Environment` 和 `DOTNET_ENVIRONMENT`；terminal 的脚本传入相同变量但使用 `--daemon:disabled`，不会为交互式终端设置进程环境。三个宿主的打包脚本均可选择收录已有升迁产物，不会自动制作它们；先在 hosting 根目录运行 `migrate.cmd`，再在宿主的升迁提示中填写 `zongsoft`。完整脚本参数见 [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.zh-Hans.md#安装包与升迁包)，工具行为以本 README 为准。
 
 ### 第 3 步：检查产物
 
@@ -317,7 +321,7 @@ Debian 写入 `Depends`，RPM 写入 `Requires`。对于 `runtime:[10.0,11.0) | 
 
 统一的是区间表示法。版本端点保留原文，按目标包管理器的原生规则比较；打包器不会按 NuGet 版本规则归一化、重排或比较端点。Debian 的虚拟包上下界可能由不同提供者分别满足；RPM 的 `with` 要求同一个包同时满足上下界。不同发行版的包名不会自动映射。Debian 的 `libc6:any`、RPM 的 `pkgconfig(openssl)` 等原生名称仍受各自格式约束；`:[`、`:(` 或冒号后以数字开头的裸版本引出范围。字母开头的原生版本请使用括号形式。
 
-`10.*` 等浮动版本、错误区间、空替代项，以及旧的 `name >= version` / `name (>= version)` 依赖输入均会使制包失败。重复约束按原样保留；未指定或空依赖列表不写入应用依赖。打包器只写声明，不下载或内嵌依赖，安装环境需有可用的软件源。以下其他关系选项继续使用原生语法。
+`10.*` 等浮动版本、错误区间、空替代项均会使制包失败。重复约束按原样保留；未指定或空依赖列表不写入应用依赖。打包器只写声明，不下载或内嵌依赖，安装环境需有可用的软件源。以下其他关系选项继续使用原生语法。
 
 #### Debian 关系选项
 
@@ -665,7 +669,7 @@ HTTPS 需要在宿主中配置可用的默认服务器证书，打包器不生�
 
 ### 服务环境变量
 
-`--daemon-environments` 列出的变量值会写入生成服务的 `Environment=`。Web 宿主的 [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd) 就用它写入 `Environment` 和 `ASPNETCORE_ENVIRONMENT`：
+`--daemon-environments` 列出的变量值会写入生成服务的 `Environment=`。Web 宿主的 [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd) 用它写入 `Environment`、`DOTNET_ENVIRONMENT` 和 `ASPNETCORE_ENVIRONMENT`。下面的 Bash 示例显式指定框架；宿主脚本则从 Variables 读取框架：
 
 ```bash
 dotnet-pack deb \
@@ -677,8 +681,9 @@ dotnet-pack deb \
   --platform:linux \
   --framework:net10.0 \
   --output:.packages \
-  --daemon-environments:Environment,ASPNETCORE_ENVIRONMENT \
+  --daemon-environments:Environment,DOTNET_ENVIRONMENT,ASPNETCORE_ENVIRONMENT \
   --Environment:Production \
+  --DOTNET_ENVIRONMENT:Production \
   --ASPNETCORE_ENVIRONMENT:Production \
   ../../mime \
   appsettings.json \

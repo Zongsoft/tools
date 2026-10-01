@@ -170,6 +170,18 @@ _**N**uget_ 包下载器默认会忽略以 `System.`、`Microsoft.Extensions.`�
 - `NuGet_Server` 表示 NuGet 服务器信息，默认值为：`https://api.nuget.org/v3/index.json`
 - `NuGet_Packages` 表示 NuGet 包的目录，默认值为：`%USERPROFILE%/.nuget/packages`
 
+### hosting 脚本中的框架与变量
+
+hosting 的 `deploy.cmd` 已省略部署命令的 `--framework`，可以在 hosting 根目录 `.env` 的根层定义 `framework=net10.0`。部署器从 Variables 获取它，仍遵循环境变量 → 祖先 `.env` → 目标应用 `appsettings.json` → 命令选项的覆盖顺序；不是直接读取某个环境变量。省略或传入 null/空字符串的选项保留已有非空框架，纯空白值保持原处理。
+
+在 daemon 宿主目录中，部署命令可写为：
+
+```cmd
+dotnet deploy --verbosity:quiet --overwrite:newest --prerelease:true --host:daemon --site:daemon --scheme:default --environment:development --debug:off --edition:Release --platform:linux --architecture:x64 --destination:bin/$(edition)/$(framework) .deploy ../.deploy/default/$(host).deploy ../.deploy/default/$(site).deploy
+```
+
+`--edition:Release` 在这个部署流程中用于定位构建配置目录；安装包的 Edition 是另外的身份参数，不应混用。这里仅执行插件部署，不编译宿主、不制作安装包或升迁包。运行 hosting 的完整 `deploy.cmd` 时，还应将同值的进程变量 `framework` 传给脚本中的 Cake 构建；加载 `.env` 不会设置进程环境。脚本参数和独立打包流程见 [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.zh-Hans.md#安装包与升迁包)。
+
 ## 安装
 
 - 查看工具

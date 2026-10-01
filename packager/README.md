@@ -134,16 +134,18 @@ This walkthrough uses the real [Zongsoft.Hosting.Web](https://github.com/Zongsof
 
 ### Step 1: Prepare the application
 
-Prepare the host and its plugins with the host's [deployment script](https://github.com/Zongsoft/hosting/blob/main/web/default/deploy.cmd). Run it from a Windows console, set remote debugging to `off` (Release), then choose Linux, x64, and net10.0. To prepare only the host, enter `exit` at the packaging prompt:
+Prepare the host and its plugins with the host's [deployment script](https://github.com/Zongsoft/hosting/blob/main/web/default/deploy.cmd). Define root-level `framework=net10.0` in the hosting root's `.env`, and set the matching process variable `framework` in the current Windows console for Cake. The script no longer prompts for the framework. Set remote debugging to `off` (Release), then choose Linux and x64. To prepare only the host, enter `exit` at the packaging prompt (this branch currently returns `1`, without indicating a preceding deployment failure):
 
 ```cmd
+set "framework=net10.0"
+set "Environment=production"
 cd /d D:\Zongsoft\hosting\web\default
 deploy.cmd
 ```
 
 ### Step 2: Build the package
 
-Package directly from the host directory, without `--source`, the source directory is the current directory, and the positional arguments pick the payload from it. The command below is exactly what the host's [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd) runs when you choose the `deb` format, version number `1.0.0`, the `production` environment, and the remaining defaults:
+Package directly from the host directory: without `--source`, the source is the current directory, and positional arguments select its payload. Alternatively, run the host's [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd). The standalone script defaults to tar, Release, and x64 and packages existing files only. The current Web environment prompt does not assign its input back to `environment`, so set `Environment=production` first, choose `deb` and version `1.0.0`, and leave the migration prompt empty. The corresponding core command follows, omitting empty Edition and migrator options:
 
 ```cmd
 dotnet-pack deb ^
@@ -151,15 +153,15 @@ dotnet-pack deb ^
 	--title:Zongsoft.Web ^
 	--version:1.0.0 ^
 	--compilation:Release ^
-	--framework:net10.0 ^
 	--platform:linux ^
 	--architecture:x64 ^
 	--Environment:production ^
+	--DOTNET_ENVIRONMENT:production ^
 	--ASPNETCORE_ENVIRONMENT:production ^
 	--listen:8069 ^
 	--daemon:zongsoft.web ^
 	--web:nginx ^
-	--daemon-environments:Environment,ASPNETCORE_ENVIRONMENT ^
+	--daemon-environments:Environment,DOTNET_ENVIRONMENT,ASPNETCORE_ENVIRONMENT ^
 	--exclude:**/logs/;bin/$(compilation)/$(framework)/*.staticwebassets.* ^
 	--output:.packages ^
 	../../mime ^
@@ -176,8 +178,8 @@ dotnet-pack deb ^
 | `--name:Zongsoft.Hosting.Web` | Application name; the entry assembly is `Zongsoft.Hosting.Web.dll`. |
 | `--title:Zongsoft.Web` | Human-readable title, also used as the service description. |
 | `--version:1.0.0` | Example release version number; use your actual version number. |
-| `--compilation`, `--framework` | Also act as variables referenced by `$(compilation)` and `$(framework)` in `--exclude` and the payload arguments. |
-| `--Environment`, `--ASPNETCORE_ENVIRONMENT` | Custom variables written into the generated service environment through `--daemon-environments`. |
+| `--compilation`, `framework` | The option supplies the build configuration; merged Variables supply the framework (hosting `.env` in this example). Both are referenced by `$(compilation)` and `$(framework)` in exclusions and payload arguments. |
+| `--Environment`, `--DOTNET_ENVIRONMENT`, `--ASPNETCORE_ENVIRONMENT` | Custom variables written into the generated service environment through `--daemon-environments`. |
 | `--listen:8069` | The generated service listens on `http://127.0.0.1:8069`. |
 | `--daemon:zongsoft.web` | Package and service identifier `zongsoft.web`; install path `/opt/zongsoft/web`. |
 | `--web:nginx` | Generates an Nginx site configuration from the host's `web.profile`. |
@@ -187,6 +189,8 @@ dotnet-pack deb ^
 | `bin/$(compilation)/$(framework):~` | The `~` directory alias places the build output directly at the installation root. |
 
 > 💡 **Tip:** Replace `deb` with `tar` or `rpm` to build the other formats. When building the same format again, use another output directory or add `--overwrite`.
+
+Daemon scripts generate `zongsoft.daemon.service` and pass `Environment` and `DOTNET_ENVIRONMENT`. Terminal scripts pass the same variables with `--daemon:disabled`; this does not set process variables for an interactive terminal. All three hosts can include existing migration artifacts without creating them. First run `migrate.cmd` from the hosting root, then enter `zongsoft` at the host's migration prompt. See the [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.md#installation-and-migration-packages) for complete script parameters; this README defines the tool's behavior.
 
 ### Step 3: Inspect the result
 
@@ -317,7 +321,7 @@ Debian receives a `Depends` field; RPM receives `Requires` entries. For `runtime
 
 Only the interval notation is shared. Version endpoints retain their original text and use the target package manager's comparison rules; the packager does not normalize, reorder, or compare them as NuGet versions. Debian virtual packages can have different providers satisfying the lower and upper bounds; RPM `with` requires the same package to satisfy both. Package names are not mapped between distributions. Native names such as Debian `libc6:any` or RPM `pkgconfig(openssl)` remain format-specific; a range is introduced by `:[`, `:(`, or a colon followed by a digit-starting bare version. Use brackets for native versions starting with a letter.
 
-Floating versions such as `10.*`, malformed intervals, empty alternatives, and the old `name >= version` / `name (>= version)` dependency inputs fail packaging. Duplicate constraints are retained. An omitted or empty dependency list writes no application dependency. The packager only writes declarations; it does not download or embed dependencies, so the installation environment needs an available package repository. Other relationship options below retain their native syntax.
+Floating versions such as `10.*`, malformed intervals, and empty alternatives fail packaging. Duplicate constraints are retained. An omitted or empty dependency list writes no application dependency. The packager only writes declarations; it does not download or embed dependencies, so the installation environment needs an available package repository. Other relationship options below retain their native syntax.
 
 #### Debian relationship options
 
@@ -665,7 +669,7 @@ HTTPS requires a usable default server certificate configured in the host; the p
 
 ### Service environment variables
 
-Values of the variables listed in `--daemon-environments` are written to the generated service's `Environment=`. The Web host's [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd) uses it for `Environment` and `ASPNETCORE_ENVIRONMENT`:
+Values of the variables listed in `--daemon-environments` are written to the generated service's `Environment=`. The Web host's [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd) uses it for `Environment`, `DOTNET_ENVIRONMENT`, and `ASPNETCORE_ENVIRONMENT`. This Bash example specifies the framework explicitly; the host scripts resolve it from Variables:
 
 ```bash
 dotnet-pack deb \
@@ -677,8 +681,9 @@ dotnet-pack deb \
   --platform:linux \
   --framework:net10.0 \
   --output:.packages \
-  --daemon-environments:Environment,ASPNETCORE_ENVIRONMENT \
+  --daemon-environments:Environment,DOTNET_ENVIRONMENT,ASPNETCORE_ENVIRONMENT \
   --Environment:Production \
+  --DOTNET_ENVIRONMENT:Production \
   --ASPNETCORE_ENVIRONMENT:Production \
   ../../mime \
   appsettings.json \

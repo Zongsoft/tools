@@ -156,6 +156,10 @@ Core separates ordered local statements from the merged effective view. Imports 
 
 Core Save() without an explicit destination writes changed declarations in the receiver and import subtree back to their respective sources. Explicit paths, streams and text writers output only the receiver's statements. Unchanged files are not rewritten. Multiple outputs are all prepared before individual commits; this is not a cross-file transaction. Deployer only reads manifests and records hashes through Importing; it does not invoke these save entry points.
 
+## Hosting invocation boundaries
+
+Hosting scripts use separate commands for building, deploying plugins, and optionally creating installation packages. Cake receives the framework through the script's process variable; deployer resolves it from its own Variables, including destination `appsettings.json` in the final merge. A framework used in a destination expression must already be available during destination bootstrap; configuration loaded afterward cannot redefine that destination. Deployer neither sets Cake's process environment nor invokes packager or migrator. See the [README example](../README.md#framework-and-variables-in-hosting-scripts).
+
 ## Local search and source links
 
 Core Searcher handles local patterns and recursive matching. Results preserve the logical source name while reading the resolved target. A selected directory link may be expanded as a payload root; nested directory links are skipped and file links contribute target bytes under their logical names. Recursive patterns do not cross directory links to match further segments. Selected broken/cyclic links fail before output writes. Destination boundaries and output path validation apply to every write.

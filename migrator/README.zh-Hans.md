@@ -41,11 +41,10 @@ dotnet tool install -g Zongsoft.Tools.Migrator --version "$toolVersion" --source
 
 ### 命令选项和示例
 
-从 `D:/Zongsoft/hosting` 的 PowerShell 制作现有 Web 升迁输入：
+从 `D:/Zongsoft/hosting` 的 PowerShell 制作默认方案的升迁输入，供 daemon、Web 等宿主安装包使用：
 
 ```powershell
-$env:scheme = 'default'
-dotnet-migrate --name:zongsoft --version:1.0.0 --platform:linux --output:packages '.deploy/$(scheme)/migration/$(version)/*.migration'
+dotnet-migrate --name:zongsoft --version:1.0.0 --platform:linux --architecture:x64 --scheme:default --output:.migration '.deploy/$(scheme)/migration/$(version)/*.migration'
 ```
 
 ```text
@@ -74,6 +73,14 @@ dotnet-migrate --name:<名称> --platform:<平台> [选项...] <输入.migration
 > - Windows 规范化为 win，仅支持 x64。
 > - Unix 必须指定具体系统，osx/xos/macos 尚无运行器，均不生成产物。
 
+### hosting 脚本衔接
+
+hosting 根目录的 `migrate.cmd` 是交互入口：默认名称 `zongsoft`、平台 `linux`、架构 `x64`、方案 `default`，Edition 可空，但必须输入版本号、版本文件或目录。首次路径留空选择 `.deploy/$(scheme)/migration/$(version)/*.migration`；输入文件名时自动加上该目录，有目录分隔符的路径按工作目录定位。可连续输入多个文件，之后留空结束；裸 `*` 不接受，使用 `*.migration`。脚本自行切换到 hosting 根目录，所以其 `.env` 变量作用域与上例相同。
+
+上例生成 `.migration/zongsoft(migrate)@1.0.0_linux-x64.tar.gz` 和同名 `.sh`。当前默认输入包含 MySQL SQL 和 Amazon S3 桶定义，连接参数使用 `.deploy/default/migration/` 中的 `.ini`。归档内的计划、内部入口和原生执行器直接位于根部，SQL 在 `.artifacts/mysql/`；hosting 的输出目录 `.migration/` 不会作为归档内层目录。只制作时不连接目标服务，源版本文件不回写；脚本不覆盖已有同名产物，覆盖需直接调用工具并指定 `--overwrite`。
+
+制作完成后，在宿主 `deploy.cmd` / `pack.cmd` 的升迁提示中填写 `zongsoft`，打包器会沿源目录祖先链查找配套产物；名称独立于宿主名称，但 Edition、版本及 RID 必须与安装包匹配。Windows x64 的升迁包可以独立使用；当前安装包集成使用 Linux x64/arm64 产物。安装包只把归档和外部脚本收纳到安装根 `.migration/`，执行时解压到独立临时目录。默认持久状态目录是启动脚本旁的 `.migration/<升迁名称>/`，它独立于归档布局；安装包调用时则显式传入 `/var/lib/<包名>/packager`。完整脚本流程见 [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.zh-Hans.md#安装包与升迁包)。
+
 ### 变量与 .env 文件
 
 每次调用依次加载描述符默认值、系统环境变量、从文件系统根目录到工作目录的各级直属 `.env`、显式命令选项。同名变量后加载覆盖先加载，空值也参与覆盖，名称不区分大小写。不搜索子目录，各个输入文件及版本文件的目录也不建立额外变量作用域。变量仅属于本次调用，不修改进程环境变量。
@@ -94,17 +101,17 @@ dotnet-migrate --name:<名称> --platform:<平台> [选项...] <输入.migration
 
 例如 `.edition` 选中 Enterprise、版本为 `2.0.0`，省略 `--edition` 时生成 `zongsoft(migrate)@2.0.0_linux-x64.tar.gz`；添加 `--edition:enterprise` 时生成 `zongsoft-Enterprise(migrate)@2.0.0_linux-x64.tar.gz`。旧多 Edition `.version` 须改名为 `.edition`，标识读取器不解析 Edition 段落。
 
-在 `D:/Zongsoft/hosting` 中，以下两种方式均使用现有 Web 宿主版本文件（先按上例设置 `scheme`）：
+在 `D:/Zongsoft/hosting` 中，可以使用 Web 宿主源版本。显式清单示例要求 `.edition` 已存在；指定目录则优先读取 `.edition`，缺失时读取 `.version`。应确保默认方案下存在对应版本的升迁输入：
 
 ```powershell
-dotnet-migrate --name:zongsoft --version:web/default/.edition --platform:linux --output:packages '.deploy/$(scheme)/migration/$(version)/*.migration'
-dotnet-migrate --name:zongsoft --version:web/default --platform:linux --output:packages '.deploy/$(scheme)/migration/$(version)/*.migration'
+dotnet-migrate --name:zongsoft --version:web/default/.edition --platform:linux --scheme:default --output:.migration '.deploy/$(scheme)/migration/$(version)/*.migration'
+dotnet-migrate --name:zongsoft --version:web/default --platform:linux --scheme:default --output:.migration '.deploy/$(scheme)/migration/$(version)/*.migration'
 ```
 
 省略 `--version` 时，在 `D:/Zongsoft/hosting/web/default` 中执行：
 
 ```powershell
-dotnet-migrate --name:zongsoft --platform:linux --output:../../packages '../../.deploy/$(scheme)/migration/$(version)/*.migration'
+dotnet-migrate --name:zongsoft --platform:linux --scheme:default --output:../../.migration '../../.deploy/$(scheme)/migration/$(version)/*.migration'
 ```
 
 版本路径支持变量；数字形式优先作为版本号，文件名为 `1.0.0` 时可用 `./1.0.0` 明确指定文件。命令选项先保留原始文本，版本来源确定后，`architecture`、`overwrite` 等值按需递归展开，再转换为对应类型；裸 `--overwrite` 仍表示 true。布尔值还支持 `true/false`、`1/0`、`yes/no`、`on/off`、`enable/disable`、`enabled/disabled`。枚举选项沿用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 的转换规则，不额外检查枚举成员是否已定义；调用方应提供有效枚举项。变量名不区分大小写，支持点号、连字符和索引；用到的值遇缺失、循环或超过 64 层会报错。最终版本和 Edition 用于 `$(version)`/`$(edition)`、计划身份及产物名称。升迁输入和输出的相对路径始终基于当前目录，不随版本文件目录改变。
@@ -399,8 +406,8 @@ MySQL 连接始终开启 `AllowUserVariables=true`，支持同一会话里的 `S
 两文件使用同一前缀 `<name>[-<edition>](migrate)@<version>_<RID>`，扩展名分别为 `.tar.gz` 和 `.sh`/`.cmd`。`name` 原样使用命令选项；未指定 Edition 时省略 `-<edition>`，`(migrate)` 始终位于版本号之前。此文件名规则独立于计划名称及默认状态目录：后两者继续使用既有的升迁后缀规范化规则，以复用已有状态。不生成描述文件。例如：
 
 ```text
-packages/zongsoft(migrate)@1.0.0_linux-x64.tar.gz
-packages/zongsoft(migrate)@1.0.0_linux-x64.sh
+.migration/zongsoft(migrate)@1.0.0_linux-x64.tar.gz
+.migration/zongsoft(migrate)@1.0.0_linux-x64.sh
 ```
 
 归档根目录包含 `migration.json`、`id`、`migrate.sh`（Windows 为 `migrate.cmd`）、原生执行器及其依赖；SQL 批次位于 `.artifacts/<provider>/`。外部不再套 `.migration/` 目录。启动脚本直接解压到独立临时目录，执行结束后清理；持久状态目录独立于归档内部布局。两个输出先暂存再发布；替换已有文件须指定 --overwrite，发布失败会恢复原输出。
@@ -470,7 +477,7 @@ SQL 校验和只用于在外部资源操作之前验证包内文件与当前计�
 
 ## 与 packager 配合
 
-在 hosting/web/default 的打包命令中使用 `--migrator:../../packages/zongsoft`；daemon 使用 `--migrator:../packages/zongsoft`。packager 根据最终 Edition、版本和 RID 查找准确配套文件，使用同一产物命名规则。任一文件缺失即失败，不选择其他版本。安装包原样包含归档和脚本；安装时显式传入 `/var/lib/<包名>/packager` 状态目录，升迁失败阻止启动。实际宿主命令和连接参数不由本工具自动修改。
+在 hosting/web/default 的打包命令中使用 `--migrator:../../.migration/zongsoft`；daemon 使用 `--migrator:../.migration/zongsoft`。packager 根据最终 Edition、版本和 RID 查找准确配套文件，使用同一产物命名规则。任一文件缺失即失败，不选择其他版本。安装包原样包含归档和脚本；安装时显式传入 `/var/lib/<包名>/packager` 状态目录，升迁失败阻止启动。实际宿主命令和连接参数不由本工具自动修改。
 
 <a id="build-and-test"></a>
 

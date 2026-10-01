@@ -171,6 +171,18 @@ NuGet-related parameters can be specified via command options, environment varia
 - `NuGet_Server` indicates the NuGet server information, the default value is: `https://api.nuget.org/v3/index.json`.
 - `NuGet_Packages` indicates the directory of NuGet packages, the default value is: `%USERPROFILE%/.nuget/packages`.
 
+### Framework and variables in hosting scripts
+
+The hosting `deploy.cmd` scripts omit the deployment command's `--framework`. Define root-level `framework=net10.0` in the hosting root's `.env`. The deployer reads it from Variables, following environment variables → ancestor `.env` → destination application `appsettings.json` → command options; it does not read one environment variable directly. Omitted, null, or empty options preserve an existing nonempty framework; whitespace keeps its previous behavior.
+
+From the daemon host directory, a deployment command can be:
+
+```cmd
+dotnet deploy --verbosity:quiet --overwrite:newest --prerelease:true --host:daemon --site:daemon --scheme:default --environment:development --debug:off --edition:Release --platform:linux --architecture:x64 --destination:bin/$(edition)/$(framework) .deploy ../.deploy/default/$(host).deploy ../.deploy/default/$(site).deploy
+```
+
+In this deployment workflow, `--edition:Release` selects the build-configuration directory; an installation package's Edition is a separate identity parameter. This command deploys plugins without building the host or creating installation/migration packages. When using the complete hosting `deploy.cmd`, also set the matching process variable `framework` for its Cake build; loading `.env` does not set process variables. See the [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.md#installation-and-migration-packages) for script parameters and standalone packaging.
+
 ## Setup
 
 - List tools

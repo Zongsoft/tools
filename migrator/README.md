@@ -41,11 +41,10 @@ Uninstall first when replacing the same version. Cake `pack` pushes to NuGet and
 
 ### Command options and example
 
-From PowerShell in `D:/Zongsoft/hosting`, use the existing Web migration inputs:
+From PowerShell in `D:/Zongsoft/hosting`, package the default scheme's migration inputs for daemon, Web, and other host installation packages:
 
 ```powershell
-$env:scheme = 'default'
-dotnet-migrate --name:zongsoft --version:1.0.0 --platform:linux --output:packages '.deploy/$(scheme)/migration/$(version)/*.migration'
+dotnet-migrate --name:zongsoft --version:1.0.0 --platform:linux --architecture:x64 --scheme:default --output:.migration '.deploy/$(scheme)/migration/$(version)/*.migration'
 ```
 
 ```text
@@ -74,6 +73,14 @@ At least one positional argument is required. Each argument supports variables, 
 > - Windows normalize to win, x64 only.
 > - Unix requires a concrete OS; osx/xos/macos have no executor and fail without outputs.
 
+### Hosting script integration
+
+The hosting root's `migrate.cmd` is an interactive entry. Defaults are name `zongsoft`, platform `linux`, architecture `x64`, and scheme `default`. Edition is optional; a version number, version file, or directory must be entered. Empty input at the first path prompt selects `.deploy/$(scheme)/migration/$(version)/*.migration`. A filename receives this directory prefix; paths with directory separators resolve from the working directory. Enter multiple files and finish with empty input. Bare `*` is rejected; use `*.migration`. The script switches to the hosting root, giving it the same `.env` scope as the example above.
+
+The example creates `.migration/zongsoft(migrate)@1.0.0_linux-x64.tar.gz` and a matching `.sh`. Current default inputs include MySQL SQL and Amazon S3 bucket declarations, with connection parameters in `.deploy/default/migration/*.ini`. The plan, internal launcher, and native executor sit at the archive root; SQL is under `.artifacts/mysql/`. The hosting output directory `.migration/` is not an inner archive directory. Creation does not contact target services or save source version files. The script does not overwrite existing outputs; invoke the tool directly with `--overwrite` to replace them.
+
+Then enter `zongsoft` at the migration prompt in the host's `deploy.cmd` / `pack.cmd`. The packager searches the source directory's ancestor chain for the pair. The migration name is independent of the host name, but Edition, version, and RID must match the installation package. Windows x64 migration packages can run independently; current installation-package integration uses Linux x64/arm64 artifacts. The installation package stores the archive and external launcher under its installation root's `.migration/`; execution extracts to a separate temporary directory. Default persistent state resides in `.migration/<migration-name>/` beside the launcher, independently of archive layout; installation packages instead pass `/var/lib/<package-name>/packager` explicitly. See the [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.md#installation-and-migration-packages) for the complete script workflow.
+
 ### Variables and .env files
 
 Each invocation loads descriptor defaults, environment variables, direct `.env` files from the filesystem root down to the working directory, and explicit command options, in that order. Later values overwrite earlier case-insensitive names, including empty values. Child directories and individual input/version-file directories do not establish additional variable scopes. Variables remain local to the invocation and do not modify the process environment.
@@ -94,17 +101,17 @@ For a manifest, explicit Edition selects the matching entry case-insensitively a
 
 For example, if `.edition` selects Enterprise with version `2.0.0`, omitting `--edition` generates `zongsoft(migrate)@2.0.0_linux-x64.tar.gz`; adding `--edition:enterprise` generates `zongsoft-Enterprise(migrate)@2.0.0_linux-x64.tar.gz`. Legacy multi-Edition `.version` files must be renamed to `.edition`; the identifier reader does not parse Edition sections.
 
-From `D:/Zongsoft/hosting`, these alternatives use the existing Web host version file (set `scheme` as above):
+From `D:/Zongsoft/hosting`, these alternatives read the Web host's source version. The explicit manifest example requires an existing `.edition`; the directory form prefers `.edition` and falls back to `.version` when absent. Ensure the default scheme contains migration inputs for the selected version:
 
 ```powershell
-dotnet-migrate --name:zongsoft --version:web/default/.edition --platform:linux --output:packages '.deploy/$(scheme)/migration/$(version)/*.migration'
-dotnet-migrate --name:zongsoft --version:web/default --platform:linux --output:packages '.deploy/$(scheme)/migration/$(version)/*.migration'
+dotnet-migrate --name:zongsoft --version:web/default/.edition --platform:linux --scheme:default --output:.migration '.deploy/$(scheme)/migration/$(version)/*.migration'
+dotnet-migrate --name:zongsoft --version:web/default --platform:linux --scheme:default --output:.migration '.deploy/$(scheme)/migration/$(version)/*.migration'
 ```
 
 To omit `--version`, run from `D:/Zongsoft/hosting/web/default`:
 
 ```powershell
-dotnet-migrate --name:zongsoft --platform:linux --output:../../packages '../../.deploy/$(scheme)/migration/$(version)/*.migration'
+dotnet-migrate --name:zongsoft --platform:linux --scheme:default --output:../../.migration '../../.deploy/$(scheme)/migration/$(version)/*.migration'
 ```
 
 Version paths support variables. Numeric values take precedence over paths; use `./1.0.0` for a file named `1.0.0`. Command options remain raw text until needed; after choosing the version source, values such as `architecture` and `overwrite` expand recursively before type conversion. A bare `--overwrite` still means true. Boolean values also accept `true/false`, `1/0`, `yes/no`, `on/off`, `enable/disable`, and `enabled/disabled`. Enum options follow [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) conversion rules without an additional check that the enum member is defined; callers must supply a valid member. Variable names are case-insensitive and may contain dots, hyphens, and indices; referenced missing, cyclic, or over-64-level values fail. The resolved version and Edition populate `$(version)`/`$(edition)`, plan identity and artifact names. Migration inputs and output paths stay relative to the working directory, even when the version file is elsewhere.
@@ -399,8 +406,8 @@ The runner authenticates with `conn`, then queries database/user catalogs, initi
 Both files use `<name>[-<edition>](migrate)@<version>_<RID>`, with .tar.gz and .sh/.cmd extensions. The command's name is used verbatim; omit `-<edition>` when no Edition is specified, and always place `(migrate)` before the version. This filename rule is separate from the plan name and default state directory, which retain the existing migration suffix normalization to reuse persistent state. No descriptor file is generated:
 
 ```text
-packages/zongsoft(migrate)@1.0.0_linux-x64.tar.gz
-packages/zongsoft(migrate)@1.0.0_linux-x64.sh
+.migration/zongsoft(migrate)@1.0.0_linux-x64.tar.gz
+.migration/zongsoft(migrate)@1.0.0_linux-x64.sh
 ```
 
 The archive root contains `migration.json`, `id`, `migrate.sh` (Windows: `migrate.cmd`), the native executor and its dependencies. Prepared SQL is stored under `.artifacts/<provider>/`. There is no enclosing `.migration/` directory. The launcher extracts these files directly into a unique temporary directory and removes that directory when execution ends. The persistent state directory is separate from this archive layout. Both outputs are staged before publication; replacing existing files requires --overwrite, and failed publication restores previous outputs.
@@ -470,7 +477,7 @@ SQL checksums only verify that packaged files match the current plan before any 
 
 ## Packager integration
 
-Use `--migrator:../../packages/zongsoft` in hosting/web/default packaging commands, or `--migrator:../packages/zongsoft` in daemon. Packager uses its final Edition, version and RID with the same artifact naming rule to locate both artifacts. Missing companions fail without fallback. Installation packages include both files unchanged; installers pass `/var/lib/<package-name>/packager` and prevent service startup on failure. This tool does not modify existing host commands or connection settings.
+Use `--migrator:../../.migration/zongsoft` in hosting/web/default packaging commands, or `--migrator:../.migration/zongsoft` in daemon. Packager uses its final Edition, version and RID with the same artifact naming rule to locate both artifacts. Missing companions fail without fallback. Installation packages include both files unchanged; installers pass `/var/lib/<package-name>/packager` and prevent service startup on failure. This tool does not modify existing host commands or connection settings.
 
 <a id="build-and-test"></a>
 

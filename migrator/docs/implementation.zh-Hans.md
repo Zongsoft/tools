@@ -1,5 +1,7 @@
 # 升迁实现说明
 
+hosting 的 `migrate.cmd` 是生成端交互包装，将工作目录固定为 hosting 根目录，产物输出到直属 `.migration/`。这个目录仅用于存放归档及外部脚本；`MigrationBundle` 写入的归档条目仍直接位于根部及 `.artifacts/`。packager 只按最终 Edition、版本、RID 定位产物，并显式传入安装状态目录；migrator 不负责宿主编译、插件部署或源版本回写。示例及脚本参数见 [hosting 脚本衔接](../README.zh-Hans.md#hosting-脚本衔接)。
+
 数据库配置由 MigrationLoader.Databases 解析。[Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 决定条目及导入覆盖；无导入的本地 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 视图提供声明位置，用于还原跨库事件顺序和真正的空段；有效条目保留首次位置和最终来源。Provider.Prepare 在指纹计算前补齐建库默认值。Databases 保存管理员参数、有效设置、用户；有序 Steps 以 DatabaseIndex 引用 Databases 数组位置（从零开始），只有引用目标入计划。执行器先验证所有 SQL，再全部建库、全部建账号及映射、执行任务、追加授权。已有设置/密码不变。数据库 pending 仅保存目标和设置摘要，恢复未完成的新库配置。Amazon S3 保留既有解析执行路径，详见[数据库指南](../README.zh-Hans.md#database-configuration)。
 
 MySQL provider 默认 `Secured=false`、`AllowPublicKeyRetrieval=true`，`Prepare` 在指纹计算前将两项补齐到计划。执行器在每次管理员/目标库连接中，将 `Secured` 映射为 `SslMode=Disabled` 或 `Required`，并将公钥获取设置传给 MySqlConnector。显式值保持不变；`AllowPublicKeyRetrieval` 仅用于 MySQL，必须为布尔值。
