@@ -121,16 +121,100 @@ public sealed partial class MigrateCommandTest
 
 	#region 版本分支测试
 	[Theory]
+	[InlineData(null, null, "2.3.4", null)]
+	[InlineData(null, "", "2.3.4", null)]
+	[InlineData(null, " \t ", "2.3.4", null)]
+	[InlineData(null, "community", "1.0.0", "Community")]
+	[InlineData(null, "$(chosen_edition)", "1.0.0", "Community")]
+	[InlineData("2.3.4", null, "2.3.4", null)]
+	[InlineData("2.3.4", "community", "2.3.4", "community")]
+	[InlineData(".version", null, "5.6.7", null)]
+	[InlineData(".version", "Other", "5.6.7", "Other")]
+	public async Task Execute_EditionOnlyFromOption_UsesManifestVersionIndependentlyAsync(string option, string edition, string version, string outputEdition)
+	{
+		using var directory = new MigrationTestDirectory();
+		var manifest = directory.Write(".edition", "Other.Application=Enterprise\n[Community]\n1.0.0\n[Enterprise]\n2.3.4\n");
+		var identifier = directory.Write(".version", "Other.Application-Legacy@5.6.7");
+		var original = File.ReadAllBytes(manifest);
+		var timestamp = File.GetLastWriteTimeUtc(manifest);
+		directory.Write(".env", "edition=Missing\nchosen_edition=community\n");
+		PrepareMigration(directory, "/data/hosting.db");
+		var arguments = VersionArguments(option);
+		if(edition != null)
+			arguments.Add("--edition:" + edition);
+		var previous = Environment.GetEnvironmentVariable("edition");
+		try
+		{
+			Environment.SetEnvironmentVariable("edition", "Wrong");
+			var result = await RunAsync(directory, arguments);
+			Assert.True(result.Code == 0, result.Output);
+			AssertVersionArtifacts(directory, version, outputEdition);
+			Assert.Equal(2, Directory.GetFiles(Path.Combine(directory.Path, "out")).Length);
+			Assert.Equal(original, File.ReadAllBytes(manifest));
+			Assert.Equal(timestamp, File.GetLastWriteTimeUtc(manifest));
+			Assert.Equal("Other.Application-Legacy@5.6.7", File.ReadAllText(identifier));
+		}
+		finally { Environment.SetEnvironmentVariable("edition", previous); }
+	}
+
+	[Theory]
+	[InlineData(".version")]
+	[InlineData("app.version")]
+	[InlineData("app.VERSION")]
+	public async Task Execute_IdentifierFileSuffix_ReadsVersionWithoutEditionAsync(string filename)
+	{
+		using var directory = new MigrationTestDirectory();
+		var path = directory.Write(filename, "Other.Application-Enterprise@2.3.4");
+		PrepareMigration(directory, "/data/hosting.db");
+		var result = await RunAsync(directory, VersionArguments(filename));
+		Assert.True(result.Code == 0, result.Output);
+		AssertVersionArtifacts(directory, "2.3.4");
+		Assert.Equal("Other.Application-Enterprise@2.3.4", File.ReadAllText(path));
+	}
+
+	[Theory]
+	[InlineData("", false)]
+	[InlineData("Other.Application=Missing\n[Community]\n1.0.0", false)]
+	[InlineData(null, true)]
+	public async Task Execute_InvalidManifest_DoesNotFallBackToIdentifierAsync(string content, bool directoryPath)
+	{
+		using var directory = new MigrationTestDirectory();
+		var manifest = Path.Combine(directory.Path, ".edition");
+		if(directoryPath)
+			Directory.CreateDirectory(manifest);
+		else
+			directory.Write(".edition", content);
+		var identifier = directory.Write(".version", "Other.Application@2.3.4");
+		var result = await RunAsync(directory, VersionArguments(null));
+		Assert.NotEqual(0, result.Code);
+		Assert.Contains(manifest, Assert.IsType<InvalidDataException>(result.Error).Message);
+		Assert.False(Directory.Exists(Path.Combine(directory.Path, "out")));
+		Assert.Equal("Other.Application@2.3.4", File.ReadAllText(identifier));
+	}
+
+	[Fact]
+	public async Task Execute_ManifestDirectory_UsesCurrentWithoutOutputEditionAsync()
+	{
+		using var directory = new MigrationTestDirectory();
+		directory.Write("versions/.edition", "Other.Application=Enterprise\n[Community]\n1.0.0\n[Enterprise]\n2.3.4\n");
+		directory.Write("versions/.version", "Other.Application@8.0.0");
+		PrepareMigration(directory, "/data/hosting.db");
+		var result = await RunAsync(directory, VersionArguments("versions"));
+		Assert.True(result.Code == 0, result.Output);
+		AssertVersionArtifacts(directory, "2.3.4");
+	}
+
+	[Theory]
 	[InlineData("Other.Application@2.3.4", null, null, "2.3.4")]
 	[InlineData("Other.Application@2.3.4", " \t ", null, "2.3.4")]
-	[InlineData("Other.Application\n[Enterprise]\n2.3.4", null, "Enterprise", "2.3.4")]
-	[InlineData("Other.Application\n[Enterprise]\n2.3.4", "", "Enterprise", "2.3.4")]
-	[InlineData("Other.Application\n[Enterprise]\n2.3.4", " \t ", "Enterprise", "2.3.4")]
+	[InlineData("Other.Application\n[Enterprise]\n2.3.4", null, null, "2.3.4")]
+	[InlineData("Other.Application\n[Enterprise]\n2.3.4", "", null, "2.3.4")]
+	[InlineData("Other.Application\n[Enterprise]\n2.3.4", " \t ", null, "2.3.4")]
 	[InlineData("Other.Application\n[Community]\n1.0.0\n[Enterprise]\n2.3.4", "enterprise", "Enterprise", "2.3.4")]
 	public async Task Execute_VersionEdition_SelectsExpectedVersionAndCanonicalSpellingAsync(string text, string edition, string selected, string version)
 	{
 		using var directory = new MigrationTestDirectory();
-		var path = directory.Write(".version", text);
+		var path = directory.Write(".edition", text);
 		var original = File.ReadAllBytes(path);
 		PrepareMigration(directory, "/data/hosting.db");
 		var arguments = VersionArguments(null);
@@ -153,10 +237,10 @@ public sealed partial class MigrateCommandTest
 	public async Task Execute_InvalidVersionEdition_PreservesFileAndExistingOutputsAsync(string text, string edition)
 	{
 		using var directory = new MigrationTestDirectory();
-		var path = directory.Write(".version", text);
+		var path = directory.Write(".edition", text);
 		var original = File.ReadAllBytes(path);
-		var archive = directory.Write("out/zongsoft.daemon-migrate@2.3.4_linux-x64.tar.gz", "previous archive");
-		var launcher = directory.Write("out/zongsoft.daemon-migrate@2.3.4_linux-x64.sh", "previous launcher");
+		var archive = directory.Write("out/zongsoft.daemon(migrate)@2.3.4_linux-x64.tar.gz", "previous archive");
+		var launcher = directory.Write("out/zongsoft.daemon(migrate)@2.3.4_linux-x64.sh", "previous launcher");
 		var arguments = VersionArguments(null);
 		arguments.Add("--overwrite");
 		if(edition != null)
@@ -193,7 +277,7 @@ public sealed partial class MigrateCommandTest
 
 		Assert.True(result.Code == 0, result.Output);
 		AssertVersionArtifacts(directory, "2.3.4", "Enterprise", "out/Enterprise/2.3.4");
-		var archive = Path.Combine(directory.Path, "out/Enterprise/2.3.4/zongsoft.daemon-migrate-Enterprise@2.3.4_linux-x64.tar.gz");
+		var archive = Path.Combine(directory.Path, "out/Enterprise/2.3.4/zongsoft.daemon-Enterprise(migrate)@2.3.4_linux-x64.tar.gz");
 		var entries = ReadArchive(archive);
 		using var plan = JsonDocument.Parse(Assert.Single(entries, entry => entry.Name == ".migration/migration.json").Content);
 		Assert.Equal("zongsoft.daemon Enterprise 2.3.4", plan.RootElement.GetProperty("Title").GetString());
@@ -265,8 +349,8 @@ public sealed partial class MigrateCommandTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var path = directory.Write("broken.release", content);
-		var archive = directory.Write("out/zongsoft.daemon-migrate@2.3.4_linux-x64.tar.gz", "previous archive");
-		var launcher = directory.Write("out/zongsoft.daemon-migrate@2.3.4_linux-x64.sh", "previous launcher");
+		var archive = directory.Write("out/zongsoft.daemon(migrate)@2.3.4_linux-x64.tar.gz", "previous archive");
+		var launcher = directory.Write("out/zongsoft.daemon(migrate)@2.3.4_linux-x64.sh", "previous launcher");
 		var arguments = VersionArguments("broken.release");
 		arguments.Add("--overwrite");
 
@@ -333,8 +417,8 @@ public sealed partial class MigrateCommandTest
 	{
 		using var directory = new MigrationTestDirectory();
 		PrepareMigration(directory, "/data/hosting.db");
-		var archive = directory.Write("out/zongsoft.daemon-migrate@2.3.4_linux-arm64.tar.gz", "previous archive");
-		var launcher = directory.Write("out/zongsoft.daemon-migrate@2.3.4_linux-arm64.sh", "previous launcher");
+		var archive = directory.Write("out/zongsoft.daemon(migrate)@2.3.4_linux-arm64.tar.gz", "previous archive");
+		var launcher = directory.Write("out/zongsoft.daemon(migrate)@2.3.4_linux-arm64.sh", "previous launcher");
 		var names = new[] { "zongsoft_migrate_version", "zongsoft_migrate_release", "zongsoft_migrate_platform", "zongsoft_migrate_architecture", "zongsoft_migrate_overwrite" };
 		var previous = names.ToDictionary(name => name, Environment.GetEnvironmentVariable);
 
@@ -447,7 +531,7 @@ public sealed partial class MigrateCommandTest
 	private static void AssertVersionArtifacts(MigrationTestDirectory directory, string version, string edition = null, string output = "out")
 	{
 		var name = "zongsoft.daemon-migrate" + (edition == null ? "" : "-" + edition);
-		var prefix = Path.Combine(directory.Path, output, name + "@" + version + "_linux-x64");
+		var prefix = Path.Combine(directory.Path, output, "zongsoft.daemon" + (edition == null ? "" : "-" + edition) + "(migrate)@" + version + "_linux-x64");
 		Assert.True(File.Exists(prefix + ".tar.gz"), prefix);
 		Assert.True(File.Exists(prefix + ".sh"), prefix);
 		Assert.Contains(Path.GetFileName(prefix) + ".tar.gz", File.ReadAllText(prefix + ".sh"));

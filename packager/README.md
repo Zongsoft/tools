@@ -7,7 +7,7 @@
 
 [English](README.md) | [简体中文](README.zh-Hans.md)
 
-`dotnet-pack` is a .NET global tool that turns a published .NET application directory into Linux installation packages (**`.tar.gz`**, **`.deb`**, and **`.rpm`**) and can generate systemd services, install/uninstall scripts, and Nginx site configuration on demand.
+`dotnet-pack` is a .NET global tool that turns an application directory, such as a frontend `dist` or a published .NET application, into Linux installation packages (**`.tar.gz`**, **`.deb`**, and **`.rpm`**) and can generate systemd services, install/uninstall scripts, and Nginx site configuration on demand.
 
 Package formats are written directly in .NET without calling external `tar`, `dpkg-deb`, `rpmbuild`, or `cpio` commands, so Linux packages can be built on Windows as well.
 
@@ -39,7 +39,7 @@ Package formats are written directly in .NET without calling external `tar`, `dp
 - **Generated services:** creates a systemd service when no `.service` file is supplied; `--listen` sets the listening address.
 - **Complete lifecycle:** generates install and uninstall scripts for every format, with custom hooks and pre/post snippets.
 - **Flexible payload selection:** explicit files, recursive directories, path-segment globbing (including `**`), exclusion patterns, target aliases, and root-level entries such as `/etc/nginx/conf.d/zongsoft.web.conf`.
-- **Application versioning:** reads and updates the source directory's `.version` file, including multiple _**E**ditions_.
+- **Application versioning:** reads and updates the source directory's `.edition` manifest (falling back to `.version`), including multiple _**E**ditions_.
 - **Web hosting configuration:** generates Nginx site configuration from `web.profile` and activates it at install time.
 - **Migration integration:** includes artifacts produced by the independent [migrator tool](../migrator/README.md) and runs them at install time.
 - **Variables:** `$(name)` and `%name%` references, with values from environment variables and `.env` files.
@@ -54,12 +54,12 @@ Read these concepts first; every later section builds on them.
 A single packaging run performs these steps in order:
 
 1. **Fix the source directory:** resolve `--source` (the current directory by default).
-2. **Determine the application identity:** merge the source `.version` with the `--name`, `--edition`, and `--version` options.
+2. **Determine the application identity:** merge values from the source `.edition` manifest or fallback `.version` identifier with the `--name`, `--edition`, and `--version` options.
 3. **Load variables:** defaults, environment variables, ancestor `.env` files, then command options.
 4. **Collect package entries:** select payload files from positional arguments and `--exclude`.
 5. **Generate supporting content:** systemd service, lifecycle scripts, Nginx configuration, migration artifacts.
 6. **Encode and write:** produce `.tar.gz` (with its `.sh` companion), `.deb`, or `.rpm`.
-7. **Save the version:** write back the source `.version` file only after packaging succeeds.
+7. **Save the version:** write back the source `.edition` manifest or `.version` identifier only after packaging succeeds.
 
 ### Key terms
 
@@ -214,7 +214,7 @@ A package file name combines the identifier, optional _**E**dition_, _**V**ersio
 
 ## Command reference
 
-> Examples in this and later sections follow the quick start conventions: they run in the `web/default` host directory of the hosting repository after deploy.cmd has built Release net10.0 and deployed the plugins.
+> The .NET examples in this and later sections follow the quick start conventions: they run in the `web/default` host directory of the hosting repository after deploy.cmd has built Release net10.0 and deployed the plugins.
 
 ### Syntax
 
@@ -236,19 +236,21 @@ Exit codes:
 | `1` | Argument, input, or packaging failure |
 | `2` | No command specified |
 
-In the tables below, **required** options must always be supplied; _conditionally required_ options are required only when the source directory has no `.version` file.
+In the tables below, **required** options must always be supplied; _conditionally required_ options are required only when the source directory has neither `.edition` nor `.version`.
 
 ### Identity and target
 
 | Option | Default | Description |
 | --- | --- | --- |
 | `--name:<name>` | _Conditionally required_ | Application/package name; also locates the .NET host assembly when a service is generated. |
-| `--version:<version>` | _Conditionally required_ | Release version number; overrides the selected version number when a source `.version` file exists. A zero version number _(`0.0.0.0`)_ is rejected. |
-| `--edition:<name>` | empty | Optional release edition appended to the package name; for RPM, a non-empty value is also used as the release. |
+| `--version:<version>` | _Conditionally required_ | Release version number; overrides the selected version number when a source `.edition` manifest or `.version` identifier exists. A zero version number _(`0.0.0.0`)_ is rejected. |
+| `--edition:<name>` | Current or the sole Edition | Optional product Edition appended to the package name. |
 | `--platform:<platform>` | **Required** | Target platform: `linux`, `unix`, `osx`, `windows`/`win`, or `unknown`. Linux packages normally use `linux`. |
-| `--framework:<tfm>` | **Required** | Target framework, such as `net8.0`, `net9.0`, or `net10.0`. |
+| `--framework:<tfm>` | empty | Optional .NET target framework, such as `net10.0`, used to locate the host under `bin/<compilation>/<framework>`. When unset, this build directory is skipped; hosts in the source directory can still be located. |
 | `--architecture:<arch>` | `x64` | Target CPU architecture, such as `x64`, `x86`, `arm64`, or `arm`. |
-| `--compilation:<name>` | `Release` | Build configuration directory used when locating host files, i.e. `bin/<configuration>/<framework>`. |
+| `--compilation:<name>` | `Release` | Optional .NET build configuration used to locate the host under `bin/<compilation>/<framework>`; also available as `$(compilation)`. |
+
+Ordinary file packaging needs neither `--framework` nor `--compilation`; these options do not run a build. Both may also be omitted when the application DLL is already in the source directory or an existing `.service` file is supplied. Specify `--framework` to locate a host in a .NET build directory; `--compilation` defaults to `Release`.
 
 ### Input and output
 
@@ -325,11 +327,25 @@ RPM relationship entries support `name`, `name = version`, `name >= version`, `n
 
 ### Option value conventions
 
-- **Booleans:** `--overwrite` may be bare or explicitly `true/false`, `1/0`, `yes/no`, `on/off`, or `enable(d)/disable(d)`; other values are false under the Core `Switch` convention.
+- **Booleans:** `--overwrite` is equivalent to `--overwrite:true`. Explicit values can be `true/false`, `1/0`, `yes/no`, `on/off`, `enable/disable`, or `enabled/disabled`.
 - **Enumerations:** follow the [conversion rules](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Common/Convert.cs) of [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) without checking whether the member is defined; supply valid values.
 - **Output conflicts:** checked before packaging and again before commit; existing artifacts remain if generation fails.
 
 ### Common examples
+
+Package a frontend `dist` directory from the frontend project root:
+
+```bash
+dotnet-pack tar \
+  --name:example.frontend \
+  --version:1.0.0 \
+  --platform:linux \
+  --source:./dist \
+  --output:../packages \
+  --daemon:none
+```
+
+Omitting positional arguments includes the entire `dist` directory; `--daemon:none` disables service generation. Replace `tar` with `deb` or `rpm` for those formats.
 
 Build a portable tarball:
 
@@ -424,44 +440,52 @@ dotnet-pack tar \
 
 ## Application identity and version files
 
-The application identity is a name, an optional _**E**dition_, and a _**V**ersion_ number. The packager merges it from two sources: the `.version` file directly inside the source directory, and the explicit `--name`, `--edition`, and `--version` options.
+The packager reads only the files directly inside `--source`: `.edition` first using [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) [`ApplicationManifest`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Services/ApplicationManifest.cs), then `.version` using [`ApplicationIdentifier`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Services/ApplicationIdentifier.cs) only when `.edition` is absent. A corrupt, unreadable file or a directory occupying either selected path stops packaging; no parent or child directory is searched.
 
-### Source version file format
+### Source manifest format
 
-The packager reads only the `.version` file directly inside `--source`; it does not search child or parent directories. The file is managed by [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core)'s [`ApplicationVersion`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Services/ApplicationVersion.cs) and has two mutually exclusive forms:
+A single-version `.edition` contains `Zongsoft.Hosting.Web@1.0.0`. A named-Edition manifest can select its current Edition on the first line:
 
-**Single version:** without _**E**ditions_, one line holds the name and _**V**ersion_ number:
+```ini
+Zongsoft.Hosting.Web=Enterprise
 
-```text
-Zongsoft.Hosting.Web@1.0.0
+[Community]
+1.0.0
+
+[Enterprise]
+2.0.0
 ```
 
-**Multiple versions _(Edition)_:** the first line contains only the application name, followed by `[edition]` sections that each contain a bare version number. The two forms cannot be mixed.
+The single-version and named-Edition forms cannot be mixed. Omitting `=Enterprise` leaves [`Editions.Current`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Services/ApplicationManifest.cs) unset. Legacy multi-Edition `.version` files must be renamed to `.edition`; the identifier reader only reads the first nonblank line and does not interpret Edition sections. A fallback identifier can contain `Zongsoft.Hosting.Web-Community@1.0.0`.
 
 ### Identity merge rules
 
 | Identity | Rule |
 | --- | --- |
-| Name | When `--name` is omitted or blank, the file name is used. A non-empty value is compared case-insensitively and must match; the file's spelling is kept. |
-| _**E**dition_ | When `--edition` is omitted or empty: with no named _**E**dition_ the top-level version number is used, a single _**E**dition_ is selected automatically, and several require an explicit choice. A non-empty _**E**dition_ must exist in the file (case-insensitive lookup, file spelling kept). Single-version files reject named _**E**ditions_. |
-| _**V**ersion_ number | `--version` overrides the selected version number; otherwise the file's version number is used. The final version number must be nonzero. |
+| Name | An omitted or blank `--name` uses the source name. An explicit name must match case-insensitively; source spelling is retained. |
+| Edition from a manifest | A nonblank `--edition` must exist, matched case-insensitively with file spelling retained. Otherwise use Current, then the only named Edition; multiple Editions without Current require an explicit choice. A manifest without named Editions uses its top-level version. |
+| Edition from an identifier | A nonblank `--edition` replaces or adds the Edition; otherwise use the identifier's Edition. |
+| Version number | `--version` overrides the selected version. The final version must be nonzero. |
 
-Without a source `.version` file, valid `--name` and `--version` are required; the optional `--edition` decides whether a single-version or named-Edition `.version` file is created. An existing but corrupt or unreadable source `.version` file stops packaging.
-
-Full variables are initialized only after the identity is final, so `$(name)`, `$(edition)`, and `$(version)` in output, payload, install scripts, and migration paths all use the final values. A source path that depends on a not-yet-determined identity variable fails with a variable error instead of being inferred circularly.
+When both files are absent, valid `--name` and `--version` are required. Identity still comes only from these source files and explicit identity options, which can reference environment or `.env` variables. Source is fixed before loading identity; final identity values then populate output, payload, scripts, and migration matching.
 
 ### Packaged version file
 
-The `.version` below the install root uses the [`ApplicationIdentifier`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Services/ApplicationIdentifier.cs) format: a single line holding this package's name, _**E**dition_, and _**V**ersion_ number.
+The installation-root `.version` is always generated from the final name, Edition and version using [`ApplicationIdentifier.Save(Stream)`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Services/ApplicationIdentifier.cs): UTF-8 without BOM, no trailing newline, mode `0644`. It replaces payload entries targeting the same location, including rooted aliases, and bypasses exclusions.
 
-- Its content is written from memory exactly as [`ApplicationIdentifier.Save(Stream)`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Services/ApplicationIdentifier.cs) produces it, with no trailing newline; its mode is `0644`.
-- A payload entry targeting that location is replaced by the generated version entry, and exclusion rules do not affect the generated entry.
+The source directory's direct `.edition` is never payload, even when explicitly selected or renamed through an alias. Entries targeting the installation-root `.edition` are also omitted. Other subdirectory files keep the ordinary payload rules.
 
-### Saving the source version file
+### Saving the source manifest or version identifier
 
-- The source `.version` file is saved atomically in [`ApplicationVersion`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Services/ApplicationVersion.cs) format only after every packaging step succeeds. Only the selected _**E**dition_ changes; other _**E**ditions_ keep their names, version numbers, and order. Comments and original whitespace layout are not preserved.
-- Parse, validation, or packaging failures leave the source `.version` file unchanged.
-- If saving the source `.version` file fails, the command returns an error stating that the package was created, and the package is kept.
+| Files found before packaging | Save after success |
+| --- | --- |
+| `.edition`, with or without `.version` | Update only `.edition`; leave any `.version` unchanged. |
+| Only `.version` | Update only `.version` in single-line identifier format. |
+| Neither file | Create `.edition` and `.version` together. |
+
+Only the selected manifest Edition's version changes, and the final named Edition becomes Current. Other Editions retain their names, versions and order; comments and blank lines follow [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core)'s preservation rules. Manifests use UTF-8 without BOM and CRLF; identifiers use [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core)'s exact output without a trailing newline.
+
+Source files are saved only after all package artifacts succeed. Single-file saves are atomic; creating both files uses grouped publication with rollback. Parse, validation, or packaging failures leave source files unchanged. If saving fails, the command reports the source paths and the already generated package, retains the package, and returns an error.
 
 ## Package entries
 
@@ -572,7 +596,7 @@ dotnet-pack deb \
 
 ## systemd services
 
-By default every package format carries a systemd service, which the lifecycle scripts register, enable, and remove.
+When services are enabled and a host or an existing service file can be located, every package format carries a systemd service, which the lifecycle scripts register, enable, and remove.
 
 ### Service source
 
@@ -587,9 +611,11 @@ Use `--daemon:none`, `--daemon:disable`, or `--daemon:disabled` to disable the s
 When generating a service, the host assembly is located in this order:
 
 1. `<source>/<name>.dll`
-2. `<source>/bin/<compilation>/<framework>/<name>.dll`
-3. The only `.exe` under `<source>`, converted to the same-named `.dll`
+2. The only `.exe` under `<source>`, converted to the same-named `.dll`
+3. `<source>/bin/<compilation>/<framework>/<name>.dll`
 4. The only `.exe` under `<source>/bin/<compilation>/<framework>`, converted to the same-named `.dll`
+
+Steps 3 and 4 are skipped without a nonblank `framework` and `compilation`. If no host is found, a diagnostic is printed and packaging continues without a service; a package with migration artifacts requires a locatable host or `--daemon:none`.
 
 The generated service runs:
 
@@ -747,14 +773,14 @@ Enable it with `--migrator:<name-or-path>`. For a source at `hosting/web/default
 
 ### Artifact names
 
-Artifacts are located by the package's **final** _**E**dition_, _**V**ersion_ number, platform, and architecture, including values obtained from the source `.version` and the default x64. The _**E**dition_ segment is omitted when absent. For enterprise, 1.0.0, and Linux x64:
+Artifacts are located by the package's **final** _**E**dition_, _**V**ersion_ number, platform, and architecture, including values obtained from the source `.edition` manifest or `.version` identifier and the default x64. The _**E**dition_ segment is omitted when absent. For enterprise, 1.0.0, and Linux x64:
 
 ```text
-zongsoft-migrate-enterprise@1.0.0_linux-x64.tar.gz
-zongsoft-migrate-enterprise@1.0.0_linux-x64.sh
+zongsoft-enterprise(migrate)@1.0.0_linux-x64.tar.gz
+zongsoft-enterprise(migrate)@1.0.0_linux-x64.sh
 ```
 
-- Existing `-migrate`, `-migration`, `.migrate`, or `.migration` suffixes are recognized case-insensitively; otherwise `-migrate` is appended.
+- The file stem is `<name>[-<edition>](migrate)@<version>_<RID>`, using the name verbatim and omitting `-<edition>` when absent. Supply the generator's `--name` without the automatic `(migrate)` marker.
 - Do not include an _**E**dition_, _**V**ersion_ number, RID, extension, wildcard, or path list in the value.
 - The migration name may differ from the host name, but _**E**dition_, _**V**ersion_ number, and RID must match.
 
@@ -815,8 +841,8 @@ Variables load in this order; later values overwrite earlier ones, including emp
 ### Expansion rules
 
 - Variables expand lazily and recursively: unused invalid references do not block packaging, while referenced unknown, cyclic, or over-64-level references fail.
-- Option text is kept until used. After `source` is located, explicit `name`, `edition`, and `version` expand before validation of the source `.version` file and version conversion; `platform`, `architecture`, and `overwrite` also expand before conversion.
-- `name`, `edition`, and `version` come only from the source `.version` file and explicit identity options; same-named environment or `.env` variables never replace the identity, although explicit options may reference `.env` variables. Identity values available only from the source `.version` cannot locate that source directory.
+- Option text is kept until used. After `source` is located, explicit `name`, `edition`, and `version` expand before validating the source `.edition` manifest or `.version` identifier and converting the version; `platform`, `architecture`, and `overwrite` also expand before conversion.
+- `name`, `edition`, and `version` come only from the source `.edition` manifest or `.version` identifier and explicit identity options; same-named environment or `.env` variables never replace the identity, although explicit options may reference `.env` variables. Identity values available only from the source `.edition` manifest or `.version` identifier cannot locate that source directory.
 - The final identity and resolved `source` and `output` override same-named values in the collection.
 - `--migrator` requires explicit activation; `--overwrite` can come from the environment or `.env` and be overridden on the command line.
 
@@ -953,11 +979,11 @@ The RPM `PACKAGER` tag (1015) holds the `--maintainer` value. This metadata live
 
 | Message | Cause and fix |
 | --- | --- |
-| `The source directory '<path>' does not exist.` | After variable expansion and normalization, `--source` points to a missing location. |
+| `The '<path>' directory does not exist.` | After variable expansion and normalization, `--source` points to a missing location. |
 | `The source path '<path>' does not exist.` | A positional entry matched no existing file, directory, or glob. |
-| `A valid nonzero --version or selected source version is required. Source: <path>` | No valid command-line version number or version number from the source `.version` file, or the version number is zero; text that is not a version number fails after expansion, before selecting a version from the source `.version` file. |
+| `A valid nonzero --version or selected source version is required. Source: <path>` | No valid command-line version number or version number from the source `.edition` manifest or `.version` identifier, or the version number is zero; text that is not a version number fails after expansion, before selecting a version from the source `.edition` manifest or `.version` identifier. |
 | `The daemon host location failed.` | No existing service file or usable host `.dll` was found, and no name could be inferred from a single `.exe`. Use `--daemon:<service-file>`, or `--daemon:none` to disable the service. |
-| `The output file '<path>' already exists.` | Names the conflicting package or tar installer. Add `--overwrite` to replace it, or choose another `--output`; without overwrite, existing artifacts stay unchanged. |
+| `The output file '<path>' already exists. Use --overwrite to replace it, or choose another --output directory.` | Names the conflicting package or tar installer. Add `--overwrite` to replace it, or choose another `--output`; without overwrite, existing artifacts stay unchanged. |
 
 ## Building from source
 

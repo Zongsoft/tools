@@ -21,18 +21,25 @@ public sealed partial class MigratorPackageTest
 {
 	#region 产物消费
 	[Theory]
-	[InlineData("tar")]
-	[InlineData("deb")]
-	[InlineData("rpm")]
-	public async Task Command_MigratorUsesResolvedSourceEditionVersionAndRuntimeAsync(string format)
+	[InlineData("tar", true)]
+	[InlineData("deb", true)]
+	[InlineData("rpm", true)]
+	[InlineData("tar", false)]
+	[InlineData("deb", false)]
+	[InlineData("rpm", false)]
+	public async Task Command_MigratorUsesResolvedSourceEditionVersionAndRuntimeAsync(string format, bool explicitEdition)
 	{
 		using var directory = new MigrationTestDirectory();
-		directory.Write(".version", "Zongsoft.Hosting.Web\n\n[Community]\n1.0.0\n\n[Enterprise]\n2.7.1\n");
+		directory.Write(".edition", "Zongsoft.Hosting.Web=Enterprise\n\n[Community]\n1.0.0\n\n[Enterprise]\n2.7.1\n");
 		directory.Write("application.txt", "hosting application");
 		var pair = Pair(directory, "releases/zongsoft.bootstrap", "Enterprise", "2.7.1", "linux-arm64");
 		Pair(directory, "releases/zongsoft.bootstrap", "Community", "1.0.0", "linux-x64");
 		CommandBase<CommandContext> command = format switch { "tar" => new TarCommand(), "deb" => new DebCommand(), _ => new RpmCommand() };
 		var arguments = new[] { format, "--source:" + directory.Path, "--output:out", "--platform:Linux", "--architecture:Arm64", "--framework:net10.0", "--edition:enterprise", "--daemon:disabled", "--install-path:/opt/zongsoft/web", "--migrator:releases/zongsoft.bootstrap", "application.txt" };
+
+		if(!explicitEdition)
+			arguments = arguments.Where(argument => !argument.StartsWith("--edition:", StringComparison.Ordinal)).ToArray();
+
 		var context = new CommandContext(new CommandExecutor(), CommandLine.Parse(CommandLine.Get(arguments))[0], command, null);
 		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
 		var terminal = (ITerminal)terminalField.GetValue(null);
@@ -310,14 +317,15 @@ public sealed partial class MigratorPackageTest
 	[InlineData("zongsoft-migration")]
 	[InlineData("zongsoft.migrate")]
 	[InlineData("zongsoft.MIGRATION")]
-	public void Migrator_ExistingSuffix_DoesNotAppendAgain(string name)
+	public void Migrator_NameEndingInMigrationWord_IsPreserved(string name)
 	{
 		using var directory = new MigrationTestDirectory();
 		var package = Create("tar", directory);
-		var pair = Pair(directory, "releases/" + name, null, "2.7.1", "linux-x64", suffixed: true);
+		var pair = Pair(directory, "releases/" + name, null, "2.7.1", "linux-x64");
 		var migrator = Migrator.Load(package, "releases/" + name);
 		Assert.Equal(pair.Archive, migrator.Archive);
 		Assert.Equal(pair.Script, migrator.Script);
+		Assert.Equal(name + "(migrate)@2.7.1_linux-x64.tar.gz", Path.GetFileName(migrator.Archive));
 	}
 
 	[Theory]
@@ -462,9 +470,9 @@ public sealed partial class MigratorPackageTest
 		return package;
 	}
 
-	private static (string Archive, string Script) Pair(MigrationTestDirectory directory, string input, string edition, string version, string runtime, string failure = null, bool suffixed = false)
+	private static (string Archive, string Script) Pair(MigrationTestDirectory directory, string input, string edition, string version, string runtime, string failure = null)
 	{
-		var name = input + (suffixed ? "" : "-migrate") + (edition == null ? "" : "-" + edition) + "@" + version + "_" + runtime;
+		var name = input + (edition == null ? "" : "-" + edition) + "(migrate)@" + version + "_" + runtime;
 		var archive = directory.Write(name + ".tar.gz", "");
 		var script = directory.Write(name + ".sh", "#!/bin/sh\n# opaque external launcher, never executed by tests\nexit 0\n");
 		using var stream = File.Create(archive);

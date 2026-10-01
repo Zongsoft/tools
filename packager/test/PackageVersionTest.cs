@@ -69,6 +69,8 @@ public sealed class PackageVersionTest
 		using var directory = new MigrationTestDirectory();
 		var original = directory.Write("source/.version", "Zongsoft.Hosting.Web\n[Community]\n1.0.0\n[Enterprise]\n4.0.0\n");
 		directory.Write("source/nested/.version", "Zongsoft.Nested@9.0.0\n");
+		directory.Write("source/.edition", "Zongsoft.Hosting.Web=Enterprise\n[Enterprise]\n4.0.0\n");
+		directory.Write("source/nested/.edition", "Zongsoft.Nested@9.0.0\n");
 		directory.Write("source/application.txt", "payload retained");
 		var source = Path.GetDirectoryName(original);
 		var sourceBytes = File.ReadAllBytes(original);
@@ -91,9 +93,9 @@ public sealed class PackageVersionTest
 		var alias = ".version:" + package.InstallPath + "/.version";
 		string[] arguments = selection switch
 		{
-			"explicit" => [".version", "application.txt"],
-			"root-alias" => [alias, "application.txt"],
-			"both-aliases" => [".version", alias, "application.txt"],
+			"explicit" => [".version", "application.txt", ".edition", ".edition:manifest.txt"],
+			"root-alias" => [alias, "application.txt", ".edition:" + package.InstallPath + "/.edition"],
+			"both-aliases" => [".version", alias, "application.txt", "application.txt:.edition", "application.txt:" + package.InstallPath + "/.edition"],
 			_ => [],
 		};
 		package.Entries.Load(source, arguments, selection == "excluded" ? [".version"] : []);
@@ -117,6 +119,8 @@ public sealed class PackageVersionTest
 		Assert.Equal((UnixFileMode)420, archived.Mode);
 		Assert.Equal(expected.Length, archived.Size);
 		Assert.DoesNotContain(archive, item => item.Name == ".root/opt/zongsoft/web/.version");
+		Assert.DoesNotContain(archive, item => item.Name == "manifest.txt" || item.Name == "opt/zongsoft/web/manifest.txt");
+		Assert.DoesNotContain(archive, item => item.Name == ".edition" || item.Name == "opt/zongsoft/web/.edition" || item.Name == ".root/opt/zongsoft/web/.edition");
 		Assert.Equal(sourceBytes, File.ReadAllBytes(original));
 		Assert.Contains(archive, item => item.Name.EndsWith("application.txt", StringComparison.Ordinal) && Encoding.UTF8.GetString(item.Content) == "payload retained");
 		var parsed = ApplicationIdentifier.Parse(Encoding.UTF8.GetString(archived.Content).Trim());
@@ -125,6 +129,7 @@ public sealed class PackageVersionTest
 		{
 			var nested = Assert.Single(archive, item => item.Name.EndsWith("nested/.version", StringComparison.Ordinal));
 			Assert.Equal("Zongsoft.Nested@9.0.0\r\n", Encoding.UTF8.GetString(nested.Content));
+			Assert.Single(archive, item => item.Name.EndsWith("nested/.edition", StringComparison.Ordinal));
 		}
 
 		if(format == "rpm")

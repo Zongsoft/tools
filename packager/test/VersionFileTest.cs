@@ -22,7 +22,7 @@ public sealed class VersionFileTest
 
 		Assert.Throws<InvalidOperationException>(() => PackCommand<Package.Tar>.VersionFile.Load(directory.Path, name, null, version == null ? null : Version.Parse(version)));
 
-		Assert.False(File.Exists(Path.Combine(directory.Path, ".version")));
+		Assert.False(File.Exists(Path.Combine(directory.Path, ".edition")));
 	}
 
 	[Theory]
@@ -35,9 +35,10 @@ public sealed class VersionFileTest
 		var file = PackCommand<Package.Tar>.VersionFile.Load(directory.Path, "Zongsoft.Daemon", edition, new Version(1, 2, 0));
 
 		AssertIdentity(file.Identifier, "Zongsoft.Daemon", string.IsNullOrEmpty(edition) ? null : edition, "1.2.0");
-		Assert.False(File.Exists(Path.Combine(directory.Path, ".version")));
+		Assert.False(File.Exists(Path.Combine(directory.Path, ".edition")));
 		file.Save(Path.Combine(directory.Path, "host.tar.gz"));
-		var saved = ApplicationVersion.Load(Path.Combine(directory.Path, ".version"));
+		Assert.Equal(file.Identifier, ApplicationIdentifier.Load(Path.Combine(directory.Path, ".version")));
+		var saved = ApplicationManifest.Load(Path.Combine(directory.Path, ".edition"));
 		Assert.Equal("Zongsoft.Daemon", saved.Name);
 		if(string.IsNullOrEmpty(edition))
 		{
@@ -49,6 +50,7 @@ public sealed class VersionFileTest
 			Assert.Null(saved.Version);
 			var selected = Assert.Single(saved.Editions);
 			Assert.Equal("Community", selected.Name);
+			Assert.Equal(selected, saved.Editions.Current);
 			Assert.Equal(new Version(1, 2, 0), selected.Version);
 		}
 	}
@@ -57,13 +59,13 @@ public sealed class VersionFileTest
 	public void Load_SourceFile_DoesNotSearchParentOrChildren()
 	{
 		using var directory = new MigrationTestDirectory();
-		directory.Write(".version", "Zongsoft.Daemon@1.0.0");
+		directory.Write(".edition", "Zongsoft.Daemon@1.0.0");
 		directory.Write("source/child/.version", "Zongsoft.Hosting.Web@2.0.0");
 		var source = Path.Combine(directory.Path, "source");
 
 		Assert.Throws<InvalidOperationException>(() => PackCommand<Package.Tar>.VersionFile.Load(source, null, null, null));
 
-		Assert.False(File.Exists(Path.Combine(source, ".version")));
+		Assert.False(File.Exists(Path.Combine(source, ".edition")));
 	}
 
 	[Theory]
@@ -78,7 +80,7 @@ public sealed class VersionFileTest
 	public void Load_SingleVersion_UsesOmittedValuesAndCanonicalName(string name, string version)
 	{
 		using var directory = new MigrationTestDirectory();
-		var path = directory.Write(".version", "Zongsoft.Daemon@1.2.0\n");
+		var path = directory.Write(".edition", "Zongsoft.Daemon@1.2.0\n");
 		var original = File.ReadAllBytes(path);
 
 		var file = PackCommand<Package.Tar>.VersionFile.Load(directory.Path, name, null, version == null ? null : Version.Parse(version));
@@ -94,7 +96,7 @@ public sealed class VersionFileTest
 	public void Load_OneEdition_AutomaticallySelectsCanonicalEdition(string edition)
 	{
 		using var directory = new MigrationTestDirectory();
-		directory.Write(".version", "Zongsoft.Hosting.Web\n\n[Community]\n1.2.3\n");
+		directory.Write(".edition", "Zongsoft.Hosting.Web\n\n[Community]\n1.2.3\n");
 
 		var file = PackCommand<Package.Tar>.VersionFile.Load(directory.Path, null, edition, null);
 
@@ -107,12 +109,12 @@ public sealed class VersionFileTest
 	public void Load_MultipleEditions_RequiresExplicitSelection(string edition, bool hasOverrides)
 	{
 		using var directory = new MigrationTestDirectory();
-		var path = directory.Write(".version", Editions());
+		var path = directory.Write(".edition", Editions());
 		var original = File.ReadAllBytes(path);
 
 		var error = Assert.Throws<InvalidOperationException>(() => PackCommand<Package.Tar>.VersionFile.Load(directory.Path, hasOverrides ? "zongsoft.hosting.web" : null, edition, hasOverrides ? new Version(4, 0, 0) : null));
 
-		Assert.Contains(".version", error.Message);
+		Assert.Contains(".edition", error.Message);
 		Assert.Equal(original, File.ReadAllBytes(path));
 	}
 
@@ -123,7 +125,7 @@ public sealed class VersionFileTest
 	public void Load_SelectedEdition_PreservesNameAndUsesSelectedVersion(string edition, string version, string expectedEdition, string expectedVersion)
 	{
 		using var directory = new MigrationTestDirectory();
-		directory.Write(".version", Editions());
+		directory.Write(".edition", Editions());
 
 		var file = PackCommand<Package.Tar>.VersionFile.Load(directory.Path, "ZONGSOFT.HOSTING.WEB", edition, version == null ? null : Version.Parse(version));
 
@@ -137,7 +139,7 @@ public sealed class VersionFileTest
 	public void Load_NameMismatchOrUnknownEdition_FailsWithoutChangingFile(string name, string edition, bool named)
 	{
 		using var directory = new MigrationTestDirectory();
-		var path = directory.Write(".version", named ? Editions() : "Zongsoft.Hosting.Web@1.0.0\n");
+		var path = directory.Write(".edition", named ? Editions() : "Zongsoft.Hosting.Web@1.0.0\n");
 		var original = File.ReadAllBytes(path);
 
 		var error = Assert.Throws<InvalidOperationException>(() => PackCommand<Package.Tar>.VersionFile.Load(directory.Path, name, edition, null));
@@ -156,7 +158,7 @@ public sealed class VersionFileTest
 	{
 		using var directory = new MigrationTestDirectory();
 		if(existing)
-			directory.Write(".version", "Zongsoft.Daemon@1.0.0\n");
+			directory.Write(".edition", "Zongsoft.Daemon@1.0.0\n");
 
 		Assert.Throws<InvalidOperationException>(() => PackCommand<Package.Tar>.VersionFile.Load(directory.Path, name, null, version == null ? null : Version.Parse(version)));
 	}
@@ -167,7 +169,7 @@ public sealed class VersionFileTest
 	public void Load_ZeroVersionFromFile_IsRejected(string content)
 	{
 		using var directory = new MigrationTestDirectory();
-		directory.Write(".version", content);
+		directory.Write(".edition", content);
 
 		Assert.Throws<InvalidOperationException>(() => PackCommand<Package.Tar>.VersionFile.Load(directory.Path, null, null, null));
 	}
@@ -179,7 +181,7 @@ public sealed class VersionFileTest
 	public void Load_InvalidFile_FailsWithoutOverwriting(string content)
 	{
 		using var directory = new MigrationTestDirectory();
-		var path = directory.Write(".version", content);
+		var path = directory.Write(".edition", content);
 		var original = File.ReadAllBytes(path);
 
 		var error = Assert.Throws<InvalidDataException>(() => PackCommand<Package.Tar>.VersionFile.Load(directory.Path, "Zongsoft.Daemon", null, new Version(3, 0, 0)));
@@ -193,7 +195,7 @@ public sealed class VersionFileTest
 	public void Load_VersionPathIsDirectory_IsNotTreatedAsMissing()
 	{
 		using var directory = new MigrationTestDirectory();
-		var path = Path.Combine(directory.Path, ".version");
+		var path = Path.Combine(directory.Path, ".edition");
 		Directory.CreateDirectory(path);
 
 		var error = Assert.Throws<InvalidDataException>(() => PackCommand<Package.Tar>.VersionFile.Load(directory.Path, "Zongsoft.Daemon", null, new Version(1, 0, 0)));
@@ -213,7 +215,7 @@ public sealed class VersionFileTest
 		var error = Assert.Throws<InvalidOperationException>(() => PackCommand<Package.Tar>.VersionFile.Load(directory.Path, name, edition, new Version(1, 0, 0)));
 
 		Assert.IsAssignableFrom<ArgumentException>(error.InnerException);
-		Assert.False(File.Exists(Path.Combine(directory.Path, ".version")));
+		Assert.False(File.Exists(Path.Combine(directory.Path, ".edition")));
 	}
 	#endregion
 
@@ -222,28 +224,29 @@ public sealed class VersionFileTest
 	public void Save_SelectedEdition_PreservesOtherVersionsAndOrder()
 	{
 		using var directory = new MigrationTestDirectory();
-		var path = directory.Write(".version", Editions());
+		var path = directory.Write(".edition", Editions());
 		var file = PackCommand<Package.Tar>.VersionFile.Load(directory.Path, null, "professional", new Version(2, 5, 0));
 
 		file.Save(Path.Combine(directory.Path, "host.rpm"));
 
-		var saved = ApplicationVersion.Load(path);
+		var saved = ApplicationManifest.Load(path);
 		Assert.Null(saved.Version);
 		Assert.Equal(new[] { "Community", "Professional", "Enterprise" }, saved.Editions.Select(edition => edition.Name));
 		Assert.Equal(new[] { new Version(1, 0, 0), new Version(2, 5, 0), new Version(3, 0, 1) }, saved.Editions.Select(edition => edition.Version));
-		Assert.Equal(Encoding.UTF8.GetBytes("Zongsoft.Hosting.Web\r\n\r\n[Community]\r\n1.0.0\r\n\r\n[Professional]\r\n2.5.0\r\n\r\n[Enterprise]\r\n3.0.1\r\n"), File.ReadAllBytes(path));
+		Assert.Equal(Encoding.UTF8.GetBytes("Zongsoft.Hosting.Web=Professional\r\n\r\n[Community]\r\n1.0.0\r\n\r\n[Professional]\r\n2.5.0\r\n\r\n[Enterprise]\r\n3.0.1\r\n"), File.ReadAllBytes(path));
 	}
 
 	[Fact]
 	public void Save_SingleVersion_UsesCoreFormat()
 	{
 		using var directory = new MigrationTestDirectory();
-		var path = directory.Write(".version", "; hosting\nZongsoft.Daemon@1.0.0\n");
+		var path = directory.Write(".edition", "; hosting\nZongsoft.Daemon@1.0.0\n");
 		var file = PackCommand<Package.Tar>.VersionFile.Load(directory.Path, null, "", new Version(2, 0, 1));
 
 		file.Save(Path.Combine(directory.Path, "host.deb"));
 
-		Assert.Equal(Encoding.UTF8.GetBytes("Zongsoft.Daemon@2.0.1\r\n"), File.ReadAllBytes(path));
+		Assert.Equal(new Version(2, 0, 1), ApplicationManifest.Load(path).Version);
+		Assert.Contains("hosting", File.ReadAllText(path));
 	}
 
 	[Fact]
@@ -251,7 +254,7 @@ public sealed class VersionFileTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var file = PackCommand<Package.Tar>.VersionFile.Load(directory.Path, "Zongsoft.Daemon", null, new Version(1, 2, 0));
-		var path = Path.Combine(directory.Path, ".version");
+		var path = Path.Combine(directory.Path, ".edition");
 		Directory.CreateDirectory(path);
 		var package = directory.Write("host.tar.gz", "retained package marker");
 		var bytes = File.ReadAllBytes(package);
@@ -263,6 +266,105 @@ public sealed class VersionFileTest
 		Assert.NotNull(error.InnerException);
 		Assert.Equal(bytes, File.ReadAllBytes(package));
 		Assert.True(Directory.Exists(path));
+	}
+	#endregion
+
+	#region 清单与标识
+	[Theory]
+	[InlineData(null, "Enterprise", "3.0.1")]
+	[InlineData("", "Enterprise", "3.0.1")]
+	[InlineData(" \t ", "Enterprise", "3.0.1")]
+	[InlineData("community", "Community", "1.0.0")]
+	public void Load_CurrentOrExplicitEdition_TakesPrecedence(string option, string edition, string version)
+	{
+		using var directory = new MigrationTestDirectory();
+		var path = directory.Write(".edition", Editions().Replace("Zongsoft.Hosting.Web\n", "Zongsoft.Hosting.Web=Enterprise\n"));
+		var legacy = directory.Write(".version", "Different.Application-Legacy@8.0.0");
+		var original = File.ReadAllBytes(legacy);
+		var file = PackCommand<Package.Tar>.VersionFile.Load(directory.Path, null, option, null);
+
+		AssertIdentity(file.Identifier, "Zongsoft.Hosting.Web", edition, version);
+		file.Save(Path.Combine(directory.Path, "host.tar.gz"));
+		Assert.Equal(edition, ApplicationManifest.Load(path).Editions.Current.Name);
+		Assert.Equal(original, File.ReadAllBytes(legacy));
+	}
+
+	[Theory]
+	[InlineData(null, "Community")]
+	[InlineData("", "Community")]
+	[InlineData("Enterprise", "Enterprise")]
+	public void Load_Identifier_AllowsEditionOverrideAndSavesOnlyIdentifier(string option, string edition)
+	{
+		using var directory = new MigrationTestDirectory();
+		var path = directory.Write(".version", "Zongsoft.Hosting.Web-Community@1.0.0");
+		var file = PackCommand<Package.Tar>.VersionFile.Load(directory.Path, null, option, new Version(2, 0, 0));
+
+		AssertIdentity(file.Identifier, "Zongsoft.Hosting.Web", edition, "2.0.0");
+		file.Save(Path.Combine(directory.Path, "host.tar.gz"));
+		Assert.Equal(file.Identifier, ApplicationIdentifier.Load(path));
+		Assert.False(File.Exists(Path.Combine(directory.Path, ".edition")));
+		Assert.DoesNotContain("\n", File.ReadAllText(path));
+	}
+
+	[Fact]
+	public void Load_IdentifierWithoutEdition_AllowsExplicitEdition()
+	{
+		using var directory = new MigrationTestDirectory();
+		directory.Write(".version", "Zongsoft.Hosting.Web@1.0.0");
+		var file = PackCommand<Package.Tar>.VersionFile.Load(directory.Path, null, "Enterprise", null);
+		AssertIdentity(file.Identifier, "Zongsoft.Hosting.Web", "Enterprise", "1.0.0");
+	}
+
+	[Theory]
+	[InlineData("")]
+	[InlineData("Zongsoft.Hosting.Web=Missing\n[Community]\n1.0.0\n")]
+	public void Load_InvalidManifest_DoesNotFallBack(string content)
+	{
+		using var directory = new MigrationTestDirectory();
+		var path = directory.Write(".edition", content);
+		var legacy = directory.Write(".version", "Zongsoft.Hosting.Web@1.0.0");
+		var error = Assert.Throws<InvalidDataException>(() => PackCommand<Package.Tar>.VersionFile.Load(directory.Path, null, null, null));
+		Assert.Contains(path, error.Message);
+		Assert.Equal("Zongsoft.Hosting.Web@1.0.0", File.ReadAllText(legacy));
+	}
+
+	[Fact]
+	public void Load_ManifestDirectory_DoesNotFallBack()
+	{
+		using var directory = new MigrationTestDirectory();
+		Directory.CreateDirectory(Path.Combine(directory.Path, ".edition"));
+		directory.Write(".version", "Zongsoft.Hosting.Web@1.0.0");
+		Assert.Throws<InvalidDataException>(() => PackCommand<Package.Tar>.VersionFile.Load(directory.Path, null, null, null));
+	}
+
+	[Fact]
+	public void Load_OldEditionFile_IsNotParsedAsManifest()
+	{
+		using var directory = new MigrationTestDirectory();
+		directory.Write(".version", Editions());
+		Assert.Throws<InvalidOperationException>(() => PackCommand<Package.Tar>.VersionFile.Load(directory.Path, null, null, null));
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void Save_NewPairConflict_DoesNotLeaveHalfPair(bool directoryConflict)
+	{
+		using var directory = new MigrationTestDirectory();
+		var file = PackCommand<Package.Tar>.VersionFile.Load(directory.Path, "Zongsoft.Hosting.Web", "Community", new Version(1, 0, 0));
+		var conflict = Path.Combine(directory.Path, ".version");
+
+		if(directoryConflict)
+			Directory.CreateDirectory(conflict);
+		else
+			directory.Write(".version", "concurrent version");
+
+		Assert.Throws<IOException>(() => file.Save(Path.Combine(directory.Path, "host.tar.gz")));
+		Assert.False(File.Exists(Path.Combine(directory.Path, ".edition")));
+		Assert.Empty(Directory.GetDirectories(directory.Path, ".zongsoft-*"));
+
+		if(!directoryConflict)
+			Assert.Equal("concurrent version", File.ReadAllText(conflict));
 	}
 	#endregion
 

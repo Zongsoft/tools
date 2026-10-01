@@ -41,7 +41,7 @@ The main design choices are:
 | `Migrator.cs` | Locate external migration artifacts by final application identity, validate PAX metadata, attach unchanged files, and provide installation coordination scripts. |
 | `ApplicationHost.cs` | Resolve the application host, service and final listen once, shared by systemd generation and Web ~. |
 | `Scriptor.Systemd.cs` | Generate/collect systemd units and compose application, migration and Web lifecycle scripts. |
-| `Web/Definition*.cs` | Collect Core Profile declarations and resolve replacement, inheritance, variables and validation. |
+| `Web/Definition*.cs` | Collect [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Profile declarations and resolve replacement, inheritance, variables and validation. |
 | `Web/Configurator*.cs` | Configurator contract, Nginx directive model/validation, deterministic serialization and relocatable content. |
 | `Web/Installation*.cs` | Validate generated targets and provide delivery, relocation, activation and removal scripts. |
 | `Normalizer.cs` / `TextSource.cs` | Expand variables on demand and resolve files under the source directory or literal text. |
@@ -49,7 +49,7 @@ The main design choices are:
 | `Variables.cs` | Variable collection and typed accessors for common variables. |
 | `Utility.cs` | RID, installation path, path normalization, Unix timestamps, and file permissions. |
 | `Dumper.cs` | Console splash, error, and warning output. |
-| Linked `tools/.shared` source | `Utility.cs` compiles with this project's `partial Utility`, sharing recursive variables and command/text helpers. `ArtifactPublisher` manages staging and publication: atomic replacement for single files, grouped commit and recovery for multiple files. Boolean switches use Core `Switch`; enums use Core conversion without checking whether a member is defined. No shared DLL is produced. |
+| Linked `tools/.shared` source | `Utility.cs` compiles with this project's `partial Utility`, sharing recursive variables and command/text helpers. `ArtifactPublisher` manages staging and publication: atomic replacement for single files, grouped commit and recovery for multiple files. Boolean switches use [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) `Switch`; enums use [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) conversion without checking whether a member is defined. No shared DLL is produced. |
 
 ## Execution pipeline
 
@@ -67,7 +67,7 @@ dotnet-pack
 ```mermaid
 flowchart TD
     A["Program.Main(args)"] --> B["Terminal executor dispatches tar/deb/rpm"]
-    B --> C["Resolve source and load ApplicationVersion"]
+    B --> C["Resolve source and load manifest or identifier"]
     C --> D["Select and validate identity, then create invocation variables"]
     D --> E["Normalize source/output paths"]
     E --> F["Create Package.Tar/Deb/Rpm"]
@@ -80,7 +80,7 @@ flowchart TD
     L --> V["Replace installation root .version with memory entry"]
     V --> I["Call package.Pack(output, overwrite)"]
     I --> J["Generator stages and commits package output"]
-    J --> S["Atomically save source/.version"]
+    J --> S["Save source .edition or .version; create both if absent"]
     S --> OK["Report success"]
 ```
 
@@ -99,31 +99,17 @@ These options are split on commas or semicolons and written into the RPM metadat
 
 ## Source and packaged versions
 
-The packager reads only `.version` directly under `--source`, without recursive or ancestor lookup. `ApplicationVersion.Load/Save` manages the application's name and Edition versions. The hosting daemon without named editions can use:
+`VersionFile` opens the source directory's direct `.edition` with `File.OpenRead` and `ApplicationManifest.Load(Stream)`. Only `FileNotFoundException` permits the fallback `.version`, parsed by `ApplicationIdentifier.Load(Stream)`; an empty identifier, corrupt file, directory placeholder or other I/O error stops the command. Neither parser searches other directories. Legacy multi-Edition `.version` files must be renamed to `.edition`.
 
-```text
-zongsoft.daemon@1.0.0
-```
+Manifest selection is explicit nonblank Edition, then Current, then the sole Edition. Multiple Editions without a selection fail; no named Editions means the top-level version. Explicit selection must exist and retains canonical spelling. Identifier fallback allows an explicit Edition to replace or add the identifier's Edition. Source names must match explicit names case-insensitively; the explicit version overrides the selected nonzero version. Identity options alone determine identity, with environment and `.env` available only through explicit variable references.
 
-For the `web/default` host without named editions, use `Zongsoft.Hosting.Web@1.0.0`. With editions, put only the application name on the first line, followed by a bare version in each `[edition]` section. These source formats cannot be mixed.
+The loaded manifest is updated in memory: replace the selected Edition in place, then set Current to it. Other entries, order and [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core)'s comment/blank-line layout survive. The save content is prepared before packaging; `Save(TextWriter)` receives a UTF-8-without-BOM writer with CRLF. Identifier bytes come directly from `ApplicationIdentifier.Save(Stream)`, with no trailing newline.
 
-- Missing or blank `--name` uses the source name. A supplied name must match case-insensitively; the source spelling is retained.
-- Missing or empty `--edition` selects the top-level version if there are no named editions, or the only edition if exactly one exists. Multiple editions require an explicit selection. A supplied edition must exist, ignoring case; its spelling is retained. A source with only a top-level version rejects a named selection.
-- `--version` overrides the selected version; otherwise the stored version is used. The final version must be nonzero. Without a source file, valid `--name` and `--version` are required; the optional Edition determines whether to create a single-version or named-edition file.
+After all package output commits, an existing manifest is atomically replaced without updating any companion identifier; identifier-only input updates only `.version`. With neither input, valid explicit name/version are required and both files are staged with `ArtifactPublisher` and committed together without overwriting concurrently created files. Failures restore the pair. Source save failure retains the package and reports the affected paths; parse, validation and package failures never save source files.
 
-Complete variables are initialized only after identity is resolved. `$(name)`, `$(edition)`, and `$(version)` in output paths, payload selections, scripts, and migration paths therefore use final values. A source path depending on an identity variable not yet known fails with a variable diagnostic; the source is not inferred recursively. Invalid or unreadable source files stop packaging.
+`EntryCollection.Load` excludes the direct source `.edition`, including explicit aliases. File entries targeting the installation-root `.edition` are omitted too; other subdirectory files retain ordinary selection rules. `SetVersion` writes a unique installation-root `.version` memory entry in mode `0644`, replaces same-target ordinary and rooted entries, and bypasses exclusions. All encoders and RPM digests use `Entry.OpenRead()`; nested `.version` files remain ordinary payload.
 
-The installation-root `.version` uses **`ApplicationIdentifier`**, representing only the selected name, Edition, and version on one line. Its in-memory bytes are exactly those from `ApplicationIdentifier.Save(Stream)`, without an added newline, with mode `0644`. It replaces payload entries targeting the same installation location and is not removed by exclusions.
-
-Only after every packaging step succeeds is the source saved in Core format. Only the selected Edition is updated; other Edition names, versions, and order remain. Comments and original whitespace are not preserved. Parsing, validation, or packaging failures leave the source unchanged. A source save failure returns an error identifying the already generated package and retains that package.
-
-If an output artifact already exists and `--overwrite` is disabled, the publisher identifies the conflicting file, and the command reports its full path with guidance to use `--overwrite` or another `--output` directory. This applies to both the archive and the companion tar installer; the existing artifact and source version remain unchanged.
-
-`Package.Entry` supports byte content internally, copies the supplied bytes, and sets `Size` to their actual length. `OpenRead()` returns an independent read-only stream for memory entries and opens `Source` for ordinary files. Tar/deb payloads, RPM SHA-256 hashes, and cpio payloads all read through this method; repeated reads are independent. The version entry is written to memory with `ApplicationIdentifier.Save(Stream)`, without appending or converting content or creating a temporary file. Its timestamp is the generation time.
-
-`EntryCollection.SetVersion` runs after payload and migration collection, writes the unique version entry, and removes rooted aliases targeting the same installation-root path. Other `.version` files in subdirectories are unaffected. `VersionFile.Load(source, name, edition, version)` determines option presence from values, without separate Boolean flags: blank names count as absent; `version == null` uses the selected source version. It prepares the full save model in memory without writing during load. The packager explicitly opens/creates the source file and passes streams to `ApplicationVersion.Load(Stream)` / `Save(Stream)`, ensuring only the immediate `.version` is accessed. A missing file is created on save; a directory at that path or an I/O failure is rejected. Core path-overload directory detection and missing-path skipping are not used. `Save` runs only after `Pack` returns, including successful generation of the companion tar installer. A save failure throws an I/O exception containing package and source paths, returns a nonzero exit code, and suppresses overall success output.
-
-Local validation can package current Core source at the project version and restore `Zongsoft.Core` through an isolated cache and package-source mapping. Web loading requires the new `ProfileOptions.RequireImports` API; publish a Core package containing this API before releasing the tool. Debug retains local assembly references and Release retains NuGet references.
+Debug references the local [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) build and Release references the centrally configured NuGet package. Both must provide `ApplicationManifest`, `Editions.Current` and `ProfileOptions.ImportBehavior`; Web loading uses `ProfileDirectiveBehavior.Existed` to require imports.
 
 ## Command option model
 
@@ -134,7 +120,6 @@ Required and conditionally required options:
 | `--name` | `string` | Required without a source version file; otherwise validate against or use the source name. |
 | `--version` | `string` | Expand, then convert to `System.Version`; required without a source file, otherwise override the selected version. The final version must be nonzero. |
 | `--platform` | `string` | Expand, then convert to `Platform` to select the target platform. |
-| `--framework` | `string` | Target framework, such as `net8.0`, `net9.0`, or `net10.0`. |
 
 Common optional settings:
 
@@ -144,8 +129,9 @@ Common optional settings:
 | `--migrator` | Empty | Original migration input name, optionally with a directory; bare names search source and ancestors plus each direct `.migration/` child using final Edition, Version, and Runtime. |
 | `--output` | `source` | Always an output directory; relative paths use `source`. A filename cannot be specified. |
 | `--exclude` | Empty | Comma- or semicolon-separated patterns skipped during entry collection. |
-| `--edition` | Empty | Package Edition/channel, included in the package name and used as RPM release. |
-| `--compilation` | `Release` | Configuration used to locate the host. |
+| `--edition` | Current or the sole Edition | Product Edition, included in the package name. |
+| `--framework` | Empty | Optional .NET target framework used to locate the host under `bin/<compilation>/<framework>`. |
+| `--compilation` | `Release` | Optional .NET build configuration used for that host lookup and available as a variable. |
 | `--architecture` | `x64` | Target architecture. |
 | `--overwrite` | `false` | Replace existing output files. |
 | `--install-path` | Derived from package identity | Installation directory. |
@@ -178,13 +164,13 @@ Systemd and lifecycle options:
 
 `PackCommand<TPackage>.GetVariables(context, directory)` loads descriptor defaults, environment variables, ancestor `.env` files for the supplied directory, and explicit command options, including extra options. Omitting `directory` skips `.env` loading for the initial source resolution. After verifying and resolving the source directory to an absolute path, variables are reloaded and source is fixed; `.env` does not determine source retroactively. Names are case-insensitive. Precedence is explicit options > nearer `.env` > farther `.env` > environment > defaults.
 
-Shared `Utility.LoadEnvironmentVariables` reads each immediate `.env` from the filesystem root down to source, without searching child directories. `Profile.Load` preserves Core empty-value and import semantics; section levels and entry names join with underscores. Read/parse failures stop packaging; only missing files are skipped. Process environment variables are not changed.
+Shared `Utility.LoadEnvironmentVariables` reads each immediate `.env` from the filesystem root down to source, without searching child directories. `Profile.Load` preserves [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) empty-value and import semantics; section levels and entry names join with underscores. Read/parse failures stop packaging; only missing files are skipped. Process environment variables are not changed.
 
 `PackCommand` creates an invocation-local `Variables` view and passes it to packages, scripts, and text sources. It keeps no process-wide variable state. References expand recursively when accessed; unused unknown references do not prevent packaging. Unknown variables, cycles, and expansion deeper than 64 levels fail with a diagnostic naming the variable. Expansion itself does not read files.
 
-Core command descriptors retain options that may contain variables as strings. `source` expands first using the complete raw variable set. Explicit `name`, `edition`, and `version` then expand; `version` is converted to `System.Version` for source `.version` selection. After identity is finalized, `platform`, `architecture`, and `overwrite` expand and convert when used. Bare `--overwrite` remains true; omission defaults to false.
+[Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) command descriptors retain options that may contain variables as strings. `source` expands first using the complete raw variable set. Explicit `name`, `edition`, and `version` then expand; `version` is converted to `System.Version` to select the version from the source `.edition` manifest or `.version` identifier. After identity is finalized, `platform`, `architecture`, and `overwrite` expand and convert when used. Bare `--overwrite` remains true; omission defaults to false.
 
-Identity still comes from the source `.version` and explicit name/edition/version options; same-named environment or `.env` variables do not implicitly replace identity. Explicit options may reference other `.env` variables. Final identity and resolved source/output overwrite the variable collection. `--migrator` requires explicit activation; `--overwrite` can come from the environment or `.env` and be overridden on the command line.
+Identity still comes from the source `.edition` manifest or `.version` identifier and explicit name/edition/version options; same-named environment or `.env` variables do not implicitly replace identity. Explicit options may reference other `.env` variables. Final identity and resolved source/output overwrite the variable collection. `--migrator` requires explicit activation; `--overwrite` can come from the environment or `.env` and be overridden on the command line.
 
 ### Variable syntax
 
@@ -345,7 +331,7 @@ Parsing rules:
 - Relative paths use `source`.
 - Absolute paths may be outside `source`; without an alias, only the filename is used in the package.
 - Directories expand recursively and are entries themselves, preserving empty directories and source modes (0755 by default on Windows). Directory alias `:~` normalizes to an empty path, placing content directly at the installation root; hosting payload arguments use this form.
-- Core `Searcher` supports `*` and `?` in any path segment; a standalone `**` matches zero or more directory levels. Results at each argument position are sorted Ordinal by paths relative to the fixed prefix, with `/` separators; the complete input sequence is not reordered. Windows matching is case-insensitive, Unix matching case-sensitive.
+- [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) `Searcher` supports `*` and `?` in any path segment; a standalone `**` matches zero or more directory levels. Results at each argument position are sorted Ordinal by paths relative to the fixed prefix, with `/` separators; the complete input sequence is not reordered. Windows matching is case-insensitive, Unix matching case-sensitive.
 - Duplicate target paths produce a conflict warning and are skipped.
 
 ### Exclusions
@@ -420,9 +406,11 @@ The flow is:
 Generating a `.service` requires locating the .NET host, in this order:
 
 1. `<source>/<name>.dll`
-2. `<source>/bin/<compilation>/<framework>/<name>.dll`
-3. The unique `.exe` under `<source>`, inferring a same-named `.dll`
+2. The unique `.exe` under `<source>`, inferring a same-named `.dll`
+3. `<source>/bin/<compilation>/<framework>/<name>.dll`
 4. The unique `.exe` under `<source>/bin/<compilation>/<framework>`, inferring a same-named `.dll`
+
+Steps 3 and 4 are skipped when `framework` or `compilation` is empty or whitespace. Neither option triggers compilation; ordinary file packaging, a .NET host in the source directory, and an existing service file do not require either option. A file-only package can use `--daemon:none` to skip host resolution entirely.
 
 A failed lookup reports:
 
@@ -505,7 +493,7 @@ See the [Web guide](web.md) for syntax and deployment requirements. Types remain
 
 Definition.cs provides the Load/Resolve entry points. Definition.Loader.cs collects declarations, arranges sections and validates structure. Definition.Resolver.cs merges declarations, evaluates values and builds the effective model, with regions for bindings/resources, backend policies, health checks, headers, native directives and basic value parsing. Value conversion belongs to Resolver rather than a separate Values file. Definition.Model.cs holds the model types.
 
-Loading uses Core Profile.Load with RequireImports=true. Importing/Imported collect declarations before replacement and retain Profile instance identity. Backend pools replace whole groups by input instance rather than enumerating all final merged entries. Structure is validated first, selected-hoster overrides next, and only consumed values are expanded. Web explicitly enables shared VariableEvaluator.allowEscapes; other callers retain their existing mode.
+Loading uses [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Profile.Load with ImportBehavior=ProfileDirectiveBehavior.Existed. Importing/Imported collect declarations before replacement and retain Profile instance identity. Backend pools replace whole groups by input instance rather than enumerating all final merged entries. Structure is validated first, selected-hoster overrides next, and only consumed values are expanded. Web explicitly enables shared VariableEvaluator.allowEscapes; other callers retain their existing mode.
 
 Resolver produces immutable site, route and policy records. Nginx builds a directive tree, validates native context/cardinality, static listener conflicts and regex proxy_pass, then emits UTF-8, Tab and CRLF. Installation-root references are typed ContentPart values, not text placeholders that can collide with input. Common literal values never silently become runtime expressions; unrepresentable values fail.
 
@@ -1014,9 +1002,9 @@ The RPM header also stores file metadata for package-manager queries and validat
 
 ## Local searches and source links
 
-Core Searcher handles local patterns. Results preserve logical names while reading actual targets. A selected directory link can expand as a payload root; internal directory links are skipped, and file links retain their original names while reading target content. Recursive patterns do not traverse directory links to match subsequent segments. Selected dangling or cyclic links fail before output writes; destination-path validation still applies.
+[Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Searcher handles local patterns. Results preserve logical names while reading actual targets. A selected directory link can expand as a payload root; internal directory links are skipped, and file links retain their original names while reading target content. Recursive patterns do not traverse directory links to match subsequent segments. Selected dangling or cyclic links fail before output writes; destination-path validation still applies.
 
-Payload-relative paths use source. Each pattern's results are sorted Ordinal by logical relative path, preserving argument order. See [Core local searches](../../../framework/Zongsoft.Core/docs/searcher.md).
+Payload-relative paths use source. Each pattern's results are sorted Ordinal by logical relative path, preserving argument order. See [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) [local searches](../../../framework/Zongsoft.Core/docs/searcher.md).
 
 `Searcher.Search` selects files, directories, or both through `Searcher.Target` (Both by default). `Match.Origin` supplies the logical fixed directory prefix for relative output paths.
 
@@ -1047,13 +1035,13 @@ The independent [migrator tool](../../migrator/README.md) prepares migrations. P
 
 After variable expansion, a value without `/` or `\` searches from the final packaging source (`--source`) through parents to the filesystem root. Each level checks that directory first, then its direct `.migration/` child; other child directories are not searched. A value containing either separator selects an explicit directory: relative paths use source, absolute paths are used directly, and neither searches parents or an implicit `.migration/` child. With source `hosting/web/default/` and artifacts in `hosting/.migration/`, `--migrator:zongsoft` finds them; `--migrator:./zongsoft` checks only source. Lookup starts at source, not the command's working directory.
 
-Existing `-migrate`, `-migration`, `.migrate`, and `.migration` suffixes are recognized case-insensitively; otherwise `-migrate` is appended. Do not include Edition, version, RID, extension, wildcards, or path lists.
+The file stem is `<name>[-<edition>](migrate)@<version>_<RID>`, using the name verbatim and omitting Edition when absent. Supply the generator's `--name` without the automatic `(migrate)` marker. Do not include Edition, version, RID, extension, wildcards, or path lists.
 
-Artifacts match the installation package's final Edition, version, platform, and architecture, including values from the source `.version` and default x64. An absent Edition omits that segment. For enterprise, 1.0.0, Linux x64:
+Artifacts match the installation package's final Edition, version, platform, and architecture, including values from the source `.edition` manifest or `.version` identifier and default x64. An absent Edition omits that segment. For enterprise, 1.0.0, Linux x64:
 
 ```text
-zongsoft-migrate-enterprise@1.0.0_linux-x64.tar.gz
-zongsoft-migrate-enterprise@1.0.0_linux-x64.sh
+zongsoft-enterprise(migrate)@1.0.0_linux-x64.tar.gz
+zongsoft-enterprise(migrate)@1.0.0_linux-x64.sh
 ```
 
 The migration name may differ from the host name, but Edition, version, and RID must match. Search continues to the next location only when both archive and script are absent. A partial pair fails immediately with the missing file's full path. A complete pair is immediately validated for archive metadata and RID; invalid metadata stops lookup. Both files must come from the same directory: no cross-directory pairing or substitution of versions, Editions, or architectures. When lookup reaches the root without a match, the diagnostic separates expected filenames from searched directories and lists every directory and `.migration/` child on individually indented lines in search order. Shared `Utility.Indent` uses platform line endings and preserves nested indentation. An omitted, empty, or whitespace-only option disables migration integration and attaches no artifacts.
@@ -1064,7 +1052,7 @@ The unchanged files enter `.migration/` under the installation root without arch
 
 ## Validation guidance
 
-Cake's `--edition` selects the same configuration for restore, build, tests, and packaging. `restore` explicitly passes MSBuild `Configuration`, avoiding missing conditional dependencies when restoring Debug and then building Release with `--no-restore`. Debug references the local framework Core DLL; Release uses the declared Core NuGet package. The main test project adds a local DLL reference only in Debug and receives transitive package dependencies in Release. `dotnet cake --edition Release` defaults to packager regression tests, without invoking AOT builds or NuGet pushes.
+Cake's `--edition` selects the same configuration for restore, build, tests, and packaging. `restore` explicitly passes MSBuild `Configuration`, avoiding missing conditional dependencies when restoring Debug and then building Release with `--no-restore`. Debug references the local framework [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) DLL; Release uses the declared [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) NuGet package. The main test project adds a local DLL reference only in Debug and receives transitive package dependencies in Release. `dotnet cake --edition Release` defaults to packager regression tests, without invoking AOT builds or NuGet pushes.
 
 `VersionFileTest`, `PackageVersionTest`, and `PackageArtifactTest` cover source versions and memory entries.
 

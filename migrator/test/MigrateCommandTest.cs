@@ -25,12 +25,14 @@ public sealed partial class MigrateCommandTest
 
 	#region 生成测试
 	[Theory]
-	[InlineData("zongsoft.daemon", "Linux", "X64", null, "zongsoft.daemon-migrate", "zongsoft.daemon-migrate@1.2.3_linux-x64.sh", "linux-x64")]
-	[InlineData("zongsoft.daemon-migrate", "Linux", "X64", null, "zongsoft.daemon-migrate", "zongsoft.daemon-migrate.sh", "linux-x64")]
-	[InlineData("zongsoft.daemon-migration", "Linux", "Arm64", "Enterprise", "zongsoft.daemon-migration-Enterprise", "zongsoft.daemon-migration-Enterprise.sh", "linux-arm64")]
-	[InlineData("zongsoft.daemon.migrate", "win", "X64", null, "zongsoft.daemon.migrate", "zongsoft.daemon.migrate.cmd", "win-x64")]
-	[InlineData("zongsoft.daemon.MIGRATION", "windows", "X64", "Community", "zongsoft.daemon.MIGRATION-Community", "zongsoft.daemon.MIGRATION-Community.cmd", "win-x64")]
-	public async Task Execute_PlatformSuffixAndEdition_GeneratesStandalonePairWithoutRunningSqlOrChangingVersionAsync(string name, string platform, string architecture, string edition, string identity, string launcher, string runtime)
+	[InlineData("zongsoft.daemon", "Linux", "X64", null, "zongsoft.daemon-migrate", "zongsoft.daemon(migrate)@1.2.3_linux-x64.sh", "linux-x64")]
+	[InlineData("zongsoft.daemon-migrate", "Linux", "X64", null, "zongsoft.daemon-migrate", "zongsoft.daemon-migrate(migrate)@1.2.3_linux-x64.sh", "linux-x64")]
+	[InlineData("zongsoft.daemon-migration", "Linux", "Arm64", "Enterprise", "zongsoft.daemon-migration-Enterprise", "zongsoft.daemon-migration-Enterprise(migrate)@1.2.3_linux-arm64.sh", "linux-arm64")]
+	[InlineData("zongsoft.daemon.migrate", "win", "X64", null, "zongsoft.daemon.migrate", "zongsoft.daemon.migrate(migrate)@1.2.3_win-x64.cmd", "win-x64")]
+	[InlineData("zongsoft.daemon.MIGRATION", "windows", "X64", "Community", "zongsoft.daemon.MIGRATION-Community", "zongsoft.daemon.MIGRATION-Community(migrate)@1.2.3_win-x64.cmd", "win-x64")]
+	[InlineData("zongsoft.daemon", "Linux", "X64", "Enterprise", "zongsoft.daemon-migrate-Enterprise", "zongsoft.daemon-Enterprise(migrate)@1.2.3_linux-x64.sh", "linux-x64")]
+	[InlineData("zongsoft.daemon", "windows", "X64", "Community", "zongsoft.daemon-migrate-Community", "zongsoft.daemon-Community(migrate)@1.2.3_win-x64.cmd", "win-x64")]
+	public async Task Execute_PlatformNameAndEdition_GeneratesStandalonePairWithoutRunningSqlOrChangingVersionAsync(string name, string platform, string architecture, string edition, string identity, string launcher, string runtime)
 	{
 		using var directory = new MigrationTestDirectory();
 		var version = directory.Write(".version", "invalid source version must not be read\n");
@@ -47,7 +49,7 @@ public sealed partial class MigrateCommandTest
 		var result = await RunAsync(directory, arguments);
 
 		Assert.True(result.Code == 0, result.Output);
-		var archive = Path.Combine(directory.Path, "out", identity + "@1.2.3_" + runtime + ".tar.gz");
+		var archive = Path.Combine(directory.Path, "out", Path.GetFileNameWithoutExtension(launcher) + ".tar.gz");
 		Assert.True(File.Exists(archive), archive);
 		using(var input = File.OpenRead(archive))
 		using(var gzip = new GZipStream(input, CompressionMode.Decompress))
@@ -61,7 +63,7 @@ public sealed partial class MigrateCommandTest
 		}
 
 		Assert.Equal(2, Directory.GetFiles(Path.Combine(directory.Path, "out")).Length);
-		var script = File.ReadAllText(Path.Combine(directory.Path, "out", identity + "@1.2.3_" + runtime + Path.GetExtension(launcher)));
+		var script = File.ReadAllText(Path.Combine(directory.Path, "out", launcher));
 		Assert.Contains(Path.GetFileName(archive), script);
 		Assert.DoesNotContain("systemctl", script);
 		if(runtime == "win-x64")
@@ -97,8 +99,8 @@ public sealed partial class MigrateCommandTest
 		var result = await RunAsync(directory, arguments);
 
 		Assert.True(result.Code == 0, result.Output);
-		var archive = Path.Combine(directory.Path, "zongsoft.daemon-migrate@1.2.3_linux-x64.tar.gz");
-		Assert.True(File.Exists(Path.Combine(directory.Path, "zongsoft.daemon-migrate@1.2.3_linux-x64.sh")));
+		var archive = Path.Combine(directory.Path, "zongsoft.daemon(migrate)@1.2.3_linux-x64.tar.gz");
+		Assert.True(File.Exists(Path.Combine(directory.Path, "zongsoft.daemon(migrate)@1.2.3_linux-x64.sh")));
 		var entry = Assert.Single(ReadArchive(archive), entry => entry.Name.EndsWith(".migration/migration.json", StringComparison.Ordinal));
 		using var plan = JsonDocument.Parse(entry.Content);
 		Assert.Equal("Hosting bootstrap", plan.RootElement.GetProperty("Title").GetString());
@@ -112,8 +114,8 @@ public sealed partial class MigrateCommandTest
 	public async Task Execute_OneOutputAlreadyExists_LeavesExistingFileAndDoesNotCreatePartnerAsync(bool archiveExists)
 	{
 		using var directory = new MigrationTestDirectory();
-		var archive = "out/zongsoft.daemon-migrate@1.2.3_linux-x64.tar.gz";
-		var launcher = "out/zongsoft.daemon-migrate@1.2.3_linux-x64.sh";
+		var archive = "out/zongsoft.daemon(migrate)@1.2.3_linux-x64.tar.gz";
+		var launcher = "out/zongsoft.daemon(migrate)@1.2.3_linux-x64.sh";
 		var existing = directory.Write(archiveExists ? archive : launcher, "existing-user-content");
 		var arguments = Arguments("zongsoft.daemon", "Linux", "X64");
 		arguments.Add("missing.migration");
@@ -131,8 +133,8 @@ public sealed partial class MigrateCommandTest
 	{
 		using var directory = new MigrationTestDirectory();
 		PrepareMigration(directory, "/data/hosting.db");
-		var archive = directory.Write("out/zongsoft.daemon-migrate@1.2.3_linux-x64.tar.gz", "old-archive");
-		var launcher = directory.Write("out/zongsoft.daemon-migrate@1.2.3_linux-x64.sh", "old-launcher");
+		var archive = directory.Write("out/zongsoft.daemon(migrate)@1.2.3_linux-x64.tar.gz", "old-archive");
+		var launcher = directory.Write("out/zongsoft.daemon(migrate)@1.2.3_linux-x64.sh", "old-launcher");
 		var arguments = Arguments("zongsoft.daemon", "Linux", "X64");
 		arguments.Add("--overwrite");
 		arguments.Add("db.migration");
@@ -162,7 +164,7 @@ public sealed partial class MigrateCommandTest
 			var result = await RunAsync(directory, arguments);
 
 			Assert.True(result.Code == 0, result.Output);
-			var archive = Path.Combine(directory.Path, "out", "zongsoft.daemon-migrate@1.2.3_linux-x64.tar.gz");
+			var archive = Path.Combine(directory.Path, "out", "zongsoft.daemon(migrate)@1.2.3_linux-x64.tar.gz");
 			var entry = Assert.Single(ReadArchive(archive), entry => entry.Name.EndsWith(".migration/migration.json", StringComparison.Ordinal));
 			using var plan = JsonDocument.Parse(entry.Content);
 			Assert.Equal("linux-x64", plan.RootElement.GetProperty("Runtime").GetString());
@@ -178,8 +180,8 @@ public sealed partial class MigrateCommandTest
 	{
 		using var directory = new MigrationTestDirectory();
 		PrepareMigration(directory, "/data/hosting.db");
-		var archive = directory.Write("out/zongsoft.daemon-migrate@1.2.3_linux-x64.tar.gz", "original-archive");
-		var launcher = directory.Write("out/zongsoft.daemon-migrate@1.2.3_linux-x64.sh", "original-launcher");
+		var archive = directory.Write("out/zongsoft.daemon(migrate)@1.2.3_linux-x64.tar.gz", "original-archive");
+		var launcher = directory.Write("out/zongsoft.daemon(migrate)@1.2.3_linux-x64.sh", "original-launcher");
 		using var held = new FileStream(launcher, FileMode.Open, FileAccess.Read, FileShare.Read);
 		var arguments = Arguments("zongsoft.daemon", "Linux", "X64");
 		arguments.Add("--overwrite");
@@ -205,7 +207,7 @@ public sealed partial class MigrateCommandTest
 		arguments.Add("db.migration");
 		var generated = await RunAsync(directory, arguments);
 		Assert.True(generated.Code == 0, generated.Output);
-		var prefix = "out/zongsoft.daemon-migrate@1.2.3_" + runtime;
+		var prefix = "out/zongsoft.daemon(migrate)@1.2.3_" + runtime;
 		var archive = Path.Combine(directory.Path, prefix + ".tar.gz");
 		var fingerprint = Encoding.UTF8.GetString(Assert.Single(ReadArchive(archive), entry => entry.Name == ".migration/id").Content);
 		var launcher = Path.Combine(directory.Path, prefix + (windows ? ".cmd" : ".sh"));
@@ -237,7 +239,7 @@ public sealed partial class MigrateCommandTest
 		arguments.Add("db.migration");
 		var generated = await RunAsync(directory, arguments);
 		Assert.True(generated.Code == 0, generated.Output);
-		var prefix = "out/zongsoft.daemon-migrate@1.2.3_" + MigrationTestDirectory.CurrentRuntime;
+		var prefix = "out/zongsoft.daemon(migrate)@1.2.3_" + MigrationTestDirectory.CurrentRuntime;
 		var archive = Path.Combine(directory.Path, prefix + ".tar.gz");
 		var extension = windows ? ".cmd" : ".sh";
 		var launcher = Path.Combine(directory.Path, prefix + extension);
@@ -271,7 +273,7 @@ public sealed partial class MigrateCommandTest
 		arguments.Add("db.migration");
 		var generated = await RunAsync(directory, arguments);
 		Assert.True(generated.Code == 0, generated.Output);
-		var prefix = "out/zongsoft.daemon-migrate@1.2.3_" + runtime;
+		var prefix = "out/zongsoft.daemon(migrate)@1.2.3_" + runtime;
 		var script = File.ReadAllText(Path.Combine(directory.Path, prefix + (runtime == "win-x64" ? ".cmd" : ".sh")));
 		if(runtime == "win-x64")
 		{
@@ -401,13 +403,15 @@ public sealed partial class MigrateCommandTest
 		};
 		if(OperatingSystem.IsWindows())
 		{
-			process.StartInfo.ArgumentList.Add("/d");
-			process.StartInfo.ArgumentList.Add("/c");
+			process.StartInfo.Arguments = $"/d /s /c \"\"{launcher}\" {action}" + (state == null ? "" : $" \"{state}\"") + "\"";
 		}
-		process.StartInfo.ArgumentList.Add(launcher);
-		process.StartInfo.ArgumentList.Add(action);
-		if(state != null)
-			process.StartInfo.ArgumentList.Add(state);
+		else
+		{
+			process.StartInfo.ArgumentList.Add(launcher);
+			process.StartInfo.ArgumentList.Add(action);
+			if(state != null)
+				process.StartInfo.ArgumentList.Add(state);
+		}
 		Assert.True(process.Start());
 		var output = process.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
 		var error = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);

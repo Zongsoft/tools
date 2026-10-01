@@ -73,9 +73,6 @@ public sealed class Migrator
 			name.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".sh", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase))
 			throw new ArgumentException(Properties.Resources.MigratorNameInvalid_Message, nameof(name));
 
-		if(!HasSuffix(name))
-			name += "-migrate";
-
 		if(package.Platform != Platform.Linux || package.Architecture is not (System.Runtime.InteropServices.Architecture.X64 or System.Runtime.InteropServices.Architecture.Arm64))
 			throw new InvalidOperationException(Properties.Resources.MigrationPlatformInvalid_Message);
 
@@ -85,7 +82,7 @@ public sealed class Migrator
 		if(!Regex.IsMatch(package.InstallPath, @"^/(?:[A-Za-z0-9._+-]+/)*[A-Za-z0-9._+-]+$") || package.InstallPath.Split('/').Any(part => part is "." or ".."))
 			throw new InvalidOperationException(Properties.Resources.MigrationInstallPathInvalid_Message);
 
-		var prefix = name + (string.IsNullOrEmpty(package.Edition) ? "" : "-" + package.Edition) + "@" + package.Version + "_" + package.Runtime;
+		var prefix = name + (string.IsNullOrEmpty(package.Edition) ? "" : "-" + package.Edition) + "(migrate)@" + package.Version + "_" + package.Runtime;
 		var migrator = Locate(Path.GetDirectoryName(path), prefix, searchParents);
 
 		Validate(migrator.Archive, package.Runtime);
@@ -152,10 +149,6 @@ public sealed class Migrator
 			!metadata.GlobalExtendedAttributes.TryGetValue("Migrator", out var generator) || string.IsNullOrWhiteSpace(generator))
 			throw new InvalidDataException(string.Format(Properties.Resources.MigratorMetadataInvalid_Message, archive, expectedRuntime));
 	}
-
-	private static bool HasSuffix(string name) =>
-		name.EndsWith("-migrate", StringComparison.OrdinalIgnoreCase) || name.EndsWith("-migration", StringComparison.OrdinalIgnoreCase) ||
-		name.EndsWith(".migrate", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".migration", StringComparison.OrdinalIgnoreCase);
 	#endregion
 
 	#region 脚本方法

@@ -145,7 +145,6 @@ public abstract partial class Package
 
 	#region 私有方法
 	private static string GetPackageName(string name, string edition) => string.IsNullOrEmpty(edition) ? name : $"{name}-{edition}";
-
 	private static string GetPackageIdentity(string name, Variables variables)
 	{
 		var daemon = variables.Daemon;
@@ -205,9 +204,9 @@ public abstract partial class Package
 	{
 		private readonly Package _package = package;
 		private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
+		private string _manifest;
 
 		public int Count => _entries.Count;
-
 		public bool Contains(string name) => name != null && _entries.ContainsKey(name);
 
 		internal void SetVersion(ApplicationIdentifier identifier)
@@ -257,6 +256,7 @@ public abstract partial class Package
 
 		internal void Load(string source, IReadOnlyCollection<string> arguments, IEnumerable<string> exclusions = null)
 		{
+			_manifest = Path.GetFullPath(Path.Combine(source, ".edition"));
 			var exclusion = EntryExclusion.Create(source, exclusions, _package.Variables);
 
 			if(arguments == null || arguments.Count == 0)
@@ -350,14 +350,17 @@ public abstract partial class Package
 		{
 			var resolved = Utility.Resolve(path);
 			var name = Utility.NormalizePath(Path.Combine(prefix ?? string.Empty, alias));
+
 			if(exclusion != null && exclusion.IsMatch(path, name))
 				return;
 
 			if(string.IsNullOrEmpty(name))
 				name = ".";
+
 			ValidatePath(name);
 			Installation.ValidateEntry(_package, name, rooted, path, true);
 			var key = rooted ? "/" + name : name;
+
 			if(_entries.TryGetValue(key, out var existing) && !existing.IsDirectory)
 				throw new InvalidOperationException(string.Format(Properties.Resources.PackageEntryTypeConflict_Message, name));
 
@@ -388,6 +391,9 @@ public abstract partial class Package
 
 		void AddFile(string source, string entryName, string prefix, bool rooted, EntryExclusion exclusion)
 		{
+			if(string.Equals(Path.GetFullPath(source), _manifest, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+				return;
+
 			if(string.IsNullOrEmpty(entryName))
 				entryName = Path.GetFileName(source);
 			else
@@ -400,6 +406,10 @@ public abstract partial class Package
 
 			entryName = Utility.NormalizePath(Path.Combine(prefix ?? string.Empty, entryName));
 			ValidatePath(entryName);
+			var manifest = Utility.NormalizePath(Path.Combine(rooted ? _package.InstallPath.TrimStart('/') : _package.EntryPrefix ?? string.Empty, ".edition"));
+			if(string.Equals(entryName, manifest, StringComparison.Ordinal))
+				return;
+
 			var resolved = (FileInfo)Utility.Resolve(source);
 
 			if(exclusion != null && exclusion.IsMatch(source, entryName))

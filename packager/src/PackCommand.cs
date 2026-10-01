@@ -46,11 +46,11 @@ namespace Zongsoft.Tools.Packager;
 
 [CommandOption(NAME_OPTION, typeof(string))]
 [CommandOption(VERSION_OPTION, typeof(string))]
-[CommandOption(PLATFORM_OPTION, typeof(string), Required = true)]
-[CommandOption(FRAMEWORK_OPTION, typeof(string), Required = true)]
 [CommandOption(SOURCE_OPTION, typeof(string))]
 [CommandOption(EDITION_OPTION, typeof(string))]
+[CommandOption(FRAMEWORK_OPTION, typeof(string))]
 [CommandOption(COMPILATION_OPTION, typeof(string), DEFAULT_COMPILATION)]
+[CommandOption(PLATFORM_OPTION, typeof(string), Required = true)]
 [CommandOption(ARCHITECTURE_OPTION, typeof(string), "X64")]
 [CommandOption(OUTPUT_OPTION, typeof(string))]
 [CommandOption(EXCLUDE_OPTION, typeof(string))]

@@ -45,7 +45,7 @@ public sealed partial class MigrateCommandTest
 			var result = await RunAsync(directory, arguments, workingDirectory);
 
 			Assert.True(result.Code == 0, result.Output);
-			var archive = Path.Combine(workingDirectory, "out", "zongsoft.daemon-migrate@2.3.4_linux-x64.tar.gz");
+			var archive = Path.Combine(workingDirectory, "out", "zongsoft.daemon(migrate)@2.3.4_linux-x64.tar.gz");
 			using var plan = JsonDocument.Parse(Assert.Single(ReadArchive(archive), entry => entry.Name == ".migration/migration.json").Content);
 			Assert.Equal("2.3.4", plan.RootElement.GetProperty("Version").GetString());
 			Assert.Equal("zongsoft.daemon 2.3.4", plan.RootElement.GetProperty("Title").GetString());
@@ -73,8 +73,8 @@ public sealed partial class MigrateCommandTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write(".env", "#@import .env\n");
-		var archive = directory.Write("out/zongsoft.daemon-migrate@1.2.3_linux-x64.tar.gz", "previous archive");
-		var launcher = directory.Write("out/zongsoft.daemon-migrate@1.2.3_linux-x64.sh", "previous launcher");
+		var archive = directory.Write("out/zongsoft.daemon(migrate)@1.2.3_linux-x64.tar.gz", "previous archive");
+		var launcher = directory.Write("out/zongsoft.daemon(migrate)@1.2.3_linux-x64.sh", "previous launcher");
 		PrepareMigration(directory, "/data/hosting.db");
 		var arguments = Arguments("zongsoft.daemon", "Linux", "X64");
 		arguments.Add("--overwrite");

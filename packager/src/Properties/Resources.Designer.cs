@@ -250,7 +250,7 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
-        ///   查找类似 The output file &apos;{0}&apos; already exists. Use --overwrite to replace it, or choose another --output directory. 的本地化字符串。
+        ///   Looks up a localized string similar to The output file &apos;{0}&apos; already exists. Use --overwrite to replace it, or choose another --output directory..
         /// </summary>
         internal static string PackageFileAlreadyExists_Message {
             get {
@@ -304,7 +304,7 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
-        ///   Looks up a localized string similar to The source version file &quot;{0}&quot; contains multiple editions. Specify --edition..
+        ///   Looks up a localized string similar to The source identity file &quot;{0}&quot; contains multiple editions without a current selection. Specify --edition..
         /// </summary>
         internal static string SourceVersionEditionRequired_Message {
             get {
@@ -313,7 +313,7 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
-        ///   Looks up a localized string similar to Invalid --name or --edition for source version file &quot;{0}&quot;..
+        ///   Looks up a localized string similar to Invalid --name or --edition for source identity file &quot;{0}&quot;..
         /// </summary>
         internal static string SourceVersionIdentityInvalid_Message {
             get {
@@ -331,7 +331,7 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
-        ///   Looks up a localized string similar to Cannot load the source version file &quot;{0}&quot;..
+        ///   Looks up a localized string similar to Cannot load the source identity file &quot;{0}&quot;..
         /// </summary>
         internal static string SourceVersionLoadFailed_Message {
             get {
@@ -358,7 +358,7 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
-        ///   Looks up a localized string similar to Package &quot;{0}&quot; was generated, but updating source version file &quot;{1}&quot; failed..
+        ///   Looks up a localized string similar to Package &quot;{0}&quot; was generated, but updating source identity file &quot;{1}&quot; failed..
         /// </summary>
         internal static string SourceVersionSaveFailed_Message {
             get {
@@ -410,8 +410,9 @@ namespace Zongsoft.Tools.Packager.Properties {
                 return ResourceManager.GetString("VariableUndefined.Message", resourceCulture);
             }
         }
+
         /// <summary>
-        ///   查找类似 The Web hoster cannot represent this setting exactly: {0}. 的本地化字符串。
+        ///   Looks up a localized string similar to The Web hoster cannot represent this setting exactly: {0}..
         /// </summary>
         internal static string Web_Capability_Message {
             get {
@@ -420,7 +421,7 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Generated Web content conflicts with another package entry: {0}. 的本地化字符串。
+        ///   Looks up a localized string similar to Generated Web content conflicts with another package entry: {0}..
         /// </summary>
         internal static string Web_Conflict_Message {
             get {
@@ -429,7 +430,7 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Invalid Nginx directive, context or arguments: {0}. 的本地化字符串。
+        ///   Looks up a localized string similar to Invalid Nginx directive, context or arguments: {0}..
         /// </summary>
         internal static string Web_Directive_Message {
             get {
@@ -438,7 +439,7 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Duplicate effective Web setting: {0}. 的本地化字符串。
+        ///   Looks up a localized string similar to Duplicate effective Web setting: {0}..
         /// </summary>
         internal static string Web_Duplicate_Message {
             get {
@@ -447,7 +448,7 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Unknown or malformed Web field: {0}. 的本地化字符串。
+        ///   Looks up a localized string similar to Unknown or malformed Web field: {0}..
         /// </summary>
         internal static string Web_Field_Message {
             get {
@@ -456,7 +457,7 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Unknown or unimplemented Web hoster: {0}. 的本地化字符串。
+        ///   Looks up a localized string similar to Unknown or unimplemented Web hoster: {0}..
         /// </summary>
         internal static string Web_Hoster_Message {
             get {
@@ -465,7 +466,7 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Unable to load Web profile: {0}. 的本地化字符串。
+        ///   Looks up a localized string similar to Unable to load Web profile: {0}..
         /// </summary>
         internal static string Web_Load_Message {
             get {
@@ -474,7 +475,7 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Scalar server and named server members cannot coexist in the same source scope: {0}. 的本地化字符串。
+        ///   Looks up a localized string similar to Scalar server and named server members cannot coexist in the same source scope: {0}..
         /// </summary>
         internal static string Web_MixedServers_Message {
             get {
@@ -483,7 +484,7 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Invalid --web option or input path: {0}. 的本地化字符串。
+        ///   Looks up a localized string similar to Invalid --web option or input path: {0}..
         /// </summary>
         internal static string Web_Option_Message {
             get {
@@ -492,7 +493,7 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
-        ///   查找类似 The native setting overrides the common setting: {0}. 的本地化字符串。
+        ///   Looks up a localized string similar to The native setting overrides the common setting: {0}..
         /// </summary>
         internal static string Web_Override_Message {
             get {
@@ -501,7 +502,7 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Required Web setting or application host information is missing: {0}. 的本地化字符串。
+        ///   Looks up a localized string similar to Required Web setting or application host information is missing: {0}..
         /// </summary>
         internal static string Web_Required_Message {
             get {
@@ -510,7 +511,7 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Web field or section is not allowed at this scope: {0}. 的本地化字符串。
+        ///   Looks up a localized string similar to Web field or section is not allowed at this scope: {0}..
         /// </summary>
         internal static string Web_Scope_Message {
             get {
@@ -519,7 +520,7 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Invalid Web value: {0}. 的本地化字符串。
+        ///   Looks up a localized string similar to Invalid Web value: {0}..
         /// </summary>
         internal static string Web_Value_Message {
             get {
@@ -528,13 +529,12 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Unable to resolve Web variable: {0}. 的本地化字符串。
+        ///   Looks up a localized string similar to Unable to resolve Web variable: {0}..
         /// </summary>
         internal static string Web_Variable_Message {
             get {
                 return ResourceManager.GetString("Web.Variable.Message", resourceCulture);
             }
         }
-
     }
 }

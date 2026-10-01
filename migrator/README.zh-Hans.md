@@ -59,8 +59,8 @@ dotnet-migrate --name:<名称> --platform:<平台> [选项...] <输入.migration
 | --- | --- | --- |
 | `--name:<名称>` | 必填 | 升迁名称，独立于版本文件中的应用名称。 |
 | `--platform:<平台>` | 必填 | `linux` 或 `win`/`windows`；`unix` 不够明确，macOS 尚无运行器。 |
-| `--version:<版本或路径>` | 当前目录直属 `.version` | 非零版本号、版本文件或含 `.version` 的目录；版本文件只读。 |
-| `--edition:<名称>` | 文件决定或空 | 选择版本文件 Edition；名称不区分大小写，保留文件拼写。 |
+| `--version:<版本或路径>` | 当前目录直属 `.edition`，回退 `.version` | 非零版本号、`.edition` 清单文件、`.version` 版本标识文件或目录；文件只读。 |
+| `--edition:<名称>` | 空 | 显式指定产物 Edition，同时选择清单版本；忽略大小写匹配，保留文件拼写。 |
 | `--architecture:<架构>` | `x64` | `x64` 或 `arm64`；`win` 仅有 x64 执行器。 |
 | `--output:<目录>` | 当前目录 | 产物目录，相对当前工作目录。 |
 | `--overwrite[:布尔值]` | `false` | 覆盖同名归档和启动器；两文件成组提交，失败恢复旧文件。 |
@@ -78,20 +78,24 @@ dotnet-migrate --name:<名称> --platform:<平台> [选项...] <输入.migration
 
 每次调用依次加载描述符默认值、系统环境变量、从文件系统根目录到工作目录的各级直属 `.env`、显式命令选项。同名变量后加载覆盖先加载，空值也参与覆盖，名称不区分大小写。不搜索子目录，各个输入文件及版本文件的目录也不建立额外变量作用域。变量仅属于本次调用，不修改进程环境变量。
 
-使用 Core `Profile.Load` 读取 INI，支持 `#@import`。根条目保留原名，各级段落名与条目名以 `_` 拼接。例如 `[mysql]` 下的 `root_password=example` 生成 `mysql_root_password`，`[io rustfs]` 下的 `access_key=example` 生成 `io_rustfs_access_key`，根级 `environment=Development` 生成 `environment`。值按需通过 `$(name)` 或 `%name%` 展开，可用于命令选项和 `.ini` 连接参数。缺失的 `.env` 跳过，读取或解析失败终止制作。
+使用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) `Profile.Load` 读取 INI，支持 `#@import`。根条目保留原名，各级段落名与条目名以 `_` 拼接。例如 `[mysql]` 下的 `root_password=example` 生成 `mysql_root_password`，`[io rustfs]` 下的 `access_key=example` 生成 `io_rustfs_access_key`，根级 `environment=Development` 生成 `environment`。值按需通过 `$(name)` 或 `%name%` 展开，可用于命令选项和 `.ini` 连接参数。缺失的 `.env` 跳过，读取或解析失败终止制作。
 
-`.env` 提供共享变量，`.ini` 提供升迁连接配置。原有 `mysql.env`、`main.env` 等参数文件需要改名为 `mysql.ini`、`main.ini`，同时更新其导入路径。自动参数查找不再回退 `*.env`，显式导入沿用 Core 既有规则。版本选择及必填选项保持既有约定。
+`.env` 提供共享变量，`.ini` 提供升迁连接配置。原有 `mysql.env`、`main.env` 等参数文件需要改名为 `mysql.ini`、`main.ini`，同时更新其导入路径。自动参数查找不再回退 `*.env`，显式导入沿用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 既有规则。版本与 Edition 选择遵循下述独立规则。
 
 ### 选择版本与 Edition
 
-`--version` 接受非零的 `System.Version` 版本号（两段、三段或四段数字）、版本文件路径，或包含 `.version` 的现有目录路径。相对路径基于当前工作目录。省略选项、空串或全空白值只读取当前目录直属的 `.version`，不使用环境变量或 `.env` 中的 `version` 代替。版本文件由 Core `ApplicationVersion` 读取，始终不修改；文件缺失、不可读或内容无效时，在生成任何产物之前报错退出。
+`--version` 接受非零 `System.Version` 版本号（两段、三段或四段数字）、文件或现有目录，相对路径基于当前工作目录。省略、空串或全空白时只检查当前目录直属文件：先用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) `ApplicationManifest.Load` 读取 `.edition`，仅清单不存在时才用 `ApplicationIdentifier.Load` 读取 `.version`。显式目录采用同样顺序。显式文件名为 `.version` 或以 `.version` 结尾时（忽略大小写）使用标识读取器，其他文件名使用清单读取器。清单损坏或不可读不回退。文件始终只读，失败发生在生成产物之前；环境及 `.env` 不能隐式提供 `version` 或 `edition` 选项。
 
-未指定非空 `--edition` 时：单版本文件使用顶层版本，只有一个具名 Edition 时自动选择，多个 Edition 时必须明确指定。指定的 Edition 必须存在，忽略大小写匹配，并采用文件中的拼写。`--name` 仍必填，与版本文件中的应用名称无关。直接指定版本号时不读取版本文件，采用命令提供的 Edition。
+**产物 Edition 只来自显式非空 `--edition`。** 数字与文件型版本均如此；省略或空白时产物不带 Edition。清单 Current 和标识文件自带 Edition 不自动进入产物身份，显式选项仍可引用变量。
+
+对于清单，显式 Edition 忽略大小写匹配并保留文件拼写；未显式指定时，只借用 Current 对应的**版本号**，无 Current 时取唯一 Edition，无具名 Edition 时取顶层版本。多个 Edition 且无 Current 时要求明确选择或传数字 `--version`。标识文件只提供版本号，显式 Edition 可以覆盖或补充其 Edition。`--name` 始终独立必填，不采用源应用名称；数字版本不读取源文件。
+
+例如 `.edition` 选中 Enterprise、版本为 `2.0.0`，省略 `--edition` 时生成 `zongsoft(migrate)@2.0.0_linux-x64.tar.gz`；添加 `--edition:enterprise` 时生成 `zongsoft-Enterprise(migrate)@2.0.0_linux-x64.tar.gz`。旧多 Edition `.version` 须改名为 `.edition`，标识读取器不解析 Edition 段落。
 
 在 `D:/Zongsoft/hosting` 中，以下两种方式均使用现有 Web 宿主版本文件（先按上例设置 `scheme`）：
 
 ```powershell
-dotnet-migrate --name:zongsoft --version:web/default/.version --platform:linux --output:packages '.deploy/$(scheme)/migration/$(version)/*.migration'
+dotnet-migrate --name:zongsoft --version:web/default/.edition --platform:linux --output:packages '.deploy/$(scheme)/migration/$(version)/*.migration'
 dotnet-migrate --name:zongsoft --version:web/default --platform:linux --output:packages '.deploy/$(scheme)/migration/$(version)/*.migration'
 ```
 
@@ -101,7 +105,7 @@ dotnet-migrate --name:zongsoft --version:web/default --platform:linux --output:p
 dotnet-migrate --name:zongsoft --platform:linux --output:../../packages '../../.deploy/$(scheme)/migration/$(version)/*.migration'
 ```
 
-版本路径支持变量；数字形式优先作为版本号，文件名为 `1.0.0` 时可用 `./1.0.0` 明确指定文件。命令选项先保留原始文本，版本来源确定后，`architecture`、`overwrite` 等值按需递归展开，再转换为对应类型；裸 `--overwrite` 仍表示 true。布尔值还支持 `true/false`、`1/0`、`yes/no`、`on/off`、`enable(d)/disable(d)`；其他值按 Core `Switch` 约定视为 false。枚举选项沿用 Core 的转换规则，不额外检查枚举成员是否已定义；调用方应提供有效枚举项。变量名不区分大小写，支持点号、连字符和索引；用到的值遇缺失、循环或超过 64 层会报错。最终版本和 Edition 用于 `$(version)`/`$(edition)`、计划身份及产物名称。升迁输入和输出的相对路径始终基于当前目录，不随版本文件目录改变。
+版本路径支持变量；数字形式优先作为版本号，文件名为 `1.0.0` 时可用 `./1.0.0` 明确指定文件。命令选项先保留原始文本，版本来源确定后，`architecture`、`overwrite` 等值按需递归展开，再转换为对应类型；裸 `--overwrite` 仍表示 true。布尔值还支持 `true/false`、`1/0`、`yes/no`、`on/off`、`enable/disable`、`enabled/disabled`。枚举选项沿用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 的转换规则，不额外检查枚举成员是否已定义；调用方应提供有效枚举项。变量名不区分大小写，支持点号、连字符和索引；用到的值遇缺失、循环或超过 64 层会报错。最终版本和 Edition 用于 `$(version)`/`$(edition)`、计划身份及产物名称。升迁输入和输出的相对路径始终基于当前目录，不随版本文件目录改变。
 
 ### 升迁输入与执行顺序
 
@@ -115,7 +119,7 @@ dotnet-migrate --name:zongsoft --platform:linux --output:../../packages '../../.
 
 ### 导入共享配置
 
-升迁 INI 和 `.ini` 均支持 Core 的 `#@import` 指令。例如：
+升迁 INI 和 `.ini` 均支持 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 的 `#@import` 指令。例如：
 
 ```ini
 # migration/main.migration
@@ -144,7 +148,7 @@ Database=/var/lib/example/application.db
 数据库 common.ini 声明 provider、数据库和用户段。只有选中的候选文件及其显式导入参与合并；缺少必需参数时报错，不从其他候选文件补齐。Amazon S3 保留 provider 命名文件的根参数简写。
 
 - 导入路径相对于包含该指令的文件，也可为绝对路径。多个路径用空格、Tab 或 `|` 分隔，不支持引号转义、通配符或变量展开。指令合并完整 Profile，即使位于段落内也不会把子文件根条目移入当前段落。
-- 缺失的导入文件按 Core 可选导入规则跳过。循环导入或超过 64 层（含根文件）时失败；允许菱形及重复导入，每次重新读取。配置链接保留逻辑来源，导入、SQL 和旁侧参数以链接位置为基准。
+- 缺失的导入文件按 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 可选导入规则跳过。循环导入或超过 64 层（含根文件）时失败；允许菱形及重复导入，每次重新读取。配置链接保留逻辑来源，导入、SQL 和旁侧参数以链接位置为基准。
 - 每个文件单独检查重复段落、重复键及语法。升迁 INI 的根条目、未知段落和同一有效配置中的升迁器别名冲突仍报错，导入文件也不例外。
 - 不同文件的同段同名条目按读取顺序覆盖，名称不区分大小写；有效集合中仍使用该键第一次出现的位置。被覆盖的 SQL/Bucket 条目不会生成任务。需要独立执行同名条目时，应使用多个命令行 INI 输入。
 - 一个有效段落按连续的声明来源拆成任务，保留有效条目顺序；同一来源在该段落内的 SQL 重叠选择跨任务去重，不对不同来源或独立输入去重。各来源保留自己的参数。跨任务及数据库段保留有效 SQL 顺序。
@@ -387,11 +391,11 @@ MySQL 连接始终开启 `AllowUserVariables=true`，支持同一会话里的 `S
 
 ### 产物命名和内容
 
-名称已有 `-migrate`、`-migration`、`.migrate`、`.migration` 后缀时保留（忽略大小写），否则追加 `-migrate`。两文件使用同一前缀 `<升迁名称>[-edition]@<version>_<platform>-<architecture>`，扩展名分别为 `.tar.gz` 和 `.sh`/`.cmd`。不生成描述文件。例如：
+两文件使用同一前缀 `<name>[-<edition>](migrate)@<version>_<RID>`，扩展名分别为 `.tar.gz` 和 `.sh`/`.cmd`。`name` 原样使用命令选项；未指定 Edition 时省略 `-<edition>`，`(migrate)` 始终位于版本号之前。此文件名规则独立于计划名称及默认状态目录：后两者继续使用既有的升迁后缀规范化规则，以复用已有状态。不生成描述文件。例如：
 
 ```text
-packages/zongsoft-migrate@1.0.0_linux-x64.tar.gz
-packages/zongsoft-migrate@1.0.0_linux-x64.sh
+packages/zongsoft(migrate)@1.0.0_linux-x64.tar.gz
+packages/zongsoft(migrate)@1.0.0_linux-x64.sh
 ```
 
 归档包含 .migration/migration.json、.migration/.artifacts/ 下的 SQL 批次和解析后的升迁数据。两个输出先暂存再发布；替换已有文件须指定 --overwrite，发布失败会恢复原输出。
@@ -406,17 +410,17 @@ packages/zongsoft-migrate@1.0.0_linux-x64.sh
 将归档和同名前缀启动器放在目标机同一目录：
 
 ```text
-sh <名称>@<版本>_linux-x64.sh [apply|status|check] [状态目录]
-<名称>@<版本>_win-x64.cmd [apply|status|check] [状态目录]
+sh "<name>[-<edition>](migrate)@<version>_linux-x64.sh" [apply|status|check] [状态目录]
+"<name>[-<edition>](migrate)@<version>_win-x64.cmd" [apply|status|check] [状态目录]
 ```
 
 状态默认位于脚本目录 `.migration/<升迁名称>[-edition]/`，不含版本和 RID；显式状态目录相对调用时的工作目录。不同版本共享执行锁、ready、status 和 pending 文件；执行失败不会写成功标记。没有动作时默认 `apply`；动作非法返回 `2`。
 
-以 `zongsoft-migrate@1.0.0_linux-x64.sh` 为例，查看最近执行报告或只检查完成标记：
+以 `zongsoft(migrate)@1.0.0_linux-x64.sh` 为例，查看最近执行报告或只检查完成标记：
 
 ```sh
-sh zongsoft-migrate@1.0.0_linux-x64.sh status ./migration-state
-sh zongsoft-migrate@1.0.0_linux-x64.sh check ./migration-state
+sh "zongsoft(migrate)@1.0.0_linux-x64.sh" status ./migration-state
+sh "zongsoft(migrate)@1.0.0_linux-x64.sh" check ./migration-state
 ```
 
 apply/status 每次创建独立临时目录，解压后调用原生执行器，结束清理并返回退出码。成功返回 0，执行失败返回 1，动作或参数无效返回 2。
@@ -461,7 +465,7 @@ SQL 校验和只用于在外部资源操作之前验证包内文件与当前计�
 
 ## 与 packager 配合
 
-在 hosting/web/default 的打包命令中使用 `--migrator:../../packages/zongsoft`；daemon 使用 `--migrator:../packages/zongsoft`。packager 根据最终 Edition、版本和 RID 查找准确配套文件，应用同一名称后缀规则。任一文件缺失即失败，不选择其他版本。安装包原样包含归档和脚本；安装时显式传入 `/var/lib/<包名>/packager` 状态目录，升迁失败阻止启动。实际宿主命令和连接参数不由本工具自动修改。
+在 hosting/web/default 的打包命令中使用 `--migrator:../../packages/zongsoft`；daemon 使用 `--migrator:../packages/zongsoft`。packager 根据最终 Edition、版本和 RID 查找准确配套文件，使用同一产物命名规则。任一文件缺失即失败，不选择其他版本。安装包原样包含归档和脚本；安装时显式传入 `/var/lib/<包名>/packager` 状态目录，升迁失败阻止启动。实际宿主命令和连接参数不由本工具自动修改。
 
 <a id="build-and-test"></a>
 

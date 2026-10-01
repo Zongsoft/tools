@@ -41,7 +41,7 @@
 | `Migrator.cs` | 按最终应用身份定位外部升迁产物，验证 PAX，原样收录并提供安装协调脚本。 |
 | `ApplicationHost.cs` | 一次解析应用宿主、已有或待生成服务及最终 listen，服务生成和 Web 的 ~ 共用此结果。 |
 | `Scriptor.Systemd.cs` | 生成或收集 systemd 单元文件，组合应用、升迁和 Web 生命周期。 |
-| `Web/Definition*.cs` | 用 Core Profile 收集来源声明，处理整体后端覆盖、继承、变量及字段校验。 |
+| `Web/Definition*.cs` | 用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Profile 收集来源声明，处理整体后端覆盖、继承、变量及字段校验。 |
 | `Web/Configurator*.cs` | 配置器契约、Nginx 指令树与校验、稳定序列化、可重定位内容片段。 |
 | `Web/Installation*.cs` | 生成载荷冲突校验、交付重定位、激活与卸载脚本。 |
 | `Normalizer.cs` / `TextSource.cs` | 按需展开变量；统一解析源目录文件与直接文本。 |
@@ -49,7 +49,7 @@
 | `Variables.cs` | 变量集合和常用变量的强类型访问器。 |
 | `Utility.cs` | RID、安装路径、路径规范化、Unix 时间戳、文件权限等辅助逻辑。 |
 | `Dumper.cs` | 控制台输出启动画面、错误和警告消息。 |
-| `tools/.shared` 链接源码 | `Utility.cs` 与本项目的 `partial Utility` 合并编译，共用递归变量与命令/文本方法；`ArtifactPublisher` 统一管理暂存与发布，单文件原子替换，多文件成组提交并在失败时恢复。布尔开关使用 Core `Switch`，枚举沿用 Core 转换且不检查成员定义，不生成共享 DLL。 |
+| `tools/.shared` 链接源码 | `Utility.cs` 与本项目的 `partial Utility` 合并编译，共用递归变量与命令/文本方法；`ArtifactPublisher` 统一管理暂存与发布，单文件原子替换，多文件成组提交并在失败时恢复。布尔开关使用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) `Switch`，枚举沿用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 转换且不检查成员定义，不生成共享 DLL。 |
 
 ## 执行流水线
 
@@ -67,7 +67,7 @@ dotnet-pack
 ```mermaid
 flowchart TD
     A["Program.Main(args)"] --> B["Terminal executor dispatches tar/deb/rpm"]
-    B --> C["Resolve source and load ApplicationVersion"]
+    B --> C["Resolve source and load manifest or identifier"]
     C --> D["Select and validate identity, then create invocation variables"]
     D --> E["Normalize source/output paths"]
     E --> F["Create Package.Tar/Deb/Rpm"]
@@ -80,7 +80,7 @@ flowchart TD
     L --> V["Replace installation root .version with memory entry"]
     V --> I["Call package.Pack(output, overwrite)"]
     I --> J["Generator stages and commits package output"]
-    J --> S["Atomically save source/.version"]
+    J --> S["Save source .edition or .version; create both if absent"]
     S --> OK["Report success"]
 ```
 
@@ -99,31 +99,17 @@ protected override Package.Deb CreatePackage(CommandContext context, Variables v
 
 ## 源版本与包内版本
 
-打包器只读取 `--source` 直属的 `.version`，不递归也不查找父目录。源文件使用 `ApplicationVersion.Load/Save` 管理应用名称与各 Edition 的版本。hosting 的 daemon 不区分 Edition 时可使用：
+`VersionFile` 使用 `File.OpenRead` 和 `ApplicationManifest.Load(Stream)` 读取源目录直属 `.edition`。仅 `FileNotFoundException` 才允许回退 `.version` 并调用 `ApplicationIdentifier.Load(Stream)`；空标识、损坏文件、目录占位和其他 I/O 错误立即失败。不搜索其他目录。旧多 Edition `.version` 须改名为 `.edition`。
 
-```text
-zongsoft.daemon@1.0.0
-```
+清单依次选择显式非空 Edition、Current、唯一 Edition；多个且无选择时报错，无具名 Edition 时用顶层版本。显式选择须存在并保留清单拼写。标识回退允许显式 Edition 替换或补充文件中的 Edition。显式名称须与源名称忽略大小写一致；显式版本覆盖所选版本，最终版本非零。身份只取显式选项及源文件，环境和 `.env` 可通过显式变量引用使用。
 
-hosting 的 `web/default` 宿主不区分 Edition 时可写为 `Zongsoft.Hosting.Web@1.0.0`；需要管理 Edition 时，首行只写应用名称，随后在各 `[edition]` 段落下写对应的裸版本号。两种源格式不能混用。
+载入的清单在内存中原位替换选中 Edition，再将 Current 设为该项，保留其他条目、顺序和 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 的注释及空行布局。制包前准备待保存内容；`Save(TextWriter)` 使用 UTF-8 无 BOM、CRLF 写入器。标识字节直接采用 `ApplicationIdentifier.Save(Stream)`，不追加换行。
 
-- `--name` 未指定或为空白时使用文件名称；非空时忽略大小写比较，必须一致，最终保留文件中的拼写。
-- 未指定 `--edition` 或传入空值时，没有具名 Edition 则使用顶层版本，只有一个则自动选择，多个则要求明确指定。非空 Edition 必须在文件中存在，忽略大小写查找并保留文件拼写。单版本文件不允许指定具名 Edition。
-- 指定 `--version` 时覆盖所选版本，否则使用文件中的对应版本；最终版本必须非零。源文件不存在时必须指定有效的 `--name`、`--version`；可选的 Edition 决定创建单版本还是具名版本文件。
+所有包产物提交成功后才保存源文件：已有清单只原子替换 `.edition`，不更新伴随标识；仅有标识时只更新 `.version`；两者均无时要求显式有效名称和版本，使用 `ArtifactPublisher` 成组暂存及提交两文件，不覆盖并发创建的文件，失败回滚。源保存失败保留包并报告受影响路径；解析、校验及制包失败不保存源文件。
 
-确定身份后才初始化完整变量，使输出、载荷、安装脚本和升迁路径中的 `$(name)`、`$(edition)`、`$(version)` 使用最终值。源目录路径若依赖尚未确定的身份变量，则报变量错误，不循环推导。源文件存在但损坏或无法读取时退出打包。
+`EntryCollection.Load` 排除源直属 `.edition`（含显式别名），指向安装根 `.edition` 的文件项也排除；其他子目录文件沿用普通选择规则。`SetVersion` 写入唯一的安装根 `.version` 内存项，权限 `0644`，替换同目标普通及根别名项，不受排除规则影响。全部编码器及 RPM 摘要通过 `Entry.OpenRead()` 读取；子目录中的 `.version` 保持普通载荷行为。
 
-包内安装根 `.version` 使用 **`ApplicationIdentifier`**，仅以一行表示本次名称、Edition 和版本。内容直接从内存写入，完全采用 `ApplicationIdentifier.Save(Stream)` 的输出，不追加换行；权限为 `0644`。指向该安装位置的载荷会被生成的版本条目替换，排除规则不影响自动生成的版本条目。
-
-所有制包步骤成功后才按 Core 格式保存源文件，只更新所选 Edition，保留其他 Edition 的名称、版本和顺序；注释及原始空白布局不保留。解析、校验或制包失败不更新源文件。保存源文件失败时命令返回错误，明确指出安装包已生成，并保留该包。
-
-未启用 `--overwrite` 且输出产物已存在时，发布器指出冲突文件，命令输出其完整路径，并提示添加 `--overwrite` 或更换 `--output` 目录。归档文件和 tar 附属安装脚本均按此处理；已有产物及源版本文件保持不变。
-
-`Package.Entry` 内部支持字节内容构造，复制输入字节并以实际字节数设置 `Size`。`OpenRead()` 对内存条目返回独立的只读流，对普通文件仍打开 `Source`。tar/deb 载荷、RPM SHA-256 摘要和 cpio 载荷均经此入口读取；重复读取互不影响。版本条目通过 `ApplicationIdentifier.Save(Stream)` 写入内存，不追加或转换任何内容，也不创建临时文件；时间戳采用生成时间。
-
-`EntryCollection.SetVersion` 在载荷和升迁资源收集后写入唯一版本条目，并删除指向同一安装根路径的根别名条目。子目录中的其他 `.version` 不受影响。`VersionFile.Load(source, name, edition, version)` 直接依据值判断是否提供选项，不另传存在性布尔标记：空白名称按未提供处理，`version == null` 时从源文件所选版本补全。`VersionFile` 在内存准备完整的待保存模型，不在加载时写盘。源文件由打包器显式 `File.OpenRead` / `File.Create`，交给 `ApplicationVersion.Load(Stream)` / `Save(Stream)` 解析和序列化：确保只访问直属 `.version`，缺失时创建、目录占位或 I/O 故障时失败，不使用 Core 路径重载的目录识别和缺失路径跳过行为。`Pack` 返回后才调用 `Save`，包括 tar 附属安装入口的生成也必须成功；保存失败抛出包含包路径和源路径的 I/O 异常，命令返回非零且不打印整体成功。
-
-本地验证按项目版本制作当前 Core 源码的 NuGet 包，通过隔离缓存和包源映射还原。Web 加载依赖新增的 `ProfileOptions.RequireImports`；正式发布工具前须先提供包含此 API 的 Core 包。Debug 保持本地程序集引用，Release 保持 NuGet 引用。
+Debug 引用本地 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 构建，Release 引用集中配置的 NuGet 包，两者须提供 `ApplicationManifest`、`Editions.Current` 和 `ProfileOptions.ImportBehavior`；Web 加载通过 `ProfileDirectiveBehavior.Existed` 要求导入文件存在。
 
 ## 命令选项模型
 
@@ -134,7 +120,6 @@ hosting 的 `web/default` 宿主不区分 Edition 时可写为 `Zongsoft.Hosting
 | `--name` | `string` | 源版本文件缺失时必填；否则校验名称或使用源名称。 |
 | `--version` | `string` | 展开后转换为 `System.Version`；源版本文件缺失时必填，否则覆盖所选版本。最终版本不能为零。 |
 | `--platform` | `string` | 展开后转换为 `Platform`，指定目标平台。 |
-| `--framework` | `string` | 目标框架，如 `net8.0`、`net9.0`、`net10.0`。 |
 
 常用可选项：
 
@@ -144,8 +129,9 @@ hosting 的 `web/default` 宿主不区分 Edition 时可写为 `Zongsoft.Hosting
 | `--migrator` | 空 | 升迁制作时的输入名称，可带目录；裸名称从源目录向父目录查找，每层还查直属 `.migration/`，按最终 Edition、Version、Runtime 匹配。 |
 | `--output` | `source` | 始终作为输出目录；相对路径基于 `source`，不支持指定文件名。 |
 | `--exclude` | 空 | 加载打包项时跳过的文件模式列表，多个模式用逗号或分号分隔。 |
-| `--edition` | 空 | 包版本/渠道标识，参与包名；RPM 中也作为 release。 |
-| `--compilation` | `Release` | 查找宿主文件时使用的配置名。 |
+| `--edition` | Current 或唯一 Edition | 产品 Edition，参与包名。 |
+| `--framework` | 空 | 可选 .NET 目标框架，用于查找 `bin/<compilation>/<framework>` 中的宿主。 |
+| `--compilation` | `Release` | 可选 .NET 构建配置，用于上述宿主目录查找，也可作为变量引用。 |
 | `--architecture` | `x64` | 目标架构。 |
 | `--overwrite` | `false` | 是否覆盖已存在的输出文件。 |
 | `--install-path` | 由包名推导 | 安装目录。 |
@@ -178,13 +164,13 @@ systemd 与生命周期脚本选项：
 
 `PackCommand<TPackage>.GetVariables(context, directory)` 依次加载描述符默认值、系统环境变量、指定目录的祖先链 `.env`、显式命令选项（包括额外选项）。省略 directory 时跳过 `.env`，供第一次解析 source 使用。源目录存在并绝对化后重新加载变量并固定 source；`.env` 不参与 source 的反向推导。变量名不区分大小写，优先级为显式选项 > 近层 `.env` > 远层 `.env` > 环境变量 > 默认值。
 
-共享 `Utility.LoadEnvironmentVariables` 从文件系统根目录到 source 加载直属 `.env`，不搜索子目录。使用 `Profile.Load` 保留 Core 的空值和导入语义，各级段落与条目以下划线拼名；读取或解析异常终止制包，仅缺失文件跳过。不写入进程环境变量。
+共享 `Utility.LoadEnvironmentVariables` 从文件系统根目录到 source 加载直属 `.env`，不搜索子目录。使用 `Profile.Load` 保留 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 的空值和导入语义，各级段落与条目以下划线拼名；读取或解析异常终止制包，仅缺失文件跳过。不写入进程环境变量。
 
 `PackCommand` 为每次调用建立独立的 `Variables` 视图，并传给包、脚本和文本来源；不保留进程级变量状态。访问值时递归展开引用，未使用的未知引用不会阻止制包。未知变量、循环引用及超过 64 层的展开失败，诊断指出变量名。展开不读取文件。
 
-Core 命令描述符将可能含变量的选项保留为字符串；`source` 先由完整原始变量集展开。显式 `name`、`edition`、`version` 随后展开，`version` 再转为 `System.Version`，供源 `.version` 选择使用。确定最终身份后，`platform`、`architecture` 与 `overwrite` 在使用时展开并转换。裸 `--overwrite` 仍为 true，未指定时为 false。
+[Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 命令描述符将可能含变量的选项保留为字符串；`source` 先由完整原始变量集展开。显式 `name`、`edition`、`version` 随后展开，`version` 再转为 `System.Version`，用于从源目录的 `.edition` 清单文件或 `.version` 版本标识文件选择版本。确定最终身份后，`platform`、`architecture` 与 `overwrite` 在使用时展开并转换。裸 `--overwrite` 仍为 true，未指定时为 false。
 
-身份仍由源 `.version` 与显式 name/edition/version 选项共同确定，不从同名环境变量或 `.env` 变量隐式替代身份；显式选项可引用 `.env` 中的其他变量。最终身份及已解析的 source/output 覆盖变量集合。`--migrator` 仍须显式启用，`--overwrite` 可从环境变量或 `.env` 提供并由命令行覆盖。
+身份仍由源目录的 `.edition` 清单文件或 `.version` 版本标识文件与显式 name/edition/version 选项共同确定，不从同名环境变量或 `.env` 变量隐式替代身份；显式选项可引用 `.env` 中的其他变量。最终身份及已解析的 source/output 覆盖变量集合。`--migrator` 仍须显式启用，`--overwrite` 可从环境变量或 `.env` 提供并由命令行覆盖。
 
 ### 变量语法
 
@@ -345,7 +331,7 @@ path:alias
 - 相对路径基于 `source`。
 - 绝对路径可以位于 `source` 外部；如果没有别名，最终只使用文件名。
 - 目录递归展开，目录自身也是条目，保留空目录与源目录模式（Windows 默认 0755）。目录别名 `:~` 被归一化为空路径，将目录内容直接放到安装根目录，hosting 的载荷参数采用此写法。
-- Core `Searcher` 统一支持任一路径段中的 `*`、`?`，独立段 `**` 匹配零层或多层目录。每个参数位置按相对于固定前缀的路径（`/` 分隔）Ordinal 排序，不重排全部输入；Windows 匹配忽略大小写，Unix 区分大小写。
+- [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) `Searcher` 统一支持任一路径段中的 `*`、`?`，独立段 `**` 匹配零层或多层目录。每个参数位置按相对于固定前缀的路径（`/` 分隔）Ordinal 排序，不重排全部输入；Windows 匹配忽略大小写，Unix 区分大小写。
 - 重复的目标路径会触发冲突警告并跳过。
 
 ### 排除规则
@@ -420,9 +406,11 @@ Windows 主机或读取不到有效权限时：
 生成 `.service` 文件时需要定位 .NET 宿主。查找顺序：
 
 1. `<source>/<name>.dll`
-2. `<source>/bin/<compilation>/<framework>/<name>.dll`
-3. `<source>` 下唯一 `.exe`，并推断同名 `.dll`
+2. `<source>` 下唯一 `.exe`，并推断同名 `.dll`
+3. `<source>/bin/<compilation>/<framework>/<name>.dll`
 4. `<source>/bin/<compilation>/<framework>` 下唯一 `.exe`，并推断同名 `.dll`
+
+`framework` 或 `compilation` 为空或全空白时跳过第 3、4 步。两个选项都不触发编译，普通文件打包、源目录中的 .NET 宿主和现成服务文件均不要求提供两项。纯文件包使用 `--daemon:none` 可直接跳过宿主解析。
 
 找不到宿主时输出：
 
@@ -505,7 +493,7 @@ http://127.0.0.1:<port>
 
 Definition.cs 提供 Load/Resolve 入口；Definition.Loader.cs 收集声明、组织段落并校验结构；Definition.Resolver.cs 集中合并声明、求值和生成有效模型，按绑定与资源、后端策略、健康检查、请求头、原始指令及基础值解析分区。字段值转换属于 Resolver，不单独拆分 Values 文件；Definition.Model.cs 保存模型类型。
 
-加载通过 Core Profile.Load（RequireImports=true），用 Importing/Imported 收集尚未被覆盖的声明及 Profile 实例身份。同一层级的后端池按输入实例整组替换，不能直接枚举最终合并条目。公共字段及层级先校验，随后确定所选托管器覆盖关系，最后仅展开实际消费的值。共享 VariableEvaluator 的 allowEscapes 由 Web 显式启用；其他调用保留原模式。
+加载通过 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Profile.Load（ImportBehavior=ProfileDirectiveBehavior.Existed），用 Importing/Imported 收集尚未被覆盖的声明及 Profile 实例身份。同一层级的后端池按输入实例整组替换，不能直接枚举最终合并条目。公共字段及层级先校验，随后确定所选托管器覆盖关系，最后仅展开实际消费的值。共享 VariableEvaluator 的 allowEscapes 由 Web 显式启用；其他调用保留原模式。
 
 Resolver 生成不可变站点、路径及策略记录；Nginx 生成器建立指令树，校验原始叶指令上下文/基数、静态监听冲突和正则 proxy_pass，再序列化为 UTF-8、Tab、CRLF。安装根是有类型的 ContentPart，不是可被用户文本碰撞的占位符。公共字面值不被当作 Nginx 运行时表达式；不能安全表示的值明确报错。
 
@@ -1014,9 +1002,9 @@ RPM header 同时保存一份文件元数据，供包管理器查询和校验。
 
 ## 本地搜索与源链接
 
-本地模式由 Core Searcher 处理。搜索结果保留逻辑名称，读取实际目标。选中目录链接作为载荷根时允许展开，内部目录链接跳过，文件链接按原名称读取目标内容。递归模式不穿过目录链接匹配后续段。选中链接悬空或循环会在输出写入前失败；目标路径校验继续执行。
+本地模式由 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Searcher 处理。搜索结果保留逻辑名称，读取实际目标。选中目录链接作为载荷根时允许展开，内部目录链接跳过，文件链接按原名称读取目标内容。递归模式不穿过目录链接匹配后续段。选中链接悬空或循环会在输出写入前失败；目标路径校验继续执行。
 
-载荷相对路径以 source 为基准。单模式结果按逻辑相对路径执行 Ordinal 排序，多参数顺序不变。参见 [Core 本地搜索](../../../framework/Zongsoft.Core/docs/searcher.zh-Hans.md)。
+载荷相对路径以 source 为基准。单模式结果按逻辑相对路径执行 Ordinal 排序，多参数顺序不变。参见 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) [本地搜索](../../../framework/Zongsoft.Core/docs/searcher.zh-Hans.md)。
 
 `Searcher.Search` 通过 `Searcher.Target` 选择文件、目录或两者（默认 Both）；`Match.Origin` 提供逻辑固定目录前缀，用于计算相对输出路径。
 
@@ -1047,13 +1035,13 @@ Debian 的 control/data gzip tar 分别写入受控临时文件，ar 依据实�
 
 先展开变量，再判断是否包含目录分隔符 `/` 或 `\`：不包含时，从最终打包源目录（`--source`）逐级向父目录查找，直到文件系统根目录；每层先查目录本身，再查直属 `.migration/`，不遍历其他子目录。包含分隔符时只定位显式目录：相对路径基于源目录，绝对路径直接使用，既不向上查找，也不隐式检查 `.migration/`。源目录为 `hosting/web/default/`、产物位于 `hosting/.migration/` 时，`--migrator:zongsoft` 即可找到；`--migrator:./zongsoft` 只查源目录。查找起点不是运行命令时的工作目录。
 
-既有 `-migrate`、`-migration`、`.migrate`、`.migration` 后缀忽略大小写识别，未带后缀时追加 `-migrate`。不能填写 Edition、版本、RID、扩展名、通配符或路径列表。
+文件前缀为 `<name>[-<edition>](migrate)@<version>_<RID>`，名称原样使用，无 Edition 时省略对应部分。选项填写制作升迁时的 `--name`，不包含自动生成的 `(migrate)` 标记。不能填写 Edition、版本、RID、扩展名、通配符或路径列表。
 
-工具使用本次安装包最终确定的 Edition、版本、平台和架构定位产物，包括从源 `.version` 取得的值及默认 x64。无 Edition 时省略对应部分。例如 enterprise、1.0.0、Linux x64 对应：
+工具使用本次安装包最终确定的 Edition、版本、平台和架构定位产物，包括从源目录的 `.edition` 清单文件或 `.version` 版本标识文件取得的值及默认 x64。无 Edition 时省略对应部分。例如 enterprise、1.0.0、Linux x64 对应：
 
 ```text
-zongsoft-migrate-enterprise@1.0.0_linux-x64.tar.gz
-zongsoft-migrate-enterprise@1.0.0_linux-x64.sh
+zongsoft-enterprise(migrate)@1.0.0_linux-x64.tar.gz
+zongsoft-enterprise(migrate)@1.0.0_linux-x64.sh
 ```
 
 名称可以不同于宿主名称，但 Edition、版本和 RID 必须匹配。每个查找位置只有在压缩包和脚本都不存在时才继续下一位置；只找到其中一份立即报错并指出缺失文件的完整路径。找到完整配套后立即校验归档元数据和 RID，校验失败不再继续查找。两份文件必须来自同一目录，不拼配不同目录、不选择其他版本、Edition 或架构。到根目录仍未找到时，错误将预期文件名与已检查目录分行显示，各级目录及其 `.migration/` 按查找顺序逐行缩进列出。共享 `Utility.Indent` 使用平台换行并保留嵌套详情的缩进。未指定选项，或选项值为空、空字符串、全空白字符时，均不启用升迁，也不收录升迁产物。
@@ -1064,7 +1052,7 @@ zongsoft-migrate-enterprise@1.0.0_linux-x64.sh
 
 ## 验证建议
 
-Cake 的 `--edition` 同时用于依赖还原、编译、测试和制包；`restore` 显式传递 MSBuild 的 `Configuration`，避免按 Debug 还原后以 Release 配合 `--no-restore` 编译时遗漏条件依赖。主项目 Debug 引用本地 framework 的 Core DLL，Release 引用声明的 Core NuGet 包；主测试项目仅在 Debug 添加本地 DLL 引用，Release 通过主项目获得传递包依赖。`dotnet cake --edition Release` 默认执行打包器回归测试，不调用 AOT 构建或 NuGet 推送。
+Cake 的 `--edition` 同时用于依赖还原、编译、测试和制包；`restore` 显式传递 MSBuild 的 `Configuration`，避免按 Debug 还原后以 Release 配合 `--no-restore` 编译时遗漏条件依赖。主项目 Debug 引用本地 framework 的 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) DLL，Release 引用声明的 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) NuGet 包；主测试项目仅在 Debug 添加本地 DLL 引用，Release 通过主项目获得传递包依赖。`dotnet cake --edition Release` 默认执行打包器回归测试，不调用 AOT 构建或 NuGet 推送。
 
 源版本与内存条目的回归由 VersionFileTest、PackageVersionTest 和 PackageArtifactTest 覆盖。
 

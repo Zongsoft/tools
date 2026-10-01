@@ -46,8 +46,7 @@ public sealed partial class MigrateCommand
 		#region 公共方法
 		public static (Version Version, string Edition) Load(string value, Variables variables)
 		{
-			var defaultSource = string.IsNullOrWhiteSpace(value);
-			var result = Normalizer.Normalize(defaultSource ? ".version" : value, variables);
+			var result = Normalizer.Normalize(string.IsNullOrWhiteSpace(value) ? "." : value, variables);
 			if(!result.Succeed)
 				throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed_Message, result.Value));
 
@@ -61,14 +60,31 @@ public sealed partial class MigrateCommand
 			}
 
 			var path = Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, result.Value));
-			if(!defaultSource && Directory.Exists(path))
-				path = Path.Combine(path, ".version");
+			var directory = Directory.Exists(path);
+			if(directory)
+				path = Path.Combine(path, ".edition");
 
-			ApplicationVersion application;
+			ApplicationManifest application = null;
+			ApplicationIdentifier identifier = default;
+
 			try
 			{
-				using var stream = File.OpenRead(path);
-				application = ApplicationVersion.Load(stream);
+				Stream stream;
+
+				try { stream = File.OpenRead(path); }
+				catch(FileNotFoundException) when(directory)
+				{
+					path = Path.Combine(Path.GetDirectoryName(path), ".version");
+					stream = File.OpenRead(path);
+				}
+
+				using(stream)
+				{
+					if(path.EndsWith(".version", StringComparison.OrdinalIgnoreCase))
+						identifier = ApplicationIdentifier.Load(stream);
+					else
+						application = ApplicationManifest.Load(stream);
+				}
 			}
 			catch(Exception exception) when(exception is IOException or UnauthorizedAccessException or FormatException)
 			{
@@ -76,24 +92,30 @@ public sealed partial class MigrateCommand
 			}
 
 			var edition = NormalizeEdition(variables.Edition);
-			if(edition == null)
-			{
-				if(application.Editions.Count > 1)
-					throw new InvalidOperationException(string.Format(Properties.Resources.MigrateVersionEditionRequired_Message, path));
-
-				if(application.Editions.Count == 1)
-					edition = application.Editions[0].Name;
-			}
-
-			if(edition == null)
-				version = application.Version;
+			if(application == null)
+				version = identifier.Version;
 			else
 			{
-				if(!application.Editions.TryGetValue(edition, out var selected))
-					throw new InvalidOperationException(string.Format(Properties.Resources.MigrateVersionEditionMissing_Message, path, edition));
+				// 文件的默认发行版仅决定版本号，不能成为未显式指定的产物 Edition。
+				var selection = edition ?? application.Editions.Current.Name;
+				if(selection == null && application.Editions.Count > 1)
+					throw new InvalidOperationException(string.Format(Properties.Resources.MigrateVersionEditionRequired_Message, path));
 
-				edition = selected.Name;
-				version = selected.Version;
+				if(selection == null && application.Editions.Count == 1)
+					selection = application.Editions[0].Name;
+
+				if(selection == null)
+					version = application.Version;
+				else
+				{
+					if(!application.Editions.TryGetValue(selection, out var selected))
+						throw new InvalidOperationException(string.Format(Properties.Resources.MigrateVersionEditionMissing_Message, path, selection));
+
+					if(edition != null)
+						edition = selected.Name;
+
+					version = selected.Version;
+				}
 			}
 
 			if(version.IsZero())

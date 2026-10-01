@@ -7,7 +7,7 @@
 
 [English](README.md) | [简体中文](README.zh-Hans.md)
 
-`dotnet-pack` 是一个 .NET 全局工具，把已发布的 .NET 应用目录制作成可在 Linux 上分发和安装的 **`.tar.gz`**、**`.deb`**、**`.rpm`** 安装包，并按需生成 systemd 服务、安装/卸载脚本和 Nginx 站点配置。
+`dotnet-pack` 是一个 .NET 全局工具，把应用文件目录（如纯前端 `dist` 或已发布的 .NET 应用）制作成可在 Linux 上分发和安装的 **`.tar.gz`**、**`.deb`**、**`.rpm`** 安装包，并按需生成 systemd 服务、安装/卸载脚本和 Nginx 站点配置。
 
 包格式由 .NET 直接写出，不依赖外部的 `tar`、`dpkg-deb`、`rpmbuild` 或 `cpio` 命令，因此在 Windows 上同样可以制作 Linux 安装包。
 
@@ -39,7 +39,7 @@
 - **自动生成服务**：未提供 `.service` 文件时自动生成 systemd 服务，可用 `--listen` 设置监听地址。
 - **完整的生命周期**：为所有格式生成安装和卸载脚本，支持自定义钩子及前置/后置脚本片段。
 - **灵活的载荷选择**：支持显式文件、递归目录、路径段通配（含 `**`）、排除模式、目标别名，以及 `/etc/nginx/conf.d/zongsoft.web.conf` 这类根路径条目。
-- **应用版本管理**：读取并回写源目录的 `.version` 文件，支持多个 发行版 _(**E**dition)_。
+- **应用版本管理**：读取并回写源目录的 `.edition` 清单（回退 `.version`），支持多个 发行版 _(**E**dition)_。
 - **Web 托管配置**：从 `web.profile` 生成 Nginx 站点配置，并在安装时激活。
 - **升迁集成**：收录独立 [migrator 工具](../migrator/README.zh-Hans.md)制作的升迁产物，安装时自动执行。
 - **变量**：支持 `$(name)` 与 `%name%` 两种引用语法，可从环境变量和 `.env` 文件取值。
@@ -54,12 +54,12 @@
 一次制包依次完成以下步骤：
 
 1. **固定源目录**：解析 `--source`（默认当前目录）。
-2. **确定应用身份**：合并源目录的 `.version` 与 `--name`、`--edition`、`--version` 选项。
+2. **确定应用身份**：合并源目录的 `.edition` 清单文件或回退读取的 `.version` 版本标识文件中的值与 `--name`、`--edition`、`--version` 选项。
 3. **加载变量**：依次读取默认值、环境变量、各级 `.env` 和命令选项。
 4. **收集打包项**：按位置参数和 `--exclude` 确定载荷文件。
 5. **生成附属内容**：systemd 服务、生命周期脚本、Nginx 配置、升迁产物。
 6. **编码并写出**：生成 `.tar.gz`（含配套 `.sh`）、`.deb` 或 `.rpm`。
-7. **回写版本**：制包成功后才保存源 `.version` 文件。
+7. **回写版本**：制包成功后才保存源目录的 `.edition` 清单文件或 `.version` 版本标识文件。
 
 ### 核心术语
 
@@ -214,7 +214,7 @@ dpkg-deb --contents ./.packages/zongsoft.web@1.0.0-x64.deb
 
 ## 命令参考
 
-> 本节及后续章节的示例均沿用快速开始的约定：在 hosting 仓库的 `web/default` 宿主目录中执行，并已按 deploy.cmd 完成 Release、net10.0 编译与插件部署。
+> 本节及后续章节的 .NET 示例沿用快速开始的约定：在 hosting 仓库的 `web/default` 宿主目录中执行，并已按 deploy.cmd 完成 Release、net10.0 编译与插件部署。
 
 ### 语法
 
@@ -236,19 +236,21 @@ dotnet-pack rpm <选项...> [打包项...]
 | `1` | 参数、输入或制包失败 |
 | `2` | 未指定命令 |
 
-以下选项表中，标记 **必需** 的选项必须提供；标记 _条件必需_ 的选项仅在源目录没有 `.version` 文件时必需。
+以下选项表中，标记 **必需** 的选项必须提供；标记 _条件必需_ 的选项仅在源目录既无 `.edition` 也无 `.version` 时必需。
 
 ### 身份与目标平台
 
 | 选项 | 默认值 | 说明 |
 | --- | --- | --- |
 | `--name:<name>` | _条件必需_ | 应用/软件包名称，也用于定位生成服务时的 .NET 宿主程序集。 |
-| `--version:<version>` | _条件必需_ | 发行版本号；存在源 `.version` 时覆盖其所选版本。零版本号 _(`0.0.0.0`)_ 会被拒绝。 |
-| `--edition:<name>` | 空 | 可选发行标识，追加到包名；对 RPM 而言，有值时也作为 release。 |
+| `--version:<version>` | _条件必需_ | 发行版本号；存在源目录的 `.edition` 清单文件或 `.version` 版本标识文件时，覆盖其中所选版本的版本号。零版本号 _(`0.0.0.0`)_ 会被拒绝。 |
+| `--edition:<name>` | Current 或唯一 Edition | 可选发行标识，追加到包名。 |
 | `--platform:<platform>` | **必需** | 目标平台：`linux`、`unix`、`osx`、`windows`/`win`、`unknown`；Linux 包通常用 `linux`。 |
-| `--framework:<tfm>` | **必需** | 目标框架，例如 `net8.0`、`net9.0`、`net10.0`。 |
+| `--framework:<tfm>` | 空 | 可选 .NET 目标框架，例如 `net10.0`；用于查找 `bin/<compilation>/<framework>` 中的宿主。未设置时跳过该构建目录，仍可定位源目录中的宿主。 |
 | `--architecture:<arch>` | `x64` | 目标 CPU 架构，例如 `x64`、`x86`、`arm64`、`arm`。 |
-| `--compilation:<name>` | `Release` | 查找宿主文件时使用的构建配置目录，即 `bin/<configuration>/<framework>`。 |
+| `--compilation:<name>` | `Release` | 可选 .NET 构建配置，用于查找 `bin/<compilation>/<framework>` 中的宿主；也可通过 `$(compilation)` 引用。 |
+
+普通文件打包无需提供 `--framework` 或 `--compilation`，这两个选项不会执行编译。源目录已有应用 DLL，或使用现成的 `.service` 文件时，也可省略两项；从 .NET 构建目录查找宿主时指定 `--framework`，`--compilation` 默认使用 `Release`。
 
 ### 输入与输出
 
@@ -325,11 +327,25 @@ RPM 关系条目支持 `name`、`name = version`、`name >= version`、`name <= 
 
 ### 选项值约定
 
-- **布尔值**：`--overwrite` 可裸写，也可写 `true/false`、`1/0`、`yes/no`、`on/off` 或 `enable(d)/disable(d)`；其他值按 Core `Switch` 约定视为 false。
+- **布尔值**：`--overwrite` 等同于 `--overwrite:true`。可显式指定 `true/false`、`1/0`、`yes/no`、`on/off`、`enable/disable` 或 `enabled/disabled`。
 - **枚举值**：沿用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 的[转换规则](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Common/Convert.cs)，不额外检查枚举成员是否已定义，请提供有效枚举项。
 - **输出冲突**：在制包前和提交前各检查一次；生成失败时旧产物保留。
 
 ### 常见示例
+
+打包纯前端 `dist` 目录，在前端项目根目录执行：
+
+```bash
+dotnet-pack tar \
+  --name:example.frontend \
+  --version:1.0.0 \
+  --platform:linux \
+  --source:./dist \
+  --output:../packages \
+  --daemon:none
+```
+
+省略位置参数会包含整个 `dist` 目录；`--daemon:none` 关闭服务生成。可将 `tar` 替换为 `deb` 或 `rpm`。
 
 生成便携式 tarball：
 
@@ -424,44 +440,52 @@ dotnet-pack tar \
 
 ## 应用身份与版本文件
 
-应用身份由名称、可选 发行版 _(**E**dition)_ 和 版本号 _(**V**ersion)_ 组成。打包器从两个来源合并它：源目录直属的 `.version` 文件和显式的 `--name`、`--edition`、`--version` 选项。
+打包器只检查 `--source` 直属文件：优先用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 的 [`ApplicationManifest`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Services/ApplicationManifest.cs) 读取 `.edition`，仅不存在时才用 [`ApplicationIdentifier`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Services/ApplicationIdentifier.cs) 读取 `.version`。所选文件损坏、不可读或路径被目录占位时直接失败，不回退，也不搜索父子目录。
 
-### 源版本文件格式
+### 源清单格式
 
-打包器只读取 `--source` 直属的 `.version`，不递归子目录，也不查找父目录。文件由 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 的 [`ApplicationVersion`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Services/ApplicationVersion.cs) 管理，有两种互斥的写法：
+单版本 `.edition` 可写为 `Zongsoft.Hosting.Web@1.0.0`。具名 Edition 清单可以在首行指定当前发行版：
 
-**单版本**：不区分 发行版 _(**E**dition)_ 时，一行写出名称和版本号 _(**V**ersion)_：
+```ini
+Zongsoft.Hosting.Web=Enterprise
 
-```text
-Zongsoft.Hosting.Web@1.0.0
+[Community]
+1.0.0
+
+[Enterprise]
+2.0.0
 ```
 
-**多版本 _(Edition)_**：首行只写应用名称，随后在各 `[edition]` 段落下写对应的裸版本号。两种格式不能混用。
+单版本与具名 Edition 格式不能混用。省略 `=Enterprise` 表示未设置 [`Editions.Current`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Services/ApplicationManifest.cs)。旧多 Edition `.version` 必须改名为 `.edition`；标识读取器只读取首个非空行，不解析后续 Edition 段落。回退标识可写为 `Zongsoft.Hosting.Web-Community@1.0.0`。
 
 ### 身份合并规则
 
 | 身份 | 规则 |
 | --- | --- |
-| 名称 | `--name` 未指定或为空白时使用文件中的名称；非空时忽略大小写比较，必须一致，最终保留文件中的拼写。 |
-| 发行版 _(**E**dition)_ | 未指定 `--edition` 或传入空值时：无具名 发行版 _(**E**dition)_ 则用顶层版本号，只有一个则自动选择，多个则要求明确指定。非空 发行版 _(**E**dition)_ 必须在文件中存在（忽略大小写查找，保留文件拼写）。单版本文件不允许指定具名 发行版 _(**E**dition)_。 |
-| 版本号 _(**V**ersion)_ | 指定 `--version` 时覆盖所选版本号，否则使用文件中的对应版本号；最终版本号必须非零。 |
+| 名称 | `--name` 未指定或为空白时使用源名称；显式名称须忽略大小写一致，保留源文件拼写。 |
+| 清单中的 Edition | 显式非空 `--edition` 须在清单中存在，忽略大小写匹配并保留文件拼写；否则依次使用 Current、唯一 Edition。多个 Edition 且无 Current 时要求明确选择；无具名 Edition 时使用顶层版本。 |
+| 标识中的 Edition | 显式非空 `--edition` 可以替换或补充标识中的 Edition；否则使用文件自带 Edition。 |
+| 版本号 | `--version` 覆盖所选版本，最终版本必须非零。 |
 
-源 `.version` 文件不存在时，必须指定有效的 `--name` 和 `--version`；可选的 `--edition` 决定新建单版本还是具名的 `.version` 文件。源 `.version` 文件存在但损坏或无法读取时退出打包。
-
-确定身份后才初始化完整变量，因此输出、载荷、安装脚本和升迁路径中的 `$(name)`、`$(edition)`、`$(version)` 使用的都是最终值。源目录路径若依赖尚未确定的身份变量，会报变量错误，不循环推导。
+两种文件均不存在时必须提供有效 `--name`、`--version`。身份只来自源文件和显式身份选项；选项可引用环境或 `.env` 变量。先固定 source 再读取身份，最终身份用于输出、载荷、脚本和升迁产物匹配。
 
 ### 包内版本文件
 
-安装根下的 `.version` 使用 [`ApplicationIdentifier`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Services/ApplicationIdentifier.cs) 格式，仅以一行表示本次的名称、发行版 _(**E**dition)_ 和 版本号 _(**V**ersion)_：
+安装根 `.version` 始终由最终名称、Edition 和版本通过 [`ApplicationIdentifier.Save(Stream)`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Services/ApplicationIdentifier.cs) 生成：UTF-8 无 BOM、无末尾换行、权限 `0644`。生成项替换所有同安装目标的旧条目（包括根别名），不受排除规则影响。
 
-- 内容直接从内存写入，完全采用 [`ApplicationIdentifier.Save(Stream)`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Services/ApplicationIdentifier.cs) 的输出，不追加换行；权限为 `0644`。
-- 指向该安装位置的载荷会被生成的版本条目替换；排除规则不影响自动生成的版本条目。
+源直属 `.edition` 不作为载荷入包，即使显式选择或通过别名改名也会排除；指向安装根 `.edition` 的其他条目同样排除。其他子目录文件沿用普通载荷规则。
 
-### 源版本文件回写
+### 源目录的清单文件或版本标识文件回写
 
-- 所有制包步骤成功后，才按 [`ApplicationVersion`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Services/ApplicationVersion.cs) 格式原子保存 `.version` 源文件；只更新所选 发行版 _(**E**dition)_，保留其他 发行版 _(**E**dition)_ 的名称、版本号和顺序。注释及原始空白布局不保留。
-- 解析、校验或制包失败时不更新源 `.version` 文件。
-- 保存源 `.version` 文件失败时命令返回错误，并明确指出安装包已生成；已生成的包会保留。
+| 制包前的文件状态 | 成功后的保存行为 |
+| --- | --- |
+| 存在 `.edition`，无论是否有 `.version` | 只更新 `.edition`，已有 `.version` 保持原样。 |
+| 只有 `.version` | 只更新单行标识 `.version`。 |
+| 两者均无 | 成组创建 `.edition`、`.version`。 |
+
+清单只更新所选 Edition 的版本号，并将最终具名 Edition 设为 Current；其他 Edition 的名称、版本和顺序保留，注释及空行遵循 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 保存规则。清单使用 UTF-8 无 BOM、CRLF；标识采用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 原始输出，不追加末尾换行。
+
+所有产物成功后才保存源文件。单文件原子保存，首次双文件创建成组提交并在失败时回滚。解析、校验或制包失败不更新源文件；保存失败保留已生成包，报告源文件路径和包路径，命令返回错误。
 
 ## 打包项
 
@@ -572,7 +596,7 @@ dotnet-pack deb \
 
 ## systemd 服务
 
-默认情况下，所有包格式都会携带一个 systemd 服务，并由生命周期脚本负责注册、启用和移除。
+服务启用且能定位宿主或现成服务文件时，所有包格式都会携带一个 systemd 服务，并由生命周期脚本负责注册、启用和移除。
 
 ### 服务来源
 
@@ -587,9 +611,11 @@ dotnet-pack deb \
 自动生成服务时，按以下顺序查找宿主程序集：
 
 1. `<source>/<name>.dll`
-2. `<source>/bin/<compilation>/<framework>/<name>.dll`
-3. `<source>` 下唯一的 `.exe`，转换为同名 `.dll`
+2. `<source>` 下唯一的 `.exe`，转换为同名 `.dll`
+3. `<source>/bin/<compilation>/<framework>/<name>.dll`
 4. `<source>/bin/<compilation>/<framework>` 下唯一的 `.exe`，转换为同名 `.dll`
+
+未提供有效的 `framework` 或 `compilation` 时跳过第 3、4 步。找不到宿主时提示定位失败并继续打包，不生成服务；带升迁产物的包须能定位宿主或指定 `--daemon:none`。
 
 生成的服务运行：
 
@@ -747,14 +773,14 @@ server = http://app:8069
 
 ### 产物命名
 
-打包器按本次安装包 **最终确定** 的 发行版 _(**E**dition)_、版本号 _(**V**ersion)_、平台和架构定位产物（包括从源 `.version` 取得的值和默认的 x64）；无 发行版 _(**E**dition)_ 时省略对应部分。例如 enterprise、1.0.0、Linux x64 对应：
+打包器按本次安装包 **最终确定** 的 发行版 _(**E**dition)_、版本号 _(**V**ersion)_、平台和架构定位产物（包括从源目录的 `.edition` 清单文件或 `.version` 版本标识文件取得的值和默认的 x64）；无 发行版 _(**E**dition)_ 时省略对应部分。例如 enterprise、1.0.0、Linux x64 对应：
 
 ```text
-zongsoft-migrate-enterprise@1.0.0_linux-x64.tar.gz
-zongsoft-migrate-enterprise@1.0.0_linux-x64.sh
+zongsoft-enterprise(migrate)@1.0.0_linux-x64.tar.gz
+zongsoft-enterprise(migrate)@1.0.0_linux-x64.sh
 ```
 
-- 已有的 `-migrate`、`-migration`、`.migrate` 或 `.migration` 后缀（不区分大小写）会被识别；未带后缀时追加 `-migrate`。
+- 文件前缀为 `<name>[-<edition>](migrate)@<version>_<RID>`，名称原样使用，无 Edition 时省略 `-<edition>`；选项填写制作升迁时的 `--name`，不包含自动生成的 `(migrate)` 标记。
 - 选项值中不要包含 发行版 _(**E**dition)_、版本号 _(**V**ersion)_、RID、扩展名、通配符或路径列表。
 - 升迁名称可以不同于宿主名称，但 发行版 _(**E**dition)_、版本号 _(**V**ersion)_ 和 RID 必须匹配。
 
@@ -815,8 +841,8 @@ $(name)
 ### 展开规则
 
 - 变量按使用时递归展开：未使用的无效引用不阻止制包；用到的未知、循环或超过 64 层的引用会报错。
-- 命令先保留原始选项文本。定位 `source` 后，显式提供的 `name`、`edition`、`version` 先展开再参与源 `.version` 文件的校验和版本转换；`platform`、`architecture` 和 `overwrite` 也先展开再转换。
-- `name`、`edition`、`version` 只由源 `.version` 文件和显式身份选项决定，同名的环境变量或 `.env` 变量不能替代身份；但显式选项可以引用 `.env` 中的变量。尚未从源 `.version` 获得的身份值不能用于定位该源目录。
+- 命令先保留原始选项文本。定位 `source` 后，显式提供的 `name`、`edition`、`version` 先展开，再用于源目录的 `.edition` 清单文件或 `.version` 版本标识文件校验及版本转换；`platform`、`architecture` 和 `overwrite` 也先展开再转换。
+- `name`、`edition`、`version` 只由源目录的 `.edition` 清单文件或 `.version` 版本标识文件和显式身份选项决定，同名的环境变量或 `.env` 变量不能替代身份；但显式选项可以引用 `.env` 中的变量。尚未从源目录的 `.edition` 清单文件或 `.version` 版本标识文件获得的身份值不能用于定位该源目录。
 - 最终身份以及解析后的 `source`、`output` 会覆盖变量集合中的同名值。
 - `--migrator` 必须显式启用；`--overwrite` 可由环境变量或 `.env` 提供，再由命令行覆盖。
 
@@ -953,11 +979,11 @@ RPM 的 `PACKAGER` 标签（1015）保存的是 `--maintainer` 维护者信息�
 
 | 错误信息 | 原因与处理 |
 | --- | --- |
-| `The source directory '<path>' does not exist.` | 变量展开和路径规范化后，`--source` 指向的位置不存在。 |
-| `The source path '<path>' does not exist.` | 位置参数没有匹配到现有文件、目录或通配路径。 |
-| `A valid nonzero --version or selected source version is required. Source: <path>` | 没有有效的命令版本号或源 `.version` 文件，或版本号为零；非版本号文本会在变量展开后、选择源 `.version` 前报错。 |
-| `The daemon host location failed.` | 找不到已有服务文件或可用的宿主 `.dll`，也无法从唯一的 `.exe` 推断名称。可指定 `--daemon:<service-file>`，或用 `--daemon:none` 禁用服务。 |
-| `输出文件“<路径>”已存在。` | 指出冲突的安装包或 tar 安装脚本。需要替换时添加 `--overwrite`，或换用其他 `--output` 目录；未启用覆盖时已有产物保持不变。 |
+| `指定的 '<路径>' 目录不存在。` | 变量展开和路径规范化后，`--source` 指向的位置不存在。 |
+| `指定的 '<路径>' 源路径不存在。` | 位置参数没有匹配到现有文件、目录或通配路径。 |
+| `必须通过 --version 或所选源版本提供有效的非零版本号。源文件：<路径>` | 命令选项及源目录的 `.edition` 清单文件或 `.version` 版本标识文件都未提供有效版本号，或版本号为零；非版本号文本会在变量展开后、从这些文件选择版本之前报错。 |
+| `后台宿主程序定位失败。` | 找不到已有服务文件或可用的宿主 `.dll`，也无法从唯一的 `.exe` 推断名称。可指定 `--daemon:<service-file>`，或用 `--daemon:none` 禁用服务。 |
+| `输出文件“<路径>”已存在。若要替换它，请添加 --overwrite；也可指定其他 --output 目录。` | 指出冲突的安装包或 tar 安装脚本。需要替换时添加 `--overwrite`，或换用其他 `--output` 目录；未启用覆盖时已有产物保持不变。 |
 
 ## 从源码构建
 

@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <root>
-  <!-- 
-    Microsoft ResX Schema 
-    
+  <!--
+    Microsoft ResX Schema
+
     Version 2.0
-    
-    The primary goals of this format is to allow a simple XML format 
-    that is mostly human readable. The generation and parsing of the 
-    various data types are done through the TypeConverter classes 
+
+    The primary goals of this format is to allow a simple XML format
+    that is mostly human readable. The generation and parsing of the
+    various data types are done through the TypeConverter classes
     associated with the data types.
-    
+
     Example:
-    
+
     ... ado.net/XML headers & schema ...
     <resheader name="resmimetype">text/microsoft-resx</resheader>
     <resheader name="version">2.0</resheader>
@@ -26,36 +26,36 @@
         <value>[base64 mime encoded string representing a byte array form of the .NET Framework object]</value>
         <comment>This is a comment</comment>
     </data>
-                
-    There are any number of "resheader" rows that contain simple 
+
+    There are any number of "resheader" rows that contain simple
     name/value pairs.
-    
-    Each data row contains a name, and value. The row also contains a 
-    type or mimetype. Type corresponds to a .NET class that support 
-    text/value conversion through the TypeConverter architecture. 
-    Classes that don't support this are serialized and stored with the 
+
+    Each data row contains a name, and value. The row also contains a
+    type or mimetype. Type corresponds to a .NET class that support
+    text/value conversion through the TypeConverter architecture.
+    Classes that don't support this are serialized and stored with the
     mimetype set.
-    
-    The mimetype is used for serialized objects, and tells the 
-    ResXResourceReader how to depersist the object. This is currently not 
+
+    The mimetype is used for serialized objects, and tells the
+    ResXResourceReader how to depersist the object. This is currently not
     extensible. For a given mimetype the value must be set accordingly:
-    
-    Note - application/x-microsoft.net.object.binary.base64 is the format 
-    that the ResXResourceWriter will generate, however the reader can 
+
+    Note - application/x-microsoft.net.object.binary.base64 is the format
+    that the ResXResourceWriter will generate, however the reader can
     read any of the formats listed below.
-    
+
     mimetype: application/x-microsoft.net.object.binary.base64
-    value   : The object must be serialized with 
+    value   : The object must be serialized with
             : System.Runtime.Serialization.Formatters.Binary.BinaryFormatter
             : and then encoded with base64 encoding.
-    
+
     mimetype: application/x-microsoft.net.object.soap.base64
-    value   : The object must be serialized with 
+    value   : The object must be serialized with
             : System.Runtime.Serialization.Formatters.Soap.SoapFormatter
             : and then encoded with base64 encoding.
 
     mimetype: application/x-microsoft.net.object.bytearray.base64
-    value   : The object must be serialized into a byte array 
+    value   : The object must be serialized into a byte array
             : using a System.ComponentModel.TypeConverter
             : and then encoded with base64 encoding.
     -->
@@ -178,7 +178,7 @@
     <value>确定应用身份之前无法解析源目录中的变量“{0}”。请指定对应身份选项或使用不包含该变量的源路径。</value>
   </data>
   <data name="SourceVersionLoadFailed.Message" xml:space="preserve">
-    <value>无法加载源版本文件“{0}”。</value>
+    <value>无法加载源身份文件“{0}”。</value>
   </data>
   <data name="SourceVersionNameRequired.Message" xml:space="preserve">
     <value>没有源版本信息时必须指定非空 --name。源文件：{0}</value>
@@ -187,19 +187,19 @@
     <value>--name“{1}”与“{0}”中的应用名称“{2}”不一致。</value>
   </data>
   <data name="SourceVersionEditionRequired.Message" xml:space="preserve">
-    <value>源版本文件“{0}”包含多个 Edition，请指定 --edition。</value>
+    <value>源身份文件“{0}”包含多个 Edition 且未设置 Current，请指定 --edition。</value>
   </data>
   <data name="SourceVersionEditionMissing.Message" xml:space="preserve">
-    <value>--edition“{1}”不存在于源版本文件“{0}”中。</value>
+    <value>--edition“{1}”不存在于源身份文件“{0}”中。</value>
   </data>
   <data name="SourceVersionInvalid.Message" xml:space="preserve">
     <value>必须通过 --version 或所选源版本提供有效的非零版本号。源文件：{0}</value>
   </data>
   <data name="SourceVersionIdentityInvalid.Message" xml:space="preserve">
-    <value>源版本文件“{0}”的 --name 或 --edition 无效。</value>
+    <value>源身份文件“{0}”的 --name 或 --edition 无效。</value>
   </data>
   <data name="SourceVersionSaveFailed.Message" xml:space="preserve">
-    <value>安装包“{0}”已生成，但更新源版本文件“{1}”失败。</value>
+    <value>安装包“{0}”已生成，但更新源身份文件“{1}”失败。</value>
   </data>
   <data name="VariableResolutionFailed.Message" xml:space="preserve">
     <value>变量“{0}”未定义或包含循环引用。</value>

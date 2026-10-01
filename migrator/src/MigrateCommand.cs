@@ -63,6 +63,7 @@ public sealed partial class MigrateCommand : CommandBase<CommandContext>
 		var values = Variables.From(context, Environment.CurrentDirectory);
 		values[Variables.SOURCE] = Environment.CurrentDirectory;
 		values.Remove(Variables.VERSION);
+		values[Variables.EDITION] = context.Options.GetValue<string>(Variables.EDITION);
 		var selected = VersionSource.Load(context.Options.GetValue<string>(Variables.VERSION), new Variables(values));
 		values[Variables.VERSION] = selected.Version.ToString();
 		values[Variables.EDITION] = selected.Edition;
@@ -92,7 +93,7 @@ public sealed partial class MigrateCommand : CommandBase<CommandContext>
 		var output = Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, variables.Output ?? "."));
 		var suffixed = HasSuffix(name);
 		var migrationName = (suffixed ? name : name + "-migrate") + (string.IsNullOrWhiteSpace(edition) ? "" : "-" + edition);
-		var prefix = migrationName + "@" + version + "_" + runtime;
+		var prefix = name + (string.IsNullOrWhiteSpace(edition) ? "" : "-" + edition) + "(migrate)@" + version + "_" + runtime;
 		var archive = prefix + ".tar.gz";
 		var launcher = prefix + (platform == "win" ? ".cmd" : ".sh");
 		var cmdlet = new CommandLine.Cmdlet(context.Command.Name);

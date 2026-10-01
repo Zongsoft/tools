@@ -1,22 +1,24 @@
 # 升迁实现说明
 
-数据库配置由 MigrationLoader.Databases 解析。Core 决定条目及导入覆盖；无导入的本地 Core 视图提供声明位置，用于还原跨库事件顺序和真正的空段；有效条目保留首次位置和最终来源。Provider.Prepare 在指纹计算前补齐建库默认值。Databases 保存管理员参数、有效设置、用户；有序 Steps 以 DatabaseIndex 引用 Databases 数组位置（从零开始），只有引用目标入计划。执行器先验证所有 SQL，再全部建库、全部建账号及映射、执行任务、追加授权。已有设置/密码不变。数据库 pending 仅保存目标和设置摘要，恢复未完成的新库配置。Amazon S3 保留既有解析执行路径，详见[数据库指南](../README.zh-Hans.md#database-configuration)。
+数据库配置由 MigrationLoader.Databases 解析。[Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 决定条目及导入覆盖；无导入的本地 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 视图提供声明位置，用于还原跨库事件顺序和真正的空段；有效条目保留首次位置和最终来源。Provider.Prepare 在指纹计算前补齐建库默认值。Databases 保存管理员参数、有效设置、用户；有序 Steps 以 DatabaseIndex 引用 Databases 数组位置（从零开始），只有引用目标入计划。执行器先验证所有 SQL，再全部建库、全部建账号及映射、执行任务、追加授权。已有设置/密码不变。数据库 pending 仅保存目标和设置摘要，恢复未完成的新库配置。Amazon S3 保留既有解析执行路径，详见[数据库指南](../README.zh-Hans.md#database-configuration)。
 
-生成端 src 使用 Core Profile 与 Searcher 解析输入，MigrationLoader.Database 预处理 SQL 批次，AmazonS3 解析桶选项。MigrationBundle 收集完整原生产物和计划；Generator 使用 System.Formats.Tar 写 PAX，记录 Migrator（程序集名@版本）和 Runtime。项目不引用 packager。
+生成端 src 使用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Profile 与 Searcher 解析输入，MigrationLoader.Database 预处理 SQL 批次，AmazonS3 解析桶选项。MigrationBundle 收集完整原生产物和计划；Generator 使用 System.Formats.Tar 写 PAX，记录 Migrator（程序集名@版本）和 Runtime。项目不引用 packager。
 
-版本解析前，共享 `Utility.CreateVariables` 依次加载默认值、系统环境、从文件系统根目录到工作目录的直属 `.env`、显式选项。`Utility.LoadEnvironmentVariables` 使用 `Profile.Load`，各级段落与条目以下划线拼名，根条目保留原名，同时保留 Core 空值和导入语义。仅跳过打开阶段的缺失文件，其余读取及解析错误传播。变量按需展开、每次调用独立，不修改进程环境；全部输入共用变量视图，不随各输入所在目录改变。
+版本解析前，共享 `Utility.CreateVariables` 依次加载默认值、系统环境、从文件系统根目录到工作目录的直属 `.env`、显式选项。`Utility.LoadEnvironmentVariables` 使用 `Profile.Load`，各级段落与条目以下划线拼名，根条目保留原名，同时保留 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 空值和导入语义。仅跳过打开阶段的缺失文件，其余读取及解析错误传播。变量按需展开、每次调用独立，不修改进程环境；全部输入共用变量视图，不随各输入所在目录改变。
 
 数据库与 Amazon S3 从声明来源向根目录逐级查找 `<输入名>.ini`，然后查找 `postgres.ini`、`postgresql.ini` 等 provider 别名文件。保持就近选择完整配置、仅合并显式导入的规则，错误将来源位置与原因分行显示，候选参数文件按查找顺序逐行列出；共享 `Utility.Indent` 使用平台换行并保留嵌套详情的缩进。自动查找不再回退 `*.env`；原有参数夹具、示例及导入路径使用 `.ini`。通用 `.env` 变量继承不参与连接配置的跨文件合并。
 
-`MigrateCommand.Version.cs` 的私有嵌套类型 `VersionSource` 负责版本来源解析。主流程先从初始变量中移除环境变量及 `.env` 中的 `version`，仅将本次命令选项传入解析器。解析器展开选项值，优先识别版本号，目录追加 `.version`，并使用 `File.OpenRead` 和 `ApplicationVersion.Load(Stream)` 只读加载文件。Edition 通过文件的忽略大小写集合选择并保留原拼写；读取或格式异常补充完整路径，非零版本和 Edition 校验均先于输出处理。
+`MigrateCommand.Version.cs` 的私有嵌套类型 `VersionSource` 负责解析。主流程排除环境及 `.env` 隐式提供的 version、edition，仅从命令选项取值。解析器展开版本输入并优先识别数字版本；默认或显式目录先通过 `ApplicationManifest.Load(Stream)` 读取直属 `.edition`，仅清单缺失时才通过 `ApplicationIdentifier.Load(Stream)` 读取 `.version`。显式文件名以 `.version` 结尾时忽略大小写使用标识读取器，其他名称使用清单读取器。读取和格式错误保留完整路径，不换解析器重试。
 
-进程入口使用 `tools/.shared/Utility.cs` 逐项保留参数边界，并转义反斜杠，保留空值与含空格的 Windows 路径。可能含变量的命令选项先作为字符串进入命令；版本来源解析后回填版本号和 Edition，并为本次命令建立独立 `Variables` 视图，按需递归展开其他值并在类型转换之前完成。布尔开关交由 Core `Switch` 判定。枚举使用 Core 转换，不额外检查成员定义。`--name` 独立于版本文件，输入和输出路径始终以当前目录为基准；全过程不保存版本文件。计划协议和原生执行器不参与源版本查找，只接收最终身份。命令测试覆盖版本号、文件、目录及默认来源、Edition 选择、变量展开，以及失败时源文件和已有输出保持不变。
+来源选择与产物 Edition 分离：显式非空 Edition 选择清单项并保留拼写；否则从 Current、唯一 Edition 或顶层版本取得版本号，不据此填入产物 Edition。多个 Edition 且无 Current 时要求选择。标识文件提供版本号，显式 Edition 可覆盖或补充其 Edition。未显式指定时产物 Edition 为 null，数字版本和具名 Current 均如此。最终版本必须非零。源文件（含 Current）从不保存；旧多 Edition `.version` 须改名为 `.edition`。
+
+进程入口使用 `tools/.shared/Utility.cs` 逐项保留参数边界，并转义反斜杠，保留空值与含空格的 Windows 路径。可能含变量的命令选项先作为字符串进入命令；版本来源解析后回填版本号和 Edition，并为本次命令建立独立 `Variables` 视图，按需递归展开其他值并在类型转换之前完成。布尔开关交由 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) `Switch` 判定。枚举使用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 转换，不额外检查成员定义。`--name` 独立于版本文件，输入和输出路径始终以当前目录为基准；全过程不保存版本文件。计划协议和原生执行器不参与源版本查找，只接收最终身份。命令测试覆盖版本号、文件、目录及默认来源、Edition 选择、变量展开，以及失败时源文件和已有输出保持不变。
 
 .shared 通过 Compile Link 分别编译到生成端与 executor，不生成共享 DLL。MigrationPlan 采用 partial 和嵌套 Step/Script/Bucket/Database/User、源码生成 JSON；Source/Content 仅在生成端扩展，参数及计划校验由共享代码负责。源码生成 JSON 的字段和指纹规则见[制作阶段的高级说明](../README.zh-Hans.md#advanced-package-details)。
 
 executor 使用显式工厂选择六种数据库或 Amazon S3，实现连接、建库、顺序提交、校验和、锁、状态及 pending。所有 SQL 每次 apply 均执行，不维护逐文件成功历史。数据库/Amazon S3 驱动只在执行器声明，TDengine 使用 WebSocket。
 
-外部脚本与归档同名，仅扩展名不同。脚本写入确切归档名、无版本状态名及计划指纹；第二参数可覆盖状态目录。check 只比较 ready；apply/status 创建临时目录，解压内部 .migration/，调用内部入口传入动作和持久状态目录，返回执行器退出码并清理临时目录。packager 的安装脚本与 systemd drop-in 均调用这个外部入口，不理解 SQL 或计划字段。
+外部脚本与归档使用同一前缀 `<name>[-<edition>](migrate)@<version>_<RID>`，name 原样使用，无 Edition 时省略对应部分，仅扩展名不同。计划名称及默认状态目录保留既有升迁后缀规范化规则，以复用持久状态。脚本写入确切归档名、无版本状态名及计划指纹；第二参数可覆盖状态目录。check 只比较 ready；apply/status 创建临时目录，解压内部 .migration/，调用内部入口传入动作和持久状态目录，返回执行器退出码并清理临时目录。packager 的安装脚本与 systemd drop-in 均调用这个外部入口，不理解 SQL 或计划字段。
 
 两个产物通过 `tools/.shared/ArtifactPublisher.cs` 先写入输出目录下的私有暂存目录，再备份/替换目标；异常恢复原输出。该类也供其他工具的单文件写入和复制使用，单文件直接原子替换。生成端还链接共享的变量和 `Utility.cs`，后者与本项目的 `partial Utility` 合并编译；不生成共享 DLL，也不改变执行器协议。归档中的 migration.json 权限为 0600，其他数据 0644，入口 0755。Unix 下外部归档 0600，脚本 0755。归档含展开后的凭据，不应上传到公共源。
 

@@ -62,7 +62,7 @@ partial class Definition
 			{
 				profile = Profile.Load(filePath, new ProfileOptions(false)
 				{
-					RequireImports = true,
+					ImportBehavior = ProfileDirectiveBehavior.Existed,
 					Importing = context => this.Collect(context.Referer),
 					Imported = context => this.Collect(context.Profile),
 				});

@@ -98,7 +98,7 @@ public sealed partial class MigratorPackageTest
 		Pair(directory, name, "Enterprise", "1.0.0", "linux-x64");
 		Pair(directory, name, "Enterprise", "2.7.1", "linux-arm64");
 		Pair(directory, "hosting/web/nested/" + name, "Enterprise", "2.7.1", "linux-x64");
-		var prefix = name + "-migrate-Enterprise@2.7.1_linux-x64";
+		var prefix = name + "-Enterprise(migrate)@2.7.1_linux-x64";
 
 		var error = Assert.Throws<FileNotFoundException>(() => Migrator.Load(package, name));
 		Assert.Equal(Path.Combine(source, prefix + ".tar.gz"), error.FileName);
@@ -179,7 +179,7 @@ public sealed partial class MigratorPackageTest
 		}
 
 		var error = Assert.Throws<FileNotFoundException>(() => Migrator.Load(package, input));
-		Assert.Equal(Path.Combine(source, "bootstrap-migrate@2.7.1_linux-x64.tar.gz"), error.FileName);
+		Assert.Equal(Path.Combine(source, "bootstrap(migrate)@2.7.1_linux-x64.tar.gz"), error.FileName);
 		var pair = Pair(directory, "hosting/web/bootstrap", null, "2.7.1", "linux-x64");
 		var migrator = Migrator.Load(package, input);
 		Assert.Equal(pair.Archive, migrator.Archive);
