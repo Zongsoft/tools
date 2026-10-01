@@ -80,7 +80,7 @@ internal static class Program
 			Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancellation.Cancel(); };
 
 			await new MigrationExecutor()
-				.ApplyAsync(plan, new(Path.GetDirectoryName(Path.GetDirectoryName(Path.GetFullPath(args[1]))), state, Console.WriteLine), cancellation.Token);
+				.ApplyAsync(plan, new(Path.GetDirectoryName(Path.GetFullPath(args[1])), state, Console.WriteLine), cancellation.Token);
 
 			return 0;
 		}

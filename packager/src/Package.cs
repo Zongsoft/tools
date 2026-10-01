@@ -67,10 +67,11 @@ public abstract partial class Package
 		this.Title = this.Variables.Title;
 		this.Summary = this.Variables.Summary;
 		this.Description = this.Variables.Description;
-		this.Url = this.Variables.Url;
+		this.Homepage = this.Variables.Homepage;
 		this.Category = this.Variables.Category;
 		this.License = this.Variables.License;
 		this.Maintainer = this.Variables.Maintainer;
+		this.Manufacturer = this.Variables.Manufacturer;
 		this.Dependencies = this.Variables.Dependencies;
 		this.Entries = new(this);
 	}
@@ -90,8 +91,9 @@ public abstract partial class Package
 	public string Summary { get; set; }
 	public string Description { get; set; }
 	public string Maintainer { get; set; }
+	public string Manufacturer { get; set; }
 	public string License { get; set; }
-	public string Url { get; set; }
+	public string Homepage { get; set; }
 	public string Category { get; set; }
 	public string InstallPath { get; set; }
 	public string[] Dependencies { get; set; }

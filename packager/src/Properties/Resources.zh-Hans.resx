@@ -248,4 +248,10 @@
   <data name="Web.Load.Message" xml:space="preserve"><value>无法加载 Web Profile：{0}。</value></data>
   <data name="Web.Capability.Message" xml:space="preserve"><value>Web 托管器无法准确表达该设置：{0}。</value></data>
   <data name="Web.Override.Message" xml:space="preserve"><value>原始设置覆盖共同设置：{0}。</value></data>
+  <data name="DependencyInvalid.Message" xml:space="preserve">
+    <value>依赖表达式“{0}”无效。请使用 name[:range]，例如 package:[1.0,2.0)。</value>
+  </data>
+  <data name="DependencyTooComplex.Message" xml:space="preserve">
+    <value>依赖替代项展开后超过 1024 个 Debian 关系组。</value>
+  </data>
 </root>

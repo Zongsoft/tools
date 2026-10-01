@@ -157,6 +157,8 @@ _**N**uget_ 包下载器默认会忽略以 `System.`、`Microsoft.Extensions.`�
 
 变量依次加载：系统环境变量、从文件系统根目录到工作目录的各级 `.env`、目标应用的 `appsettings.json`、命令选项。同名变量后加载覆盖先加载，空值也参与覆盖，变量名不区分大小写。
 
+`--framework` 未指定或为空时，使用合并后变量集中的非空 `framework`，遵循上述加载顺序；非空选项优先。变量未定义或为空时沿用原有框架处理流程，纯空白选项值保持原有行为。
+
 每级只读取直属 `.env`，不搜索子目录或各个清单所在目录；同次调用的全部清单共用变量集合。INI 文件使用 Core `Profile.Load` 读取，支持 `#@import`。根条目保留原名，各级段落名与条目名以 `_` 拼接：`[io rustfs]` 下的 `access_key=example` 生成 `io_rustfs_access_key=example`，根级 `environment=Development` 生成 `environment`。缺失的 `.env` 跳过，读取或解析失败终止初始化。值仅在使用时展开，不修改进程环境变量。
 
 变量值可递归引用其他变量，不受命令选项顺序影响；仅在使用时展开，缺失、循环引用或超过 64 层会报错。`destination` 可引用命令选项、环境变量及已加载的 `.env` 变量；目标目录确定后才加载其中的 `appsettings.json`。

@@ -78,6 +78,8 @@ At least one positional argument is required. Each argument supports variables, 
 
 Each invocation loads descriptor defaults, environment variables, direct `.env` files from the filesystem root down to the working directory, and explicit command options, in that order. Later values overwrite earlier case-insensitive names, including empty values. Child directories and individual input/version-file directories do not establish additional variable scopes. Variables remain local to the invocation and do not modify the process environment.
 
+`framework` is available to variable references. An omitted or empty `--framework` uses a nonempty value from the merged variables; a nonempty option takes precedence. A missing or empty variable and whitespace-only option values keep their existing behavior. This variable does not select the native executor or RID.
+
 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) `Profile.Load` reads these INI files, including `#@import`. Root entries retain their names; section levels and entry names join with `_`. For example, `[mysql]` with `root_password=example` creates `mysql_root_password`, and `[io rustfs]` with `access_key=example` creates `io_rustfs_access_key`. Root `environment=Development` creates `environment`. Values expand lazily through `$(name)` or `%name%`, including references in command options and `.ini` connection parameters. Missing `.env` files are skipped; read or parse failures stop generation.
 
 `.env` supplies shared variables; `.ini` supplies migration connection configuration. Rename existing parameter files such as `mysql.env` and `main.env` to `mysql.ini` and `main.ini`, and update their import paths. Automatic parameter lookup no longer falls back to `*.env`; explicit imports keep [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core)'s existing rules. Version and Edition selection follow the separate rules below.
@@ -262,13 +264,16 @@ Parameter/provider names and enum values are case insensitive. Database names, u
 | `CommandTimeout` | All | `300s`, per-command timeout |
 | `Secured` | Network databases | true / false; omission behavior below |
 | `TrustServerCertificate` | mssql | `false`, trust server certificate |
+| `AllowPublicKeyRetrieval` | mysql | `true`, allow retrieving the server RSA public key for password authentication without TLS |
 
 | Provider | UserName | Port | Bootstrap | Secured omitted |
 | --- | --- | --- | --- | --- |
-| mysql | root | 3306 | mysql | Driver default |
+| mysql | root | 3306 | mysql | `false`, mapped to `SslMode=Disabled` |
 | postgres / postgresql | postgres | 5432 | postgres | Driver default |
 | mssql | sa | 1433 | master | Encryption enabled |
 | tdengine | root | 6041 | No database | Plain WebSocket |
+
+MySQL maps `Secured=false` to `SslMode=Disabled` and `Secured=true` to `SslMode=Required`. Omitted `Secured` defaults to `false`; `AllowPublicKeyRetrieval` defaults to `true`, allowing password authentication without TLS, including `caching_sha2_password` with an empty authentication cache. Both options can be overridden, are stored in the plan and affect its fingerprint. `SslMode` is a driver setting derived from `Secured`, not a separate INI parameter.
 
 Timeouts accept positive integer seconds and s/m suffixes, up to one day. SQLite and DuckDB provider sections accept only Database and CommandTimeout.
 
@@ -368,7 +373,7 @@ Each apply appends grants to the business schemas/objects present after SQL exec
 
 ### SQL batch preparation
 
-`MigrationLoader.Database` runs in the migration generator and prepares batches that can be submitted directly to the driver. Each batch is written to `<extraction directory>/.migration/.artifacts/<provider>/<sequence>.sql`; the plan records their order and SHA-256 checksums. Migrator reads and executes each prepared file without splitting it. Script authors remain responsible for SQL syntax, schema changes and business semantics. Invalid SQL is reported by the driver/database during execution.
+`MigrationLoader.Database` runs in the migration generator and prepares batches that can be submitted directly to the driver. Each batch is written to `<extraction directory>/.artifacts/<provider>/<sequence>.sql`; the plan records their order and SHA-256 checksums. Migrator reads and executes each prepared file without splitting it. Script authors remain responsible for SQL syntax, schema changes and business semantics. Invalid SQL is reported by the driver/database during execution.
 
 | Migrator | Submission strategy |
 | --- | --- |
@@ -398,7 +403,7 @@ packages/zongsoft(migrate)@1.0.0_linux-x64.tar.gz
 packages/zongsoft(migrate)@1.0.0_linux-x64.sh
 ```
 
-The archive contains .migration/migration.json, prepared SQL under .migration/.artifacts/, and resolved migration data. Both outputs are staged before publication; replacing existing files requires --overwrite, and failed publication restores previous outputs.
+The archive root contains `migration.json`, `id`, `migrate.sh` (Windows: `migrate.cmd`), the native executor and its dependencies. Prepared SQL is stored under `.artifacts/<provider>/`. There is no enclosing `.migration/` directory. The launcher extracts these files directly into a unique temporary directory and removes that directory when execution ends. The persistent state directory is separate from this archive layout. Both outputs are staged before publication; replacing existing files requires --overwrite, and failed publication restores previous outputs.
 
 > 🚨 **Warning:** The archive contains expanded database and Amazon S3 credentials from `.ini`. Restrict who can inspect, store or download the package.
 
@@ -513,7 +518,7 @@ Steps have no separate Id: array position defines execution order, and logs/stat
 | `Databases[].Users[].Privileges` / `Roles` | String arrays | Normalized, deduplicated effective unified capabilities including the Permission preset, and existing role names. |
 | `Databases[].Users[].Host` | String? | MySQL account host, default `%`; omitted for other providers. |
 | `Steps[].Scripts` | Array | Ordered SQL batches for database tasks; `[]` for Amazon S3 tasks. |
-| `Steps[].Scripts[].Path` | String | Batch path relative to the migration archive extraction root, such as `.migration/.artifacts/mysql/1.sql`. Steps of the same provider share the directory and consecutive numbering. |
+| `Steps[].Scripts[].Path` | String | Batch path relative to the migration archive extraction root, such as `.artifacts/mysql/1.sql`. Steps of the same provider share the directory and consecutive numbering. |
 | `Steps[].Scripts[].Checksum` | String | Uppercase hexadecimal SHA-256 of the actual UTF-8 batch bytes, checked before execution. |
 | `Steps[].Buckets` | Array | Bucket descriptions for Amazon S3 tasks; `[]` for database tasks. |
 | `Steps[].Buckets[].Name` | String | Bucket name, such as hosting's `attachments`. |
@@ -526,6 +531,6 @@ Steps have no separate Id: array position defines execution order, and logs/stat
 
 Omitted bucket settings do not produce configuration requests. `Script.Source` and `Script.Content` belong only to the migration generator and are excluded from JSON. Original INI/ENV paths and local SQL source paths are not protocol fields. Parameters may contain passwords or keys; the file mode is `0600`.
 
-The fingerprint is stored outside JSON: the migration generator hashes the model's compact JSON UTF-8 bytes with SHA-256 and writes the uppercase hexadecimal result to `.migration/id`. Migrator writes it to the state directory's `ready` only after all tasks succeed. This is not a direct hash of the indented `migration.json` file. Effective database settings/users, parameters, script paths, checksums, bucket options and array order contribute to it; indentation and file line endings do not. It identifies completion of the current plan, rather than providing a signature or per-script execution history.
+The fingerprint is stored outside JSON: the migration generator hashes the model's compact JSON UTF-8 bytes with SHA-256 and writes the uppercase hexadecimal result to `id`. Migrator writes it to the state directory's `ready` only after all tasks succeed. This is not a direct hash of the indented `migration.json` file. Effective database settings/users, parameters, script paths, checksums, bucket options and array order contribute to it; indentation and file line endings do not. It identifies completion of the current plan, rather than providing a signature or per-script execution history.
 
 </details>

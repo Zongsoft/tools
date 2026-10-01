@@ -11,7 +11,7 @@ namespace Zongsoft.Tools.Migrator.Migration.Tests;
 public sealed class MigrationPlanTest
 {
 	#region 常量定义
-	private const string CANONICAL_JSON = "{\"Name\":\"zongsoft.web\",\"Version\":\"1.1.0\",\"Runtime\":\"linux-x64\",\"Steps\":[{\"Provider\":\"sqlite\",\"DatabaseIndex\":0,\"Settings\":{},\"Scripts\":[{\"Path\":\".migration/.artifacts/schema.sql\",\"Checksum\":\"17DB4FD369EDB9244B9F91D9AEED145C3D04AD8BA6E95D06247F07A63527D11A\"}],\"Buckets\":[]}],\"Databases\":[{\"Name\":\"hosting\",\"Provider\":\"sqlite\",\"Settings\":{\"CommandTimeout\":\"300s\"},\"Options\":{\"Path\":\"/var/lib/zongsoft/hosting.db\",\"CommandTimeout\":\"300s\",\"Charset\":\"UTF-8\"},\"Users\":[]}]}";
+	private const string CANONICAL_JSON = "{\"Name\":\"zongsoft.web\",\"Version\":\"1.1.0\",\"Runtime\":\"linux-x64\",\"Steps\":[{\"Provider\":\"sqlite\",\"DatabaseIndex\":0,\"Settings\":{},\"Scripts\":[{\"Path\":\".artifacts/schema.sql\",\"Checksum\":\"17DB4FD369EDB9244B9F91D9AEED145C3D04AD8BA6E95D06247F07A63527D11A\"}],\"Buckets\":[]}],\"Databases\":[{\"Name\":\"hosting\",\"Provider\":\"sqlite\",\"Settings\":{\"CommandTimeout\":\"300s\"},\"Options\":{\"Path\":\"/var/lib/zongsoft/hosting.db\",\"CommandTimeout\":\"300s\",\"Charset\":\"UTF-8\"},\"Users\":[]}]}";
 	#endregion
 
 	#region 测试方法
@@ -26,7 +26,7 @@ public sealed class MigrationPlanTest
 		using var directory = new MigrationTestDirectory();
 		var json = runtime == null ? CANONICAL_JSON.Replace("\"Runtime\":\"linux-x64\",", "") : CANONICAL_JSON.Replace("linux-x64", runtime);
 
-		Assert.Throws<InvalidDataException>(() => MigrationPlan.Load(directory.Write(".migration/migration.json", json)));
+		Assert.Throws<InvalidDataException>(() => MigrationPlan.Load(directory.Write("migration.json", json)));
 	}
 
 	[Theory]
@@ -38,7 +38,7 @@ public sealed class MigrationPlanTest
 		using var directory = new MigrationTestDirectory();
 		var json = CANONICAL_JSON.Replace("linux-x64", runtime).Replace("/var/lib/zongsoft/hosting.db", database);
 
-		var plan = MigrationPlan.Load(directory.Write(".migration/migration.json", json));
+		var plan = MigrationPlan.Load(directory.Write("migration.json", json));
 
 		Assert.Equal(runtime, plan.Runtime);
 		Assert.Equal(database, Assert.Single(plan.Databases).Options["Path"]);
@@ -48,13 +48,13 @@ public sealed class MigrationPlanTest
 	public void Load_CanonicalJsonPreservesFingerprintAndHasNoSourceMember()
 	{
 		using var directory = new MigrationTestDirectory();
-		var file = directory.Write(".migration/migration.json", CANONICAL_JSON);
+		var file = directory.Write("migration.json", CANONICAL_JSON);
 
 		var loaded = MigrationPlan.Load(file);
 
 		Assert.Equal(0, Assert.Single(loaded.Steps).DatabaseIndex);
-		Assert.Equal(".migration/.artifacts/schema.sql", Assert.Single(loaded.Steps[0].Scripts).Path);
-		Assert.Equal("4D98AFD0485B59EC20EEC62A25999249C4B5A17BBAA5BB6DE4000F911DB06C1B", loaded.Fingerprint());
+		Assert.Equal(".artifacts/schema.sql", Assert.Single(loaded.Steps[0].Scripts).Path);
+		Assert.Equal("E7BBE5206AEE37071193944D4EB5977A66BA509214D3997BFD70A498241EF796", loaded.Fingerprint());
 		Assert.Null(typeof(MigrationPlan.Script).GetProperty("Source"));
 		Assert.DoesNotContain(typeof(MigrationPlan.Script).GetFields(), field => field.Name.Contains("Source", StringComparison.Ordinal));
 	}
@@ -62,7 +62,7 @@ public sealed class MigrationPlanTest
 	public void Serialize_StepsAndSettings_ExcludesLegacyNamesAndStepIdentifier()
 	{
 		using var directory = new MigrationTestDirectory();
-		var plan = MigrationPlan.Load(directory.Write(".migration/migration.json", CANONICAL_JSON));
+		var plan = MigrationPlan.Load(directory.Write("migration.json", CANONICAL_JSON));
 
 		using var document = JsonDocument.Parse(plan.Serialize());
 

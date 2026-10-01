@@ -59,7 +59,7 @@ A single packaging run performs these steps in order:
 4. **Collect package entries:** select payload files from positional arguments and `--exclude`.
 5. **Generate supporting content:** systemd service, lifecycle scripts, Nginx configuration, migration artifacts.
 6. **Encode and write:** produce `.tar.gz` (with its `.sh` companion), `.deb`, or `.rpm`.
-7. **Save the version:** write back the source `.edition` manifest or `.version` identifier only after packaging succeeds.
+7. **Save the version:** save source version files only after packaging succeeds; when `.edition` exists, write back both `.edition` and `.version`.
 
 ### Key terms
 
@@ -143,7 +143,7 @@ deploy.cmd
 
 ### Step 2: Build the package
 
-Package directly from the host directory; no staging directory is needed. Without `--source`, the source directory is the current directory, and the positional arguments pick the payload from it. The command below is exactly what the host's [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd) runs when you choose the `deb` format, version number `1.0.0`, the `production` environment, and the remaining defaults:
+Package directly from the host directory, without `--source`, the source directory is the current directory, and the positional arguments pick the payload from it. The command below is exactly what the host's [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd) runs when you choose the `deb` format, version number `1.0.0`, the `production` environment, and the remaining defaults:
 
 ```cmd
 dotnet-pack deb ^
@@ -244,13 +244,13 @@ In the tables below, **required** options must always be supplied; _conditionall
 | --- | --- | --- |
 | `--name:<name>` | _Conditionally required_ | Application/package name; also locates the .NET host assembly when a service is generated. |
 | `--version:<version>` | _Conditionally required_ | Release version number; overrides the selected version number when a source `.edition` manifest or `.version` identifier exists. A zero version number _(`0.0.0.0`)_ is rejected. |
-| `--edition:<name>` | Current or the sole Edition | Optional product Edition appended to the package name. |
+| `--edition:<name>` | Defined by `.edition` | Optional product Edition appended to the package name. |
 | `--platform:<platform>` | **Required** | Target platform: `linux`, `unix`, `osx`, `windows`/`win`, or `unknown`. Linux packages normally use `linux`. |
-| `--framework:<tfm>` | empty | Optional .NET target framework, such as `net10.0`, used to locate the host under `bin/<compilation>/<framework>`. When unset, this build directory is skipped; hosts in the source directory can still be located. |
+| `--framework:<tfm>` | `framework` variable or empty | Optional .NET target framework, such as `net10.0`, used to locate the host under `bin/<compilation>/<framework>`. An omitted or empty option uses the merged variable. If the final value is empty, this build directory is skipped; hosts in the source directory can still be located. |
 | `--architecture:<arch>` | `x64` | Target CPU architecture, such as `x64`, `x86`, `arm64`, or `arm`. |
 | `--compilation:<name>` | `Release` | Optional .NET build configuration used to locate the host under `bin/<compilation>/<framework>`; also available as `$(compilation)`. |
 
-Ordinary file packaging needs neither `--framework` nor `--compilation`; these options do not run a build. Both may also be omitted when the application DLL is already in the source directory or an existing `.service` file is supplied. Specify `--framework` to locate a host in a .NET build directory; `--compilation` defaults to `Release`.
+Ordinary file packaging needs neither `--framework` nor `--compilation`; these options do not run a build. Both may also be omitted when the application DLL is already in the source directory or an existing `.service` file is supplied. Supply the framework through `--framework`, an environment variable or an ancestor `.env` to locate a host in a .NET build directory; `--compilation` defaults to `Release`.
 
 ### Input and output
 
@@ -277,10 +277,11 @@ Ordinary file packaging needs neither `--framework` nor `--compilation`; these o
 | `--title:<text>` | empty | Human-readable package title, also used as the generated systemd description. |
 | `--summary:<text-or-file>` | empty | Short summary; see [Text sources](#text-sources). |
 | `--description:<text-or-file>` | empty | Long description; see [Text sources](#text-sources). |
-| `--url:<url>` | `https://github.com/Zongsoft` | Project homepage. |
+| `--homepage:<url>` | `https://github.com/Zongsoft` | Project homepage. |
 | `--license:<text>` | empty | License expression or name. |
 | `--category:<text>` | format default | Debian `Section` (default `utils`) or RPM `Group` (default `Applications/System`). |
-| `--maintainer:<text>` | `Zongsoft Studio <zongsoft@gmail.com>` | Package maintainer/vendor. |
+| `--maintainer:<text>` | `Zongsoft` | Package maintainer. |
+| `--manufacturer:<text>` | `Zongsoft` | Software manufacturer; a missing, null, or empty value uses the default. Whitespace alone does not trigger the default. |
 
 ### Extensions
 
@@ -292,14 +293,31 @@ Ordinary file packaging needs neither `--framework` nor `--compilation`; these o
 
 ### Dependencies and relationships
 
-`--dependencies:<list>` applies to both `deb` and `rpm`, separated by commas or semicolons. The two formats use **different** version-relationship syntax:
+`--dependencies:<list>` uses the same `name[:range]` syntax for `deb` and `rpm`. Ranges follow [NuGet interval notation](https://learn.microsoft.com/en-us/nuget/concepts/package-versioning#version-ranges), with `[10.0)` additionally accepted as shorthand for `[10.0,)`.
 
-| Format | Field | Example |
-| --- | --- | --- |
-| Debian | `Depends` | `--dependencies:"aspnetcore-runtime-10.0 (>= 10.0)"` |
-| RPM | `Requires` | `--dependencies:"aspnetcore-runtime-10.0 >= 10.0"` |
+| Input | Required version |
+| --- | --- |
+| `runtime` or `runtime:(,)` | Any version |
+| `runtime:10.0`, `runtime:[10.0,)`, or `runtime:[10.0)` | Greater than or equal to 10.0 |
+| `runtime:[10.0]` | Exactly 10.0 |
+| `runtime:(10.0,)` | Greater than 10.0 |
+| `runtime:(,11.0]` | Less than or equal to 11.0 |
+| `runtime:(,11.0)` | Less than 11.0 |
+| `runtime:[10.0,11.0)` | At least 10.0 and below 11.0 |
+| `runtime:(10.0,11.0]` | Above 10.0 and at most 11.0 |
+| `runtime:[10.0,11.0]` / `runtime:(10.0,11.0)` | Both boundaries included / excluded |
 
-The packager only writes the declarations. It does not download or embed those packages, so the target environment needs an available package repository.
+Separate required groups with commas or semicolons **outside ranges**. Within a group, `|` means that any one alternative is sufficient. Quote the complete value:
+
+```text
+--dependencies:"aspnetcore-runtime-10.0:[10.0,11.0);openssl:[3.0) | libressl:[4.0)"
+```
+
+Debian receives a `Depends` field; RPM receives `Requires` entries. For `runtime:[10.0,11.0) | alternative:[9.0)`, Debian writes `runtime (>= 10.0) | alternative (>= 9.0), runtime (<< 11.0) | alternative (>= 9.0)`. RPM writes `((runtime >= 10.0 with runtime < 11.0) or alternative >= 9.0)`. RPM alternatives require RPM 4.13+, and bounded ranges using `with` require RPM 4.14+. Debian expansion fails with a diagnostic if one group would produce more than 1024 relationship groups.
+
+Only the interval notation is shared. Version endpoints retain their original text and use the target package manager's comparison rules; the packager does not normalize, reorder, or compare them as NuGet versions. Debian virtual packages can have different providers satisfying the lower and upper bounds; RPM `with` requires the same package to satisfy both. Package names are not mapped between distributions. Native names such as Debian `libc6:any` or RPM `pkgconfig(openssl)` remain format-specific; a range is introduced by `:[`, `:(`, or a colon followed by a digit-starting bare version. Use brackets for native versions starting with a letter.
+
+Floating versions such as `10.*`, malformed intervals, empty alternatives, and the old `name >= version` / `name (>= version)` dependency inputs fail packaging. Duplicate constraints are retained. An omitted or empty dependency list writes no application dependency. The packager only writes declarations; it does not download or embed dependencies, so the installation environment needs an available package repository. Other relationship options below retain their native syntax.
 
 #### Debian relationship options
 
@@ -313,7 +331,7 @@ The packager only writes the declarations. It does not download or embed those p
 | `--suggests:<list>` | Suggests |
 
 - Version relationships must be parenthesized, e.g. `zongsoft.daemon (>= 1.0.0)`; supported operators are `<<`, `<=`, `=`, `>=`, and `>>`.
-- Depends, Recommends, and Suggests accept `|` alternatives (any one satisfies the relationship); Provides accepts only `=`.
+- Recommends and Suggests accept `|` alternatives (any one satisfies the relationship); Provides accepts only `=`. Depends is generated from the uniform dependency syntax above.
 - Separate entries with commas or semicolons and quote the whole option. Invalid relationships or line breaks fail packaging.
 
 #### RPM relationship options
@@ -323,7 +341,7 @@ The packager only writes the declarations. It does not download or embed those p
 | `--provides:<list>` | RPM `Provides` entries. |
 | `--conflicts:<list>` | RPM `Conflicts` entries. |
 
-RPM relationship entries support `name`, `name = version`, `name >= version`, `name <= version`, `name > version`, `name < version`, or `name(>= version)`.
+RPM Provides and Conflicts entries support `name`, `name = version`, `name >= version`, `name <= version`, `name > version`, `name < version`, or `name(>= version)`. Requires is generated from the uniform dependency syntax above.
 
 ### Option value conventions
 
@@ -383,7 +401,7 @@ dotnet-pack rpm \
   --framework:net10.0 \
   --output:.packages \
   --license:MIT \
-  --dependencies:"aspnetcore-runtime-10.0 >= 10.0" \
+  --dependencies:"aspnetcore-runtime-10.0:[10.0)" \
   --provides:"zongsoft.web = 1.0.0" \
   ../../mime \
   appsettings.json \
@@ -471,7 +489,7 @@ When both files are absent, valid `--name` and `--version` are required. Identit
 
 ### Packaged version file
 
-The installation-root `.version` is always generated from the final name, Edition and version using [`ApplicationIdentifier.Save(Stream)`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Services/ApplicationIdentifier.cs): UTF-8 without BOM, no trailing newline, mode `0644`. It replaces payload entries targeting the same location, including rooted aliases, and bypasses exclusions.
+The installation-root `.version` is always generated from the final name, Edition and version using [`ApplicationIdentifier.Save(Stream)`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Services/ApplicationIdentifier.cs): UTF-8 without BOM, mode `0644`. It replaces payload entries targeting the same location, including rooted aliases, and bypasses exclusions.
 
 The source directory's direct `.edition` is never payload, even when explicitly selected or renamed through an alias. Entries targeting the installation-root `.edition` are also omitted. Other subdirectory files keep the ordinary payload rules.
 
@@ -479,13 +497,13 @@ The source directory's direct `.edition` is never payload, even when explicitly 
 
 | Files found before packaging | Save after success |
 | --- | --- |
-| `.edition`, with or without `.version` | Update only `.edition`; leave any `.version` unchanged. |
+| `.edition`, with or without `.version` | Rewrite both `.edition` and `.version`; create `.version` if missing. |
 | Only `.version` | Update only `.version` in single-line identifier format. |
 | Neither file | Create `.edition` and `.version` together. |
 
-Only the selected manifest Edition's version changes, and the final named Edition becomes Current. Other Editions retain their names, versions and order; comments and blank lines follow [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core)'s preservation rules. Manifests use UTF-8 without BOM and CRLF; identifiers use [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core)'s exact output without a trailing newline.
+Only the selected manifest Edition's version changes, and the final named Edition becomes Current. Other Editions retain their names, versions and order; comments and blank lines follow [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core)'s preservation rules. Manifests use UTF-8 without BOM and CRLF; identifiers use [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core)'s serialization. A trailing LF or CRLF is optional and does not affect identifier parsing.
 
-Source files are saved only after all package artifacts succeed. Single-file saves are atomic; creating both files uses grouped publication with rollback. Parse, validation, or packaging failures leave source files unchanged. If saving fails, the command reports the source paths and the already generated package, retains the package, and returns an error.
+Source files are saved only after all package artifacts succeed. Single-file saves are atomic; creating or updating both files uses grouped publication with rollback. When neither file existed, concurrently created files are not overwritten. Parse, validation, or packaging failures leave source files unchanged. If saving fails, the command reports the source paths and the already generated package, retains the package, and returns an error.
 
 ## Package entries
 
@@ -508,7 +526,7 @@ dotnet-pack deb \
   --output:../../../.packages
 ```
 
-**Explicit selection:** with positional arguments, only the listed files or directories are included. This example matches the host pack.cmd: it selects the MIME definitions, application settings, host configuration, static files, and plugins, and uses the `~` directory alias to place the build output at the installation root:
+**Explicit selection:** with positional arguments, only the listed files or directories are included. This example matches the host [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd): it selects the MIME definitions, application settings, host configuration, static files, and plugins, and uses the `~` directory alias to place the build output at the installation root:
 
 ```bash
 dotnet-pack deb \
@@ -647,7 +665,7 @@ HTTPS requires a usable default server certificate configured in the host; the p
 
 ### Service environment variables
 
-Values of the variables listed in `--daemon-environments` are written to the generated service's `Environment=`. The Web host's `pack.cmd` uses it for `Environment` and `ASPNETCORE_ENVIRONMENT`:
+Values of the variables listed in `--daemon-environments` are written to the generated service's `Environment=`. The Web host's [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd) uses it for `Environment` and `ASPNETCORE_ENVIRONMENT`:
 
 ```bash
 dotnet-pack deb \
@@ -803,7 +821,7 @@ Matching rules:
 
 ### Packaging and installation behavior
 
-- Both files are copied unchanged into the install root's `.migration/`; the archive is not unpacked while packaging. The script has mode `0755` and the archive `0600`. Payload collisions fail packaging.
+- Both files are copied unchanged into the install root's `.migration/`; the archive is not unpacked while packaging. When run, the migrator launcher extracts the archive into a separate temporary directory, whose root directly contains the plan and executor; it does not create an additional `.migration/` layer inside the installation directory. The script has mode `0755` and the archive `0600`. Payload collisions fail packaging.
 - At installation, the generated hook runs `apply` with `/var/lib/<package-name>/packager` as the state directory; a failed migration prevents the service from starting.
 - systemd `ExecStartPre` runs `check`, which compares the package plan fingerprint with the local `ready` completion marker; it does not inspect live database or bucket state.
 - Migration also runs without a daemon; DESTDIR staging skips lifecycle hooks; uninstallation preserves migration state, databases, and buckets.
@@ -830,6 +848,8 @@ Variables load in this order; later values overwrite earlier ones, including emp
 2. System environment variables
 3. The direct `.env` file of each directory from the filesystem root down to the source directory (farthest first)
 4. Explicit command options, including extra options such as `--Environment:Production`
+
+An omitted or empty `--framework` uses a nonempty `framework` from the merged variables; a nonempty option takes precedence. If no nonempty variable is available, the existing handling remains. Whitespace-only option values keep their existing behavior.
 
 `.env` rules:
 
@@ -949,6 +969,18 @@ sudo rpm -Uvh ./.packages/zongsoft.web@1.0.0-x64.rpm
 ```
 
 Root-level entries under `/etc/` are marked as RPM configuration files.
+
+### Application metadata
+
+`--homepage` identifies the application's home page. `--manufacturer` identifies the software manufacturer, while `--maintainer` identifies the package maintainer. The variables `homepage`, `manufacturer`, and `maintainer` follow the usual defaults → environment → ancestor `.env` → explicit options order. Manufacturer values that resolve to null or an empty string use `Zongsoft`; a value consisting only of whitespace does not use the default.
+
+| Format | Homepage | Manufacturer | Maintainer |
+| --- | --- | --- | --- |
+| tar.gz | — | PAX global extended attribute `manufacturer` | — |
+| deb | `Homepage` | Custom control field `Manufacturer` | `Maintainer` |
+| rpm | `URL` (1020) | `VENDOR` (1011) | `PACKAGER` (1015) |
+
+Debian text fields follow the existing normalization rules: surrounding whitespace is trimmed, and a whitespace-only manufacturer field is omitted. Tar and RPM retain the manufacturer value. These fields are format metadata and add no installed files.
 
 ### Packager version metadata
 

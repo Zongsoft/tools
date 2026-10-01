@@ -34,6 +34,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Runtime.InteropServices;
 
@@ -74,7 +75,7 @@ partial class Package
 		{
 			var values = name switch
 			{
-				"Depends" => this.Dependencies,
+				"Depends" => GetDependencies(this.Dependencies),
 				"Provides" => this.Provides,
 				"Replaces" => this.Replaces,
 				"Breaks" => this.Breaks,
@@ -106,6 +107,49 @@ partial class Package
 			}
 
 			return text;
+		}
+
+		private static string[] GetDependencies(string[] values)
+		{
+			var result = new List<string>();
+
+			foreach(var group in Dependency.Parse(values))
+			{
+				var clauses = new List<string> { string.Empty };
+				foreach(var dependency in group)
+				{
+					var terms = GetTerms(dependency);
+					if(clauses.Count > 1024 / terms.Length)
+						throw new InvalidDataException(Properties.Resources.DependencyTooComplex_Message);
+
+					var expanded = new List<string>(clauses.Count * terms.Length);
+					foreach(var clause in clauses)
+					{
+						foreach(var term in terms)
+							expanded.Add(clause.Length == 0 ? term : clause + " | " + term);
+					}
+
+					clauses = expanded;
+				}
+
+				result.AddRange(clauses);
+			}
+
+			return result.ToArray();
+
+			static string[] GetTerms(Dependency dependency)
+			{
+				if(dependency.IsExact)
+					return [$"{dependency.Name} (= {dependency.Minimum})"];
+
+				var terms = new List<string>(2);
+				if(dependency.Minimum != null)
+					terms.Add($"{dependency.Name} ({(dependency.MinimumIncluded ? ">=" : ">>")} {dependency.Minimum})");
+				if(dependency.Maximum != null)
+					terms.Add($"{dependency.Name} ({(dependency.MaximumIncluded ? "<=" : "<<")} {dependency.Maximum})");
+
+				return terms.Count == 0 ? [dependency.Name] : terms.ToArray();
+			}
 		}
 		#endregion
 

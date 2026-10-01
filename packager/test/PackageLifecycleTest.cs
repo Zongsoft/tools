@@ -21,13 +21,24 @@ public sealed class PackageLifecycleTest
 	private const string UNINSTALLED_MARKER = "echo uninstalled-lifecycle-marker";
 
 	[Theory]
-	[InlineData("tar")]
-	[InlineData("deb")]
-	[InlineData("rpm")]
-	public void Package_Provenance_RecordsGeneratorAndPreservesApplicationMetadata(string format)
+	[InlineData("tar", null, "Zongsoft")]
+	[InlineData("deb", null, "Zongsoft")]
+	[InlineData("rpm", null, "Zongsoft")]
+	[InlineData("tar", "", "Zongsoft")]
+	[InlineData("deb", "", "Zongsoft")]
+	[InlineData("rpm", "", "Zongsoft")]
+	[InlineData("tar", "Hosting Manufacturer", "Hosting Manufacturer")]
+	[InlineData("deb", "Hosting Manufacturer", "Hosting Manufacturer")]
+	[InlineData("rpm", "Hosting Manufacturer", "Hosting Manufacturer")]
+	[InlineData("tar", "   ", "   ")]
+	[InlineData("deb", "   ", "   ")]
+	[InlineData("rpm", "   ", "   ")]
+	public void Package_Provenance_RecordsGeneratorAndPreservesApplicationMetadata(string format, string manufacturer, string expectedManufacturer)
 	{
 		using var directory = new TemporaryDirectory();
 		var variables = CreateVariables(directory.Path);
+		variables["manufacturer"] = manufacturer;
+		variables["homepage"] = "https://example.test/product";
 		var version = new Version(1, 2, 3);
 		Package package = format switch
 		{
@@ -38,6 +49,7 @@ public sealed class PackageLifecycleTest
 		package.InstallPath = INSTALL_PATH;
 		package.Maintainer = "Hosting Maintainer";
 		package.Scripts = new(":", ":", ":", ":");
+		Assert.Equal(expectedManufacturer, package.Manufacturer);
 
 		package.Pack(directory.Path, true);
 
@@ -52,6 +64,7 @@ public sealed class PackageLifecycleTest
 				{
 					var metadata = Assert.IsType<PaxGlobalExtendedAttributesTarEntry>(reader.GetNextEntry());
 					Assert.Equal(expected, metadata.GlobalExtendedAttributes["Packager"]);
+					Assert.Equal(expectedManufacturer, metadata.GlobalExtendedAttributes["manufacturer"]);
 					Assert.Null(metadata.DataStream);
 					Assert.Equal("install.sh", reader.GetNextEntry().Name);
 					Assert.Equal("uninstall.sh", reader.GetNextEntry().Name);
@@ -62,12 +75,19 @@ public sealed class PackageLifecycleTest
 				var control = PackageReader.ReadDebianControlScript(path, "control");
 				Assert.Contains($"\nPackager: {expected}\n", control);
 				Assert.Contains("\nMaintainer: Hosting Maintainer\n", control);
+				if(string.IsNullOrWhiteSpace(expectedManufacturer))
+					Assert.DoesNotContain("\nManufacturer:", control);
+				else
+					Assert.Contains($"\nManufacturer: {expectedManufacturer}\n", control);
+				Assert.Contains("\nHomepage: https://example.test/product\n", control);
 				Assert.Contains("\nVersion: 1.2.3\n", control);
 				break;
 			case "rpm":
-				var tags = PackageReader.ReadRpmStringTags(path, 1001, 1015, 1064);
+				var tags = PackageReader.ReadRpmStringTags(path, 1001, 1011, 1015, 1020, 1064);
 				Assert.Equal(expected, tags[1064]);
 				Assert.Equal("Hosting Maintainer", tags[1015]);
+				Assert.Equal(expectedManufacturer, tags[1011]);
+				Assert.Equal("https://example.test/product", tags[1020]);
 				Assert.Equal("1.2.3", tags[1001]);
 				break;
 		}

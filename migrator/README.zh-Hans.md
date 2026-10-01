@@ -78,6 +78,8 @@ dotnet-migrate --name:<名称> --platform:<平台> [选项...] <输入.migration
 
 每次调用依次加载描述符默认值、系统环境变量、从文件系统根目录到工作目录的各级直属 `.env`、显式命令选项。同名变量后加载覆盖先加载，空值也参与覆盖，名称不区分大小写。不搜索子目录，各个输入文件及版本文件的目录也不建立额外变量作用域。变量仅属于本次调用，不修改进程环境变量。
 
+`framework` 可用于变量引用。`--framework` 未指定或为空时，使用合并后变量集中的非空值；非空选项优先。变量未定义或为空、选项为纯空白时均沿用原有行为。该变量不参与原生执行器或 RID 选择。
+
 使用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) `Profile.Load` 读取 INI，支持 `#@import`。根条目保留原名，各级段落名与条目名以 `_` 拼接。例如 `[mysql]` 下的 `root_password=example` 生成 `mysql_root_password`，`[io rustfs]` 下的 `access_key=example` 生成 `io_rustfs_access_key`，根级 `environment=Development` 生成 `environment`。值按需通过 `$(name)` 或 `%name%` 展开，可用于命令选项和 `.ini` 连接参数。缺失的 `.env` 跳过，读取或解析失败终止制作。
 
 `.env` 提供共享变量，`.ini` 提供升迁连接配置。原有 `mysql.env`、`main.env` 等参数文件需要改名为 `mysql.ini`、`main.ini`，同时更新其导入路径。自动参数查找不再回退 `*.env`，显式导入沿用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 既有规则。版本与 Edition 选择遵循下述独立规则。
@@ -262,13 +264,16 @@ sql/analytics/*.sql
 | `CommandTimeout` | 全部 | `300s`，每条命令超时 |
 | `Secured` | 网络数据库 | true / false；省略行为见下表 |
 | `TrustServerCertificate` | mssql | `false`，是否信任服务器证书 |
+| `AllowPublicKeyRetrieval` | mysql | `true`，允许获取服务器 RSA 公钥，用于未开启 TLS 时的密码认证 |
 
 | Provider | UserName | Port | Bootstrap | 未指定 Secured |
 | --- | --- | --- | --- | --- |
-| mysql | root | 3306 | mysql | 驱动默认值 |
+| mysql | root | 3306 | mysql | `false`，映射 `SslMode=Disabled` |
 | postgres / postgresql | postgres | 5432 | postgres | 驱动默认值 |
 | mssql | sa | 1433 | master | 开启加密 |
 | tdengine | root | 6041 | 不指定数据库 | 普通 WebSocket |
+
+MySQL 的 `Secured=false` 映射 `SslMode=Disabled`，`Secured=true` 映射 `SslMode=Required`。省略 `Secured` 时默认 `false`，`AllowPublicKeyRetrieval` 默认 `true`，因此未开启 TLS 时也能完成密码认证，包括认证缓存为空时的 `caching_sha2_password`。两项均可显式覆盖，写入计划并参与指纹。`SslMode` 是由 `Secured` 转换得到的驱动设置，不是独立的 INI 参数。
 
 超时支持正整数秒数及 s、m 后缀，上限一天。SQLite、DuckDB provider 仅接受 Database、CommandTimeout。
 
@@ -368,7 +373,7 @@ Roles 必须已存在。MySQL 使用 `%` host，检查 SHOW GRANTS 仅包含目�
 
 ### SQL 批次预处理
 
-`MigrationLoader.Database` 由升迁制作工具调用，处理客户端分隔符并生成可以直接提交给驱动的批次。每个批次写入 `<解压目录>/.migration/.artifacts/<升迁器名称>/<序号>.sql`，顺序和 SHA-256 校验和记录在计划中。运行器按计划逐文件读取并提交预处理后的批次。SQL 语法、结构变更和业务含义仍由脚本作者负责，SQL 错误由执行时的驱动或数据库报告。
+`MigrationLoader.Database` 由升迁制作工具调用，处理客户端分隔符并生成可以直接提交给驱动的批次。每个批次写入 `<解压目录>/.artifacts/<升迁器名称>/<序号>.sql`，顺序和 SHA-256 校验和记录在计划中。运行器按计划逐文件读取并提交预处理后的批次。SQL 语法、结构变更和业务含义仍由脚本作者负责，SQL 错误由执行时的驱动或数据库报告。
 
 | 升迁器 | 提交方式 |
 | --- | --- |
@@ -398,7 +403,7 @@ packages/zongsoft(migrate)@1.0.0_linux-x64.tar.gz
 packages/zongsoft(migrate)@1.0.0_linux-x64.sh
 ```
 
-归档包含 .migration/migration.json、.migration/.artifacts/ 下的 SQL 批次和解析后的升迁数据。两个输出先暂存再发布；替换已有文件须指定 --overwrite，发布失败会恢复原输出。
+归档根目录包含 `migration.json`、`id`、`migrate.sh`（Windows 为 `migrate.cmd`）、原生执行器及其依赖；SQL 批次位于 `.artifacts/<provider>/`。外部不再套 `.migration/` 目录。启动脚本直接解压到独立临时目录，执行结束后清理；持久状态目录独立于归档内部布局。两个输出先暂存再发布；替换已有文件须指定 --overwrite，发布失败会恢复原输出。
 
 > 🚨 注意：归档包含从 `.ini` 展开的数据库和 Amazon S3 凭据。请限制升迁包的查看、存储和下载权限。
 
@@ -513,7 +518,7 @@ Steps 不再保存独立 Id：数组位置决定执行顺序，日志和状态�
 | `Databases[].Users[].Privileges` / `Roles` | 字符串数组 | 规范化、去重并包含 Permission 预设的有效统一能力，以及已有角色名。 |
 | `Databases[].Users[].Host` | 字符串? | MySQL 账号主机，默认 `%`；其他 provider 省略。 |
 | `Steps[].Scripts` | 数组 | 数据库任务的有序批次列表；Amazon S3 任务为 `[]`。 |
-| `Steps[].Scripts[].Path` | 字符串 | 相对于升迁归档解压根目录的批次路径，例如 `.migration/.artifacts/mysql/1.sql`。同类任务共享目录和连续编号。 |
+| `Steps[].Scripts[].Path` | 字符串 | 相对于升迁归档解压根目录的批次路径，例如 `.artifacts/mysql/1.sql`。同类任务共享目录和连续编号。 |
 | `Steps[].Scripts[].Checksum` | 字符串 | 包内批次实际 UTF-8 字节的 SHA-256，使用大写十六进制；执行前校验内容完整性。 |
 | `Steps[].Buckets` | 数组 | Amazon S3 任务的桶描述列表；数据库任务为 `[]`。 |
 | `Steps[].Buckets[].Name` | 字符串 | Bucket 名称，例如 hosting 的 `attachments`。 |
@@ -526,6 +531,6 @@ Steps 不再保存独立 Id：数组位置决定执行顺序，日志和状态�
 
 省略的桶配置不发送对应配置请求。`Script.Source` 和 `Script.Content` 只供升迁生成端使用，不写入 JSON；原始 INI/ENV 路径和本机 SQL 源路径也不作为协议字段保存。连接参数可能包含密码或密钥，文件权限为 `0600`。
 
-计划指纹不保存在 JSON 内：升迁制作工具对模型的无缩进 JSON UTF-8 字节计算 SHA-256，将大写十六进制结果写入 `.migration/id`；运行器全部执行成功后写入状态目录的 `ready`。它不是对带缩进的 `migration.json` 文件直接计算摘要。有效数据库设置及用户、参数、脚本路径、校验和、桶配置以及数组顺序均参与指纹；缩进和文件换行不参与。指纹用于当前安装计划的完成判断，不是签名或逐脚本执行历史。
+计划指纹不保存在 JSON 内：升迁制作工具对模型的无缩进 JSON UTF-8 字节计算 SHA-256，将大写十六进制结果写入 `id`；运行器全部执行成功后写入状态目录的 `ready`。它不是对带缩进的 `migration.json` 文件直接计算摘要。有效数据库设置及用户、参数、脚本路径、校验和、桶配置以及数组顺序均参与指纹；缩进和文件换行不参与。指纹用于当前安装计划的完成判断，不是签名或逐脚本执行历史。
 
 </details>

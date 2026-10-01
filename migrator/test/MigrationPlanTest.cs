@@ -18,7 +18,7 @@ public sealed class MigrationPlanTest
 {
 	#region 常量定义
 	// This literal is the portable wire representation, independent of serializer options and platform newlines.
-	private const string CANONICAL_JSON = "{\"Name\":\"zongsoft.web\",\"Version\":\"1.1.0\",\"Runtime\":\"linux-x64\",\"Steps\":[{\"Provider\":\"sqlite\",\"DatabaseIndex\":0,\"Settings\":{},\"Scripts\":[{\"Path\":\".migration/.artifacts/schema.sql\",\"Checksum\":\"17DB4FD369EDB9244B9F91D9AEED145C3D04AD8BA6E95D06247F07A63527D11A\"}],\"Buckets\":[]}],\"Databases\":[{\"Name\":\"hosting\",\"Provider\":\"sqlite\",\"Settings\":{\"CommandTimeout\":\"300s\"},\"Options\":{\"Path\":\"/var/lib/zongsoft/hosting.db\",\"CommandTimeout\":\"300s\",\"Charset\":\"UTF-8\"},\"Users\":[]}]}";
+	private const string CANONICAL_JSON = "{\"Name\":\"zongsoft.web\",\"Version\":\"1.1.0\",\"Runtime\":\"linux-x64\",\"Steps\":[{\"Provider\":\"sqlite\",\"DatabaseIndex\":0,\"Settings\":{},\"Scripts\":[{\"Path\":\".artifacts/schema.sql\",\"Checksum\":\"17DB4FD369EDB9244B9F91D9AEED145C3D04AD8BA6E95D06247F07A63527D11A\"}],\"Buckets\":[]}],\"Databases\":[{\"Name\":\"hosting\",\"Provider\":\"sqlite\",\"Settings\":{\"CommandTimeout\":\"300s\"},\"Options\":{\"Path\":\"/var/lib/zongsoft/hosting.db\",\"CommandTimeout\":\"300s\",\"Charset\":\"UTF-8\"},\"Users\":[]}]}";
 	#endregion
 
 	#region 测试方法
@@ -31,7 +31,7 @@ public sealed class MigrationPlanTest
 
 		if(plan.Runtime == "win-x64")
 			plan.Databases[0].Options["Path"] = "C:/Zongsoft/must-not-run.db";
-		var file = directory.Write(".migration/migration.json", plan.Serialize());
+		var file = directory.Write("migration.json", plan.Serialize());
 		var state = Path.Combine(directory.Path, "state");
 
 		var error = await RunAsync("apply", file, state, 1);
@@ -49,7 +49,7 @@ public sealed class MigrationPlanTest
 
 		var fingerprint = plan.Fingerprint();
 
-		Assert.Equal("4D98AFD0485B59EC20EEC62A25999249C4B5A17BBAA5BB6DE4000F911DB06C1B", fingerprint);
+		Assert.Equal("E7BBE5206AEE37071193944D4EB5977A66BA509214D3997BFD70A498241EF796", fingerprint);
 		Assert.Equal("SELECT 1;", File.ReadAllText(plan.Steps[0].Scripts[0].Source));
 		Assert.DoesNotContain("\r", CANONICAL_JSON);
 		Assert.DoesNotContain("\n", CANONICAL_JSON);
@@ -81,7 +81,7 @@ public sealed class MigrationPlanTest
 		task.Provider = "postgres";
 		plan.Databases[0] = new() { Provider = "postgres", Name = "hosting", Settings = new(StringComparer.OrdinalIgnoreCase) { ["Server"] = "localhost", ["UserName"] = "operator", ["Password"] = "first\r\nsecond" } };
 		plan.Validate();
-		var file = directory.Write(".migration/migration.json", plan.Serialize());
+		var file = directory.Write("migration.json", plan.Serialize());
 		var loaded = MigrationPlan.Load(file);
 		var original = loaded.Fingerprint();
 
@@ -187,14 +187,14 @@ public sealed class MigrationPlanTest
 		var plan = Plan(directory);
 		plan.Runtime = MigrationTestDirectory.CurrentRuntime;
 		plan.Databases[0].Options["Path"] = Path.Combine(directory.Path, "hosting.db");
-		plan.Steps[0].Scripts.Add(directory.Script(".migration/.artifacts/seed.sql", "INSERT INTO samples VALUES (1);"));
+		plan.Steps[0].Scripts.Add(directory.Script(".artifacts/seed.sql", "INSERT INTO samples VALUES (1);"));
 		plan.Steps.Add(new()
 		{
 			Provider = "amazon.s3",
 			Settings = new(StringComparer.OrdinalIgnoreCase) { ["Server"] = "http://localhost:9000", ["Region"] = "us-east-1", ["AccessKey"] = "test", ["SecretKey"] = "test;value=retained" },
 			Buckets = [new() { Name = "attachments", Public = true }, new() { Name = "archives", Public = false }],
 		});
-		var file = directory.Write(".migration/migration.json", plan.Serialize());
+		var file = directory.Write("migration.json", plan.Serialize());
 
 		var state = Path.Combine(directory.Path, "state");
 		directory.Write("state/ready", plan.Fingerprint());
@@ -203,7 +203,7 @@ public sealed class MigrationPlanTest
 
 		Assert.DoesNotContain("Source", File.ReadAllText(file));
 		plan.Steps.Reverse();
-		directory.Write(".migration/migration.json", plan.Serialize());
+		directory.Write("migration.json", plan.Serialize());
 		await RunAsync("check", file, state, 1);
 	}
 
@@ -237,11 +237,11 @@ public sealed class MigrationPlanTest
 		var plan = new MigrationLoader(null).Load("input/db.migration;input/other.migration", directory.Path, "zongsoft.daemon", "1.1.0", MigrationTestDirectory.CurrentRuntime);
 		Assert.Equal(2, plan.Steps.Count);
 		var scripts = plan.Steps[0].Scripts;
-		Assert.Equal(".migration/.artifacts/sqlite/4.sql", Assert.Single(plan.Steps[1].Scripts).Path);
-		Assert.Equal(new[] { ".migration/.artifacts/sqlite/1.sql", ".migration/.artifacts/sqlite/2.sql", ".migration/.artifacts/sqlite/3.sql" }, scripts.Select(script => script.Path));
+		Assert.Equal(".artifacts/sqlite/4.sql", Assert.Single(plan.Steps[1].Scripts).Path);
+		Assert.Equal(new[] { ".artifacts/sqlite/1.sql", ".artifacts/sqlite/2.sql", ".artifacts/sqlite/3.sql" }, scripts.Select(script => script.Path));
 		foreach(var script in plan.Steps.SelectMany(task => task.Scripts))
 			directory.Write(script.Path, script.Content);
-		var file = directory.Write(".migration/migration.json", plan.Serialize());
+		var file = directory.Write("migration.json", plan.Serialize());
 		var state = Path.Combine(directory.Path, "state");
 
 		await RunAsync("apply", file, state, 0);
@@ -276,13 +276,13 @@ public sealed class MigrationPlanTest
 		}
 		var plan = new MigrationLoader(null).Load("db.migration", directory.Path, "test", "1.0.0", MigrationTestDirectory.CurrentRuntime);
 		var scripts = Assert.Single(plan.Steps).Scripts;
-		Assert.Equal(Enumerable.Range(1, 11).Select(number => $".migration/.artifacts/sqlite/{number}.sql"), scripts.Select(script => script.Path));
+		Assert.Equal(Enumerable.Range(1, 11).Select(number => $".artifacts/sqlite/{number}.sql"), scripts.Select(script => script.Path));
 		Assert.Single(plan.Databases);
 		Assert.Equal(0, Assert.Single(plan.Steps).DatabaseIndex);
 		Assert.NotEqual(scripts.Select(script => script.Path), scripts.Select(script => script.Path).Order(StringComparer.Ordinal));
 		foreach(var script in scripts)
 			directory.Write(script.Path, script.Content);
-		var file = directory.Write(".migration/migration.json", plan.Serialize());
+		var file = directory.Write("migration.json", plan.Serialize());
 		var state = Path.Combine(directory.Path, "state");
 
 		await RunAsync("apply", file, state, 0);
@@ -336,7 +336,7 @@ public sealed class MigrationPlanTest
 		Name = "zongsoft.web",
 		Version = "1.1.0",
 		Runtime = "linux-x64",
-		Steps = [new() { Provider = "sqlite", DatabaseIndex = 0, Scripts = [directory.Script(".migration/.artifacts/schema.sql", "SELECT 1;")] }],
+		Steps = [new() { Provider = "sqlite", DatabaseIndex = 0, Scripts = [directory.Script(".artifacts/schema.sql", "SELECT 1;")] }],
 		Databases = [new() { Provider = "sqlite", Name = "hosting", Settings = new() { ["CommandTimeout"] = "300s" }, Options = new() { ["Path"] = "/var/lib/zongsoft/hosting.db", ["CommandTimeout"] = "300s", ["Charset"] = "UTF-8" } }],
 	};
 	#endregion

@@ -57,11 +57,12 @@ namespace Zongsoft.Tools.Packager;
 [CommandOption(MIGRATOR_OPTION, typeof(string))]
 [CommandOption(WEB_OPTION, typeof(string))]
 [CommandOption(OVERWRITE_OPTION, typeof(string), "False")]
-[CommandOption(URL_OPTION, typeof(string), DEFAULT_URL)]
+[CommandOption(HOMEPAGE_OPTION, typeof(string), DEFAULT_HOMEPAGE)]
 [CommandOption(TITLE_OPTION, typeof(string))]
 [CommandOption(LICENSE_OPTION, typeof(string))]
 [CommandOption(CATEGORY_OPTION, typeof(string))]
 [CommandOption(MAINTAINER_OPTION, typeof(string), DEFAULT_MAINTAINER)]
+[CommandOption(MANUFACTURER_OPTION, typeof(string), Variables.DEFAULT_MANUFACTURER)]
 [CommandOption(SUMMARY_OPTION, typeof(string))]
 [CommandOption(DESCRIPTION_OPTION, typeof(string))]
 [CommandOption(DEPENDENCIES_OPTION, typeof(string))]
@@ -96,10 +97,11 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	protected const string ARCHITECTURE_OPTION = Variables.ARCHITECTURE;
 	protected const string SUMMARY_OPTION = Variables.SUMMARY;
 	protected const string DESCRIPTION_OPTION = Variables.DESCRIPTION;
-	protected const string URL_OPTION = Variables.URL;
+	protected const string HOMEPAGE_OPTION = Variables.HOMEPAGE;
 	protected const string LICENSE_OPTION = Variables.LICENSE;
 	protected const string CATEGORY_OPTION = Variables.CATEGORY;
 	protected const string MAINTAINER_OPTION = Variables.MAINTAINER;
+	protected const string MANUFACTURER_OPTION = Variables.MANUFACTURER;
 	protected const string DEPENDENCIES_OPTION = Variables.DEPENDENCIES;
 	protected const string EXCLUDE_OPTION = Variables.EXCLUDE;
 	protected const string MIGRATOR_OPTION = "migrator";
@@ -123,8 +125,8 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	protected const string POSTUNINSTALLED_OPTION = Variables.ScriptVariable.POSTUNINSTALLED;
 
 	private const string DEFAULT_COMPILATION = "Release";
-	private const string DEFAULT_MAINTAINER = "Zongsoft Studio <zongsoft@gmail.com>";
-	private const string DEFAULT_URL = "https://github.com/Zongsoft";
+	private const string DEFAULT_MAINTAINER = "Zongsoft";
+	private const string DEFAULT_HOMEPAGE = "https://github.com/Zongsoft";
 	#endregion
 
 	#region 执行方法

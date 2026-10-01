@@ -80,7 +80,7 @@ flowchart TD
     L --> V["Replace installation root .version with memory entry"]
     V --> I["Call package.Pack(output, overwrite)"]
     I --> J["Generator stages and commits package output"]
-    J --> S["Save source .edition or .version; create both if absent"]
+    J --> S["Save both source files if .edition exists; otherwise save .version or create both"]
     S --> OK["Report success"]
 ```
 
@@ -103,9 +103,9 @@ These options are split on commas or semicolons and written into the RPM metadat
 
 Manifest selection is explicit nonblank Edition, then Current, then the sole Edition. Multiple Editions without a selection fail; no named Editions means the top-level version. Explicit selection must exist and retains canonical spelling. Identifier fallback allows an explicit Edition to replace or add the identifier's Edition. Source names must match explicit names case-insensitively; the explicit version overrides the selected nonzero version. Identity options alone determine identity, with environment and `.env` available only through explicit variable references.
 
-The loaded manifest is updated in memory: replace the selected Edition in place, then set Current to it. Other entries, order and [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core)'s comment/blank-line layout survive. The save content is prepared before packaging; `Save(TextWriter)` receives a UTF-8-without-BOM writer with CRLF. Identifier bytes come directly from `ApplicationIdentifier.Save(Stream)`, with no trailing newline.
+The loaded manifest is updated in memory: replace the selected Edition in place, then set Current to it. Other entries, order and [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core)'s comment/blank-line layout survive. The save content is prepared before packaging; `Save(TextWriter)` receives a UTF-8-without-BOM writer with CRLF. Identifier bytes come from `ApplicationIdentifier.Save(Stream)`. Reading uses `ApplicationIdentifier.Load`, which accepts identifiers with or without a trailing LF or CRLF; validation checks the parsed identity rather than trailing newline bytes.
 
-After all package output commits, an existing manifest is atomically replaced without updating any companion identifier; identifier-only input updates only `.version`. With neither input, valid explicit name/version are required and both files are staged with `ArtifactPublisher` and committed together without overwriting concurrently created files. Failures restore the pair. Source save failure retains the package and reports the affected paths; parse, validation and package failures never save source files.
+After all package output commits, manifest input writes both `.edition` and `.version` through `ArtifactPublisher` as a group, replacing any existing identifier or creating it if missing. The identifier records the final selected name, Edition and version. Identifier-only input atomically updates only `.version`. With neither input, valid explicit name/version are required and both files are staged and committed together without overwriting concurrently created files. Failures restore the pair. Source save failure retains the package and reports the affected paths; parse, validation and package failures never save source files.
 
 `EntryCollection.Load` excludes the direct source `.edition`, including explicit aliases. File entries targeting the installation-root `.edition` are omitted too; other subdirectory files retain ordinary selection rules. `SetVersion` writes a unique installation-root `.version` memory entry in mode `0644`, replaces same-target ordinary and rooted entries, and bypasses exclusions. All encoders and RPM digests use `Entry.OpenRead()`; nested `.version` files remain ordinary payload.
 
@@ -130,7 +130,7 @@ Common optional settings:
 | `--output` | `source` | Always an output directory; relative paths use `source`. A filename cannot be specified. |
 | `--exclude` | Empty | Comma- or semicolon-separated patterns skipped during entry collection. |
 | `--edition` | Current or the sole Edition | Product Edition, included in the package name. |
-| `--framework` | Empty | Optional .NET target framework used to locate the host under `bin/<compilation>/<framework>`. |
+| `--framework` | `framework` variable or empty | Optional .NET target framework used to locate the host under `bin/<compilation>/<framework>`; omitted or empty options use the merged variable. |
 | `--compilation` | `Release` | Optional .NET build configuration used for that host lookup and available as a variable. |
 | `--architecture` | `x64` | Target architecture. |
 | `--overwrite` | `false` | Replace existing output files. |
@@ -138,11 +138,12 @@ Common optional settings:
 | `--title` | Empty | Human-readable title. |
 | `--summary` | Empty | Short description or file path. |
 | `--description` | Empty | Long description or file path. |
-| `--url` | `https://github.com/Zongsoft` | Project homepage. |
+| `--homepage` | `https://github.com/Zongsoft` | Project homepage. |
 | `--license` | Empty | License text. |
 | `--category` | Format default | Debian `Section` or RPM `Group`. |
-| `--maintainer` | `Zongsoft Studio <zongsoft@gmail.com>` | Maintainer/vendor. |
-| `--dependencies` | Empty | Dependency list. |
+| `--maintainer` | `Zongsoft` | Package maintainer. |
+| `--manufacturer` | `Zongsoft` | Software manufacturer; missing, null, and empty values use the default, but whitespace alone does not. |
+| `--dependencies` | Empty | Uniform `name[:range]` dependency list; interval syntax with `[v)` shorthand and `|` alternatives. |
 
 Systemd and lifecycle options:
 
@@ -165,6 +166,8 @@ Systemd and lifecycle options:
 `PackCommand<TPackage>.GetVariables(context, directory)` loads descriptor defaults, environment variables, ancestor `.env` files for the supplied directory, and explicit command options, including extra options. Omitting `directory` skips `.env` loading for the initial source resolution. After verifying and resolving the source directory to an absolute path, variables are reloaded and source is fixed; `.env` does not determine source retroactively. Names are case-insensitive. Precedence is explicit options > nearer `.env` > farther `.env` > environment > defaults.
 
 Shared `Utility.LoadEnvironmentVariables` reads each immediate `.env` from the filesystem root down to source, without searching child directories. `Profile.Load` preserves [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) empty-value and import semantics; section levels and entry names join with underscores. Read/parse failures stop packaging; only missing files are skipped. Process environment variables are not changed.
+
+`Variables.From` declares `FRAMEWORK` in a case-insensitive set passed as `fallbackOptions` to shared `Utility.CreateVariables`. Both source bootstrap and final loading apply the rule directly in the existing option merge loop: only a declared option with a raw null/empty value preserves an existing nonempty variable. Without a nonempty fallback, the original assignment remains. Whitespace values, nonempty expressions that expand to empty, and nearer `.env` values that clear earlier values keep their existing behavior. This changes no source lookup scope or framework validation.
 
 `PackCommand` creates an invocation-local `Variables` view and passes it to packages, scripts, and text sources. It keeps no process-wide variable state. References expand recursively when accessed; unused unknown references do not prevent packaging. Unknown variables, cycles, and expansion deeper than 64 levels fail with a diagnostic naming the variable. Expansion itself does not read files.
 
@@ -229,8 +232,9 @@ The abstract `Package` class holds metadata shared by all formats:
 - `Summary`
 - `Description`
 - `Maintainer`
+- `Manufacturer`
 - `License`
-- `Url`
+- `Homepage`
 - `Category`
 - `InstallPath`
 - `Dependencies`
@@ -515,6 +519,12 @@ Cleanup fragments are also generated when the new package has no Web result, so 
 Tests cover declarations/models, native output, actual three-format archive decoding and isolated Shell doubles. Shell fixtures replace system paths with temporary directories and use fake nginx/systemctl commands, without installing packages or touching real services. These tests do not establish real installation validation; target Linux, Nginx modules, certificate loading, and reload behavior require an isolated environment with actual dependencies. See the [Web configuration guide](web.md) for configuration contracts, module requirements, and deployment behavior.
 
 
+## Application metadata
+
+The option and variable name for the home page is `homepage`; `Package.Homepage` supplies Debian `Homepage` and RPM `URL` (1020). `manufacturer` supplies `Package.Manufacturer`, with the shared default `Zongsoft` when absent, null, or empty after expansion. The accessor preserves literal whitespace before the normalizer can turn it into an empty string. The default for the `maintainer` option is also `Zongsoft`; the two values remain independent.
+
+Tar writes manufacturer as the PAX global attribute `manufacturer`, Debian writes the custom control field `Manufacturer`, and RPM writes the standard `VENDOR` string tag (1011). Debian keeps its existing text normalization, including omission of a whitespace-only manufacturer field. These fields add no payload entries. See [Debian user-defined fields](https://www.debian.org/doc/debian-policy/ch-controlfields.html#user-defined-fields) and the [RPM tag reference](https://rpm.org/docs/latest/manual/tags.html).
+
 ## Packager version metadata
 
 Each package records the generator identity, logically `Packager:Zongsoft.Tools.Packager@<assembly-version>`. The value is `assembly-name@version`, read from the packager assembly independently of the host application version. No additional option or migration configuration is required.
@@ -705,7 +715,8 @@ Priority: optional
 Architecture: <debian-architecture>
 Installed-Size: <payload-size-in-KiB>
 Maintainer: <maintainer>
-Homepage: <url>
+Manufacturer: <manufacturer>
+Homepage: <homepage>
 License: <license>
 Depends: <dependencies>
 Description: <summary-or-title-or-name>
@@ -720,7 +731,7 @@ Details:
 - The first `Description` line is the short description.
 - Every long-description line starts with one space.
 - Blank lines become ` .`.
-- `License` and `Packager` are additional fields. `Packager`, application `Version`, and `Maintainer` hold distinct information.
+- `License`, `Manufacturer`, and `Packager` are additional fields. `Packager`, application `Version`, and `Maintainer` hold distinct information.
 
 ### Debian architecture mapping
 
@@ -872,7 +883,7 @@ Main contents:
 
 - Package name, version, and release.
 - Summary, description, build time, and build host.
-- Package size, license, maintainer, category, and URL.
+- Package size, license, manufacturer, maintainer, category, and homepage.
 - OS and architecture.
 - Installation/uninstallation scripts.
 - File sizes, modes, mtimes, digests, usernames, group names, and configuration flags.
@@ -892,6 +903,7 @@ Common tags:
 | `1006` | Build time. |
 | `1007` | Build host. |
 | `1009` | Installed size. |
+| `1011` | Manufacturer/vendor. |
 | `1014` | License. |
 | `1015` | Maintainer/packager. |
 | `1016` | Group. |
@@ -929,7 +941,7 @@ Common tags:
 
 ### Requires, Provides, and Conflicts
 
-Supported relationship expressions:
+Requires uses the uniform dependency model described below. Provides and Conflicts retain these native relationship expressions:
 
 ```text
 name
@@ -959,6 +971,8 @@ rpmlib(CompressedFileNames) <= 3.0.4-1
 rpmlib(FileDigests) <= 4.6.0-1
 rpmlib(PayloadFilesHavePrefix) <= 4.0-1
 ```
+
+Rich Requires also add `rpmlib(RichDependencies) <= 4.12.0-1`. The complete parenthesized expression is stored as the requirement name, with flags `0` and an empty version. Feature requirements use `RPMLIB | LESS | EQUAL`; endpoints containing `~` or `^` additionally declare `TildeInVersions <= 4.10.0-1` or `CaretInVersions <= 4.15.0-1`. These are capability versions, not RPM product versions.
 
 Default Provides:
 
@@ -1014,9 +1028,19 @@ Payload-relative paths use source. Each pattern's results are sorted Ordinal by 
 
 Debian control/data gzip tars use separate controlled temporary files, and ar streams them using actual lengths. RPM's uncompressed cpio and gzip payload use temporary files; compressed-payload SHA-256 and main-header + payload MD5 are computed through streams. Headers and payload are then written sequentially, avoiding full-package byte arrays. Small version content and header metadata remain in memory: metadata allocation grows with entry count, while payload allocation does not grow with file bytes. Temporary files use exclusive CreateNew and DeleteOnClose, with Unix mode 0600, and are released on success or failure. Sufficient temporary disk space is required; RPM peak usage includes both raw and compressed payloads. Existing integer size limits in RPM fields still apply.
 
+## Uniform dependencies
+
+`Variables.Dependencies` expands variables before `Dependency.Split` separates top-level comma/semicolon groups. Bracketed intervals and RPM capability parentheses retain their internal punctuation. `Package.Dependencies` remains a string array; both encoders use `Dependency.Parse` to obtain AND groups of OR alternatives, with a name, original minimum/maximum strings, and inclusion flags for each alternative.
+
+The grammar is `name[:range]`: a name alone is unversioned; a digit-starting bare version is an inclusive lower bound. Standard NuGet-style intervals are supported, plus `[v)` as an alias for `[v,)`. `[v]` is exact; `(v,)` is an exclusive lower bound, `(,v]` / `(,v)` are upper bounds, and `(,)` is unrestricted. Missing endpoints must use an open boundary. Package-name qualifiers such as `libc6:any` remain names; use brackets around native versions starting with letters. Versions retain native epoch, revision, and comparison semantics; no NuGet normalization, sorting, floating-version resolution, or contradictory-range merging is performed. Old comparison expressions, invalid brackets, floating `*`, empty alternatives, and control characters fail with localized diagnostics. Blank list items and repeated constraints retain the existing list behavior.
+
+Debian converts an interval to one or two native comparisons, mapping strict bounds to `>>` / `<<`. It distributes OR across the alternatives' comparisons: `foo:[1,2) | bar:[3)` becomes `foo (>= 1) | bar (>= 3), foo (<< 2) | bar (>= 3)`. Expansion is limited to 1024 clauses per input group and fails before publishing an artifact when exceeded. Final names and versions pass the existing Debian relationship validator.
+
+RPM uses ordinary flags/name/version entries for single comparisons. A finite range becomes `(foo >= 1 with foo < 2)`; alternatives become `((foo >= 1 with foo < 2) or bar >= 3)`. The `with` operator requires one package to satisfy both endpoints. Alternatives require RPM 4.13+; `with` requires RPM 4.14+. Debian has no corresponding single-provider operator: its virtual dependencies can be satisfied by different providers for each endpoint. Both formats retain their native version comparison and provider semantics; only the input notation is shared. See [Debian relationships](https://www.debian.org/doc/debian-policy/ch-relationships.html) and [RPM boolean dependencies](https://rpm.org/docs/latest/manual/boolean_dependencies).
+
 ## Debian relationship fields
 
-`DebCommand` exposes `--provides`, `--replaces`, `--breaks`, `--conflicts`, `--recommends`, and `--suggests`, mapped to capitalized control fields. `--dependencies` writes Depends: for example, `--dependencies:"aspnetcore-runtime-10.0 (>= 10.0)"` produces `Depends: aspnetcore-runtime-10.0 (>= 10.0)`. RPM expressions without parentheses cannot be copied directly into Debian options. `Package.Deb` owns these rules and does not reuse the RPM parser. Lists split on commas or semicolons; relationships use parentheses, as in `name (>= version)`, with `<< <= = >= >>`. Depends/Recommends/Suggests allow `|` alternatives; Provides permits only `=` for version relationships. Empty fields are omitted. Invalid names, relationships, newlines, and NUL are rejected; binary control fields do not accept source-package architecture restrictions or build-profile expressions. See [Debian Policy relationship fields](https://www.debian.org/doc/debian-policy/ch-relationships.html).
+`DebCommand` exposes `--provides`, `--replaces`, `--breaks`, `--conflicts`, `--recommends`, and `--suggests`, mapped to capitalized control fields. These options keep native syntax: lists split on commas or semicolons, and relationships use parentheses as in `name (>= version)`, with `<< <= = >= >>`. Recommends/Suggests allow `|` alternatives; Provides permits only `=` for version relationships. `--dependencies` instead uses the uniform parser: `--dependencies:"aspnetcore-runtime-10.0:[10.0)"` produces `Depends: aspnetcore-runtime-10.0 (>= 10.0)`. `Package.Deb` formats the parsed model and validates the resulting fields independently of RPM. Empty fields are omitted. Invalid names, relationships, newlines, and NUL are rejected; binary control fields do not accept source-package architecture restrictions or build-profile expressions. See [Debian Policy relationship fields](https://www.debian.org/doc/debian-policy/ch-relationships.html).
 
 ## Current implementation limits
 
@@ -1046,7 +1070,7 @@ zongsoft-enterprise(migrate)@1.0.0_linux-x64.sh
 
 The migration name may differ from the host name, but Edition, version, and RID must match. Search continues to the next location only when both archive and script are absent. A partial pair fails immediately with the missing file's full path. A complete pair is immediately validated for archive metadata and RID; invalid metadata stops lookup. Both files must come from the same directory: no cross-directory pairing or substitution of versions, Editions, or architectures. When lookup reaches the root without a match, the diagnostic separates expected filenames from searched directories and lists every directory and `.migration/` child on individually indented lines in search order. Shared `Utility.Indent` uses platform line endings and preserves nested indentation. An omitted, empty, or whitespace-only option disables migration integration and attaches no artifacts.
 
-The unchanged files enter `.migration/` under the installation root without archive extraction; the script uses 0755 and archive 0600. Payload target conflicts fail. Installation calls the launcher with `apply` and `/var/lib/<package-name>/packager`; failure prevents startup. Systemd `ExecStartPre` calls the same launcher with `check`, which only compares completion markers without extraction or service connections. Migration runs even without a daemon; DESTDIR staging skips hooks. Uninstallation preserves state and databases/buckets. Targets need POSIX sh, tar/gzip, cmp, and the executor's system libraries; see the migration guide.
+The unchanged files enter `.migration/` under the installation root without archive extraction; the script uses 0755 and archive 0600. At execution time the migrator launcher creates a separate temporary directory, extracts the archive contents directly into its root and cleans it up afterward; it does not add another `.migration/` layer to the installation directory. Payload target conflicts fail. Installation calls the launcher with `apply` and `/var/lib/<package-name>/packager`; failure prevents startup. Systemd `ExecStartPre` calls the same launcher with `check`, which only compares completion markers without extraction or service connections. Migration runs even without a daemon; DESTDIR staging skips hooks. Uninstallation preserves state and databases/buckets. Targets need POSIX sh, tar/gzip, cmp, and the executor's system libraries; see the migration guide.
 
 `Migrator.Load` separates location from archive validation. Private `Locate` follows `DirectoryInfo.Parent`, includes the root, and records each direct directory followed by its `.migration/` child in search order. After selecting a same-directory pair, `Validate` checks PAX metadata. Explicit directories are checked once without an implicit child lookup. All lookup and validation precede artifact attachment and package generation.
 
@@ -1056,7 +1080,7 @@ Cake's `--edition` selects the same configuration for restore, build, tests, and
 
 `VersionFileTest`, `PackageVersionTest`, and `PackageArtifactTest` cover source versions and memory entries.
 
-`Package_Provenance_RecordsGeneratorAndPreservesApplicationMetadata` covers generator identity, application version, and maintainer fields in all three formats.
+`Package_Provenance_RecordsGeneratorAndPreservesApplicationMetadata` covers generator identity, application version, manufacturer values and defaults in all three formats, and independent homepage and maintainer fields in Debian/RPM.
 
 Use packages produced by the [README quick start](../README.md#quick-start). The following commands run from the hosting checkout root and only inspect package contents. For installation and uninstallation, see [README package formats](../README.md#package-formats).
 

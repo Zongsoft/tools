@@ -233,6 +233,7 @@ public sealed class VersionFileTest
 		Assert.Null(saved.Version);
 		Assert.Equal(new[] { "Community", "Professional", "Enterprise" }, saved.Editions.Select(edition => edition.Name));
 		Assert.Equal(new[] { new Version(1, 0, 0), new Version(2, 5, 0), new Version(3, 0, 1) }, saved.Editions.Select(edition => edition.Version));
+		Assert.Equal(file.Identifier, ApplicationIdentifier.Load(Path.Combine(directory.Path, ".version")));
 		Assert.Equal(Encoding.UTF8.GetBytes("Zongsoft.Hosting.Web=Professional\r\n\r\n[Community]\r\n1.0.0\r\n\r\n[Professional]\r\n2.5.0\r\n\r\n[Enterprise]\r\n3.0.1\r\n"), File.ReadAllBytes(path));
 	}
 
@@ -247,6 +248,50 @@ public sealed class VersionFileTest
 
 		Assert.Equal(new Version(2, 0, 1), ApplicationManifest.Load(path).Version);
 		Assert.Contains("hosting", File.ReadAllText(path));
+		Assert.Equal(file.Identifier, ApplicationIdentifier.Load(Path.Combine(directory.Path, ".version")));
+	}
+
+	[Fact]
+	public void Save_ManifestIdentifierConflict_PreservesManifestAndPackage()
+	{
+		using var directory = new MigrationTestDirectory();
+		var path = directory.Write(".edition", Editions());
+		var original = File.ReadAllBytes(path);
+		var file = PackCommand<Package.Tar>.VersionFile.Load(directory.Path, null, "Community", new Version(2, 0, 0));
+		var conflict = Path.Combine(directory.Path, ".version");
+		Directory.CreateDirectory(conflict);
+		var package = directory.Write("host.tar.gz", "retained package marker");
+
+		var error = Assert.Throws<IOException>(() => file.Save(package));
+
+		Assert.Contains(path, error.Message);
+		Assert.Contains(conflict, error.Message);
+		Assert.Contains(package, error.Message);
+		Assert.Equal(original, File.ReadAllBytes(path));
+		Assert.True(Directory.Exists(conflict));
+		Assert.Equal("retained package marker", File.ReadAllText(package));
+		Assert.Empty(Directory.GetDirectories(directory.Path, ".zongsoft-*"));
+	}
+
+	[Fact]
+	public void Save_LockedIdentifier_RollsBackManifestAndPreservesPackage()
+	{
+		Assert.SkipWhen(!OperatingSystem.IsWindows(), "File sharing prevents replacement on Windows.");
+
+		using var directory = new MigrationTestDirectory();
+		var path = directory.Write(".edition", Editions());
+		var identifier = directory.Write(".version", "different-Legacy@8.0.0\n");
+		var originalManifest = File.ReadAllBytes(path);
+		var originalIdentifier = File.ReadAllBytes(identifier);
+		var file = PackCommand<Package.Tar>.VersionFile.Load(directory.Path, null, "Community", new Version(2, 0, 0));
+		var package = directory.Write("host.tar.gz", "retained package marker");
+		using var locked = File.Open(identifier, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+		Assert.Throws<IOException>(() => file.Save(package));
+		Assert.Equal(originalManifest, File.ReadAllBytes(path));
+		Assert.Equal(originalIdentifier, File.ReadAllBytes(identifier));
+		Assert.Equal("retained package marker", File.ReadAllText(package));
+		Assert.Empty(Directory.GetDirectories(directory.Path, ".zongsoft-*"));
 	}
 
 	[Fact]
@@ -284,26 +329,33 @@ public sealed class VersionFileTest
 		var file = PackCommand<Package.Tar>.VersionFile.Load(directory.Path, null, option, null);
 
 		AssertIdentity(file.Identifier, "Zongsoft.Hosting.Web", edition, version);
+		Assert.Equal(original, File.ReadAllBytes(legacy));
 		file.Save(Path.Combine(directory.Path, "host.tar.gz"));
 		Assert.Equal(edition, ApplicationManifest.Load(path).Editions.Current.Name);
-		Assert.Equal(original, File.ReadAllBytes(legacy));
+		Assert.Equal(file.Identifier, ApplicationIdentifier.Load(legacy));
 	}
 
 	[Theory]
-	[InlineData(null, "Community")]
-	[InlineData("", "Community")]
-	[InlineData("Enterprise", "Enterprise")]
-	public void Load_Identifier_AllowsEditionOverrideAndSavesOnlyIdentifier(string option, string edition)
+	[InlineData(null, "Community", "")]
+	[InlineData(null, "Community", "\n")]
+	[InlineData(null, "Community", "\r\n")]
+	[InlineData("", "Community", "")]
+	[InlineData("", "Community", "\n")]
+	[InlineData("", "Community", "\r\n")]
+	[InlineData("Enterprise", "Enterprise", "")]
+	[InlineData("Enterprise", "Enterprise", "\n")]
+	[InlineData("Enterprise", "Enterprise", "\r\n")]
+	public void Load_Identifier_AllowsEditionOverrideAndSavesOnlyIdentifier(string option, string edition, string newline)
 	{
 		using var directory = new MigrationTestDirectory();
-		var path = directory.Write(".version", "Zongsoft.Hosting.Web-Community@1.0.0");
+		var path = Path.Combine(directory.Path, ".version");
+		File.WriteAllText(path, "Zongsoft.Hosting.Web-Community@1.0.0" + newline, new UTF8Encoding(false));
 		var file = PackCommand<Package.Tar>.VersionFile.Load(directory.Path, null, option, new Version(2, 0, 0));
 
 		AssertIdentity(file.Identifier, "Zongsoft.Hosting.Web", edition, "2.0.0");
 		file.Save(Path.Combine(directory.Path, "host.tar.gz"));
 		Assert.Equal(file.Identifier, ApplicationIdentifier.Load(path));
 		Assert.False(File.Exists(Path.Combine(directory.Path, ".edition")));
-		Assert.DoesNotContain("\n", File.ReadAllText(path));
 	}
 
 	[Fact]

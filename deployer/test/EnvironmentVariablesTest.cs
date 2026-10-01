@@ -6,6 +6,77 @@ namespace Zongsoft.Tools.Deployer.Tests;
 
 public sealed class EnvironmentVariablesTest
 {
+	[Theory]
+	[InlineData(false, null, false, "net8.0")]
+	[InlineData(true, null, false, "net8.0")]
+	[InlineData(true, "", false, "net8.0")]
+	[InlineData(false, null, true, "net9.0")]
+	[InlineData(true, null, true, "net9.0")]
+	[InlineData(true, "", true, "net9.0")]
+	[InlineData(true, "net10.0", true, "net10.0")]
+	[InlineData(true, "   ", true, "")]
+	public void CreateVariables_EmptyFrameworkUsesMergedVariables(bool specified, string option, bool environmentFile, string expected)
+	{
+		using var fixture = new DeploymentFixture();
+		var previous = Environment.GetEnvironmentVariable("framework");
+		try
+		{
+			Environment.SetEnvironmentVariable("framework", "net8.0");
+			if(environmentFile)
+			{
+				fixture.Write(".env", "framework=net8.0\n");
+				fixture.Write("source/.env", "FRAMEWORK=net9.0\n");
+			}
+			var options = new Dictionary<string, string> { ["destination"] = "$(framework)" };
+			if(specified)
+				options["FrAmEwOrK"] = option;
+
+			var source = Path.Combine(fixture.Root, "source");
+			var variables = Deployer.CreateVariables(options, source);
+
+			Assert.Equal(expected, variables["framework"]);
+			Assert.Equal(Path.GetFullPath(Path.Combine(source, expected)), variables["destination"]);
+			Assert.Equal("net8.0", Environment.GetEnvironmentVariable("framework"));
+		}
+		finally
+		{
+			Environment.SetEnvironmentVariable("framework", previous);
+		}
+	}
+
+	[Theory]
+	[InlineData(null)]
+	[InlineData("")]
+	public void CreateVariables_EmptyFrameworkPreservesApplicationConfiguration(string option)
+	{
+		using var fixture = new DeploymentFixture();
+		fixture.Write(".env", "framework=net8.0\n");
+		fixture.Write("target/appsettings.json", "{\"Framework\":\"net9.0\"}");
+		var options = new Dictionary<string, string>
+		{
+			["destination"] = fixture.Destination,
+			["framework"] = option,
+		};
+
+		var variables = Deployer.CreateVariables(options, fixture.Root);
+
+		Assert.Equal("net9.0", variables["framework"]);
+	}
+
+	[Theory]
+	[InlineData(null, "framework")]
+	[InlineData("", "framework=")]
+	public void CreateVariables_EmptyFrameworkPreservesEmptyValueWhenFallbackUnavailable(string option, string entry)
+	{
+		using var fixture = new DeploymentFixture();
+		fixture.Write(".env", "framework=net8.0\n");
+		fixture.Write("source/.env", entry + "\n");
+		var variables = Deployer.CreateVariables(new Dictionary<string, string> { ["framework"] = option }, Path.Combine(fixture.Root, "source"));
+
+		Assert.True(variables.ContainsKey("framework"));
+		Assert.Equal(string.Empty, variables["framework"]);
+	}
+
 	[Fact]
 	public void CreateVariables_EnvironmentHierarchyFlattensSectionsAndIsolatesLoads()
 	{

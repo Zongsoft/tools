@@ -131,6 +131,8 @@ partial class Migrator
 				var builder = new DbConnectionStringBuilder
 				{
 					["Allow User Variables"] = true,
+					["Allow Public Key Retrieval"] = bool.Parse(settings.Get("AllowPublicKeyRetrieval", "true")),
+					["SSL Mode"] = bool.Parse(settings.Get("Secured", "false")) ? "Required" : "Disabled",
 					["Host"] = settings.Get("Server"),
 					["Username"] = settings.Get("UserName"),
 					["Password"] = settings["Password"],
@@ -140,8 +142,6 @@ partial class Migrator
 
 				if(!string.IsNullOrEmpty(name))
 					builder["Database"] = name;
-				if(settings.TryGetValue("Secured", out var secured))
-					builder["SSL Mode"] = bool.Parse(secured) ? "Required" : "Disabled";
 
 				return new MySqlConnector.MySqlConnection(builder.ConnectionString);
 			}

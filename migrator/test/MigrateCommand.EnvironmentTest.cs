@@ -13,6 +13,74 @@ namespace Zongsoft.Tools.Migrator.Tests;
 public sealed partial class MigrateCommandTest
 {
 	[Theory]
+	[InlineData(null, false, "net8.0")]
+	[InlineData("--framework", false, "net8.0")]
+	[InlineData("--framework=", false, "net8.0")]
+	[InlineData(null, true, "net9.0")]
+	[InlineData("--FRAMEWORK:", true, "net9.0")]
+	[InlineData("--framework=", true, "net9.0")]
+	[InlineData("--framework:net10.0", true, "net10.0")]
+	[InlineData("--framework:   ", true, "   ")]
+	public async Task Execute_EmptyFrameworkUsesMergedVariablesAsync(string option, bool environmentFile, string expected)
+	{
+		using var directory = new MigrationTestDirectory();
+		PrepareMigration(directory, "/data/hosting.db");
+		if(environmentFile)
+		{
+			directory.Write(".env", "framework=net8.0\n");
+			directory.Write("workspace/.env", "FRAMEWORK=net9.0\n");
+		}
+		var previous = Environment.GetEnvironmentVariable("framework");
+		try
+		{
+			Environment.SetEnvironmentVariable("framework", "net8.0");
+			var arguments = Arguments("zongsoft.daemon", "Linux", "X64");
+			arguments.Add("--title:tfm=$(framework)");
+			if(option != null)
+				arguments.Add(option);
+			arguments.Add("../db.migration");
+			var workingDirectory = Path.Combine(directory.Path, "workspace");
+			Directory.CreateDirectory(workingDirectory);
+
+			var result = await RunAsync(directory, arguments, workingDirectory);
+
+			Assert.True(result.Code == 0, result.Output);
+			var archive = Path.Combine(workingDirectory, "out", "zongsoft.daemon(migrate)@1.2.3_linux-x64.tar.gz");
+			using var plan = JsonDocument.Parse(Assert.Single(ReadArchive(archive), entry => entry.Name == "migration.json").Content);
+			Assert.Equal("tfm=" + expected, plan.RootElement.GetProperty("Title").GetString());
+			Assert.Equal("linux-x64", plan.RootElement.GetProperty("Runtime").GetString());
+			Assert.Equal("net8.0", Environment.GetEnvironmentVariable("framework"));
+		}
+		finally
+		{
+			Environment.SetEnvironmentVariable("framework", previous);
+		}
+	}
+
+	[Theory]
+	[InlineData("--framework")]
+	[InlineData("--framework=")]
+	public async Task Execute_EmptyFrameworkPreservesEmptyValueWhenFallbackUnavailableAsync(string option)
+	{
+		using var directory = new MigrationTestDirectory();
+		PrepareMigration(directory, "/data/hosting.db");
+		directory.Write(".env", "framework=net8.0\n");
+		directory.Write("workspace/.env", "framework=\n");
+		var arguments = Arguments("zongsoft.daemon", "Linux", "X64");
+		arguments.Add(option);
+		arguments.Add("--title:tfm=$(framework)");
+		arguments.Add("../db.migration");
+		var workingDirectory = Path.Combine(directory.Path, "workspace");
+
+		var result = await RunAsync(directory, arguments, workingDirectory);
+
+		Assert.True(result.Code == 0, result.Output);
+		var archive = Path.Combine(workingDirectory, "out", "zongsoft.daemon(migrate)@1.2.3_linux-x64.tar.gz");
+		using var plan = JsonDocument.Parse(Assert.Single(ReadArchive(archive), entry => entry.Name == "migration.json").Content);
+		Assert.Equal("tfm=", plan.RootElement.GetProperty("Title").GetString());
+	}
+
+	[Theory]
 	[InlineData(false)]
 	[InlineData(true)]
 	public async Task Execute_EnvironmentFilesSupplyVersionAndParametersForAllInputsAsync(bool emptySecret)
@@ -46,7 +114,7 @@ public sealed partial class MigrateCommandTest
 
 			Assert.True(result.Code == 0, result.Output);
 			var archive = Path.Combine(workingDirectory, "out", "zongsoft.daemon(migrate)@2.3.4_linux-x64.tar.gz");
-			using var plan = JsonDocument.Parse(Assert.Single(ReadArchive(archive), entry => entry.Name == ".migration/migration.json").Content);
+			using var plan = JsonDocument.Parse(Assert.Single(ReadArchive(archive), entry => entry.Name == "migration.json").Content);
 			Assert.Equal("2.3.4", plan.RootElement.GetProperty("Version").GetString());
 			Assert.Equal("zongsoft.daemon 2.3.4", plan.RootElement.GetProperty("Title").GetString());
 			var database = Assert.Single(plan.RootElement.GetProperty("Databases").EnumerateArray());

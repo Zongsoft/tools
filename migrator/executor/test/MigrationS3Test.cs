@@ -236,9 +236,9 @@ public sealed class MigrationExecutorTests
 	{
 		using var directory = new MigrationTestDirectory();
 		var plan = Plan();
-		var script = directory.Script(".migration/.artifacts/later.sql", "SELECT 1;");
+		var script = directory.Script(".artifacts/later.sql", "SELECT 1;");
 		plan.Steps[1].Scripts.Add(script);
-		directory.Write(".migration/.artifacts/later.sql", "SELECT 2;");
+		directory.Write(".artifacts/later.sql", "SELECT 2;");
 		var calls = new List<string>();
 		var context = new MigrationContext(directory.Path, Path.Combine(directory.Path, "state"));
 

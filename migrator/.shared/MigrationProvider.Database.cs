@@ -49,7 +49,7 @@ partial class MigrationProvider
 		{
 			base.Validate(parameters, this.Name is "sqlite" or "duckdb" ?
 				["Database", "CommandTimeout"] :
-				["Server", "Port", "Database", "UserName", "Password", "Bootstrap", "Timeout", "CommandTimeout", "Secured", "TrustServerCertificate"]);
+				["Server", "Port", "Database", "UserName", "Password", "Bootstrap", "Timeout", "CommandTimeout", "Secured", "TrustServerCertificate", "AllowPublicKeyRetrieval"]);
 
 			parameters.Seconds("CommandTimeout", 300);
 
@@ -63,7 +63,7 @@ partial class MigrationProvider
 			if(parameters.TryGetValue("Port", out var port) && (!ushort.TryParse(port, NumberStyles.None, CultureInfo.InvariantCulture, out var number) || number == 0))
 				throw Invalid("Port");
 
-			foreach(var key in new[] { "Secured", "TrustServerCertificate" })
+			foreach(var key in new[] { "Secured", "TrustServerCertificate", "AllowPublicKeyRetrieval" })
 			{
 				if(parameters.TryGetValue(key, out var value) && !bool.TryParse(value, out _))
 					throw Invalid(key);
@@ -71,6 +71,8 @@ partial class MigrationProvider
 
 			if(this.Name != "mssql" && parameters.ContainsKey("TrustServerCertificate"))
 				throw Invalid("TrustServerCertificate");
+			if(this.Name != "mysql" && parameters.ContainsKey("AllowPublicKeyRetrieval"))
+				throw Invalid("AllowPublicKeyRetrieval");
 		}
 
 		public override void Prepare(MigrationPlan.Database database, string runtime = "linux-x64")
@@ -102,6 +104,11 @@ partial class MigrationProvider
 				{
 					parameters.TryAdd("Secured", "true");
 					parameters.TryAdd("TrustServerCertificate", "false");
+				}
+				else if(this.Name == "mysql")
+				{
+					parameters.TryAdd("Secured", "false");
+					parameters.TryAdd("AllowPublicKeyRetrieval", "true");
 				}
 				else if(this.Name == "tdengine")
 					parameters.TryAdd("Secured", "false");

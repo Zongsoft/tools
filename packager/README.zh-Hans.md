@@ -59,7 +59,7 @@
 4. **收集打包项**：按位置参数和 `--exclude` 确定载荷文件。
 5. **生成附属内容**：systemd 服务、生命周期脚本、Nginx 配置、升迁产物。
 6. **编码并写出**：生成 `.tar.gz`（含配套 `.sh`）、`.deb` 或 `.rpm`。
-7. **回写版本**：制包成功后才保存源目录的 `.edition` 清单文件或 `.version` 版本标识文件。
+7. **回写版本**：制包成功后才保存源版本文件；存在 `.edition` 时同时回写 `.edition` 和 `.version`。
 
 ### 核心术语
 
@@ -143,7 +143,7 @@ deploy.cmd
 
 ### 第 2 步：生成安装包
 
-直接在宿主目录中制包，无需另建暂存目录：未指定 `--source` 时源目录就是当前目录，位置参数从中挑选载荷。以下命令即宿主 [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd) 在选择 `deb` 格式、版本号 `1.0.0`、`production` 环境并采用其余默认值时实际执行的命令：
+直接在宿主目录中制包，未指定 `--source` 时源目录就是当前目录，位置参数从中挑选载荷。以下命令即宿主 [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd) 在选择 `deb` 格式、版本号 `1.0.0`、`production` 环境并采用其余默认值时实际执行的命令：
 
 ```cmd
 dotnet-pack deb ^
@@ -244,13 +244,13 @@ dotnet-pack rpm <选项...> [打包项...]
 | --- | --- | --- |
 | `--name:<name>` | _条件必需_ | 应用/软件包名称，也用于定位生成服务时的 .NET 宿主程序集。 |
 | `--version:<version>` | _条件必需_ | 发行版本号；存在源目录的 `.edition` 清单文件或 `.version` 版本标识文件时，覆盖其中所选版本的版本号。零版本号 _(`0.0.0.0`)_ 会被拒绝。 |
-| `--edition:<name>` | Current 或唯一 Edition | 可选发行标识，追加到包名。 |
+| `--edition:<name>` | 由 `.edition` 定义 | 可选发行版名，追加到包名。 |
 | `--platform:<platform>` | **必需** | 目标平台：`linux`、`unix`、`osx`、`windows`/`win`、`unknown`；Linux 包通常用 `linux`。 |
-| `--framework:<tfm>` | 空 | 可选 .NET 目标框架，例如 `net10.0`；用于查找 `bin/<compilation>/<framework>` 中的宿主。未设置时跳过该构建目录，仍可定位源目录中的宿主。 |
+| `--framework:<tfm>` | `framework` 变量或空 | 可选 .NET 目标框架，例如 `net10.0`；用于查找 `bin/<compilation>/<framework>` 中的宿主。选项未指定或为空时使用合并后的变量；最终值为空时跳过该构建目录，仍可定位源目录中的宿主。 |
 | `--architecture:<arch>` | `x64` | 目标 CPU 架构，例如 `x64`、`x86`、`arm64`、`arm`。 |
 | `--compilation:<name>` | `Release` | 可选 .NET 构建配置，用于查找 `bin/<compilation>/<framework>` 中的宿主；也可通过 `$(compilation)` 引用。 |
 
-普通文件打包无需提供 `--framework` 或 `--compilation`，这两个选项不会执行编译。源目录已有应用 DLL，或使用现成的 `.service` 文件时，也可省略两项；从 .NET 构建目录查找宿主时指定 `--framework`，`--compilation` 默认使用 `Release`。
+普通文件打包无需提供 `--framework` 或 `--compilation`，这两个选项不会执行编译。源目录已有应用 DLL，或使用现成的 `.service` 文件时，也可省略两项；从 .NET 构建目录查找宿主时通过 `--framework`、环境变量或祖先 `.env` 提供框架，`--compilation` 默认使用 `Release`。
 
 ### 输入与输出
 
@@ -277,10 +277,11 @@ dotnet-pack rpm <选项...> [打包项...]
 | `--title:<text>` | 空 | 人类可读的软件包标题，也用作生成的 systemd 描述。 |
 | `--summary:<text-or-file>` | 空 | 简短摘要，取值规则见[文本来源](#文本来源)。 |
 | `--description:<text-or-file>` | 空 | 详细描述，取值规则见[文本来源](#文本来源)。 |
-| `--url:<url>` | `https://github.com/Zongsoft` | 项目主页。 |
+| `--homepage:<url>` | `https://github.com/Zongsoft` | 项目主页。 |
 | `--license:<text>` | 空 | 许可证表达式或名称。 |
 | `--category:<text>` | 格式默认值 | Debian `Section`（默认 `utils`）或 RPM `Group`（默认 `Applications/System`）。 |
-| `--maintainer:<text>` | `Zongsoft Studio <zongsoft@gmail.com>` | 软件包维护者/厂商。 |
+| `--maintainer:<text>` | `Zongsoft` | 软件包维护者。 |
+| `--manufacturer:<text>` | `Zongsoft` | 软件生产厂家；未指定、null 或空字符串使用默认值，纯空白不触发默认值。 |
 
 ### 扩展功能
 
@@ -292,14 +293,31 @@ dotnet-pack rpm <选项...> [打包项...]
 
 ### 包依赖与关系
 
-`--dependencies:<list>` 适用于 `deb` 和 `rpm`，以逗号或分号分隔。两种格式的版本关系写法 **不同**：
+`--dependencies:<list>` 在 `deb` 和 `rpm` 中统一使用 `name[:range]` 语法。范围采用 [NuGet 区间表示法](https://learn.microsoft.com/zh-cn/nuget/concepts/package-versioning#version-ranges)，另外支持将 `[10.0,)` 简写为 `[10.0)`。
 
-| 格式 | 写入字段 | 写法示例 |
-| --- | --- | --- |
-| Debian | `Depends` | `--dependencies:"aspnetcore-runtime-10.0 (>= 10.0)"` |
-| RPM | `Requires` | `--dependencies:"aspnetcore-runtime-10.0 >= 10.0"` |
+| 输入 | 要求的版本 |
+| --- | --- |
+| `runtime` 或 `runtime:(,)` | 不限版本 |
+| `runtime:10.0`、`runtime:[10.0,)` 或 `runtime:[10.0)` | 大于等于 10.0 |
+| `runtime:[10.0]` | 等于 10.0 |
+| `runtime:(10.0,)` | 大于 10.0 |
+| `runtime:(,11.0]` | 小于等于 11.0 |
+| `runtime:(,11.0)` | 小于 11.0 |
+| `runtime:[10.0,11.0)` | 大于等于 10.0、小于 11.0 |
+| `runtime:(10.0,11.0]` | 大于 10.0、小于等于 11.0 |
+| `runtime:[10.0,11.0]` / `runtime:(10.0,11.0)` | 两端均包含 / 均不包含 |
 
-打包器只写入依赖声明，不下载或内嵌这些软件包，安装环境需有可用的软件源。
+**区间外**的逗号或分号分隔各组必须满足的依赖；组内以 `|` 表示满足任意一个即可。整个值应加引号：
+
+```text
+--dependencies:"aspnetcore-runtime-10.0:[10.0,11.0);openssl:[3.0) | libressl:[4.0)"
+```
+
+Debian 写入 `Depends`，RPM 写入 `Requires`。对于 `runtime:[10.0,11.0) | alternative:[9.0)`，Debian 输出 `runtime (>= 10.0) | alternative (>= 9.0), runtime (<< 11.0) | alternative (>= 9.0)`；RPM 输出 `((runtime >= 10.0 with runtime < 11.0) or alternative >= 9.0)`。RPM 的替代依赖需要 RPM 4.13+，使用 `with` 的双边区间需要 RPM 4.14+。单组依赖若在 Debian 中展开超过 1024 个关系组，会明确报错。
+
+统一的是区间表示法。版本端点保留原文，按目标包管理器的原生规则比较；打包器不会按 NuGet 版本规则归一化、重排或比较端点。Debian 的虚拟包上下界可能由不同提供者分别满足；RPM 的 `with` 要求同一个包同时满足上下界。不同发行版的包名不会自动映射。Debian 的 `libc6:any`、RPM 的 `pkgconfig(openssl)` 等原生名称仍受各自格式约束；`:[`、`:(` 或冒号后以数字开头的裸版本引出范围。字母开头的原生版本请使用括号形式。
+
+`10.*` 等浮动版本、错误区间、空替代项，以及旧的 `name >= version` / `name (>= version)` 依赖输入均会使制包失败。重复约束按原样保留；未指定或空依赖列表不写入应用依赖。打包器只写声明，不下载或内嵌依赖，安装环境需有可用的软件源。以下其他关系选项继续使用原生语法。
 
 #### Debian 关系选项
 
@@ -313,7 +331,7 @@ dotnet-pack rpm <选项...> [打包项...]
 | `--suggests:<list>` | Suggests |
 
 - 版本关系必须放在括号内，例如 `zongsoft.daemon (>= 1.0.0)`；支持的运算符为 `<<`、`<=`、`=`、`>=`、`>>`。
-- Depends、Recommends、Suggests 支持以 `|` 表示替代项（满足其一即可）；Provides 的版本关系只接受 `=`。
+- Recommends、Suggests 支持以 `|` 表示替代项（满足其一即可）；Provides 的版本关系只接受 `=`。Depends 由上面的统一区间语法生成。
 - 多个条目用逗号或分号分隔，整个选项应加引号。非法关系及换行会使制包失败。
 
 #### RPM 关系选项
@@ -323,7 +341,7 @@ dotnet-pack rpm <选项...> [打包项...]
 | `--provides:<list>` | RPM `Provides` 条目。 |
 | `--conflicts:<list>` | RPM `Conflicts` 条目。 |
 
-RPM 关系条目支持 `name`、`name = version`、`name >= version`、`name <= version`、`name > version`、`name < version` 或 `name(>= version)`。
+RPM 的 Provides、Conflicts 条目支持 `name`、`name = version`、`name >= version`、`name <= version`、`name > version`、`name < version` 或 `name(>= version)`。Requires 由上面的统一区间语法生成。
 
 ### 选项值约定
 
@@ -383,7 +401,7 @@ dotnet-pack rpm \
   --framework:net10.0 \
   --output:.packages \
   --license:MIT \
-  --dependencies:"aspnetcore-runtime-10.0 >= 10.0" \
+  --dependencies:"aspnetcore-runtime-10.0:[10.0)" \
   --provides:"zongsoft.web = 1.0.0" \
   ../../mime \
   appsettings.json \
@@ -471,7 +489,7 @@ Zongsoft.Hosting.Web=Enterprise
 
 ### 包内版本文件
 
-安装根 `.version` 始终由最终名称、Edition 和版本通过 [`ApplicationIdentifier.Save(Stream)`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Services/ApplicationIdentifier.cs) 生成：UTF-8 无 BOM、无末尾换行、权限 `0644`。生成项替换所有同安装目标的旧条目（包括根别名），不受排除规则影响。
+安装根 `.version` 始终由最终名称、Edition 和版本通过 [`ApplicationIdentifier.Save(Stream)`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Services/ApplicationIdentifier.cs) 生成：UTF-8 无 BOM、权限 `0644`。生成项替换所有同安装目标的旧条目（包括根别名），不受排除规则影响。
 
 源直属 `.edition` 不作为载荷入包，即使显式选择或通过别名改名也会排除；指向安装根 `.edition` 的其他条目同样排除。其他子目录文件沿用普通载荷规则。
 
@@ -479,13 +497,13 @@ Zongsoft.Hosting.Web=Enterprise
 
 | 制包前的文件状态 | 成功后的保存行为 |
 | --- | --- |
-| 存在 `.edition`，无论是否有 `.version` | 只更新 `.edition`，已有 `.version` 保持原样。 |
+| 存在 `.edition`，无论是否有 `.version` | `.edition` 和 `.version` 都被改写；缺失的 `.version` 会创建。 |
 | 只有 `.version` | 只更新单行标识 `.version`。 |
 | 两者均无 | 成组创建 `.edition`、`.version`。 |
 
-清单只更新所选 Edition 的版本号，并将最终具名 Edition 设为 Current；其他 Edition 的名称、版本和顺序保留，注释及空行遵循 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 保存规则。清单使用 UTF-8 无 BOM、CRLF；标识采用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 原始输出，不追加末尾换行。
+清单只更新所选 Edition 的版本号，并将最终具名 Edition 设为 Current；其他 Edition 的名称、版本和顺序保留，注释及空行遵循 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 保存规则。清单使用 UTF-8 无 BOM、CRLF；标识采用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 序列化。末尾可以有或没有 LF、CRLF 换行，不影响标识解析。
 
-所有产物成功后才保存源文件。单文件原子保存，首次双文件创建成组提交并在失败时回滚。解析、校验或制包失败不更新源文件；保存失败保留已生成包，报告源文件路径和包路径，命令返回错误。
+所有产物成功后才保存源文件。单文件原子保存，双文件创建或回写成组提交并在失败时回滚；两者均无时不覆盖并发创建的文件。解析、校验或制包失败不更新源文件；保存失败保留已生成包，报告源文件路径和包路径，命令返回错误。
 
 ## 打包项
 
@@ -508,7 +526,7 @@ dotnet-pack deb \
   --output:../../../.packages
 ```
 
-**显式选择**：提供位置参数时，只包含所列文件或目录。以下示例与宿主 pack.cmd 相同，选择 MIME 定义、应用设置、宿主配置、静态文件、插件，并用目录别名 `~` 把编译输出放到安装根目录：
+**显式选择**：提供位置参数时，只包含所列文件或目录。以下示例与宿主 [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd) 相同，选择 MIME 定义、应用设置、宿主配置、静态文件、插件，并用目录别名 `~` 把编译输出放到安装根目录：
 
 ```bash
 dotnet-pack deb \
@@ -647,7 +665,7 @@ HTTPS 需要在宿主中配置可用的默认服务器证书，打包器不生�
 
 ### 服务环境变量
 
-`--daemon-environments` 列出的变量值会写入生成服务的 `Environment=`。Web 宿主的 `pack.cmd` 就用它写入 `Environment` 和 `ASPNETCORE_ENVIRONMENT`：
+`--daemon-environments` 列出的变量值会写入生成服务的 `Environment=`。Web 宿主的 [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd) 就用它写入 `Environment` 和 `ASPNETCORE_ENVIRONMENT`：
 
 ```bash
 dotnet-pack deb \
@@ -803,7 +821,7 @@ zongsoft-enterprise(migrate)@1.0.0_linux-x64.sh
 
 ### 打包与安装行为
 
-- 两个文件原样放入安装根的 `.migration/`，打包时不展开归档；脚本权限为 `0755`，归档为 `0600`。载荷与目标冲突时制包失败。
+- 两个文件原样放入安装根的 `.migration/`，打包时不展开归档。运行时升迁启动脚本解压到独立临时目录，计划及执行器直接位于临时目录根部，不在安装目录中再展开一层 `.migration/`；脚本权限为 `0755`，归档为 `0600`。载荷与目标冲突时制包失败。
 - 安装时，生成的钩子以 `/var/lib/<包名>/packager` 为状态目录运行 `apply`；升迁失败会阻止服务启动。
 - systemd 的 `ExecStartPre` 运行 `check`，比较包的计划指纹与本地 `ready` 成功标记；它不读取数据库或桶的当前状态。
 - 无 daemon 时仍会执行升迁；DESTDIR 暂存安装不执行生命周期钩子；卸载保留升迁状态、数据库和桶。
@@ -830,6 +848,8 @@ $(name)
 2. 系统环境变量
 3. 从文件系统根目录到源目录，各级目录直属的 `.env` 文件（由远到近）
 4. 显式命令选项，包括额外选项（如 `--Environment:Production`）
+
+`--framework` 未指定或为空时，使用合并后变量集中的非空 `framework`；非空选项优先。没有非空变量可用时沿用原有处理流程，纯空白选项值保持原有行为。
 
 `.env` 的读取规则：
 
@@ -874,7 +894,7 @@ dotnet-pack deb \
 
 | 变量 | 含义 |
 | --- | --- |
-| `name`、`version`、`edition` | 软件包身份及可选发行标识 |
+| `name`、`version`、`edition` | 软件包身份及可选发行版名 |
 | `platform`、`architecture`、`RuntimeIdentifier` | 目标操作系统、CPU 架构及组合后的运行时标识 |
 | `framework`、`compilation` | 目标 .NET 框架和构建配置 |
 | `source`、`output` | 规范化后的源目录和安装包输出目录 |
@@ -949,6 +969,18 @@ sudo rpm -Uvh ./.packages/zongsoft.web@1.0.0-x64.rpm
 ```
 
 `/etc/` 下的根路径条目会被标记为 RPM 配置文件。
+
+### 应用元数据
+
+`--homepage` 表示应用主页，`--manufacturer` 表示软件生产厂家，`--maintainer` 表示软件包维护者。变量 `homepage`、`manufacturer`、`maintainer` 按既有的默认值 → 环境变量 → 祖先 `.env` → 显式选项顺序加载。厂家值解析后为 null 或空字符串时使用 `Zongsoft`，纯空白不使用默认值。
+
+| 格式 | 主页 | 生产厂家 | 维护者 |
+| --- | --- | --- | --- |
+| tar.gz | — | PAX 全局扩展属性 `manufacturer` | — |
+| deb | `Homepage` | 自定义 control 字段 `Manufacturer` | `Maintainer` |
+| rpm | `URL`（1020） | `VENDOR`（1011） | `PACKAGER`（1015） |
+
+Debian 文本字段遵循既有规范化规则：去除外围空白，纯空白的厂家字段不写入；tar 与 RPM 保留厂家值。这些字段属于格式元数据，不增加安装目录文件。
 
 ### 打包器版本元数据
 

@@ -2,9 +2,13 @@
 
 数据库配置由 MigrationLoader.Databases 解析。[Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 决定条目及导入覆盖；无导入的本地 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 视图提供声明位置，用于还原跨库事件顺序和真正的空段；有效条目保留首次位置和最终来源。Provider.Prepare 在指纹计算前补齐建库默认值。Databases 保存管理员参数、有效设置、用户；有序 Steps 以 DatabaseIndex 引用 Databases 数组位置（从零开始），只有引用目标入计划。执行器先验证所有 SQL，再全部建库、全部建账号及映射、执行任务、追加授权。已有设置/密码不变。数据库 pending 仅保存目标和设置摘要，恢复未完成的新库配置。Amazon S3 保留既有解析执行路径，详见[数据库指南](../README.zh-Hans.md#database-configuration)。
 
+MySQL provider 默认 `Secured=false`、`AllowPublicKeyRetrieval=true`，`Prepare` 在指纹计算前将两项补齐到计划。执行器在每次管理员/目标库连接中，将 `Secured` 映射为 `SslMode=Disabled` 或 `Required`，并将公钥获取设置传给 MySqlConnector。显式值保持不变；`AllowPublicKeyRetrieval` 仅用于 MySQL，必须为布尔值。
+
 生成端 src 使用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Profile 与 Searcher 解析输入，MigrationLoader.Database 预处理 SQL 批次，AmazonS3 解析桶选项。MigrationBundle 收集完整原生产物和计划；Generator 使用 System.Formats.Tar 写 PAX，记录 Migrator（程序集名@版本）和 Runtime。项目不引用 packager。
 
 版本解析前，共享 `Utility.CreateVariables` 依次加载默认值、系统环境、从文件系统根目录到工作目录的直属 `.env`、显式选项。`Utility.LoadEnvironmentVariables` 使用 `Profile.Load`，各级段落与条目以下划线拼名，根条目保留原名，同时保留 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 空值和导入语义。仅跳过打开阶段的缺失文件，其余读取及解析错误传播。变量按需展开、每次调用独立，不修改进程环境；全部输入共用变量视图，不随各输入所在目录改变。
+
+`Variables.From` 将 `FRAMEWORK` 放入不区分大小写的集合，通过 `fallbackOptions` 参数传给共享 `Utility.CreateVariables`。原有选项合并循环仅在已声明选项的原始值为 null 或空字符串时保留已有非空变量；没有非空回退值时保留原赋值，使显式空变量仍展开为空。纯空白选项、表达式展开为空、较近 `.env` 清空先前值的行为不变。framework 仍是通用变量，不参与原生执行器或 RID 选择。
 
 数据库与 Amazon S3 从声明来源向根目录逐级查找 `<输入名>.ini`，然后查找 `postgres.ini`、`postgresql.ini` 等 provider 别名文件。保持就近选择完整配置、仅合并显式导入的规则，错误将来源位置与原因分行显示，候选参数文件按查找顺序逐行列出；共享 `Utility.Indent` 使用平台换行并保留嵌套详情的缩进。自动查找不再回退 `*.env`；原有参数夹具、示例及导入路径使用 `.ini`。通用 `.env` 变量继承不参与连接配置的跨文件合并。
 
@@ -18,9 +22,9 @@
 
 executor 使用显式工厂选择六种数据库或 Amazon S3，实现连接、建库、顺序提交、校验和、锁、状态及 pending。所有 SQL 每次 apply 均执行，不维护逐文件成功历史。数据库/Amazon S3 驱动只在执行器声明，TDengine 使用 WebSocket。
 
-外部脚本与归档使用同一前缀 `<name>[-<edition>](migrate)@<version>_<RID>`，name 原样使用，无 Edition 时省略对应部分，仅扩展名不同。计划名称及默认状态目录保留既有升迁后缀规范化规则，以复用持久状态。脚本写入确切归档名、无版本状态名及计划指纹；第二参数可覆盖状态目录。check 只比较 ready；apply/status 创建临时目录，解压内部 .migration/，调用内部入口传入动作和持久状态目录，返回执行器退出码并清理临时目录。packager 的安装脚本与 systemd drop-in 均调用这个外部入口，不理解 SQL 或计划字段。
+外部脚本与归档使用同一前缀 `<name>[-<edition>](migrate)@<version>_<RID>`，name 原样使用，无 Edition 时省略对应部分，仅扩展名不同。计划名称及默认状态目录保留既有升迁后缀规范化规则，以复用持久状态。脚本写入确切归档名、无版本状态名及计划指纹；第二参数可覆盖状态目录。check 只比较 ready；apply/status 创建临时目录，直接解压归档到该目录，调用根目录的 `migrate.sh` 或 `migrate.cmd` 入口传入动作和持久状态目录，返回执行器退出码并清理临时目录。packager 的安装脚本与 systemd drop-in 均调用这个外部入口，不理解 SQL 或计划字段。
 
-两个产物通过 `tools/.shared/ArtifactPublisher.cs` 先写入输出目录下的私有暂存目录，再备份/替换目标；异常恢复原输出。该类也供其他工具的单文件写入和复制使用，单文件直接原子替换。生成端还链接共享的变量和 `Utility.cs`，后者与本项目的 `partial Utility` 合并编译；不生成共享 DLL，也不改变执行器协议。归档中的 migration.json 权限为 0600，其他数据 0644，入口 0755。Unix 下外部归档 0600，脚本 0755。归档含展开后的凭据，不应上传到公共源。
+两个产物通过 `tools/.shared/ArtifactPublisher.cs` 先写入输出目录下的私有暂存目录，再备份/替换目标；异常恢复原输出。该类也供其他工具的单文件写入和复制使用，单文件直接原子替换。生成端还链接共享的变量和 `Utility.cs`，后者与本项目的 `partial Utility` 合并编译；不生成共享 DLL，也不改变执行器协议。归档根目录直接放置 `migration.json`、`id`、内部入口、原生执行器及依赖；SQL 路径为 `.artifacts/<provider>/<序号>.sql`，相对于解压根目录。执行器以计划所在目录为根，只允许读取其 `.artifacts/` 子树中的脚本。路径参与计划指纹，生成端、启动脚本与执行器必须采用同一布局。归档中的 migration.json 权限为 0600，其他数据 0644，入口 0755。Unix 下外部归档 0600，脚本 0755。归档含展开后的凭据，不应上传到公共源。
 
 Linux 运行需要 glibc >=2.34、libgcc、libstdc++、zlib、ICU、OpenSSL、CA 证书，部分认证需要 Kerberos/GSSAPI；Shell 需要 sh、tar/gzip、核心工具和 cmp。Windows 需要系统 PowerShell、tar.exe 和发行目录内的原生 DLL。目标机无需 .NET。AOT 不启用 invariant globalization，保留中英文资源；原生产物位于 `executor/src/bin/<配置>/net10.0/<RID>/publish/`，同级 logs/ 和 symbols/ 分别保存日志/架构检查及符号。普通构建和独立发布通过文件链接收录到程序目录的 .migrator/<RID>/；NuGet 制包仅在 tools/.migrator/<RID>/ 保存一份，并移除包内各框架的重复副本。MigrationBundle 先检查程序目录的 .migrator/，该目录不存在时定位 tools/<TFM>/any/ 上两级的共享目录。不向源码目录写入原生产物。第三方 AOT 警告保留并审查，不屏蔽。
 

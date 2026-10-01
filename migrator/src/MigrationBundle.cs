@@ -81,10 +81,10 @@ public sealed class MigrationBundle : IDisposable
 			foreach(var script in plan.Steps.SelectMany(step => step.Scripts))
 				bundle.AddText(script.Path, script.Content, Utility.Unix.Mode644, false);
 
-			bundle.AddText(".migration/migration.json", plan.Serialize(), UnixFileMode.UserRead | UnixFileMode.UserWrite);
-			bundle.AddText(".migration/id", plan.Fingerprint(), Utility.Unix.Mode644);
+			bundle.AddText("migration.json", plan.Serialize(), UnixFileMode.UserRead | UnixFileMode.UserWrite);
+			bundle.AddText("id", plan.Fingerprint(), Utility.Unix.Mode644);
 			var windows = plan.Runtime == "win-x64";
-			bundle.AddText(".migration/migrate." + (windows ? "cmd" : "sh"), windows ? CreateWindowsEntry() : CreateUnixEntry(defaultStateDirectory), Utility.Unix.Mode755, false);
+			bundle.AddText("migrate." + (windows ? "cmd" : "sh"), windows ? CreateWindowsEntry() : CreateUnixEntry(defaultStateDirectory), Utility.Unix.Mode755, false);
 			return bundle;
 		}
 		catch { bundle.Dispose(); throw; }
@@ -143,7 +143,7 @@ public sealed class MigrationBundle : IDisposable
 				continue;
 
 			var relative = Path.GetRelativePath(directory, path).Replace('\\', '/');
-			this.AddFile(path, ".migration/" + relative, relative == runner ? Utility.Unix.Mode755 : Utility.Unix.Mode644);
+			this.AddFile(path, relative, relative == runner ? Utility.Unix.Mode755 : Utility.Unix.Mode644);
 		}
 	}
 

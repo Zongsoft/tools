@@ -110,7 +110,7 @@ internal static partial class Utility
 		return text.ToString();
 	}
 
-	internal static Dictionary<string, string> CreateVariables(CommandContext context, string directory = null)
+	internal static Dictionary<string, string> CreateVariables(CommandContext context, string directory = null, IReadOnlySet<string> fallbackOptions = null)
 	{
 		ArgumentNullException.ThrowIfNull(context);
 		var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -125,7 +125,14 @@ internal static partial class Utility
 			LoadEnvironmentVariables(variables, directory);
 
 		foreach(var option in context.Options)
-			variables[option.Key] = option.Value?.ToString();
+		{
+			var value = option.Value?.ToString();
+			if(fallbackOptions?.Contains(option.Key) == true && string.IsNullOrEmpty(value) &&
+				variables.TryGetValue(option.Key, out var previous) && !string.IsNullOrEmpty(previous))
+				continue;
+
+			variables[option.Key] = value;
+		}
 
 		return variables;
 	}

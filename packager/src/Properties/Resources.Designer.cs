@@ -79,6 +79,24 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
+        ///   Looks up a localized string similar to Invalid dependency expression: {0}. Use name[:range], for example package:[1.0,2.0)..
+        /// </summary>
+        internal static string DependencyInvalid_Message {
+            get {
+                return ResourceManager.GetString("DependencyInvalid.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to The dependency alternatives expand to more than 1024 Debian relationship groups..
+        /// </summary>
+        internal static string DependencyTooComplex_Message {
+            get {
+                return ResourceManager.GetString("DependencyTooComplex.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
         ///   Looks up a localized string similar to The &apos;{0}&apos; directory does not exist..
         /// </summary>
         internal static string DirectoryNotExist_Message {

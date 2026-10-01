@@ -25,18 +25,19 @@ public sealed class MigrationBundleTest
 		var plan = Plan(directory, runtime);
 		using var bundle = MigrationBundle.Build(plan, null, directory.CreateRuntime());
 		var entries = bundle.Entries;
-		var json = Assert.Single(entries, entry => entry.EntryName == ".migration/migration.json");
+		Assert.DoesNotContain(entries, entry => entry.EntryName == ".migration" || entry.EntryName.StartsWith(".migration/", StringComparison.Ordinal));
+		var json = Assert.Single(entries, entry => entry.EntryName == "migration.json");
 		Assert.Equal((UnixFileMode)384, json.Mode);
-		Assert.Equal(plan.Fingerprint(), File.ReadAllText(Assert.Single(entries, entry => entry.EntryName == ".migration/id").Source));
+		Assert.Equal(plan.Fingerprint(), File.ReadAllText(Assert.Single(entries, entry => entry.EntryName == "id").Source));
 		Assert.Equal(plan.Fingerprint(), MigrationPlan.Load(json.Source).Fingerprint());
 		Assert.Equal(plan.Fingerprint(), bundle.Fingerprint);
 		Assert.Equal(runtime, bundle.Runtime);
 		Assert.DoesNotContain("Source", File.ReadAllText(json.Source));
 		Assert.DoesNotContain("Content", File.ReadAllText(json.Source));
 		Assert.DoesNotContain("\r", File.ReadAllText(json.Source));
-		var executable = Assert.Single(entries, entry => entry.EntryName == ".migration/Zongsoft.Tools.Migrator.Executor" + executableExtension);
+		var executable = Assert.Single(entries, entry => entry.EntryName == "Zongsoft.Tools.Migrator.Executor" + executableExtension);
 		Assert.Equal((UnixFileMode)493, executable.Mode);
-		var launcher = Assert.Single(entries, entry => entry.EntryName == ".migration/migrate." + extension);
+		var launcher = Assert.Single(entries, entry => entry.EntryName == "migrate." + extension);
 		Assert.Equal((UnixFileMode)493, launcher.Mode);
 		var content = File.ReadAllText(launcher.Source);
 		Assert.Contains("Zongsoft.Tools.Migrator.Executor", content);
@@ -77,11 +78,11 @@ public sealed class MigrationBundleTest
 				plan.Databases.Add(new() { Provider = provider, Name = "hosting", Settings = provider is "sqlite" or "duckdb" ? new() : parameters, Options = provider is "sqlite" or "duckdb" ? new() { ["Path"] = "/var/lib/zongsoft/test.db" } : new() });
 			}
 			using var bundle = MigrationBundle.Build(plan, null, runtimeRoot);
-			var native = Assert.Single(bundle.Entries, entry => entry.EntryName == ".migration/Zongsoft.Tools.Migrator.Executor");
+			var native = Assert.Single(bundle.Entries, entry => entry.EntryName == "Zongsoft.Tools.Migrator.Executor");
 			Assert.Equal(runtime == "linux-x64" ? (byte)62 : (byte)183, File.ReadAllBytes(native.Source)[18]);
-			Assert.Equal("sqlite-" + runtime, File.ReadAllText(Assert.Single(bundle.Entries, entry => entry.EntryName == ".migration/libe_sqlite3.so").Source));
-			Assert.Equal("duckdb-" + runtime, File.ReadAllText(Assert.Single(bundle.Entries, entry => entry.EntryName == ".migration/libduckdb.so").Source));
-			Assert.Equal(runtime, File.ReadAllText(Assert.Single(bundle.Entries, entry => entry.EntryName == ".migration/assets/manifest.txt").Source));
+			Assert.Equal("sqlite-" + runtime, File.ReadAllText(Assert.Single(bundle.Entries, entry => entry.EntryName == "libe_sqlite3.so").Source));
+			Assert.Equal("duckdb-" + runtime, File.ReadAllText(Assert.Single(bundle.Entries, entry => entry.EntryName == "libduckdb.so").Source));
+			Assert.Equal(runtime, File.ReadAllText(Assert.Single(bundle.Entries, entry => entry.EntryName == "assets/manifest.txt").Source));
 			Assert.DoesNotContain(bundle.Entries, entry => entry.EntryName.EndsWith(".deps.json", StringComparison.Ordinal));
 		}
 	}
@@ -125,7 +126,7 @@ public sealed class MigrationBundleTest
 		directory.Write("other.sql", "SELECT N'other task';");
 		var plan = new MigrationLoader(null).Load("db.migration;second.migration", directory.Path, "zongsoft.daemon", "1.1.0");
 		using var bundle = MigrationBundle.Build(plan, null, directory.CreateRuntime());
-		using var json = JsonDocument.Parse(File.ReadAllBytes(Assert.Single(bundle.Entries, entry => entry.EntryName == ".migration/migration.json").Source));
+		using var json = JsonDocument.Parse(File.ReadAllBytes(Assert.Single(bundle.Entries, entry => entry.EntryName == "migration.json").Source));
 		var tasks = json.RootElement.GetProperty("Steps").EnumerateArray().ToArray();
 		Assert.Equal(2, tasks.Length);
 		var scripts = tasks.SelectMany(task => task.GetProperty("Scripts").EnumerateArray()).ToArray();
@@ -134,7 +135,7 @@ public sealed class MigrationBundleTest
 		Assert.Equal(expected.Length, bundle.Entries.Count(entry => entry.EntryName.EndsWith(".sql", StringComparison.Ordinal)));
 		for(var index = 0; index < expected.Length; index++)
 		{
-			var path = $".migration/.artifacts/mssql/{index + 1}.sql";
+			var path = $".artifacts/mssql/{index + 1}.sql";
 			Assert.Equal(path, scripts[index].GetProperty("Path").GetString());
 			var entry = Assert.Single(bundle.Entries, entry => entry.EntryName == path);
 			Assert.Equal(expected[index], File.ReadAllText(entry.Source).Trim());
@@ -150,7 +151,7 @@ public sealed class MigrationBundleTest
 		Name = "zongsoft.daemon",
 		Version = "1.1.0",
 		Runtime = runtime,
-		Steps = [new() { Provider = "sqlite", DatabaseIndex = 0, Scripts = [directory.Script(".migration/.artifacts/sqlite/1.sql", "CREATE TABLE samples (id INTEGER);")] }],
+		Steps = [new() { Provider = "sqlite", DatabaseIndex = 0, Scripts = [directory.Script(".artifacts/sqlite/1.sql", "CREATE TABLE samples (id INTEGER);")] }],
 		Databases = [new() { Provider = "sqlite", Name = "hosting", Options = new() { ["Path"] = runtime == "win-x64" ? "C:/Zongsoft/hosting.db" : "/var/lib/zongsoft/hosting.db" } }],
 	};
 	#endregion

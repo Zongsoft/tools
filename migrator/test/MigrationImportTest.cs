@@ -31,7 +31,7 @@ public sealed class MigrationImportTest
 		Assert.Equal(new[] { "/data/leaf.db", "/data/child.db", "/data/root.db" }, plan.Steps.Select(task => plan.Databases[task.DatabaseIndex.Value].Name));
 		Assert.Equal(new[] { leaf, child, root }, plan.Steps.Select(task => Assert.Single(task.Scripts).Source));
 
-		Assert.Equal(new[] { ".migration/.artifacts/sqlite/1.sql", ".migration/.artifacts/sqlite/2.sql", ".migration/.artifacts/sqlite/3.sql" }, plan.Steps.SelectMany(task => task.Scripts).Select(script => script.Path));
+		Assert.Equal(new[] { ".artifacts/sqlite/1.sql", ".artifacts/sqlite/2.sql", ".artifacts/sqlite/3.sql" }, plan.Steps.SelectMany(task => task.Scripts).Select(script => script.Path));
 	}
 
 	[Fact]
@@ -52,7 +52,7 @@ public sealed class MigrationImportTest
 		Assert.Equal(new[] { "/data/root.db", "/data/child.db", "/data/root.db" }, plan.Steps.Select(task => plan.Databases[task.DatabaseIndex.Value].Name));
 		Assert.Equal(new[] { first, second, shared, last }, plan.Steps.SelectMany(task => task.Scripts).Select(script => script.Source));
 		Assert.Equal(new[] { 2, 1, 1 }, plan.Steps.Select(task => task.Scripts.Count));
-		Assert.Equal(new[] { ".migration/.artifacts/sqlite/1.sql", ".migration/.artifacts/sqlite/2.sql", ".migration/.artifacts/sqlite/3.sql", ".migration/.artifacts/sqlite/4.sql" }, plan.Steps.SelectMany(task => task.Scripts).Select(script => script.Path));
+		Assert.Equal(new[] { ".artifacts/sqlite/1.sql", ".artifacts/sqlite/2.sql", ".artifacts/sqlite/3.sql", ".artifacts/sqlite/4.sql" }, plan.Steps.SelectMany(task => task.Scripts).Select(script => script.Path));
 	}
 
 	[Theory]
@@ -245,7 +245,7 @@ public sealed class MigrationImportTest
 		var sql = directory.Write("child/schema.sql", "SELECT 'retry';");
 		var task = Assert.Single(loader.Load("main.migration", directory.Path, "test", "1.0.0").Steps);
 		Assert.Equal(sql, Assert.Single(task.Scripts).Source);
-		Assert.Equal(".migration/.artifacts/sqlite/1.sql", task.Scripts[0].Path);
+		Assert.Equal(".artifacts/sqlite/1.sql", task.Scripts[0].Path);
 	}
 
 	[Fact]

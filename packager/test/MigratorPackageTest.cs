@@ -486,11 +486,11 @@ public sealed partial class MigratorPackageTest
 			metadata["Migrator"] = failure == "empty-migrator" ? " " : "Zongsoft.Tools.Migrator@0.10.0.0";
 
 		if(failure == "late-global")
-			writer.WriteEntry(new PaxTarEntry(TarEntryType.Directory, ".migration"));
+			writer.WriteEntry(new PaxTarEntry(TarEntryType.Directory, ".artifacts"));
 		if(failure != "no-global")
 			writer.WriteEntry(new PaxGlobalExtendedAttributesTarEntry(metadata));
 		using var body = new MemoryStream(Encoding.UTF8.GetBytes("opaque sql fixture: SELECT 'original';\n"));
-		writer.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, ".migration/.artifacts/mysql/schema.sql") { DataStream = body, Mode = (UnixFileMode)384 });
+		writer.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, ".artifacts/mysql/schema.sql") { DataStream = body, Mode = (UnixFileMode)384 });
 		return (archive, script);
 	}
 

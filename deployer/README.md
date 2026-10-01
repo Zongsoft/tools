@@ -158,6 +158,8 @@ Supports matching and version comparison of *TargetFramework*. If *TargetFramewo
 
 Variables load in this order: environment variables, ancestor `.env` files from the filesystem root to the working directory, the destination application's `appsettings.json`, and command options. Later values overwrite earlier values with the same case-insensitive name, including empty values.
 
+An omitted or empty `--framework` uses a nonempty `framework` from the merged variables, following the same load order. A nonempty option takes precedence. If the variable is missing or empty, the existing framework handling remains; whitespace-only option values keep their existing behavior.
+
 Each directory contributes only its direct `.env`; child directories and individual manifest directories are not searched. All manifests in one invocation share the resulting variables. Core `Profile.Load` reads these INI files, including `#@import`. Root entries retain their names; section levels and entry names join with `_`: `[io rustfs]` with `access_key=example` creates `io_rustfs_access_key=example`. A root `environment=Development` creates `environment`. Missing `.env` files are skipped; read or parse failures stop initialization. Values expand only when used, and process environment variables are not modified.
 
 Variable values may reference other values recursively, regardless of command-option order. Values expand when used; missing references, cycles, and chains longer than 64 levels fail. `destination` may reference command options, environment variables and loaded `.env` values; its `appsettings.json` is loaded afterward.

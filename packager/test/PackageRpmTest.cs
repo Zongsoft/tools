@@ -17,6 +17,66 @@ namespace Zongsoft.Tools.Packager.Tests;
 public sealed class PackageRpmTest
 {
 	#region 测试方法
+	[Theory]
+	[InlineData("runtime:[2:10.0~rc1-2+build]", "runtime", "2:10.0~rc1-2+build", "rpmlib(TildeInVersions)", "4.10.0-1")]
+	[InlineData("runtime:[10.0^git1,11.0)", "(runtime >= 10.0^git1 with runtime < 11.0)", "", "rpmlib(CaretInVersions)", "4.15.0-1")]
+	public void Rpm_NativeVersionEndpoints_PreserveTextAndDeclareRequiredFeatures(string expression, string expectedName, string expectedVersion, string feature, string featureVersion)
+	{
+		using var directory = new MigrationTestDirectory();
+		var package = Create("rpm", directory.Path, "disabled");
+		package.Dependencies = [expression];
+		package.Pack(directory.Path, true);
+
+		var bytes = File.ReadAllBytes(Directory.GetFiles(directory.Path, "*.rpm").Single());
+		var main = RpmHeaderEnd(bytes, 96, true);
+		var names = RpmStrings(bytes, main, 1049);
+		var versions = RpmStrings(bytes, main, 1050);
+		var flags = RpmIndex(bytes, main, 1048);
+		Assert.Equal(expectedName, names[3]);
+		Assert.Equal(expectedVersion, versions[3]);
+		var index = Array.IndexOf(names, feature);
+		Assert.True(index >= 0);
+		Assert.Equal(featureVersion, versions[index]);
+		Assert.Equal(0x0100000A, ReadInt(bytes, flags.Offset + index * 4));
+	}
+
+	[Theory]
+	[InlineData("runtime", "runtime", 0, "", false)]
+	[InlineData("runtime:[10.0)", "runtime", 12, "10.0", false)]
+	[InlineData("runtime:[10.0]", "runtime", 8, "10.0", false)]
+	[InlineData("runtime:(10.0,)", "runtime", 4, "10.0", false)]
+	[InlineData("runtime:(,11.0]", "runtime", 10, "11.0", false)]
+	[InlineData("runtime:(,11.0)", "runtime", 2, "11.0", false)]
+	[InlineData("runtime:[10.0,11.0)", "(runtime >= 10.0 with runtime < 11.0)", 0, "", true)]
+	[InlineData("runtime:(10.0,11.0]", "(runtime > 10.0 with runtime <= 11.0)", 0, "", true)]
+	[InlineData("runtime | alternative:[9.0)", "(runtime or alternative >= 9.0)", 0, "", true)]
+	[InlineData("runtime:[10.0,11.0) | alternative:[9.0,12.0]", "((runtime >= 10.0 with runtime < 11.0) or (alternative >= 9.0 with alternative <= 12.0))", 0, "", true)]
+	public void Rpm_UniformDependencies_WriteNativeConstraintsAndRichCapability(string expression, string expectedName, int expectedFlags, string expectedVersion, bool rich)
+	{
+		using var directory = new MigrationTestDirectory();
+		var package = Create("rpm", directory.Path, "disabled");
+		package.Dependencies = [expression];
+		package.Pack(directory.Path, true);
+
+		var bytes = File.ReadAllBytes(Directory.GetFiles(directory.Path, "*.rpm").Single());
+		var main = RpmHeaderEnd(bytes, 96, true);
+		var names = RpmStrings(bytes, main, 1049);
+		var versions = RpmStrings(bytes, main, 1050);
+		var flags = RpmIndex(bytes, main, 1048);
+		Assert.Equal(names.Length, versions.Length);
+		Assert.Equal(names.Length, flags.Count);
+		Assert.Equal(expectedName, names[3]);
+		Assert.Equal(expectedVersion, versions[3]);
+		Assert.Equal(expectedFlags, ReadInt(bytes, flags.Offset + 12));
+		Assert.Equal(rich ? 5 : 4, names.Length);
+		if(rich)
+		{
+			Assert.Equal("rpmlib(RichDependencies)", names[4]);
+			Assert.Equal("4.12.0-1", versions[4]);
+			Assert.Equal(0x0100000A, ReadInt(bytes, flags.Offset + 16));
+		}
+	}
+
 	[Fact]
 	public void Rpm_GzipPayload_DeclaresSupportedRpmlibRequirementsAndAlignedVersions()
 	{
@@ -24,7 +84,7 @@ public sealed class PackageRpmTest
 		const string SERVICE_NAME = "zongsoft.daemon.service";
 		var source = directory.Write(SERVICE_NAME, "[Unit]\nDescription=Zongsoft Daemon\n[Service]\nExecStart=/bin/true\n");
 		var package = Create("rpm", directory.Path, SERVICE_NAME);
-		package.Dependencies = ["dotnet-runtime-10.0 >= 10.0"];
+		package.Dependencies = ["dotnet-runtime-10.0:[10.0)"];
 		package.Scriptor.Script();
 
 		package.Pack(directory.Path, true);

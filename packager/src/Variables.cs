@@ -44,13 +44,15 @@ namespace Zongsoft.Tools.Packager;
 public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variables = null) : IReadOnlyDictionary<string, string>, IReadOnlyCollection<KeyValuePair<string, string>>
 {
 	#region 常量定义
-	internal const string URL = "url";
 	internal const string NAME = "name";
 	internal const string TITLE = "title";
 	internal const string LISTEN = "listen";
 	internal const string LICENSE = "license";
 	internal const string CATEGORY = "category";
+	internal const string HOMEPAGE = "homepage";
 	internal const string MAINTAINER = "maintainer";
+	internal const string MANUFACTURER = "manufacturer";
+	internal const string DEFAULT_MANUFACTURER = "Zongsoft";
 	internal const string DEPENDENCIES = "dependencies";
 	internal const string SUMMARY = "summary";
 	internal const string DESCRIPTION = "description";
@@ -66,6 +68,7 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 	#endregion
 
 	#region 成员字段
+	private static readonly HashSet<string> _fallbackOptions = new(StringComparer.OrdinalIgnoreCase) { FRAMEWORK };
 	private readonly Dictionary<string, string> _variables = new(variables ?? [], StringComparer.OrdinalIgnoreCase)
 	{
 	};
@@ -88,13 +91,25 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 		set => _variables[name] = value;
 	}
 
-	public string Url => this[URL];
+	public string Homepage => this[HOMEPAGE];
 	public string Name => this[NAME];
 	public string Title => this[TITLE];
 	public string Listen => this[LISTEN];
 	public string License => this[LICENSE];
 	public string Category => this[CATEGORY];
 	public string Maintainer => this[MAINTAINER];
+	public string Manufacturer
+	{
+		get
+		{
+			var value = this.GetRaw(MANUFACTURER);
+			if(!string.IsNullOrWhiteSpace(value))
+				value = this[MANUFACTURER];
+
+			return string.IsNullOrEmpty(value) ? DEFAULT_MANUFACTURER : value;
+		}
+	}
+
 	public string Summary => TextSource.Read(this.Source, this.GetRaw(SUMMARY), this);
 	public string Description => TextSource.Read(this.Source, this.GetRaw(DESCRIPTION), this);
 	public string Source => this[SOURCE];
@@ -107,7 +122,7 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 	public string Framework => this[FRAMEWORK];
 	public string Compilation => _variables.TryGetValue(COMPILATION, out var value) ? this[COMPILATION] : "Release";
 	public string RuntimeIdentifier => _variables.TryGetValue(nameof(this.RuntimeIdentifier), out var value) ? this[nameof(this.RuntimeIdentifier)] : Utility.GetRuntimeIdentifier(this.Platform, this.Architecture);
-	public string[] Dependencies => _variables.TryGetValue(DEPENDENCIES, out var value) && value != null ? this[DEPENDENCIES].Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) : [];
+	public string[] Dependencies => Dependency.Split(this[DEPENDENCIES]);
 
 	public DaemonVariable Daemon => new
 	(
@@ -147,7 +162,7 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 
 	#region 内部方法
 	private string GetRaw(string name) => _variables.GetValueOrDefault(name);
-	internal static Dictionary<string, string> From(CommandContext context, string directory = null) => Utility.CreateVariables(context, directory);
+	internal static Dictionary<string, string> From(CommandContext context, string directory = null) => Utility.CreateVariables(context, directory, _fallbackOptions);
 	#endregion
 
 	#region 显式实现

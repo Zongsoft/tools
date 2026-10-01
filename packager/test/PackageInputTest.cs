@@ -17,12 +17,16 @@ public sealed class PackageInputTest
 	{
 		var architecture = Environment.GetEnvironmentVariable("architecture");
 		var compilation = Environment.GetEnvironmentVariable("compilation");
-		var url = Environment.GetEnvironmentVariable("url");
+		var homepage = Environment.GetEnvironmentVariable("homepage");
+		var maintainer = Environment.GetEnvironmentVariable("maintainer");
+		var manufacturer = Environment.GetEnvironmentVariable("manufacturer");
 		try
 		{
 			Environment.SetEnvironmentVariable("architecture", "Arm64");
 			Environment.SetEnvironmentVariable("compilation", "Debug");
-			Environment.SetEnvironmentVariable("url", null);
+			Environment.SetEnvironmentVariable("homepage", null);
+			Environment.SetEnvironmentVariable("maintainer", null);
+			Environment.SetEnvironmentVariable("manufacturer", null);
 			var command = new DebCommand();
 			var context = new CommandContext(new CommandExecutor(), CommandLine.Parse("deb --architecture:X64 --platform:Linux --framework:net10.0")[0], command, null);
 
@@ -31,7 +35,9 @@ public sealed class PackageInputTest
 
 			Assert.Equal("X64", values["architecture"]);
 			Assert.Equal("Debug", values["compilation"]);
-			Assert.Equal("https://github.com/Zongsoft", values["url"]);
+			Assert.Equal("https://github.com/Zongsoft", values["homepage"]);
+			Assert.Equal("Zongsoft", variables.Maintainer);
+			Assert.Equal("Zongsoft", variables.Manufacturer);
 			Assert.Equal(System.Runtime.InteropServices.Architecture.X64, variables.Architecture);
 			Assert.Equal("Debug", variables.Compilation);
 		}
@@ -39,7 +45,9 @@ public sealed class PackageInputTest
 		{
 			Environment.SetEnvironmentVariable("architecture", architecture);
 			Environment.SetEnvironmentVariable("compilation", compilation);
-			Environment.SetEnvironmentVariable("url", url);
+			Environment.SetEnvironmentVariable("homepage", homepage);
+			Environment.SetEnvironmentVariable("maintainer", maintainer);
+			Environment.SetEnvironmentVariable("manufacturer", manufacturer);
 		}
 	}
 

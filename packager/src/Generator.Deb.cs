@@ -10,7 +10,7 @@
  *   钟峰(Popeye Zhong) <zongsoft@gmail.com>
  *
  * The MIT License (MIT)
- * 
+ *
  * Copyright (C) 2020-2026 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -77,7 +77,8 @@ partial class Generator
 		builder.AppendLine($"Architecture: {GetDebianArchitecture(package.Architecture)}");
 		builder.AppendLine($"Installed-Size: {Math.Max(1, (package.GetPackageSize() + 1023) / 1024)}");
 		builder.AppendLine($"Maintainer: {NormalizeDebText(package.Maintainer) ?? "Unknown"}");
-		AppendDebField(builder, "Homepage", package.Url);
+		AppendDebField(builder, "Manufacturer", package.Manufacturer);
+		AppendDebField(builder, "Homepage", package.Homepage);
 		AppendDebField(builder, "License", package.License);
 
 		if(package is Package.Deb deb)
@@ -249,9 +250,7 @@ partial class Generator
 	}
 
 	static bool IsDebianConfigurationFile(Package.Entry entry) => !entry.IsDirectory && entry.Rooted && entry.EntryName.StartsWith("etc/", StringComparison.Ordinal);
-
 	static void WriteArHeader(Stream stream) => stream.Write(Encoding.ASCII.GetBytes("!<arch>\n"));
-
 	static void WriteArEntry(Stream stream, string name, byte[] data)
 	{
 		using var content = new MemoryStream(data, false);

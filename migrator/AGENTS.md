@@ -15,7 +15,7 @@
 - 支持六种数据库和 Amazon S3；MigrationProvider 管参数规则，MigrationPlan 管结构；TDengine 用 WebSocket。执行器每次 apply 执行全部 SQL，脚本负责幂等；无成功文件历史、自动回滚或并发调度。
 - 产物名为 `<name>[-<edition>](migrate)@<version>_<RID>.tar.gz` 与同名 .sh/.cmd；name 原样使用，计划名称及默认状态目录保留既有升迁后缀规范化规则；不生成描述文件；版本文件只读，不创建或保存。两文件先暂存后发布，覆盖失败恢复原文件。
 - 版本来源由私有 VersionSource 解析，数字 --version 优先；省略/空白和显式目录只查直属 .edition/ApplicationManifest，缺失才读 .version/ApplicationIdentifier。显式文件名以 .version 结尾时按标识读取，其余按清单。产物 Edition 只来自显式非空 --edition，环境和 .env 不参与；未指定时仅借用 Current、唯一 Edition 或顶层版本的版本号，产物无 Edition。多个且无 Current 时要求选择，显式 Edition 按清单匹配；标识文件允许显式 Edition 覆盖。name 独立必填；源文件始终只读，错误保留完整路径。最终版本与 Edition 回填后建立本次变量视图，失败不改已有产物。
-- 计划为 .migration/migration.json，SQL 为 .migration/.artifacts/<provider>/<序号>.sql。计划使用源码生成 JSON，数组顺序参与指纹计算；Source/Content 不入 JSON。PAX 元数据为 Migrator 与 Runtime。
+- 归档根目录直接放置 migration.json、id、migrate.sh/migrate.cmd、原生执行器及依赖，不套 .migration 目录；SQL 为 .artifacts/<provider>/<序号>.sql。执行器以计划所在目录为根，脚本路径须位于其 .artifacts 子目录。外部脚本解压到独立临时目录并清理，默认持久状态目录与此布局无关。计划使用源码生成 JSON，数组顺序参与指纹计算；Source/Content 不入 JSON。PAX 元数据为 Migrator 与 Runtime。
 - 外部入口 [apply|status|check] [state]，check 比较内嵌指纹与 ready，不解压。默认 state 不含版本/RID；安装方显式传入目录。apply/status 清理临时解压目录并返回退出码。
 - 执行使用状态锁，失败使 ready 失效，Amazon S3 pending 支持配置重试；不记录凭据，不删除数据库/桶。可选 Amazon S3 加密、版本控制和标签均使用标准 API；未指定时不发配置请求。
 

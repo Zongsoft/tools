@@ -21,7 +21,7 @@ public sealed class MigrationDatabaseTest
 		var first = FileDatabase(directory, provider, "first");
 		var second = FileDatabase(directory, provider, "second");
 		var plan = Plan(first, second);
-		plan.Steps[0].Scripts.Add(directory.Script(".migration/.artifacts/first.sql", "CREATE TABLE records(id INTEGER); INSERT INTO records VALUES(7);"));
+		plan.Steps[0].Scripts.Add(directory.Script(".artifacts/first.sql", "CREATE TABLE records(id INTEGER); INSERT INTO records VALUES(7);"));
 
 		var context = new MigrationContext(directory.Path, Path.Combine(directory.Path, "state"));
 
@@ -116,8 +116,8 @@ public sealed class MigrationDatabaseTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var plan = Plan(FileDatabase(directory, "sqlite", "first"), FileDatabase(directory, "sqlite", "second"));
-		plan.Steps[1].Scripts.Add(directory.Script(".migration/.artifacts/schema.sql", "SELECT 1;"));
-		directory.Write(".migration/.artifacts/schema.sql", "SELECT 2;");
+		plan.Steps[1].Scripts.Add(directory.Script(".artifacts/schema.sql", "SELECT 1;"));
+		directory.Write(".artifacts/schema.sql", "SELECT 2;");
 		var calls = new List<string>();
 
 		await Assert.ThrowsAsync<MigrationException>(() => new MigrationExecutor(_ => new RecordingDatabase(calls)).ApplyAsync(plan, new(directory.Path, Path.Combine(directory.Path, "state")), TestContext.Current.CancellationToken));

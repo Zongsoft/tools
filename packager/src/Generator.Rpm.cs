@@ -262,8 +262,62 @@ partial class Generator
 			new("rpmlib(PayloadFilesHavePrefix)", RPM_SENSE_RPMLIB | RPM_SENSE_LESS | RPM_SENSE_EQUAL, "4.0-1"),
 		};
 
-		AddRpmDependencies(result, package.Dependencies);
+		var rich = false;
+		var tilde = false;
+		var caret = false;
+
+		foreach(var group in Dependency.Parse(package.Dependencies))
+		{
+			foreach(var item in group)
+			{
+				tilde |= item.Minimum?.Contains('~') == true || item.Maximum?.Contains('~') == true;
+				caret |= item.Minimum?.Contains('^') == true || item.Maximum?.Contains('^') == true;
+			}
+
+			var alternatives = Array.ConvertAll(group, GetRpmDependency);
+			var dependency = alternatives.Length == 1 ? alternatives[0] :
+				new RpmDependency("(" + string.Join(" or ", alternatives.Select(FormatRpmDependency)) + ")", 0, string.Empty);
+			result.Add(dependency);
+			rich |= dependency.Name.StartsWith('(');
+		}
+
+		if(rich)
+			result.Add(new("rpmlib(RichDependencies)", RPM_SENSE_RPMLIB | RPM_SENSE_LESS | RPM_SENSE_EQUAL, "4.12.0-1"));
+		if(tilde)
+			result.Add(new("rpmlib(TildeInVersions)", RPM_SENSE_RPMLIB | RPM_SENSE_LESS | RPM_SENSE_EQUAL, "4.10.0-1"));
+		if(caret)
+			result.Add(new("rpmlib(CaretInVersions)", RPM_SENSE_RPMLIB | RPM_SENSE_LESS | RPM_SENSE_EQUAL, "4.15.0-1"));
+
 		return result;
+	}
+
+	static RpmDependency GetRpmDependency(Dependency dependency)
+	{
+		if(dependency.IsExact)
+			return new(dependency.Name, RPM_SENSE_EQUAL, dependency.Minimum);
+
+		var minimum = new RpmDependency(dependency.Name, RPM_SENSE_GREATER | (dependency.MinimumIncluded ? RPM_SENSE_EQUAL : 0), dependency.Minimum);
+		var maximum = new RpmDependency(dependency.Name, RPM_SENSE_LESS | (dependency.MaximumIncluded ? RPM_SENSE_EQUAL : 0), dependency.Maximum);
+
+		if(dependency.Minimum != null && dependency.Maximum != null)
+			return new($"({FormatRpmDependency(minimum)} with {FormatRpmDependency(maximum)})", 0, string.Empty);
+
+		return dependency.Minimum != null ? minimum : dependency.Maximum != null ? maximum : new(dependency.Name, 0, string.Empty);
+	}
+
+	static string FormatRpmDependency(RpmDependency dependency)
+	{
+		var op = dependency.Flags switch
+		{
+			RPM_SENSE_LESS => "<",
+			RPM_SENSE_LESS | RPM_SENSE_EQUAL => "<=",
+			RPM_SENSE_GREATER => ">",
+			RPM_SENSE_GREATER | RPM_SENSE_EQUAL => ">=",
+			RPM_SENSE_EQUAL => "=",
+			_ => null,
+		};
+
+		return op == null ? dependency.Name : $"{dependency.Name} {op} {dependency.Version}";
 	}
 
 	static List<RpmDependency> GetRpmProvides(Package.Rpm package)
@@ -444,10 +498,11 @@ partial class Generator
 			builder.AddInt32(1006, buildTime);
 			builder.AddString(1007, Environment.MachineName);
 			builder.AddInt32(1009, (int)Math.Min(int.MaxValue, package.GetPackageSize()));
+			builder.AddString(1011, package.Manufacturer);
 			builder.AddString(1014, package.License);
 			builder.AddString(1015, package.Maintainer);
 			builder.AddString(1016, package.Category ?? "Applications/System");
-			builder.AddString(1020, package.Url);
+			builder.AddString(1020, package.Homepage);
 			builder.AddString(1021, "linux");
 			builder.AddString(1022, GetRpmArchitecture(package.Architecture));
 			builder.AddScript(1023, package.Scripts.Installing);

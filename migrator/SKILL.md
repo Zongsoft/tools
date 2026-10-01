@@ -15,7 +15,11 @@ description: 修改独立升迁输入、SQL 批次、原生执行、产物命名
 
 输入处理在 src/MigrationLoader* 与 MigrationProfile，生成文件集在 MigrationBundle，归档和脚本在 Generator。协议及参数描述在 .shared。数据库/Amazon S3/锁/状态在 executor/src。保持这些边界；packager 只消费产物。
 
+归档根目录直接收录计划 migration.json、指纹 id、内部入口、原生执行器及依赖，SQL 路径为 .artifacts/<provider>/<序号>.sql；不套 .migration 目录。生成端、双平台启动脚本及执行器使用同一布局；执行器以计划文件所在目录为根，保留 .artifacts 路径边界及校验和检查。外部启动器使用独立临时目录并清理，默认状态目录和 packager 的安装根 .migration 收纳目录独立于归档布局。
+
 通用变量按默认值、系统环境、从根到工作目录的直属 `.env`、显式选项顺序覆盖，先通过共享 Utility/Profile.Load 加载再解析版本来源；各级段落与条目以下划线拼名，同次命令全部输入共用变量。连接参数使用 `<输入名>.ini` 或 `<provider>.ini`，保持就近选择完整配置及显式导入规则，自动查找不回退旧 `*.env`。迁移示例、测试与文档时同步导入路径，不能把通用 `.env` 改成 `.ini`。
+
+`--framework` 未指定或原始值为 null/空字符串时保留合并变量集中已有的非空值；无非空变量时保留原赋值。纯空白、表达式展开为空及其他空选项保持原行为；framework 仍是通用变量，不参与原生执行器或 RID 选择。
 
 核对两端名称契约：外部产物为 `<name>[-<edition>](migrate)@<version>_<RID>`，name 原样使用；计划名称及默认状态目录保留既有升迁后缀规范化规则。Edition 可省略，版本与 RID 明确。脚本和归档必须同前缀，check 不解压，状态跨版本保留，外部调用可覆盖 state。已有输入无效不能按缺失跳过。
 

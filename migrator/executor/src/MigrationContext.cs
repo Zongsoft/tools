@@ -60,7 +60,7 @@ public sealed class MigrationContext(string directory, string stateDirectory, Ac
 	{
 		var path = System.IO.Path.GetFullPath(System.IO.Path.Combine(this.Directory, script.Path));
 
-		if(!path.StartsWith(System.IO.Path.Combine(this.Directory, ".migration", ".artifacts") + System.IO.Path.DirectorySeparatorChar, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+		if(!path.StartsWith(System.IO.Path.Combine(this.Directory, ".artifacts") + System.IO.Path.DirectorySeparatorChar, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
 			throw new InvalidDataException(Properties.Resources.ScriptPathInvalid_Message);
 
 		if(Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))) != script.Checksum)

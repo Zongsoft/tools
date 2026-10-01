@@ -183,7 +183,7 @@ public sealed class MigrationTDengineTest
 		{
 			Provider = "tdengine",
 			DatabaseIndex = 0,
-			Scripts = batches.Select((sql, index) => directory.Script($".migration/.artifacts/tdengine/{index + 1}.sql", sql)).ToList(),
+			Scripts = batches.Select((sql, index) => directory.Script($".artifacts/tdengine/{index + 1}.sql", sql)).ToList(),
 		};
 	}
 

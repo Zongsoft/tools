@@ -62,6 +62,8 @@ Core 由 ProfileReader 内置处理导入，提供循环/深度保护；ProfileO
 
 共享 `Utility.LoadEnvironmentVariables` 收集祖先链，再逆序用 `Profile.Load` 加载各级直属 `.env`。根条目保留原名，递归段落与条目以下划线拼名，保留 Core 解析、空值和导入语义。仅跳过打开阶段的缺失文件；读取、权限及解析异常直接传播。每次调用独立加载，嵌套清单不重新加载，不修改进程环境变量。
 
+deployer 通过不区分大小写的集合声明允许空值回退的选项，目前仅包含 `framework`。目标目录预解析与加载 appsettings 后的最终变量合并均在原有循环中直接执行规则：已声明选项的原始值为 null 或空字符串时保留变量集中已有的非空值。没有非空回退值时保留原赋值，包括存在性过滤使用的空值键。纯空白值、非空表达式展开为空的行为不变；较近 `.env` 的空值不回溯先前来源。
+
 `Normalizer` 处理 `$(name)` 和 `%name%`，保留 URL 中的斜线。部署路径展开发现未定义变量时报错；被过滤掉的分支无需提供变量。过滤组合保持从左到右求值，源过滤与目标过滤都必须满足。
 
 `NugetAssets.ResolveLibraryPath` 集中处理显式缓存路径的框架适配：只解析相对 NuGet_Packages 根的路径，识别 lib 目录；路径内的框架优先于 Framework 变量，通过官方 NuGetFrameworkUtility.GetNearest 选择最近框架并保留后续子路径。根外、未指定目标框架或无适用目录时返回原路径。

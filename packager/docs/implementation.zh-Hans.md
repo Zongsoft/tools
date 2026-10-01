@@ -80,7 +80,7 @@ flowchart TD
     L --> V["Replace installation root .version with memory entry"]
     V --> I["Call package.Pack(output, overwrite)"]
     I --> J["Generator stages and commits package output"]
-    J --> S["Save source .edition or .version; create both if absent"]
+    J --> S["Save both source files if .edition exists; otherwise save .version or create both"]
     S --> OK["Report success"]
 ```
 
@@ -103,9 +103,9 @@ protected override Package.Deb CreatePackage(CommandContext context, Variables v
 
 清单依次选择显式非空 Edition、Current、唯一 Edition；多个且无选择时报错，无具名 Edition 时用顶层版本。显式选择须存在并保留清单拼写。标识回退允许显式 Edition 替换或补充文件中的 Edition。显式名称须与源名称忽略大小写一致；显式版本覆盖所选版本，最终版本非零。身份只取显式选项及源文件，环境和 `.env` 可通过显式变量引用使用。
 
-载入的清单在内存中原位替换选中 Edition，再将 Current 设为该项，保留其他条目、顺序和 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 的注释及空行布局。制包前准备待保存内容；`Save(TextWriter)` 使用 UTF-8 无 BOM、CRLF 写入器。标识字节直接采用 `ApplicationIdentifier.Save(Stream)`，不追加换行。
+载入的清单在内存中原位替换选中 Edition，再将 Current 设为该项，保留其他条目、顺序和 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 的注释及空行布局。制包前准备待保存内容；`Save(TextWriter)` 使用 UTF-8 无 BOM、CRLF 写入器。标识字节采用 `ApplicationIdentifier.Save(Stream)`；读取使用 `ApplicationIdentifier.Load`，末尾有无 LF、CRLF 换行均可，验证只检查解析后的身份，不限制末尾换行。
 
-所有包产物提交成功后才保存源文件：已有清单只原子替换 `.edition`，不更新伴随标识；仅有标识时只更新 `.version`；两者均无时要求显式有效名称和版本，使用 `ArtifactPublisher` 成组暂存及提交两文件，不覆盖并发创建的文件，失败回滚。源保存失败保留包并报告受影响路径；解析、校验及制包失败不保存源文件。
+所有包产物提交成功后才保存源文件：已有清单通过 `ArtifactPublisher` 成组回写 `.edition` 和 `.version`，覆盖已有标识或创建缺失标识，标识记录最终选定的名称、Edition 和版本；仅有标识时只原子更新 `.version`；两者均无时要求显式有效名称和版本，成组暂存及提交两文件，不覆盖并发创建的文件。双文件保存失败回滚。源保存失败保留包并报告受影响路径；解析、校验及制包失败不保存源文件。
 
 `EntryCollection.Load` 排除源直属 `.edition`（含显式别名），指向安装根 `.edition` 的文件项也排除；其他子目录文件沿用普通选择规则。`SetVersion` 写入唯一的安装根 `.version` 内存项，权限 `0644`，替换同目标普通及根别名项，不受排除规则影响。全部编码器及 RPM 摘要通过 `Entry.OpenRead()` 读取；子目录中的 `.version` 保持普通载荷行为。
 
@@ -130,7 +130,7 @@ Debug 引用本地 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/ma
 | `--output` | `source` | 始终作为输出目录；相对路径基于 `source`，不支持指定文件名。 |
 | `--exclude` | 空 | 加载打包项时跳过的文件模式列表，多个模式用逗号或分号分隔。 |
 | `--edition` | Current 或唯一 Edition | 产品 Edition，参与包名。 |
-| `--framework` | 空 | 可选 .NET 目标框架，用于查找 `bin/<compilation>/<framework>` 中的宿主。 |
+| `--framework` | `framework` 变量或空 | 可选 .NET 目标框架，用于查找 `bin/<compilation>/<framework>` 中的宿主；选项未指定或为空时使用合并后的变量。 |
 | `--compilation` | `Release` | 可选 .NET 构建配置，用于上述宿主目录查找，也可作为变量引用。 |
 | `--architecture` | `x64` | 目标架构。 |
 | `--overwrite` | `false` | 是否覆盖已存在的输出文件。 |
@@ -138,11 +138,12 @@ Debug 引用本地 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/ma
 | `--title` | 空 | 人类可读标题。 |
 | `--summary` | 空 | 短描述；可为文件路径。 |
 | `--description` | 空 | 长描述；可为文件路径。 |
-| `--url` | `https://github.com/Zongsoft` | 项目主页。 |
+| `--homepage` | `https://github.com/Zongsoft` | 项目主页。 |
 | `--license` | 空 | 许可证文本。 |
 | `--category` | 格式默认 | Debian `Section` 或 RPM `Group`。 |
-| `--maintainer` | `Zongsoft Studio <zongsoft@gmail.com>` | 维护者/供应商。 |
-| `--dependencies` | 空 | 依赖列表。 |
+| `--maintainer` | `Zongsoft` | 软件包维护者。 |
+| `--manufacturer` | `Zongsoft` | 软件生产厂家；未指定、null、空字符串使用默认值，纯空白不触发默认值。 |
+| `--dependencies` | 空 | 统一的 `name[:range]` 依赖列表；区间语法支持 `[v)` 简写及 `|` 替代项。 |
 
 systemd 与生命周期脚本选项：
 
@@ -165,6 +166,8 @@ systemd 与生命周期脚本选项：
 `PackCommand<TPackage>.GetVariables(context, directory)` 依次加载描述符默认值、系统环境变量、指定目录的祖先链 `.env`、显式命令选项（包括额外选项）。省略 directory 时跳过 `.env`，供第一次解析 source 使用。源目录存在并绝对化后重新加载变量并固定 source；`.env` 不参与 source 的反向推导。变量名不区分大小写，优先级为显式选项 > 近层 `.env` > 远层 `.env` > 环境变量 > 默认值。
 
 共享 `Utility.LoadEnvironmentVariables` 从文件系统根目录到 source 加载直属 `.env`，不搜索子目录。使用 `Profile.Load` 保留 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 的空值和导入语义，各级段落与条目以下划线拼名；读取或解析异常终止制包，仅缺失文件跳过。不写入进程环境变量。
+
+`Variables.From` 将 `FRAMEWORK` 放入不区分大小写的集合，通过 `fallbackOptions` 参数传给共享 `Utility.CreateVariables`。源目录预解析和最终加载均在原有选项合并循环中直接执行规则：仅在已声明选项的原始值为 null 或空字符串时保留已有非空变量；没有非空回退值时保留原赋值。纯空白值、非空表达式展开为空、较近 `.env` 清空先前值的行为不变，不改变 source 查找范围及框架校验。
 
 `PackCommand` 为每次调用建立独立的 `Variables` 视图，并传给包、脚本和文本来源；不保留进程级变量状态。访问值时递归展开引用，未使用的未知引用不会阻止制包。未知变量、循环引用及超过 64 层的展开失败，诊断指出变量名。展开不读取文件。
 
@@ -229,8 +232,9 @@ dotnet-pack deb \
 - `Summary`
 - `Description`
 - `Maintainer`
+- `Manufacturer`
 - `License`
-- `Url`
+- `Homepage`
 - `Category`
 - `InstallPath`
 - `Dependencies`
@@ -515,6 +519,12 @@ Package.InstallScripts 的 Delivered 独立于四个生命周期。Tar 复制载
 测试分为声明/有效模型、原生输出、三格式实际解包及隔离 Shell 替身。Shell 夹具把所有系统路径替换为临时目录，并使用假的 nginx/systemctl；不安装包、不操作真实服务。这些测试不等于真实安装验证；目标 Linux、Nginx 模块、证书加载和重载应在具备实际依赖的隔离环境中验证。配置契约、模块要求和部署行为见 [Web 配置指南](web.zh-Hans.md)。
 
 
+## 应用元数据
+
+主页的选项名和变量名为 `homepage`；`Package.Homepage` 提供 Debian `Homepage` 与 RPM `URL`（1020）的值。`manufacturer` 提供 `Package.Manufacturer`，未定义、null 或展开后为空字符串时使用共享默认值 `Zongsoft`。访问器在通用规范化把纯空白归为空字符串之前保留该原始值。`maintainer` 选项的默认值也为 `Zongsoft`，两者独立保存。
+
+tar 以 PAX 全局属性 `manufacturer` 保存厂家，Debian 写入自定义 control 字段 `Manufacturer`，RPM 写入标准 `VENDOR` 字符串标签（1011）。Debian 沿用既有文本规范化，包括不写入纯空白的厂家字段；这些元数据不增加载荷条目。参见 [Debian 自定义字段](https://www.debian.org/doc/debian-policy/ch-controlfields.html#user-defined-fields)与 [RPM 标签说明](https://rpm.org/docs/latest/manual/tags.html)。
+
 ## 打包器版本元数据
 
 每个安装包自动记录当前生成工具的身份，逻辑内容为 `Packager:Zongsoft.Tools.Packager@<assembly-version>`。值采用 `程序集名@版本号`，从打包器自身程序集读取，独立于宿主应用版本；无需指定额外选项或启用升迁。
@@ -705,7 +715,8 @@ Priority: optional
 Architecture: <debian-architecture>
 Installed-Size: <payload-size-in-KiB>
 Maintainer: <maintainer>
-Homepage: <url>
+Manufacturer: <manufacturer>
+Homepage: <homepage>
 License: <license>
 Depends: <dependencies>
 Description: <summary-or-title-or-name>
@@ -720,7 +731,7 @@ Description: <summary-or-title-or-name>
 - `Description` 第一行是短描述。
 - 长描述每行前置一个空格。
 - 空行写为 ` .`。
-- `License` 与 `Packager` 作为额外字段写入；`Packager` 与宿主 `Version`、`Maintainer` 分别保存不同信息。
+- `License`、`Manufacturer` 与 `Packager` 作为额外字段写入；`Packager` 与宿主 `Version`、`Maintainer` 分别保存不同信息。
 
 ### Debian 架构映射
 
@@ -872,7 +883,7 @@ signature section 末尾按 8 字节对齐。两个 header 的索引均按 tag �
 
 - 包名、版本、release。
 - 摘要、描述、构建时间、构建主机。
-- 包大小、许可证、维护者、分类、URL。
+- 包大小、许可证、生产厂家、维护者、分类、主页地址。
 - OS 和架构。
 - 安装/卸载脚本。
 - 文件大小、模式、mtime、digest、用户名、组名、配置文件标记。
@@ -892,6 +903,7 @@ signature section 末尾按 8 字节对齐。两个 header 的索引均按 tag �
 | `1006` | 构建时间。 |
 | `1007` | 构建主机。 |
 | `1009` | 安装大小。 |
+| `1011` | 生产厂家/供应商。 |
 | `1014` | 许可证。 |
 | `1015` | 维护者/打包者。 |
 | `1016` | 分组。 |
@@ -929,7 +941,7 @@ signature section 末尾按 8 字节对齐。两个 header 的索引均按 tag �
 
 ### Requires、Provides、Conflicts
 
-关系表达式支持：
+Requires 使用下文的统一依赖模型。Provides、Conflicts 保留以下原生关系表达式：
 
 ```text
 name
@@ -959,6 +971,8 @@ rpmlib(CompressedFileNames) <= 3.0.4-1
 rpmlib(FileDigests) <= 4.6.0-1
 rpmlib(PayloadFilesHavePrefix) <= 4.0-1
 ```
+
+布尔 Requires 还会添加 `rpmlib(RichDependencies) <= 4.12.0-1`。完整的括号表达式存入依赖名称，flags 为 `0`、version 为空。能力依赖使用 `RPMLIB | LESS | EQUAL`；端点含 `~` 或 `^` 时，还分别声明 `TildeInVersions <= 4.10.0-1` 或 `CaretInVersions <= 4.15.0-1`。这些是能力标识版本，不是 RPM 产品版本。
 
 默认 Provides：
 
@@ -1014,9 +1028,19 @@ RPM header 同时保存一份文件元数据，供包管理器查询和校验。
 
 Debian 的 control/data gzip tar 分别写入受控临时文件，ar 依据实际长度流式复制。RPM 原始 cpio 与 gzip payload 使用临时文件，压缩载荷 SHA-256、主 Header + payload MD5 均通过流计算，最后顺序写入各 Header 与载荷，避免完整包体数组。小版本内容和 Header 元数据仍保留内存处理；元数据内存随条目数增长，载荷不随文件字节数增加托管分配。临时文件使用独占 CreateNew、DeleteOnClose，Unix 模式 0600；正常结束及异常均释放。需要足够临时磁盘空间，RPM 峰值包括原始及压缩载荷；RPM 字段的整数大小上限仍然适用。
 
+## 统一依赖
+
+`Variables.Dependencies` 先展开变量，再由 `Dependency.Split` 分割顶层逗号/分号组；区间及 RPM capability 括号内的标点保持完整。`Package.Dependencies` 仍为字符串数组，两种编码器均调用 `Dependency.Parse` 得到 AND 组及组内 OR 替代项，每项包含名称、原始上下界字符串及是否包含边界的标志。
+
+语法为 `name[:range]`：单独包名表示不限版本，以数字开头的裸版本表示包含下界。支持标准 NuGet 风格区间，并将 `[v)` 作为 `[v,)` 的别名；`[v]` 表示精确版本，`(v,)` 表示不含下界，`(,v]` / `(,v)` 表示上界，`(,)` 表示不限版本。缺省端点必须使用开边界。`libc6:any` 等包名限定仍属于名称；字母开头的原生版本请使用括号。保留原生 epoch、修订号及版本比较语义，不进行 NuGet 归一化、排序、浮动版本解析或矛盾区间合并。旧比较表达式、错误括号、浮动 `*`、空替代项及控制字符使用本地化诊断报错；空列表项及重复约束保留既有列表行为。
+
+Debian 将区间转换为一或两个原生比较，严格边界映射为 `>>` / `<<`；对替代项的比较应用分配律：`foo:[1,2) | bar:[3)` 转换为 `foo (>= 1) | bar (>= 3), foo (<< 2) | bar (>= 3)`。每个输入组最多展开为 1024 个关系组，超限在发布产物前报错。最终名称及版本通过既有 Debian 关系校验。
+
+RPM 的单比较使用普通 flags/name/version 条目；有限区间转换为 `(foo >= 1 with foo < 2)`，替代项转换为 `((foo >= 1 with foo < 2) or bar >= 3)`。`with` 要求同一个包满足两个端点；替代依赖需要 RPM 4.13+，`with` 需要 RPM 4.14+。Debian 没有对应的单提供者运算符，其虚拟依赖的两个端点可能由不同提供者分别满足。两种格式均保留自身的版本比较及提供者语义，统一的是输入表示法。参见 [Debian 关系字段](https://www.debian.org/doc/debian-policy/ch-relationships.html)和 [RPM 布尔依赖](https://rpm.org/docs/latest/manual/boolean_dependencies)。
+
 ## Debian 关系字段
 
-`DebCommand` 提供 `--provides`、`--replaces`、`--breaks`、`--conflicts`、`--recommends`、`--suggests`，分别写入同名首字母大写的 control 字段；`--dependencies` 写 Depends，例如 `--dependencies:"aspnetcore-runtime-10.0 (>= 10.0)"` 写出 `Depends: aspnetcore-runtime-10.0 (>= 10.0)`；RPM 示例中不带括号的版本关系不能直接用于 Debian。`Package.Deb` 独占规则，不复用 RPM 解析器。列表以逗号或分号分隔；关系写为 `name (>= version)` 等括号语法，支持 `<< <= = >= >>`。Depends/Recommends/Suggests 可用 `|` 表达替代项，Provides 的版本关系仅允许 `=`。无值不写字段，拒绝非法包名、关系、换行和 NUL；二进制 control 不接受源包的架构限制及构建 profile 表达式。规则依据 [Debian Policy 关系字段](https://www.debian.org/doc/debian-policy/ch-relationships.html)。
+`DebCommand` 提供 `--provides`、`--replaces`、`--breaks`、`--conflicts`、`--recommends`、`--suggests`，分别写入同名首字母大写的 control 字段。这些选项保留原生语法：列表以逗号或分号分隔，关系写为 `name (>= version)` 等括号形式，支持 `<< <= = >= >>`；Recommends/Suggests 可用 `|` 表达替代项，Provides 的版本关系仅允许 `=`。`--dependencies` 则使用统一解析器：`--dependencies:"aspnetcore-runtime-10.0:[10.0)"` 写出 `Depends: aspnetcore-runtime-10.0 (>= 10.0)`。`Package.Deb` 格式化解析模型并独立校验输出字段，不复用 RPM 解析器。无值不写字段，拒绝非法包名、关系、换行和 NUL；二进制 control 不接受源包的架构限制及构建 profile 表达式。规则依据 [Debian Policy 关系字段](https://www.debian.org/doc/debian-policy/ch-relationships.html)。
 
 ## 当前实现边界
 
@@ -1046,7 +1070,7 @@ zongsoft-enterprise(migrate)@1.0.0_linux-x64.sh
 
 名称可以不同于宿主名称，但 Edition、版本和 RID 必须匹配。每个查找位置只有在压缩包和脚本都不存在时才继续下一位置；只找到其中一份立即报错并指出缺失文件的完整路径。找到完整配套后立即校验归档元数据和 RID，校验失败不再继续查找。两份文件必须来自同一目录，不拼配不同目录、不选择其他版本、Edition 或架构。到根目录仍未找到时，错误将预期文件名与已检查目录分行显示，各级目录及其 `.migration/` 按查找顺序逐行缩进列出。共享 `Utility.Indent` 使用平台换行并保留嵌套详情的缩进。未指定选项，或选项值为空、空字符串、全空白字符时，均不启用升迁，也不收录升迁产物。
 
-两个文件原样存入安装根 `.migration/`，不展开归档；脚本为 0755，压缩包为 0600。与载荷目标冲突时报错。安装时调用脚本 `apply` 并传入 `/var/lib/<包名>/packager`；失败阻止启动。systemd 的 `ExecStartPre` 调用同一脚本 `check`，只比较完成标记，不解压、不连接服务。无 daemon 时仍执行升迁，DESTDIR 暂存不执行钩子，卸载保留状态与数据库/桶。目标机需要 POSIX sh、tar/gzip、cmp 和运行器所需系统库；详见升迁指南。
+两个文件原样存入安装根 `.migration/`，不展开归档；脚本为 0755，压缩包为 0600。升迁启动脚本执行时另建临时目录，归档内容直接展开到该目录根部，结束后清理，不在安装目录中增加一层 `.migration/`。与载荷目标冲突时报错。安装时调用脚本 `apply` 并传入 `/var/lib/<包名>/packager`；失败阻止启动。systemd 的 `ExecStartPre` 调用同一脚本 `check`，只比较完成标记，不解压、不连接服务。无 daemon 时仍执行升迁，DESTDIR 暂存不执行钩子，卸载保留状态与数据库/桶。目标机需要 POSIX sh、tar/gzip、cmp 和运行器所需系统库；详见升迁指南。
 
 定位与归档校验在 `Migrator.Load` 中分离：私有 `Locate` 方法沿 `DirectoryInfo.Parent` 遍历目录，包含根目录，按目录本身、直属 `.migration/` 的顺序记录检查位置；选中同目录配套后由 `Validate` 检查 PAX 元数据。显式目录只检查一次，不隐式查找子目录。所有定位与校验均先于产物收录和制包。
 
@@ -1056,7 +1080,7 @@ Cake 的 `--edition` 同时用于依赖还原、编译、测试和制包；`rest
 
 源版本与内存条目的回归由 VersionFileTest、PackageVersionTest 和 PackageArtifactTest 覆盖。
 
-打包器版本元数据回归 `Package_Provenance_RecordsGeneratorAndPreservesApplicationMetadata` 覆盖三格式生成工具身份、应用版本和维护者字段。
+打包器版本元数据回归 `Package_Provenance_RecordsGeneratorAndPreservesApplicationMetadata` 覆盖三格式生成工具身份、应用版本、厂家值和默认值，以及 Debian/RPM 中独立的主页和维护者字段。
 
 使用 [README](../README.zh-Hans.md#快速开始) 中生成的真实项目安装包；以下命令从 hosting 仓库根目录执行，只检查包内容。安装与卸载用法见 [README 包格式](../README.zh-Hans.md#包格式)。
 

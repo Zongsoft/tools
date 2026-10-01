@@ -31,6 +31,8 @@ public sealed class MigrationDatabaseTest
 		Assert.Equal("mysql", database.Settings["Bootstrap"]);
 		Assert.Equal("3306", database.Settings["Port"]);
 		Assert.Equal("30s", database.Settings["Timeout"]);
+		Assert.Equal("false", database.Settings["Secured"]);
+		Assert.Equal("true", database.Settings["AllowPublicKeyRetrieval"]);
 		Assert.Equal("300s", database.Options["CommandTimeout"]);
 		Assert.Equal("utf8mb4", database.Options["Charset"]);
 		Assert.Equal("utf8mb4_0900_ai_ci", database.Options["Collation"]);
@@ -131,7 +133,7 @@ public sealed class MigrationDatabaseTest
 
 		Assert.Equal(new[] { "analytics", "hosting" }, plan.Steps.Select(task => plan.Databases[task.DatabaseIndex.Value].Name));
 		Assert.Equal(new[] { "SELECT 'analytics-first';", "SELECT 'hosting-second';" }, plan.Steps.SelectMany(task => task.Scripts).Select(script => script.Content));
-		Assert.Equal(new[] { ".migration/.artifacts/mysql/1.sql", ".migration/.artifacts/mysql/2.sql" }, plan.Steps.SelectMany(task => task.Scripts).Select(script => script.Path));
+		Assert.Equal(new[] { ".artifacts/mysql/1.sql", ".artifacts/mysql/2.sql" }, plan.Steps.SelectMany(task => task.Scripts).Select(script => script.Path));
 	}
 
 	[Fact]
@@ -237,6 +239,53 @@ public sealed class MigrationDatabaseTest
 
 		Assert.Contains(key, error.Message, StringComparison.OrdinalIgnoreCase);
 		Assert.False(Directory.Exists(Path.Combine(directory.Path, ".migration")));
+	}
+
+	[Theory]
+	[InlineData("Secured=false\n", "false", "true")]
+	[InlineData("Secured=true\n", "true", "true")]
+	[InlineData("AllowPublicKeyRetrieval=false\n", "false", "false")]
+	[InlineData("Secured=true\nAllowPublicKeyRetrieval=false\n", "true", "false")]
+	[InlineData("secured=FALSE\nallowpublickeyretrieval=TRUE\n", "FALSE", "TRUE")]
+	public void Load_MySqlConnectionOptions_RespectExplicitOverrides(string settings, string secured, string retrieval)
+	{
+		using var directory = new MigrationTestDirectory();
+		var plan = Load(directory, "[mysql]\n", "[mysql]\nServer=localhost\nDatabase=hosting\nPassword=root\n" + settings);
+
+		var database = Assert.Single(plan.Databases);
+		Assert.Equal(secured, database.Settings["Secured"]);
+		Assert.Equal(retrieval, database.Settings["AllowPublicKeyRetrieval"]);
+		var loaded = MigrationPlan.Load(directory.Write("plan.json", plan.Serialize()));
+		Assert.Equal(plan.Fingerprint(), loaded.Fingerprint());
+	}
+
+	[Theory]
+	[InlineData("mysql", "AllowPublicKeyRetrieval=invalid\n")]
+	[InlineData("mysql", "AllowPublicKeyRetrieval=\n")]
+	[InlineData("postgres", "AllowPublicKeyRetrieval=true\n")]
+	[InlineData("mssql", "AllowPublicKeyRetrieval=true\n")]
+	[InlineData("tdengine", "AllowPublicKeyRetrieval=true\n")]
+	public void Load_InvalidOrUnsupportedPublicKeyRetrieval_RejectsConfiguration(string provider, string settings)
+	{
+		using var directory = new MigrationTestDirectory();
+
+		Assert.Throws<InvalidDataException>(() => Load(directory, $"[{provider}]\n", $"[{provider}]\nServer=localhost\nDatabase=hosting\nPassword=root\n" + settings));
+	}
+
+	[Fact]
+	public void Fingerprint_MySqlConnectionOverrides_ChangeEffectivePlan()
+	{
+		using var directory = new MigrationTestDirectory();
+		var plan = Load(directory, "[mysql]\n", "[mysql]\nServer=localhost\nDatabase=hosting\nPassword=root\n");
+		var settings = Assert.Single(plan.Databases).Settings;
+		var original = plan.Fingerprint();
+
+		settings["Secured"] = "true";
+		Assert.NotEqual(original, plan.Fingerprint());
+		settings["Secured"] = "false";
+		Assert.Equal(original, plan.Fingerprint());
+		settings["AllowPublicKeyRetrieval"] = "false";
+		Assert.NotEqual(original, plan.Fingerprint());
 	}
 
 	[Theory]

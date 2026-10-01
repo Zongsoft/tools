@@ -24,7 +24,7 @@ public sealed class MigrationRuntimeTest
 		{
 			Provider = provider,
 			DatabaseIndex = 0,
-			Scripts = [directory.Script(".migration/.artifacts/schema.sql", "CREATE TABLE IF NOT EXISTS samples (id INTEGER PRIMARY KEY, title VARCHAR(100));\nINSERT INTO samples SELECT 1, 'hosting;ready' WHERE NOT EXISTS (SELECT 1 FROM samples WHERE id=1);\nCREATE TABLE IF NOT EXISTS migration_audit (id INTEGER); INSERT INTO migration_audit VALUES (1);")],
+			Scripts = [directory.Script(".artifacts/schema.sql", "CREATE TABLE IF NOT EXISTS samples (id INTEGER PRIMARY KEY, title VARCHAR(100));\nINSERT INTO samples SELECT 1, 'hosting;ready' WHERE NOT EXISTS (SELECT 1 FROM samples WHERE id=1);\nCREATE TABLE IF NOT EXISTS migration_audit (id INTEGER); INSERT INTO migration_audit VALUES (1);")],
 		};
 		var context = new MigrationContext(directory.Path, Path.Combine(directory.Path, "state"), logs.Add);
 		var migrator = Migrator.Create(migration.Provider);
@@ -59,7 +59,7 @@ public sealed class MigrationRuntimeTest
 		{
 			Provider = provider,
 			DatabaseIndex = 0,
-			Scripts = [directory.Script(".migration/.artifacts/failure.sql", "CREATE TABLE samples (id INTEGER); INSERT INTO absent_table VALUES (1); INSERT INTO samples VALUES (2);")],
+			Scripts = [directory.Script(".artifacts/failure.sql", "CREATE TABLE samples (id INTEGER); INSERT INTO absent_table VALUES (1); INSERT INTO samples VALUES (2);")],
 		};
 		try
 		{
@@ -78,10 +78,10 @@ public sealed class MigrationRuntimeTest
 	public void Context_ModifiedOrEscapingSql_IsRejectedBeforeExecution()
 	{
 		using var directory = new MigrationTestDirectory();
-		var script = directory.Script(".migration/.artifacts/schema.sql", "SELECT 1;");
+		var script = directory.Script(".artifacts/schema.sql", "SELECT 1;");
 		var context = new MigrationContext(directory.Path, Path.Combine(directory.Path, "state"));
-		Assert.Equal(Path.Combine(directory.Path, ".migration", ".artifacts", "schema.sql"), context.GetScriptPath(script));
-		directory.Write(".migration/.artifacts/schema.sql", "SELECT 2;");
+		Assert.Equal(Path.Combine(directory.Path, ".artifacts", "schema.sql"), context.GetScriptPath(script));
+		directory.Write(".artifacts/schema.sql", "SELECT 2;");
 
 		Assert.Contains(script.Path, Assert.Throws<InvalidDataException>(() => context.GetScriptPath(script)).Message);
 		script.Path = "../outside.sql";
@@ -97,7 +97,7 @@ public sealed class MigrationRuntimeTest
 		{
 			Provider = "sqlite",
 			DatabaseIndex = 0,
-			Scripts = [directory.Script(".migration/.artifacts/trigger.sql", "CREATE TABLE samples (id INTEGER); CREATE TABLE audit (message TEXT); CREATE TRIGGER sample_added AFTER INSERT ON samples BEGIN INSERT INTO audit VALUES ('first;part'); INSERT INTO audit VALUES ('second'); END; INSERT INTO samples VALUES (1);")],
+			Scripts = [directory.Script(".artifacts/trigger.sql", "CREATE TABLE samples (id INTEGER); CREATE TABLE audit (message TEXT); CREATE TRIGGER sample_added AFTER INSERT ON samples BEGIN INSERT INTO audit VALUES ('first;part'); INSERT INTO audit VALUES ('second'); END; INSERT INTO samples VALUES (1);")],
 		};
 		try
 		{
@@ -124,8 +124,8 @@ public sealed class MigrationRuntimeTest
 			DatabaseIndex = 0,
 			Scripts =
 			[
-				directory.Script(".migration/.artifacts/first.sql", "CREATE TABLE IF NOT EXISTS migration_audit (id INTEGER); INSERT INTO migration_audit VALUES (1);"),
-				directory.Script(".migration/.artifacts/second.sql", "INSERT INTO absent_table VALUES (2);"),
+				directory.Script(".artifacts/first.sql", "CREATE TABLE IF NOT EXISTS migration_audit (id INTEGER); INSERT INTO migration_audit VALUES (1);"),
+				directory.Script(".artifacts/second.sql", "INSERT INTO absent_table VALUES (2);"),
 			],
 		};
 		var context = new MigrationContext(directory.Path, Path.Combine(directory.Path, "state"));
@@ -133,7 +133,7 @@ public sealed class MigrationRuntimeTest
 		{
 			await Assert.ThrowsAnyAsync<DbException>(() => RunAsync(database, migration, context));
 			Assert.Equal(1L, await CountAudits());
-			migration.Scripts[1] = directory.Script(".migration/.artifacts/second.sql", "CREATE TABLE IF NOT EXISTS repaired (id INTEGER); INSERT INTO repaired VALUES (2);");
+			migration.Scripts[1] = directory.Script(".artifacts/second.sql", "CREATE TABLE IF NOT EXISTS repaired (id INTEGER); INSERT INTO repaired VALUES (2);");
 
 			await RunAsync(database, migration, context);
 
@@ -159,15 +159,16 @@ public sealed class MigrationRuntimeTest
 	[Theory]
 	[InlineData("migration/schema.sql")]
 	[InlineData("../outside.sql")]
-	[InlineData(".migration/private.sql")]
-	[InlineData(".migration/.artifacts/../outside.sql")]
-	[InlineData(".migration/.artifacts-neighbor/schema.sql")]
-	public void Context_ScriptOutsideMigrationDirectory_IsRejected(string relative)
+	[InlineData("private.sql")]
+	[InlineData(".artifacts/../outside.sql")]
+	[InlineData(".artifacts-neighbor/schema.sql")]
+	[InlineData(".migration/.artifacts/schema.sql")]
+	public void Context_ScriptOutsideArtifactsDirectory_IsRejected(string relative)
 	{
 		using var directory = new MigrationTestDirectory();
-		var script = directory.Script(".migration/.artifacts/schema.sql", "SELECT 1;");
+		var script = directory.Script(".artifacts/schema.sql", "SELECT 1;");
 		var context = new MigrationContext(directory.Path, Path.Combine(directory.Path, "state"));
-		Assert.Equal(Path.Combine(directory.Path, ".migration", ".artifacts", "schema.sql"), context.GetScriptPath(script));
+		Assert.Equal(Path.Combine(directory.Path, ".artifacts", "schema.sql"), context.GetScriptPath(script));
 		script.Path = relative;
 
 		Assert.Throws<InvalidDataException>(() => context.GetScriptPath(script));

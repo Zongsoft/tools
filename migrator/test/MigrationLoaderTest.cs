@@ -104,7 +104,7 @@ public sealed class MigrationLoaderTest
 
 		Assert.Equal("linux-arm64", plan.Runtime);
 		Assert.Equal(new[] { "/data/last.db", "/data/parts-a.db", "/data/parts-b.db", "/data/last.db" }, plan.Steps.Select(step => plan.Databases[step.DatabaseIndex.Value].Options["Path"]));
-		Assert.Equal(new[] { ".migration/.artifacts/sqlite/1.sql", ".migration/.artifacts/sqlite/2.sql", ".migration/.artifacts/sqlite/3.sql", ".migration/.artifacts/sqlite/4.sql" }, plan.Steps.SelectMany(step => step.Scripts).Select(script => script.Path));
+		Assert.Equal(new[] { ".artifacts/sqlite/1.sql", ".artifacts/sqlite/2.sql", ".artifacts/sqlite/3.sql", ".artifacts/sqlite/4.sql" }, plan.Steps.SelectMany(step => step.Scripts).Select(script => script.Path));
 	}
 
 	[Fact]
@@ -501,7 +501,7 @@ public sealed class MigrationLoaderTest
 		Assert.Equal(new[] { "first", "hosting", "second", "first" }, plan.Steps.Select(task => plan.Databases[task.DatabaseIndex.Value].Name));
 		Assert.Equal(4, plan.Steps.Count);
 		var scripts = plan.Steps.Select(task => Assert.Single(task.Scripts)).ToArray();
-		Assert.Equal(new[] { ".migration/.artifacts/postgres/1.sql", ".migration/.artifacts/mysql/1.sql", ".migration/.artifacts/postgres/2.sql", ".migration/.artifacts/postgres/3.sql" }, scripts.Select(script => script.Path));
+		Assert.Equal(new[] { ".artifacts/postgres/1.sql", ".artifacts/mysql/1.sql", ".artifacts/postgres/2.sql", ".artifacts/postgres/3.sql" }, scripts.Select(script => script.Path));
 		Assert.Equal(new[] { "SELECT 'first';", "SELECT 'mysql';", "SELECT 'second';", "SELECT 'first';" }, scripts.Select(script => script.Content));
 		Assert.All(scripts, script => Assert.Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(script.Content))), script.Checksum));
 		Assert.Equal(scripts[0].Source, scripts[3].Source);
@@ -520,7 +520,7 @@ public sealed class MigrationLoaderTest
 		var first = loader.Load("db.migration;db.migration", directory.Path, "zongsoft.daemon", "1.1.0");
 		var second = loader.Load("db.migration;db.migration", directory.Path, "zongsoft.daemon", "1.1.0");
 
-		Assert.Equal(new[] { ".migration/.artifacts/sqlite/1.sql", ".migration/.artifacts/sqlite/2.sql" }, second.Steps.SelectMany(task => task.Scripts).Select(script => script.Path));
+		Assert.Equal(new[] { ".artifacts/sqlite/1.sql", ".artifacts/sqlite/2.sql" }, second.Steps.SelectMany(task => task.Scripts).Select(script => script.Path));
 		Assert.Equal(first.Serialize(), second.Serialize());
 		Assert.Equal(first.Fingerprint(), second.Fingerprint());
 	}
@@ -689,7 +689,7 @@ public sealed class MigrationLoaderTest
 		var step = Assert.Single(plan.Steps);
 		Assert.Equal(new[] { "SELECT N'附件';\r\n-- retained", "SELECT 2;", "SELECT 3;" }, step.Scripts.Select(script => script.Content));
 		Assert.Equal(new[] { first, first, later }, step.Scripts.Select(script => script.Source));
-		Assert.Equal(new[] { ".migration/.artifacts/mssql/1.sql", ".migration/.artifacts/mssql/2.sql", ".migration/.artifacts/mssql/3.sql" }, step.Scripts.Select(script => script.Path));
+		Assert.Equal(new[] { ".artifacts/mssql/1.sql", ".artifacts/mssql/2.sql", ".artifacts/mssql/3.sql" }, step.Scripts.Select(script => script.Path));
 		foreach(var script in step.Scripts)
 		{
 			Assert.Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(script.Content))), script.Checksum);
@@ -718,7 +718,7 @@ public sealed class MigrationLoaderTest
 		Assert.Equal("SELECT 'explicit';", Assert.Single(plan.Steps[2].Scripts).Content);
 		Assert.Equal(plan.Steps[0].Scripts.Select(script => script.Content), plan.Steps[3].Scripts.Select(script => script.Content));
 		var scripts = plan.Steps.SelectMany(task => task.Scripts).ToArray();
-		Assert.Equal(Enumerable.Range(1, 8).Select(index => $".migration/.artifacts/sqlite/{index}.sql"), scripts.Select(script => script.Path));
+		Assert.Equal(Enumerable.Range(1, 8).Select(index => $".artifacts/sqlite/{index}.sql"), scripts.Select(script => script.Path));
 		Assert.Equal(4, plan.Steps.Count);
 		Assert.All(scripts, script => Assert.Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(script.Content))), script.Checksum));
 	}

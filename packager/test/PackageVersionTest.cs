@@ -105,26 +105,24 @@ public sealed class PackageVersionTest
 		package.Scriptor.Script();
 		package.Pack(output, true);
 
-		var expected = Encoding.UTF8.GetBytes("Zongsoft.Hosting.Web-Community@2.3.4");
 		var target = format == "tar" ? ".version" : "opt/zongsoft/web/.version";
 		var entry = Assert.Single(package.Entries, item => item.EntryName == target);
 		Assert.False(entry.Rooted);
 		Assert.Null(entry.Source);
-		Assert.Equal((long)expected.Length, entry.Size);
 		Assert.Equal((UnixFileMode)420, entry.Mode);
 		var archivePath = Path.Combine(output, package.FileName);
 		var archive = ReadArchive(archivePath, format);
 		var archived = Assert.Single(archive, item => item.Name == target);
-		Assert.Equal(expected, archived.Content);
+		using var content = new MemoryStream(archived.Content);
+		Assert.Equal(identity, ApplicationIdentifier.Load(content));
 		Assert.Equal((UnixFileMode)420, archived.Mode);
-		Assert.Equal(expected.Length, archived.Size);
+		Assert.Equal(archived.Content.Length, archived.Size);
+		Assert.Equal(archived.Size, entry.Size);
 		Assert.DoesNotContain(archive, item => item.Name == ".root/opt/zongsoft/web/.version");
 		Assert.DoesNotContain(archive, item => item.Name == "manifest.txt" || item.Name == "opt/zongsoft/web/manifest.txt");
 		Assert.DoesNotContain(archive, item => item.Name == ".edition" || item.Name == "opt/zongsoft/web/.edition" || item.Name == ".root/opt/zongsoft/web/.edition");
 		Assert.Equal(sourceBytes, File.ReadAllBytes(original));
 		Assert.Contains(archive, item => item.Name.EndsWith("application.txt", StringComparison.Ordinal) && Encoding.UTF8.GetString(item.Content) == "payload retained");
-		var parsed = ApplicationIdentifier.Parse(Encoding.UTF8.GetString(archived.Content).Trim());
-		Assert.Equal(identity, parsed);
 		if(selection == "recursive")
 		{
 			var nested = Assert.Single(archive, item => item.Name.EndsWith("nested/.version", StringComparison.Ordinal));
@@ -133,7 +131,7 @@ public sealed class PackageVersionTest
 		}
 
 		if(format == "rpm")
-			AssertRpmVersionDigest(archivePath, expected);
+			AssertRpmVersionDigest(archivePath, archived.Content);
 	}
 	#endregion
 

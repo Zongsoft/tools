@@ -57,6 +57,7 @@ internal static class Generator
 	internal static void Migrate(MigrationBundle bundle, string output, string archive, string launcher, string name, bool windows, bool overwrite)
 	{
 		CheckMigrationOutputs(output, archive, launcher, overwrite);
+
 		using var publisher = new ArtifactPublisher(output, overwrite, archive, launcher);
 		using(var stream = File.Create(publisher.StagePath(archive)))
 		using(var gzip = new GZipStream(stream, CompressionLevel.Optimal))
@@ -128,7 +129,7 @@ internal static class Generator
 		trap 'exit 143' HUP TERM
 		tar -xzf "$BASE_DIR/"{{MigrationBundle.Quote(archive)}} -C "$WORK_DIR"
 		set +e
-		sh "$WORK_DIR/.migration/migrate.sh" "$ACTION" "$STATE_DIR"
+		sh "$WORK_DIR/migrate.sh" "$ACTION" "$STATE_DIR"
 		RESULT=$?
 		exit "$RESULT"
 		""" + "\n").ReplaceLineEndings("\n");
@@ -139,7 +140,7 @@ internal static class Generator
 		set "MIGRATION_BASE=%~dp0"
 		set "MIGRATION_ACTION=%~1"
 		set "MIGRATION_STATE=%~2"
-		powershell.exe -NoLogo -NoProfile -NonInteractive -Command "$ErrorActionPreference='Stop'; $action=$env:MIGRATION_ACTION; if(-not $action){$action='apply'}; if($action -cnotin @('apply','status','check')){exit 2}; $state=$env:MIGRATION_STATE; if(-not $state){$state=Join-Path $env:MIGRATION_BASE '.migration\{{name}}'}; if($action -eq 'check'){$ready=Join-Path $state 'ready'; if((Test-Path -LiteralPath $ready) -and [IO.File]::ReadAllText($ready) -ceq '{{fingerprint}}'){exit 0}; exit 1}; $work=Join-Path ([IO.Path]::GetTempPath()) ('zongsoft-migrate-'+[guid]::NewGuid().ToString('N')); $result=1; try { New-Item -ItemType Directory -Path $work | Out-Null; & tar.exe -xzf (Join-Path $env:MIGRATION_BASE '{{archive}}') -C $work; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}; & (Join-Path $work '.migration\migrate.cmd') $action $state; $result=$LASTEXITCODE } catch { [Console]::Error.WriteLine($_.Exception.Message) } finally { if(Test-Path -LiteralPath $work){Remove-Item -LiteralPath $work -Recurse -Force} }; exit $result"
+		powershell.exe -NoLogo -NoProfile -NonInteractive -Command "$ErrorActionPreference='Stop'; $action=$env:MIGRATION_ACTION; if(-not $action){$action='apply'}; if($action -cnotin @('apply','status','check')){exit 2}; $state=$env:MIGRATION_STATE; if(-not $state){$state=Join-Path $env:MIGRATION_BASE '.migration\{{name}}'}; if($action -eq 'check'){$ready=Join-Path $state 'ready'; if((Test-Path -LiteralPath $ready) -and [IO.File]::ReadAllText($ready) -ceq '{{fingerprint}}'){exit 0}; exit 1}; $work=Join-Path ([IO.Path]::GetTempPath()) ('zongsoft-migrate-'+[guid]::NewGuid().ToString('N')); $result=1; try { New-Item -ItemType Directory -Path $work | Out-Null; & tar.exe -xzf (Join-Path $env:MIGRATION_BASE '{{archive}}') -C $work; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}; & (Join-Path $work 'migrate.cmd') $action $state; $result=$LASTEXITCODE } catch { [Console]::Error.WriteLine($_.Exception.Message) } finally { if(Test-Path -LiteralPath $work){Remove-Item -LiteralPath $work -Recurse -Force} }; exit $result"
 		exit /b %errorlevel%
 		""" + "\n").ReplaceLineEndings("\r\n");
 	#endregion

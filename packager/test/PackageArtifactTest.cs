@@ -379,6 +379,59 @@ public sealed class PackageArtifactTest
 	#endregion
 
 	#region Debian 关系
+	[Theory]
+	[InlineData("runtime", "runtime")]
+	[InlineData("runtime:10.0", "runtime (>= 10.0)")]
+	[InlineData("runtime:[10.0)", "runtime (>= 10.0)")]
+	[InlineData("runtime:[10.0,)", "runtime (>= 10.0)")]
+	[InlineData("runtime:[10.0]", "runtime (= 10.0)")]
+	[InlineData("runtime:(10.0,)", "runtime (>> 10.0)")]
+	[InlineData("runtime:(,11.0]", "runtime (<= 11.0)")]
+	[InlineData("runtime:(,11.0)", "runtime (<< 11.0)")]
+	[InlineData("runtime:[10.0,11.0)", "runtime (>= 10.0), runtime (<< 11.0)")]
+	[InlineData("runtime:[10.0,11.0]", "runtime (>= 10.0), runtime (<= 11.0)")]
+	[InlineData("runtime:(10.0,11.0)", "runtime (>> 10.0), runtime (<< 11.0)")]
+	[InlineData("runtime:(10.0,11.0]", "runtime (>> 10.0), runtime (<= 11.0)")]
+	[InlineData("runtime:[10.0,11.0) | alternative:[9.0);libssl:[3.0]", "runtime (>= 10.0) | alternative (>= 9.0), runtime (<< 11.0) | alternative (>= 9.0), libssl (= 3.0)")]
+	[InlineData("runtime:[10.0,11.0) | alternative:[9.0,12.0]", "runtime (>= 10.0) | alternative (>= 9.0), runtime (>= 10.0) | alternative (<= 12.0), runtime (<< 11.0) | alternative (>= 9.0), runtime (<< 11.0) | alternative (<= 12.0)")]
+	[InlineData("libc6:any:[2:2.36~rc1-9]", "libc6:any (= 2:2.36~rc1-9)")]
+	public void Debian_UniformDependencies_EncodeRangeAndAlternativeGrouping(string expression, string expected)
+	{
+		using var directory = new MigrationTestDirectory();
+		var package = (Package.Deb)CreatePackage("deb", directory.Path);
+		package.Dependencies = [expression];
+		package.Pack(directory.Path, true);
+		var control = ReadControl(Path.Combine(directory.Path, package.FileName), "control");
+		Assert.Contains("\nDepends: " + expected + "\n", control);
+	}
+
+	[Fact]
+	public void Debian_ExcessiveAlternativeExpansion_FailsWithoutPublishing()
+	{
+		using var directory = new MigrationTestDirectory();
+		var package = (Package.Deb)CreatePackage("deb", directory.Path);
+		package.Dependencies = [string.Join(" | ", Enumerable.Range(0, 11).Select(index => $"runtime-{index}:[1,2)"))];
+		Assert.Throws<InvalidDataException>(() => package.Pack(directory.Path, true));
+		Assert.False(File.Exists(Path.Combine(directory.Path, package.FileName)));
+	}
+
+	[Theory]
+	[InlineData("deb", "runtime >= 10.0")]
+	[InlineData("rpm", "runtime >= 10.0")]
+	[InlineData("deb", "runtime:[10.*)")]
+	[InlineData("rpm", "runtime:[10.*)")]
+	[InlineData("deb", "runtime || alternative")]
+	[InlineData("rpm", "runtime || alternative")]
+	public void InvalidDependencies_PreserveExistingArtifact(string format, string expression)
+	{
+		using var directory = new MigrationTestDirectory();
+		var package = CreatePackage(format, directory.Path);
+		package.Dependencies = [expression];
+		var path = directory.Write(package.FileName, "previous artifact");
+		Assert.Throws<InvalidDataException>(() => package.Pack(directory.Path, true));
+		Assert.Equal("previous artifact", File.ReadAllText(path));
+	}
+
 	[Fact]
 	public void Debian_Relationships_WriteDistinctControlFields()
 	{

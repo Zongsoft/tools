@@ -41,6 +41,10 @@ namespace Zongsoft.Tools.Deployer;
 
 partial class Deployer
 {
+	#region 成员字段
+	private static readonly HashSet<string> _fallbackOptions = new(StringComparer.OrdinalIgnoreCase) { Utility.FRAMEWORK_VARIABLE };
+	#endregion
+
 	#region 变量加载
 	public static IDictionary<string, string> CreateVariables(IDictionary<string, string> options, string currentDirectory = null)
 	{
@@ -56,14 +60,26 @@ partial class Deployer
 		//目标配置尚未加载；启动路径依赖环境、.env 和本次命令的完整选项集。
 		var bootstrap = new Dictionary<string, string>(variables, StringComparer.OrdinalIgnoreCase);
 		foreach(var option in arguments)
+		{
+			if(_fallbackOptions.Contains(option.Key) && string.IsNullOrEmpty(option.Value) &&
+				bootstrap.TryGetValue(option.Key, out var previous) && !string.IsNullOrEmpty(previous))
+				continue;
+
 			bootstrap[option.Key] = option.Value ?? string.Empty;
+		}
 
 		target = Normalizer.Normalize(target, bootstrap, name => throw new FormatException(string.Format(Properties.Resources.Review_UndefinedVariable, name)));
 		target = Path.GetFullPath(target, currentDirectory);
 		AppSettingsUtility.Load(variables, target);
 
 		foreach(var option in arguments)
+		{
+			if(_fallbackOptions.Contains(option.Key) && string.IsNullOrEmpty(option.Value) &&
+				variables.TryGetValue(option.Key, out var previous) && !string.IsNullOrEmpty(previous))
+				continue;
+
 			variables[option.Key] = option.Value ?? string.Empty;
+		}
 
 		variables[DESTINATION_OPTION] = target;
 		NugetUtility.Initialize(variables);

@@ -48,14 +48,16 @@ public abstract partial class PackCommand<TPackage>
 		private readonly string _path;
 		private readonly byte[] _content;
 		private readonly byte[] _identifier;
+		private readonly bool _overwrite;
 		#endregion
 
 		#region 构造函数
-		private VersionFile(string path, ApplicationIdentifier identifier, byte[] content, byte[] version = null)
+		private VersionFile(string path, ApplicationIdentifier identifier, byte[] content, byte[] version = null, bool overwrite = false)
 		{
 			_path = path;
 			_content = content;
 			_identifier = version;
+			_overwrite = overwrite;
 			this.Identifier = identifier;
 		}
 		#endregion
@@ -137,10 +139,12 @@ public abstract partial class PackCommand<TPackage>
 				else
 				{
 					var selected = new ApplicationManifest.Edition(edition, version);
+
 					if(application.Editions.TryGetValue(edition, out var previous))
 						application.Editions[application.Editions.IndexOf(previous)] = selected;
 					else
 						application.Editions.Add(selected);
+
 					application.Editions.Current = edition;
 				}
 
@@ -148,7 +152,7 @@ public abstract partial class PackCommand<TPackage>
 				using(var writer = new StreamWriter(content, new UTF8Encoding(false), leaveOpen: true) { NewLine = "\r\n" })
 					application.Save(writer);
 
-				return new(path, identifier, content.ToArray(), hasManifest ? null : identity.ToArray());
+				return new(path, identifier, content.ToArray(), identity.ToArray(), hasManifest);
 			}
 			catch(Exception exception) when(exception is ArgumentException or FormatException or InvalidOperationException)
 			{
@@ -159,6 +163,7 @@ public abstract partial class PackCommand<TPackage>
 		public void Save(string packagePath)
 		{
 			var path = _path;
+
 			try
 			{
 				if(_identifier == null)
@@ -167,7 +172,7 @@ public abstract partial class PackCommand<TPackage>
 				{
 					var directory = Path.GetDirectoryName(_path);
 					path = $"{_path}; {Path.Combine(directory, ".version")}";
-					using var publisher = new ArtifactPublisher(directory, false, ".edition", ".version");
+					using var publisher = new ArtifactPublisher(directory, _overwrite, ".edition", ".version");
 					Write(publisher.StagePath(".edition"), _content);
 					Write(publisher.StagePath(".version"), _identifier);
 					publisher.Commit();

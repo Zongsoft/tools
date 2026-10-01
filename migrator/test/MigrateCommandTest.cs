@@ -71,7 +71,8 @@ public sealed partial class MigrateCommandTest
 		else
 			Assert.DoesNotContain("\r", script);
 		var payload = ReadArchive(archive);
-		var planEntry = Assert.Single(payload, entry => entry.Name.EndsWith(".migration/migration.json", StringComparison.Ordinal));
+		Assert.DoesNotContain(payload, entry => entry.Name == ".migration" || entry.Name.StartsWith(".migration/", StringComparison.Ordinal));
+		var planEntry = Assert.Single(payload, entry => entry.Name.EndsWith("migration.json", StringComparison.Ordinal));
 		Assert.Equal((UnixFileMode)384, planEntry.Mode);
 		using var plan = JsonDocument.Parse(planEntry.Content);
 		Assert.Equal(identity, plan.RootElement.GetProperty("Name").GetString());
@@ -80,10 +81,10 @@ public sealed partial class MigrateCommandTest
 		Assert.Equal(name, plan.RootElement.GetProperty("Title").GetString());
 		Assert.Equal("Initial bootstrap", plan.RootElement.GetProperty("Summary").GetString());
 		Assert.Equal("Zongsoft hosting migration", plan.RootElement.GetProperty("Description").GetString());
-		var sql = Assert.Single(payload, entry => entry.Name.EndsWith(".migration/.artifacts/sqlite/1.sql", StringComparison.Ordinal));
+		var sql = Assert.Single(payload, entry => entry.Name.EndsWith(".artifacts/sqlite/1.sql", StringComparison.Ordinal));
 		Assert.Equal("CREATE TABLE must_not_run (id INTEGER);", Encoding.UTF8.GetString(sql.Content));
 		Assert.DoesNotContain(payload, entry => entry.Name.EndsWith(".version", StringComparison.Ordinal));
-		Assert.Contains(payload, entry => entry.Name.EndsWith(runtime == "win-x64" ? ".migration/migrate.cmd" : ".migration/migrate.sh", StringComparison.Ordinal));
+		Assert.Contains(payload, entry => entry.Name.EndsWith(runtime == "win-x64" ? "migrate.cmd" : "migrate.sh", StringComparison.Ordinal));
 		Assert.Equal(versionBytes, File.ReadAllBytes(version));
 		Assert.False(File.Exists(Path.Combine(directory.Path, "not-created.db")));
 		Assert.False(Directory.Exists(Path.Combine(directory.Path, "state")));
@@ -101,7 +102,7 @@ public sealed partial class MigrateCommandTest
 		Assert.True(result.Code == 0, result.Output);
 		var archive = Path.Combine(directory.Path, "zongsoft.daemon(migrate)@1.2.3_linux-x64.tar.gz");
 		Assert.True(File.Exists(Path.Combine(directory.Path, "zongsoft.daemon(migrate)@1.2.3_linux-x64.sh")));
-		var entry = Assert.Single(ReadArchive(archive), entry => entry.Name.EndsWith(".migration/migration.json", StringComparison.Ordinal));
+		var entry = Assert.Single(ReadArchive(archive), entry => entry.Name.EndsWith("migration.json", StringComparison.Ordinal));
 		using var plan = JsonDocument.Parse(entry.Content);
 		Assert.Equal("Hosting bootstrap", plan.RootElement.GetProperty("Title").GetString());
 		Assert.Equal("linux-x64", plan.RootElement.GetProperty("Runtime").GetString());
@@ -165,7 +166,7 @@ public sealed partial class MigrateCommandTest
 
 			Assert.True(result.Code == 0, result.Output);
 			var archive = Path.Combine(directory.Path, "out", "zongsoft.daemon(migrate)@1.2.3_linux-x64.tar.gz");
-			var entry = Assert.Single(ReadArchive(archive), entry => entry.Name.EndsWith(".migration/migration.json", StringComparison.Ordinal));
+			var entry = Assert.Single(ReadArchive(archive), entry => entry.Name.EndsWith("migration.json", StringComparison.Ordinal));
 			using var plan = JsonDocument.Parse(entry.Content);
 			Assert.Equal("linux-x64", plan.RootElement.GetProperty("Runtime").GetString());
 			Assert.Equal("zongsoft.daemon-migrate", plan.RootElement.GetProperty("Name").GetString());
@@ -209,7 +210,7 @@ public sealed partial class MigrateCommandTest
 		Assert.True(generated.Code == 0, generated.Output);
 		var prefix = "out/zongsoft.daemon(migrate)@1.2.3_" + runtime;
 		var archive = Path.Combine(directory.Path, prefix + ".tar.gz");
-		var fingerprint = Encoding.UTF8.GetString(Assert.Single(ReadArchive(archive), entry => entry.Name == ".migration/id").Content);
+		var fingerprint = Encoding.UTF8.GetString(Assert.Single(ReadArchive(archive), entry => entry.Name == "id").Content);
 		var launcher = Path.Combine(directory.Path, prefix + (windows ? ".cmd" : ".sh"));
 		var defaultReady = directory.Write("out/.migration/zongsoft.daemon-migrate/ready", fingerprint);
 		var overrideReady = directory.Write("selected-state/ready", "wrong-fingerprint");
@@ -249,7 +250,7 @@ public sealed partial class MigrateCommandTest
 		using(var gzip = new GZipStream(file, CompressionLevel.Optimal))
 		using(var writer = new TarWriter(gzip, TarEntryFormat.Pax, false))
 		using(var content = new MemoryStream(Encoding.UTF8.GetBytes(windows ? "@echo off\r\n> \"%~2\\observed.txt\" echo %~1\r\nexit /b 7\r\n" : "#!/bin/sh\nprintf '%s' \"$1\" > \"$2/observed.txt\"\nexit 7\n")))
-			writer.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, ".migration/migrate" + extension) { DataStream = content, Mode = (UnixFileMode)493 });
+			writer.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, "migrate" + extension) { DataStream = content, Mode = (UnixFileMode)493 });
 		var before = Directory.GetDirectories(Path.GetTempPath(), "zongsoft-migrate-*").Order(StringComparer.Ordinal).ToArray();
 
 		await RunLauncherAsync(launcher, "apply", state, 7);

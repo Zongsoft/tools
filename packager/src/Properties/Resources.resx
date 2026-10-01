@@ -228,4 +228,10 @@
   <data name="Web.Load.Message" xml:space="preserve"><value>Unable to load Web profile: {0}.</value></data>
   <data name="Web.Capability.Message" xml:space="preserve"><value>The Web hoster cannot represent this setting exactly: {0}.</value></data>
   <data name="Web.Override.Message" xml:space="preserve"><value>The native setting overrides the common setting: {0}.</value></data>
+  <data name="DependencyInvalid.Message" xml:space="preserve">
+    <value>Invalid dependency expression: {0}. Use name[:range], for example package:[1.0,2.0).</value>
+  </data>
+  <data name="DependencyTooComplex.Message" xml:space="preserve">
+    <value>The dependency alternatives expand to more than 1024 Debian relationship groups.</value>
+  </data>
 </root>

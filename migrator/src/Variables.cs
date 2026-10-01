@@ -53,10 +53,12 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 	internal const string EDITION = "edition";
 	internal const string VERSION = "version";
 	internal const string PLATFORM = "platform";
+	internal const string FRAMEWORK = "framework";
 	internal const string ARCHITECTURE = "architecture";
 	#endregion
 
 	#region 成员字段
+	private static readonly HashSet<string> _fallbackOptions = new(StringComparer.OrdinalIgnoreCase) { FRAMEWORK };
 	private readonly Dictionary<string, string> _variables = new(variables ?? [], StringComparer.OrdinalIgnoreCase);
 	#endregion
 
@@ -103,7 +105,7 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 
 	#region 内部方法
 	private string GetRaw(string name) => _variables.GetValueOrDefault(name);
-	internal static Dictionary<string, string> From(CommandContext context, string directory = null) => Utility.CreateVariables(context, directory);
+	internal static Dictionary<string, string> From(CommandContext context, string directory = null) => Utility.CreateVariables(context, directory, _fallbackOptions);
 	#endregion
 
 	#region 显式实现

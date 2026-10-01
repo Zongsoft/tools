@@ -82,7 +82,7 @@ partial class MigrationLoader
 					{
 						Source = sql,
 						Content = content,
-						Path = $".migration/.artifacts/{_step.Provider}/{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}.sql",
+						Path = $".artifacts/{_step.Provider}/{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}.sql",
 						Checksum = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content))),
 					});
 				}
