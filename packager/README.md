@@ -922,6 +922,8 @@ Inspect a package before installing it. The listing and metadata commands below 
 
 The tar command produces a `.tar.gz` archive and a same-named `.sh` installer. The archive contains the application files, optional root-level entries under `.root/`, and executable `install.sh` and `uninstall.sh` scripts that merge the lifecycle scripts.
 
+The PAX global attribute `Architecture` records the target CPU architecture from the existing `--architecture` option (default `x64`), using the same lowercase value as the filename, such as `x64`, `arm64`, `x86`, or `arm`.
+
 Inspect the contents:
 
 ```bash

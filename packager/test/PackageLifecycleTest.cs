@@ -21,6 +21,37 @@ public sealed class PackageLifecycleTest
 	private const string UNINSTALLED_MARKER = "echo uninstalled-lifecycle-marker";
 
 	[Theory]
+	[InlineData(Architecture.X64, "x64")]
+	[InlineData(Architecture.Arm64, "arm64")]
+	[InlineData(Architecture.X86, "x86")]
+	[InlineData(Architecture.Arm, "arm")]
+	public void Tar_Architecture_IsReadableFromRenamedArchive(Architecture architecture, string expected)
+	{
+		using var directory = new TemporaryDirectory();
+		var package = new Package.Tar("zongsoft.daemon", null, new Version(1, 0, 0), Platform.Linux, architecture, CreateVariables(directory.Path))
+		{
+			Manufacturer = "Hosting Manufacturer",
+			Scripts = new(":", ":", ":", ":"),
+		};
+		package.Pack(directory.Path, false);
+
+		var archive = Path.Combine(directory.Path, "application.tar.gz");
+		File.Move(Path.Combine(directory.Path, package.FileName), archive);
+
+		using var stream = File.OpenRead(archive);
+		using var gzip = new GZipStream(stream, CompressionMode.Decompress);
+		using var reader = new TarReader(gzip);
+		var metadata = Assert.IsType<PaxGlobalExtendedAttributesTarEntry>(reader.GetNextEntry());
+		Assert.Equal(expected, metadata.GlobalExtendedAttributes["Architecture"]);
+		Assert.Equal($"Zongsoft.Tools.Packager@{typeof(Package).Assembly.GetName().Version}", metadata.GlobalExtendedAttributes["Packager"]);
+		Assert.Equal("Hosting Manufacturer", metadata.GlobalExtendedAttributes["Manufacturer"]);
+		Assert.Null(metadata.DataStream);
+		Assert.Equal("install.sh", reader.GetNextEntry().Name);
+		Assert.Equal("uninstall.sh", reader.GetNextEntry().Name);
+		Assert.Null(reader.GetNextEntry());
+	}
+
+	[Theory]
 	[InlineData("tar", null, "Zongsoft")]
 	[InlineData("deb", null, "Zongsoft")]
 	[InlineData("rpm", null, "Zongsoft")]

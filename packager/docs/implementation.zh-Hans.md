@@ -582,7 +582,7 @@ install.sh
 uninstall.sh
 ```
 
-归档开头包含 `Packager` PAX 全局扩展记录，它不是安装文件。rooted 文件只有存在根路径别名时写入 `.root/`。生命周期脚本内容写入 `install.sh` 和 `uninstall.sh`。
+归档开头包含带有 `Packager`、`Manufacturer` 和 `Architecture` 的 PAX 全局扩展记录，它不是安装文件。`Architecture` 使用 `package.Architecture.ToString().ToLowerInvariant()`，与文件名的架构值一致（如 `x64`、`arm64`、`x86` 或 `arm`），归档改名后仍可读取。该值直接来自既有目标架构，不增加选项或载荷条目。rooted 文件只有存在根路径别名时写入 `.root/`。生命周期脚本内容写入 `install.sh` 和 `uninstall.sh`。
 
 ### 文件条目
 
@@ -1084,6 +1084,8 @@ Cake 的 `--edition` 同时用于依赖还原、编译、测试和制包；`rest
 源版本与内存条目的回归由 VersionFileTest、PackageVersionTest 和 PackageArtifactTest 覆盖。
 
 打包器版本元数据回归 `Package_Provenance_RecordsGeneratorAndPreservesApplicationMetadata` 覆盖三格式生成工具身份、应用版本、厂家值和默认值，以及 Debian/RPM 中独立的主页和维护者字段。
+
+`Tar_Architecture_IsReadableFromRenamedArchive` 在归档改名后从 PAX 全局头读取 x64、arm64、x86、arm 架构值，并验证既有属性保持且没有新增载荷条目。
 
 使用 [README](../README.zh-Hans.md#快速开始) 中生成的真实项目安装包；以下命令从 hosting 仓库根目录执行，只检查包内容。安装与卸载用法见 [README 包格式](../README.zh-Hans.md#包格式)。
 

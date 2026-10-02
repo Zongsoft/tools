@@ -922,6 +922,8 @@ Debian/RPM 载荷使用自动清理的临时文件和流式摘要，不在内存
 
 tar 命令生成 `.tar.gz` 包及同名 `.sh` 安装脚本。tar 包包含应用文件、`.root/` 下的可选根路径条目，以及融合了生命周期脚本的可执行 `install.sh` 和 `uninstall.sh`。
 
+PAX 全局属性 `Architecture` 记录既有 `--architecture` 选项确定的目标 CPU 架构（默认为 `x64`），采用与文件名一致的小写值，如 `x64`、`arm64`、`x86` 或 `arm`。
+
 检查内容：
 
 ```bash

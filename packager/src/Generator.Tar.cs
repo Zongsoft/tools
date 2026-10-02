@@ -62,6 +62,7 @@ partial class Generator
 			([
 				new KeyValuePair<string, string>("Packager", GetIdentity()),
 				new KeyValuePair<string, string>("Manufacturer", package.Manufacturer),
+				new KeyValuePair<string, string>("Architecture", package.Architecture.ToString().ToLowerInvariant()),
 			]));
 
 			foreach(var entry in GetPackageDirectories(package.Entries, true).Concat(package.Entries.Where(entry => !entry.IsDirectory)))

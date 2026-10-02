@@ -582,7 +582,7 @@ install.sh
 uninstall.sh
 ```
 
-A `Packager` PAX global extended record starts the archive; it is not an installed file. Rooted files enter `.root/` only when root-path aliases exist. Lifecycle content is written into `install.sh` and `uninstall.sh`.
+A PAX global extended record containing `Packager`, `Manufacturer`, and `Architecture` starts the archive; it is not an installed file. `Architecture` uses `package.Architecture.ToString().ToLowerInvariant()`, matching the filename's architecture value (for example `x64`, `arm64`, `x86`, or `arm`) while remaining readable after the archive is renamed. It uses the existing target architecture without an additional option or payload entry. Rooted files enter `.root/` only when root-path aliases exist. Lifecycle content is written into `install.sh` and `uninstall.sh`.
 
 ### File entries
 
@@ -1084,6 +1084,8 @@ Cake's `--edition` selects the same configuration for restore, build, tests, and
 `VersionFileTest`, `PackageVersionTest`, and `PackageArtifactTest` cover source versions and memory entries.
 
 `Package_Provenance_RecordsGeneratorAndPreservesApplicationMetadata` covers generator identity, application version, manufacturer values and defaults in all three formats, and independent homepage and maintainer fields in Debian/RPM.
+
+`Tar_Architecture_IsReadableFromRenamedArchive` reads x64, arm64, x86, and arm architecture values from the PAX global header after renaming the archive, and verifies that existing attributes remain intact without adding payload entries.
 
 Use packages produced by the [README quick start](../README.md#quick-start). The following commands run from the hosting checkout root and only inspect package contents. For installation and uninstallation, see [README package formats](../README.md#package-formats).
 
