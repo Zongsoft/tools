@@ -425,10 +425,13 @@ public sealed class PackageArtifactTest
 	}
 
 	[Theory]
+	[InlineData("tar", "runtime >= 10.0")]
 	[InlineData("deb", "runtime >= 10.0")]
 	[InlineData("rpm", "runtime >= 10.0")]
+	[InlineData("tar", "runtime:[10.*)")]
 	[InlineData("deb", "runtime:[10.*)")]
 	[InlineData("rpm", "runtime:[10.*)")]
+	[InlineData("tar", "runtime || alternative")]
 	[InlineData("deb", "runtime || alternative")]
 	[InlineData("rpm", "runtime || alternative")]
 	public void InvalidDependencies_PreserveExistingArtifact(string format, string expression)

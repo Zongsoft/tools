@@ -524,7 +524,7 @@ Package.InstallScripts 的 Delivered 独立于四个生命周期。Tar 复制载
 
 ## 应用元数据
 
-主页的选项名和变量名为 `homepage`；`Package.Homepage` 提供 Debian `Homepage` 与 RPM `URL`（1020）的值。`manufacturer` 提供 `Package.Manufacturer`，未定义、null 或展开后为空字符串时使用共享默认值 `Zongsoft`。访问器在通用规范化把纯空白归为空字符串之前保留该原始值。`maintainer` 选项的默认值也为 `Zongsoft`，两者独立保存。
+主页的选项名和变量名为 `homepage`；`Package.Homepage` 提供 tar PAX `Homepage`、Debian `Homepage` 与 RPM `URL`（1020）的值。tar PAX `Maintainer`、Debian `Maintainer` 与 RPM `PACKAGER`（1015）保存包维护者，与生成工具身份独立。`manufacturer` 提供 `Package.Manufacturer`，未定义、null 或展开后为空字符串时使用共享默认值 `Zongsoft`。访问器在通用规范化把纯空白归为空字符串之前保留该原始值。`maintainer` 选项的默认值也为 `Zongsoft`，两者独立保存。
 
 tar 以 PAX 全局属性 `Manufacturer` 保存厂家，Debian 写入自定义 control 字段 `Manufacturer`，RPM 写入标准 `VENDOR` 字符串标签（1011）。Debian 沿用既有文本规范化，包括不写入纯空白的厂家字段；这些元数据不增加载荷条目。参见 [Debian 自定义字段](https://www.debian.org/doc/debian-policy/ch-controlfields.html#user-defined-fields)与 [RPM 标签说明](https://rpm.org/docs/latest/manual/tags.html)。
 
@@ -582,7 +582,15 @@ install.sh
 uninstall.sh
 ```
 
-归档开头包含带有 `Packager`、`Manufacturer` 和 `Architecture` 的 PAX 全局扩展记录，它不是安装文件。`Architecture` 使用 `package.Architecture.ToString().ToLowerInvariant()`，与文件名的架构值一致（如 `x64`、`arm64`、`x86` 或 `arm`），归档改名后仍可读取。该值直接来自既有目标架构，不增加选项或载荷条目。rooted 文件只有存在根路径别名时写入 `.root/`。生命周期脚本内容写入 `install.sh` 和 `uninstall.sh`。
+归档开头包含 PAX 全局扩展记录，它不是安装文件。`GetTarMetadata` 写入 `Packager`、`PackageName`、`Version`、`Manufacturer`、`Architecture`、`Summary`、`Description`、`PackageSize`；还写入非空白的 `License`、`Homepage`、`Maintainer`、`InstallPath`、`Dependencies`、`Category`。不写入 `BuildTime` 属性。
+
+`PackageName` 使用 `package.PackageName`，保留 daemon 身份和 Edition 确定的最终系统包名，不使用应用身份或归档文件名。`Version` 保留 `package.Version.ToString()` 的完整文本，与生成的 `.version` 一致。`Architecture` 使用 `package.Architecture.ToString().ToLowerInvariant()`，与文件名的架构值一致（如 `x64`、`arm64`、`x86` 或 `arm`）。全部属性在归档改名后仍可读取，不增加选项或载荷条目。
+
+`Summary` 按 Summary、Title、应用 Name 顺序选择首个非空白值；Description 为空白时回退到有效摘要。由于 .NET PAX 写入器不接受属性值中的实际换行，这两个字段将反斜杠、CR、LF 分别转义为 `\\`、`\r`、`\n`，读取时解码还原原文，Unicode 保持原样。可选空白值省略，既有 Manufacturer 的纯空白行为保持不变。`Category` 只使用包模型值，不设置格式默认分类；`InstallPath` 描述默认路径，不改变安装时覆盖规则。
+
+`Dependencies` 使用 `Dependency.Split` 与 `Dependency.Parse` 校验统一输入语法，再以 `; ` 连接各组，保留区间、原生版本端点及替代项。该字段仅作声明，tar 安装器不检查或安装依赖；非法声明在产物发布前失败。`PackageSize` 使用 `Package.GetPackageSize()` 按不变区域格式输出字节数，包含生成条目和 rooted 文件，不含容器头及 tar 安装/卸载脚本。目录贡献为零，空载荷记录 `0`，不表示文件系统实际占用。
+
+rooted 文件只有存在根路径别名时写入 `.root/`。生命周期脚本内容写入 `install.sh` 和 `uninstall.sh`。
 
 ### 文件条目
 
@@ -1083,9 +1091,9 @@ Cake 的 `--edition` 同时用于依赖还原、编译、测试和制包；`rest
 
 源版本与内存条目的回归由 VersionFileTest、PackageVersionTest 和 PackageArtifactTest 覆盖。
 
-打包器版本元数据回归 `Package_Provenance_RecordsGeneratorAndPreservesApplicationMetadata` 覆盖三格式生成工具身份、应用版本、厂家值和默认值，以及 Debian/RPM 中独立的主页和维护者字段。
+打包器版本元数据回归 `Package_Provenance_RecordsGeneratorAndPreservesApplicationMetadata` 覆盖三格式生成工具身份、应用版本、厂家值和默认值，以及独立的主页和维护者字段。
 
-`Tar_Architecture_IsReadableFromRenamedArchive` 在归档改名后从 PAX 全局头读取 x64、arm64、x86、arm 架构值，并验证既有属性保持且没有新增载荷条目。
+`Tar_Metadata_IsReadableFromRenamedArchive` 在归档改名后从 PAX 全局头读取包含 daemon 身份和 Edition 的最终包名以及 x64、arm64、x86、arm 架构值，同时覆盖新增元数据、Unicode/多行文本、依赖区间和替代项、不写入 BuildTime 及载荷条目不变。其他 tar 元数据测试覆盖载荷字节总数与版本身份、空可选值省略、摘要/描述回退及反斜杠、CR、LF 的独立转义；非法依赖测试加入 tar，验证失败保留既有产物。来源元数据测试同时覆盖没有 daemon 身份和 Edition 的包名。
 
 使用 [README](../README.zh-Hans.md#快速开始) 中生成的真实项目安装包；以下命令从 hosting 仓库根目录执行，只检查包内容。安装与卸载用法见 [README 包格式](../README.zh-Hans.md#包格式)。
 

@@ -297,7 +297,7 @@ dotnet-pack rpm <选项...> [打包项...]
 
 ### 包依赖与关系
 
-`--dependencies:<list>` 在 `deb` 和 `rpm` 中统一使用 `name[:range]` 语法。范围采用 [NuGet 区间表示法](https://learn.microsoft.com/zh-cn/nuget/concepts/package-versioning#version-ranges)，另外支持将 `[10.0,)` 简写为 `[10.0)`。
+`--dependencies:<list>` 在 `tar`、`deb` 和 `rpm` 中统一使用 `name[:range]` 语法。范围采用 [NuGet 区间表示法](https://learn.microsoft.com/zh-cn/nuget/concepts/package-versioning#version-ranges)，另外支持将 `[10.0,)` 简写为 `[10.0)`。
 
 | 输入 | 要求的版本 |
 | --- | --- |
@@ -317,7 +317,7 @@ dotnet-pack rpm <选项...> [打包项...]
 --dependencies:"aspnetcore-runtime-10.0:[10.0,11.0);openssl:[3.0) | libressl:[4.0)"
 ```
 
-Debian 写入 `Depends`，RPM 写入 `Requires`。对于 `runtime:[10.0,11.0) | alternative:[9.0)`，Debian 输出 `runtime (>= 10.0) | alternative (>= 9.0), runtime (<< 11.0) | alternative (>= 9.0)`；RPM 输出 `((runtime >= 10.0 with runtime < 11.0) or alternative >= 9.0)`。RPM 的替代依赖需要 RPM 4.13+，使用 `with` 的双边区间需要 RPM 4.14+。单组依赖若在 Debian 中展开超过 1024 个关系组，会明确报错。
+Tar 将校验后的输入写入 PAX 全局属性 `Dependencies`，各组以 `; ` 连接，保留区间和替代项；安装脚本不检查或安装依赖。Debian 写入 `Depends`，RPM 写入 `Requires`。对于 `runtime:[10.0,11.0) | alternative:[9.0)`，Debian 输出 `runtime (>= 10.0) | alternative (>= 9.0), runtime (<< 11.0) | alternative (>= 9.0)`；RPM 输出 `((runtime >= 10.0 with runtime < 11.0) or alternative >= 9.0)`。RPM 的替代依赖需要 RPM 4.13+，使用 `with` 的双边区间需要 RPM 4.14+。单组依赖若在 Debian 中展开超过 1024 个关系组，会明确报错。
 
 统一的是区间表示法。版本端点保留原文，按目标包管理器的原生规则比较；打包器不会按 NuGet 版本规则归一化、重排或比较端点。Debian 的虚拟包上下界可能由不同提供者分别满足；RPM 的 `with` 要求同一个包同时满足上下界。不同发行版的包名不会自动映射。Debian 的 `libc6:any`、RPM 的 `pkgconfig(openssl)` 等原生名称仍受各自格式约束；`:[`、`:(` 或冒号后以数字开头的裸版本引出范围。字母开头的原生版本请使用括号形式。
 
@@ -922,7 +922,28 @@ Debian/RPM 载荷使用自动清理的临时文件和流式摘要，不在内存
 
 tar 命令生成 `.tar.gz` 包及同名 `.sh` 安装脚本。tar 包包含应用文件、`.root/` 下的可选根路径条目，以及融合了生命周期脚本的可执行 `install.sh` 和 `uninstall.sh`。
 
-PAX 全局属性 `Architecture` 记录既有 `--architecture` 选项确定的目标 CPU 架构（默认为 `x64`），采用与文件名一致的小写值，如 `x64`、`arm64`、`x86` 或 `arm`。
+归档通过 PAX 全局属性保存以下元数据。全部属性在归档改名后仍可读取，不增加安装文件或命令选项：
+
+| 属性 | 含义 |
+| --- | --- |
+| `Packager` | 生成工具身份，值为 `Zongsoft.Tools.Packager@<assembly-version>`，独立于应用版本。 |
+| `PackageName` | 最终系统包名，包括 `--daemon` 选定的服务身份及 Edition 后缀，与 `.version` 中的应用身份相区分。 |
+| `PackageSize` | 载荷文件大小之和，单位为字节；包含生成的载荷和根路径文件，不含 tar 头及 `install.sh`/`uninstall.sh`，不表示文件系统实际占用。 |
+| `Version` | 最终应用版本，与生成的 `.version` 一致。 |
+| `Architecture` | `--architecture` 确定的目标 CPU 架构（默认为 `x64`），采用与文件名一致的小写值，如 `x64`、`arm64`、`x86` 或 `arm`。 |
+| `Manufacturer` | 软件生产厂家；null 或空字符串时默认 `Zongsoft`，纯空白值保留。 |
+| `Maintainer` | 包维护者，与 `Packager` 中的生成工具身份、`Manufacturer` 中的软件生产厂家分别保存。 |
+| `Homepage` | 项目主页。 |
+| `License` | 应用许可证表达式或名称。 |
+| `Summary` | 摘要；为空时依次回退到标题、应用名。 |
+| `Description` | 完整描述；为空时回退到有效摘要，通过下述文本转义保留 Unicode 和换行。 |
+| `InstallPath` | 默认安装路径；支持安装时覆盖的场景仍按既有规则执行。 |
+| `Dependencies` | 校验后的统一输入语法，各组以 `; ` 分隔，仅作声明。 |
+| `Category` | 显式包分类，不套用 Debian 或 RPM 的默认分类。 |
+
+可选值（`License`、`Homepage`、`Maintainer`、`InstallPath`、`Dependencies`、`Category`）为空白时省略；空载荷的 `PackageSize` 为 `0`。不写入 `BuildTime` 属性。
+
+.NET PAX 写入器不接受属性值中的实际换行，因此 `Summary` 和 `Description` 将反斜杠、回车、换行分别转义为 `\\`、`\r`、`\n`；读取时应解码这些序列以还原原文。其他属性沿用普通文本表示。
 
 检查内容：
 
@@ -983,7 +1004,7 @@ sudo rpm -Uvh ./.packages/zongsoft.web@1.0.0-x64.rpm
 
 | 格式 | 主页 | 生产厂家 | 维护者 |
 | --- | --- | --- | --- |
-| tar.gz | — | PAX 全局扩展属性 `Manufacturer` | — |
+| tar.gz | PAX 全局扩展属性 `Homepage` | PAX 全局扩展属性 `Manufacturer` | PAX 全局扩展属性 `Maintainer` |
 | deb | `Homepage` | 自定义 control 字段 `Manufacturer` | `Maintainer` |
 | rpm | `URL`（1020） | `VENDOR`（1011） | `PACKAGER`（1015） |
 

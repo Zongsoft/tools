@@ -524,7 +524,7 @@ Tests cover declarations/models, native output, actual three-format archive deco
 
 ## Application metadata
 
-The option and variable name for the home page is `homepage`; `Package.Homepage` supplies Debian `Homepage` and RPM `URL` (1020). `manufacturer` supplies `Package.Manufacturer`, with the shared default `Zongsoft` when absent, null, or empty after expansion. The accessor preserves literal whitespace before the normalizer can turn it into an empty string. The default for the `maintainer` option is also `Zongsoft`; the two values remain independent.
+The option and variable name for the home page is `homepage`; `Package.Homepage` supplies tar PAX `Homepage`, Debian `Homepage`, and RPM `URL` (1020). Tar PAX `Maintainer`, Debian `Maintainer`, and RPM `PACKAGER` (1015) retain the package maintainer independently of the generator identity. `manufacturer` supplies `Package.Manufacturer`, with the shared default `Zongsoft` when absent, null, or empty after expansion. The accessor preserves literal whitespace before the normalizer can turn it into an empty string. The default for the `maintainer` option is also `Zongsoft`; the two values remain independent.
 
 Tar writes manufacturer as the PAX global attribute `Manufacturer`, Debian writes the custom control field `Manufacturer`, and RPM writes the standard `VENDOR` string tag (1011). Debian keeps its existing text normalization, including omission of a whitespace-only manufacturer field. These fields add no payload entries. See [Debian user-defined fields](https://www.debian.org/doc/debian-policy/ch-controlfields.html#user-defined-fields) and the [RPM tag reference](https://rpm.org/docs/latest/manual/tags.html).
 
@@ -582,7 +582,15 @@ install.sh
 uninstall.sh
 ```
 
-A PAX global extended record containing `Packager`, `Manufacturer`, and `Architecture` starts the archive; it is not an installed file. `Architecture` uses `package.Architecture.ToString().ToLowerInvariant()`, matching the filename's architecture value (for example `x64`, `arm64`, `x86`, or `arm`) while remaining readable after the archive is renamed. It uses the existing target architecture without an additional option or payload entry. Rooted files enter `.root/` only when root-path aliases exist. Lifecycle content is written into `install.sh` and `uninstall.sh`.
+A PAX global extended record starts the archive; it is not an installed file. `GetTarMetadata` writes `Packager`, `PackageName`, `Version`, `Manufacturer`, `Architecture`, `Summary`, `Description`, and `PackageSize`. Nonblank `License`, `Homepage`, `Maintainer`, `InstallPath`, `Dependencies`, and `Category` values are also written. No `BuildTime` attribute is written.
+
+`PackageName` uses `package.PackageName`, preserving the final system package name determined by the daemon identity and Edition; it does not use the application identity or archive filename. `Version` uses the full `package.Version.ToString()` and matches the generated `.version`. `Architecture` uses `package.Architecture.ToString().ToLowerInvariant()`, matching the filename's architecture value (for example `x64`, `arm64`, `x86`, or `arm`). All values remain readable after the archive is renamed, without additional options or payload entries.
+
+`Summary` selects the first nonblank value from Summary, Title, and application Name; a blank Description falls back to the effective summary. Since the .NET PAX writer rejects literal line breaks in values, both fields escape backslashes, CR, and LF as `\\`, `\r`, and `\n`. Readers decode these sequences to restore the original text; Unicode remains literal. Optional blank values are omitted; the existing Manufacturer whitespace behavior remains unchanged. `Category` uses only the package value, without a format-specific default. `InstallPath` describes the default path and does not change installation-time overrides.
+
+`Dependencies` uses `Dependency.Split` and `Dependency.Parse` to validate the shared input grammar, then joins required groups with `; ` while preserving ranges, native version endpoints, and alternatives. It is metadata only; the tar installer does not check or install dependencies. Invalid declarations fail before artifact publication. `PackageSize` uses `Package.GetPackageSize()` formatted with invariant culture: payload bytes, including generated entries and rooted files, excluding container headers and the tar install/uninstall scripts. Directories contribute zero; an empty payload records `0`. This is not filesystem disk usage.
+
+Rooted files enter `.root/` only when root-path aliases exist. Lifecycle content is written into `install.sh` and `uninstall.sh`.
 
 ### File entries
 
@@ -1083,9 +1091,9 @@ Cake's `--edition` selects the same configuration for restore, build, tests, and
 
 `VersionFileTest`, `PackageVersionTest`, and `PackageArtifactTest` cover source versions and memory entries.
 
-`Package_Provenance_RecordsGeneratorAndPreservesApplicationMetadata` covers generator identity, application version, manufacturer values and defaults in all three formats, and independent homepage and maintainer fields in Debian/RPM.
+`Package_Provenance_RecordsGeneratorAndPreservesApplicationMetadata` covers generator identity, application version, manufacturer values and defaults, and independent homepage and maintainer fields in all three formats.
 
-`Tar_Architecture_IsReadableFromRenamedArchive` reads x64, arm64, x86, and arm architecture values from the PAX global header after renaming the archive, and verifies that existing attributes remain intact without adding payload entries.
+`Tar_Metadata_IsReadableFromRenamedArchive` reads the final package name, including the daemon identity and Edition, and x64, arm64, x86, and arm architecture values from the PAX global header after renaming the archive. It also covers the added metadata, Unicode/multiline text, dependency ranges and alternatives, no BuildTime, and unchanged payload entries. Additional tar metadata tests cover payload byte totals and version identity, omitted empty optional values, summary/description fallback, and distinct escaping of backslashes, CR, and LF. Invalid dependency tests include tar and verify that existing artifacts survive failure. The provenance test also covers the package name without a daemon identity or Edition.
 
 Use packages produced by the [README quick start](../README.md#quick-start). The following commands run from the hosting checkout root and only inspect package contents. For installation and uninstallation, see [README package formats](../README.md#package-formats).
 

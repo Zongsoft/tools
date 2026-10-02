@@ -10,6 +10,8 @@ using System.Runtime.InteropServices;
 
 using Xunit;
 
+using Zongsoft.Services;
+
 [assembly: CollectionBehavior(DisableTestParallelization = true)]
 
 namespace Zongsoft.Tools.Packager.Tests;
@@ -25,12 +27,22 @@ public sealed class PackageLifecycleTest
 	[InlineData(Architecture.Arm64, "arm64")]
 	[InlineData(Architecture.X86, "x86")]
 	[InlineData(Architecture.Arm, "arm")]
-	public void Tar_Architecture_IsReadableFromRenamedArchive(Architecture architecture, string expected)
+	public void Tar_Metadata_IsReadableFromRenamedArchive(Architecture architecture, string expected)
 	{
 		using var directory = new TemporaryDirectory();
-		var package = new Package.Tar("zongsoft.daemon", null, new Version(1, 0, 0), Platform.Linux, architecture, CreateVariables(directory.Path))
+		var variables = CreateVariables(directory.Path);
+		variables["daemon"] = "zongsoft.web.service";
+		var package = new Package.Tar("Zongsoft.Hosting.Web", "Enterprise", new Version(1, 0, 0), Platform.Linux, architecture, variables)
 		{
 			Manufacturer = "Hosting Manufacturer",
+			Maintainer = "Hosting Maintainer",
+			Homepage = "https://example.test/product",
+			License = "MIT",
+			Summary = "应用摘要",
+			Description = "应用说明\n\n第二段说明",
+			Category = "Web",
+			InstallPath = INSTALL_PATH,
+			Dependencies = ["runtime:[10.0,11.0) | alternative:[9.0)", "libssl:[1:3.0-1,1:4.0)"],
 			Scripts = new(":", ":", ":", ":"),
 		};
 		package.Pack(directory.Path, false);
@@ -43,12 +55,143 @@ public sealed class PackageLifecycleTest
 		using var reader = new TarReader(gzip);
 		var metadata = Assert.IsType<PaxGlobalExtendedAttributesTarEntry>(reader.GetNextEntry());
 		Assert.Equal(expected, metadata.GlobalExtendedAttributes["Architecture"]);
+		Assert.Equal("zongsoft.web-Enterprise", metadata.GlobalExtendedAttributes["PackageName"]);
 		Assert.Equal($"Zongsoft.Tools.Packager@{typeof(Package).Assembly.GetName().Version}", metadata.GlobalExtendedAttributes["Packager"]);
 		Assert.Equal("Hosting Manufacturer", metadata.GlobalExtendedAttributes["Manufacturer"]);
+		Assert.Equal("1.0.0", metadata.GlobalExtendedAttributes["Version"]);
+		Assert.Equal("Hosting Maintainer", metadata.GlobalExtendedAttributes["Maintainer"]);
+		Assert.Equal("https://example.test/product", metadata.GlobalExtendedAttributes["Homepage"]);
+		Assert.Equal("MIT", metadata.GlobalExtendedAttributes["License"]);
+		Assert.Equal("应用摘要", metadata.GlobalExtendedAttributes["Summary"]);
+		Assert.Equal("应用说明\\n\\n第二段说明", metadata.GlobalExtendedAttributes["Description"]);
+		Assert.Equal("Web", metadata.GlobalExtendedAttributes["Category"]);
+		Assert.Equal(INSTALL_PATH, metadata.GlobalExtendedAttributes["InstallPath"]);
+		Assert.Equal("runtime:[10.0,11.0) | alternative:[9.0); libssl:[1:3.0-1,1:4.0)", metadata.GlobalExtendedAttributes["Dependencies"]);
+		Assert.Equal("0", metadata.GlobalExtendedAttributes["PackageSize"]);
+		Assert.False(metadata.GlobalExtendedAttributes.ContainsKey("BuildTime"));
 		Assert.Null(metadata.DataStream);
 		Assert.Equal("install.sh", reader.GetNextEntry().Name);
 		Assert.Equal("uninstall.sh", reader.GetNextEntry().Name);
 		Assert.Null(reader.GetNextEntry());
+	}
+
+	[Fact]
+	public void Tar_Metadata_PackageSize_CountsPayloadBytesAndPreservesVersionIdentity()
+	{
+		using var directory = new TemporaryDirectory();
+		var package = new Package.Tar("Zongsoft.Hosting.Web", "Enterprise", new Version(1, 2, 3, 4), Platform.Linux, Architecture.X64, CreateVariables(directory.Path))
+		{
+			Scripts = new(":", ":", ":", ":"),
+		};
+		var content = "应用载荷\n";
+		var file = Path.Combine(directory.Path, "settings.conf");
+		File.WriteAllBytes(file, new byte[1025]);
+		package.Entries.AddGeneratedContent("application.txt", content, Utility.Unix.Mode644);
+		package.Entries.Add(directory.Path, "settings.conf:/etc/zongsoft/settings.conf");
+		var identity = new ApplicationIdentifier(package.Name, package.Edition, package.Version);
+		package.Entries.SetVersion(identity);
+		using var version = new MemoryStream();
+		identity.Save(version);
+		package.Pack(directory.Path, false);
+
+		using var stream = File.OpenRead(Path.Combine(directory.Path, package.FileName));
+		using var gzip = new GZipStream(stream, CompressionMode.Decompress);
+		using var reader = new TarReader(gzip);
+		var metadata = Assert.IsType<PaxGlobalExtendedAttributesTarEntry>(reader.GetNextEntry());
+		var size = 1025 + Encoding.UTF8.GetByteCount(content) + version.Length;
+		Assert.Equal(size.ToString(System.Globalization.CultureInfo.InvariantCulture), metadata.GlobalExtendedAttributes["PackageSize"]);
+		Assert.Equal("1.2.3.4", metadata.GlobalExtendedAttributes["Version"]);
+		var files = new List<string>();
+		TarEntry entry;
+
+		while((entry = reader.GetNextEntry()) != null)
+		{
+			if(entry.EntryType != TarEntryType.RegularFile)
+				continue;
+
+			files.Add(entry.Name);
+			if(entry.Name == ".version")
+				Assert.Equal(identity, ApplicationIdentifier.Load(entry.DataStream));
+		}
+
+		Assert.Equal(["application.txt", ".root/etc/zongsoft/settings.conf", ".version", "install.sh", "uninstall.sh"], files);
+	}
+
+	[Fact]
+	public void Tar_Metadata_TextEscaping_DistinguishesNewlinesAndBackslashes()
+	{
+		using var directory = new TemporaryDirectory();
+		var package = new Package.Tar("example", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, CreateVariables(directory.Path))
+		{
+			Summary = "摘要\\n\r\n说明",
+			Description = "说明\\path\r\n\n第二段\r结尾",
+			Scripts = new(":", ":", ":", ":"),
+		};
+		package.Pack(directory.Path, false);
+
+		using var stream = File.OpenRead(Path.Combine(directory.Path, package.FileName));
+		using var gzip = new GZipStream(stream, CompressionMode.Decompress);
+		using var reader = new TarReader(gzip);
+		var metadata = Assert.IsType<PaxGlobalExtendedAttributesTarEntry>(reader.GetNextEntry());
+		Assert.Equal("摘要\\\\n\\r\\n说明", metadata.GlobalExtendedAttributes["Summary"]);
+		Assert.Equal("说明\\\\path\\r\\n\\n第二段\\r结尾", metadata.GlobalExtendedAttributes["Description"]);
+	}
+
+	[Theory]
+	[InlineData(null)]
+	[InlineData("")]
+	[InlineData("   ")]
+	public void Tar_Metadata_EmptyOptionalValues_AreOmitted(string value)
+	{
+		using var directory = new TemporaryDirectory();
+		var package = new Package.Tar("example", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, CreateVariables(directory.Path))
+		{
+			License = value,
+			Homepage = value,
+			Maintainer = value,
+			Category = value,
+			Title = value,
+			Summary = value,
+			Description = value,
+			Dependencies = value == null ? null : [value],
+			Scripts = new(":", ":", ":", ":"),
+		};
+		package.Pack(directory.Path, false);
+
+		using var stream = File.OpenRead(Path.Combine(directory.Path, package.FileName));
+		using var gzip = new GZipStream(stream, CompressionMode.Decompress);
+		using var reader = new TarReader(gzip);
+		var metadata = Assert.IsType<PaxGlobalExtendedAttributesTarEntry>(reader.GetNextEntry());
+		Assert.Equal("example", metadata.GlobalExtendedAttributes["Summary"]);
+		Assert.Equal("example", metadata.GlobalExtendedAttributes["Description"]);
+
+		foreach(var name in new[] { "License", "Homepage", "Maintainer", "Category", "Dependencies", "BuildTime" })
+			Assert.False(metadata.GlobalExtendedAttributes.ContainsKey(name));
+	}
+
+	[Theory]
+	[InlineData(null, "Application title", null, "Application title", "Application title")]
+	[InlineData("Application summary", "Application title", null, "Application summary", "Application summary")]
+	[InlineData("Application summary", "Application title", "Long description", "Application summary", "Long description")]
+	[InlineData(null, null, "Long description", "example", "Long description")]
+	public void Tar_Metadata_TextFallbacks_PreserveSummaryAndDescription(string summary, string title, string description, string expectedSummary, string expectedDescription)
+	{
+		using var directory = new TemporaryDirectory();
+		var package = new Package.Tar("example", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, CreateVariables(directory.Path))
+		{
+			Title = title,
+			Summary = summary,
+			Description = description,
+			Scripts = new(":", ":", ":", ":"),
+		};
+		package.Pack(directory.Path, false);
+
+		using var stream = File.OpenRead(Path.Combine(directory.Path, package.FileName));
+		using var gzip = new GZipStream(stream, CompressionMode.Decompress);
+		using var reader = new TarReader(gzip);
+		var metadata = Assert.IsType<PaxGlobalExtendedAttributesTarEntry>(reader.GetNextEntry());
+		Assert.Equal(expectedSummary, metadata.GlobalExtendedAttributes["Summary"]);
+		Assert.Equal(expectedDescription, metadata.GlobalExtendedAttributes["Description"]);
 	}
 
 	[Theory]
@@ -96,7 +239,11 @@ public sealed class PackageLifecycleTest
 				{
 					var metadata = Assert.IsType<PaxGlobalExtendedAttributesTarEntry>(reader.GetNextEntry());
 					Assert.Equal(expected, metadata.GlobalExtendedAttributes["Packager"]);
+					Assert.Equal("zongsoft.daemon", metadata.GlobalExtendedAttributes["PackageName"]);
 					Assert.Equal(expectedManufacturer, metadata.GlobalExtendedAttributes["Manufacturer"]);
+					Assert.Equal("1.2.3", metadata.GlobalExtendedAttributes["Version"]);
+					Assert.Equal("Hosting Maintainer", metadata.GlobalExtendedAttributes["Maintainer"]);
+					Assert.Equal("https://example.test/product", metadata.GlobalExtendedAttributes["Homepage"]);
 					Assert.Null(metadata.DataStream);
 					Assert.Equal("install.sh", reader.GetNextEntry().Name);
 					Assert.Equal("uninstall.sh", reader.GetNextEntry().Name);

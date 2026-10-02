@@ -297,7 +297,7 @@ Ordinary file packaging needs neither `--framework` nor `--compilation`; these o
 
 ### Dependencies and relationships
 
-`--dependencies:<list>` uses the same `name[:range]` syntax for `deb` and `rpm`. Ranges follow [NuGet interval notation](https://learn.microsoft.com/en-us/nuget/concepts/package-versioning#version-ranges), with `[10.0)` additionally accepted as shorthand for `[10.0,)`.
+`--dependencies:<list>` uses the same `name[:range]` syntax for `tar`, `deb`, and `rpm`. Ranges follow [NuGet interval notation](https://learn.microsoft.com/en-us/nuget/concepts/package-versioning#version-ranges), with `[10.0)` additionally accepted as shorthand for `[10.0,)`.
 
 | Input | Required version |
 | --- | --- |
@@ -317,7 +317,7 @@ Separate required groups with commas or semicolons **outside ranges**. Within a 
 --dependencies:"aspnetcore-runtime-10.0:[10.0,11.0);openssl:[3.0) | libressl:[4.0)"
 ```
 
-Debian receives a `Depends` field; RPM receives `Requires` entries. For `runtime:[10.0,11.0) | alternative:[9.0)`, Debian writes `runtime (>= 10.0) | alternative (>= 9.0), runtime (<< 11.0) | alternative (>= 9.0)`. RPM writes `((runtime >= 10.0 with runtime < 11.0) or alternative >= 9.0)`. RPM alternatives require RPM 4.13+, and bounded ranges using `with` require RPM 4.14+. Debian expansion fails with a diagnostic if one group would produce more than 1024 relationship groups.
+Tar records the validated input in the PAX global attribute `Dependencies`, joining required groups with `; ` and preserving ranges and alternatives. Its installer does not check or install dependencies. Debian receives a `Depends` field; RPM receives `Requires` entries. For `runtime:[10.0,11.0) | alternative:[9.0)`, Debian writes `runtime (>= 10.0) | alternative (>= 9.0), runtime (<< 11.0) | alternative (>= 9.0)`. RPM writes `((runtime >= 10.0 with runtime < 11.0) or alternative >= 9.0)`. RPM alternatives require RPM 4.13+, and bounded ranges using `with` require RPM 4.14+. Debian expansion fails with a diagnostic if one group would produce more than 1024 relationship groups.
 
 Only the interval notation is shared. Version endpoints retain their original text and use the target package manager's comparison rules; the packager does not normalize, reorder, or compare them as NuGet versions. Debian virtual packages can have different providers satisfying the lower and upper bounds; RPM `with` requires the same package to satisfy both. Package names are not mapped between distributions. Native names such as Debian `libc6:any` or RPM `pkgconfig(openssl)` remain format-specific; a range is introduced by `:[`, `:(`, or a colon followed by a digit-starting bare version. Use brackets for native versions starting with a letter.
 
@@ -922,7 +922,28 @@ Inspect a package before installing it. The listing and metadata commands below 
 
 The tar command produces a `.tar.gz` archive and a same-named `.sh` installer. The archive contains the application files, optional root-level entries under `.root/`, and executable `install.sh` and `uninstall.sh` scripts that merge the lifecycle scripts.
 
-The PAX global attribute `Architecture` records the target CPU architecture from the existing `--architecture` option (default `x64`), using the same lowercase value as the filename, such as `x64`, `arm64`, `x86`, or `arm`.
+The archive records the following metadata as PAX global attributes. All attributes remain readable after the archive is renamed and add no installed files or command options:
+
+| Attribute | Meaning |
+| --- | --- |
+| `Packager` | Generator identity, `Zongsoft.Tools.Packager@<assembly-version>`, independent of the application version. |
+| `PackageName` | Final system package name, including the service identity selected by `--daemon` and any Edition suffix; distinct from the application identity in `.version`. |
+| `PackageSize` | Sum of payload file sizes in bytes, including generated payload files and root-level files, excluding tar headers and `install.sh`/`uninstall.sh`; not filesystem disk usage. |
+| `Version` | Final application version, matching the generated `.version`. |
+| `Architecture` | Target CPU architecture from `--architecture` (default `x64`), using the same lowercase value as the filename, such as `x64`, `arm64`, `x86`, or `arm`. |
+| `Manufacturer` | Software manufacturer; defaults to `Zongsoft` when null or empty, while whitespace-only values are retained. |
+| `Maintainer` | Package maintainer, separate from the generator identity in `Packager` and software manufacturer in `Manufacturer`. |
+| `Homepage` | Project home page. |
+| `License` | Application license expression or name. |
+| `Summary` | Summary, falling back to the title and then the application name when blank. |
+| `Description` | Full description, falling back to the effective summary when blank; Unicode and line breaks are preserved through the text escaping described below. |
+| `InstallPath` | Default installation path; installation-time overrides still apply where supported. |
+| `Dependencies` | Validated dependency declarations in the shared input syntax, with required groups separated by `; `; informational only. |
+| `Category` | Explicit package category, without Debian or RPM default categories. |
+
+Blank optional values (`License`, `Homepage`, `Maintainer`, `InstallPath`, `Dependencies`, and `Category`) are omitted. `PackageSize` is `0` for an empty payload. No `BuildTime` attribute is written.
+
+The .NET PAX writer rejects literal line breaks in attribute values. `Summary` and `Description` therefore escape backslashes, carriage returns, and line feeds as `\\`, `\r`, and `\n`, respectively; readers must decode these sequences to restore the original text. Other attributes retain their existing plain-text representation.
 
 Inspect the contents:
 
@@ -983,7 +1004,7 @@ Root-level entries under `/etc/` are marked as RPM configuration files.
 
 | Format | Homepage | Manufacturer | Maintainer |
 | --- | --- | --- | --- |
-| tar.gz | — | PAX global extended attribute `Manufacturer` | — |
+| tar.gz | PAX global extended attribute `Homepage` | PAX global extended attribute `Manufacturer` | PAX global extended attribute `Maintainer` |
 | deb | `Homepage` | Custom control field `Manufacturer` | `Maintainer` |
 | rpm | `URL` (1020) | `VENDOR` (1011) | `PACKAGER` (1015) |
 

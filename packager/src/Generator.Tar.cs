@@ -36,6 +36,7 @@ using System.IO;
 using System.Text;
 using System.Linq;
 using System.Formats.Tar;
+using System.Globalization;
 using System.IO.Compression;
 using System.Collections.Generic;
 
@@ -58,12 +59,7 @@ partial class Generator
 		using(var gzip = new GZipStream(stream, CompressionLevel.Optimal))
 		using(var writer = new TarWriter(gzip, TarEntryFormat.Pax, false))
 		{
-			writer.WriteEntry(new PaxGlobalExtendedAttributesTarEntry
-			([
-				new KeyValuePair<string, string>("Packager", GetIdentity()),
-				new KeyValuePair<string, string>("Manufacturer", package.Manufacturer),
-				new KeyValuePair<string, string>("Architecture", package.Architecture.ToString().ToLowerInvariant()),
-			]));
+			writer.WriteEntry(new PaxGlobalExtendedAttributesTarEntry(GetTarMetadata(package)));
 
 			foreach(var entry in GetPackageDirectories(package.Entries, true).Concat(package.Entries.Where(entry => !entry.IsDirectory)))
 			{
@@ -88,6 +84,44 @@ partial class Generator
 	#endregion
 
 	#region 私有方法
+	static IEnumerable<KeyValuePair<string, string>> GetTarMetadata(Package package)
+	{
+		var summary = !string.IsNullOrWhiteSpace(package.Summary) ? package.Summary :
+			!string.IsNullOrWhiteSpace(package.Title) ? package.Title : package.Name;
+		var dependencies = Dependency.Split(string.Join("; ", package.Dependencies ?? []));
+
+		Dependency.Parse(dependencies);
+
+		var attributes = new List<KeyValuePair<string, string>>
+		{
+			new("Packager", GetIdentity()),
+			new("Version", package.Version.ToString()),
+			new("PackageName", package.PackageName),
+			new("PackageSize", package.GetPackageSize().ToString(CultureInfo.InvariantCulture)),
+			new("Architecture", package.Architecture.ToString().ToLowerInvariant()),
+			new("Manufacturer", package.Manufacturer),
+			new("Summary", EncodeText(summary)),
+			new("Description", EncodeText(string.IsNullOrWhiteSpace(package.Description) ? summary : package.Description)),
+		};
+
+		Add("License", package.License);
+		Add("Homepage", package.Homepage);
+		Add("Maintainer", package.Maintainer);
+		Add("InstallPath", package.InstallPath);
+		Add("Dependencies", string.Join("; ", dependencies));
+		Add("Category", package.Category);
+
+		return attributes;
+
+		void Add(string name, string value)
+		{
+			if(!string.IsNullOrWhiteSpace(value))
+				attributes.Add(new(name, value));
+		}
+
+		static string EncodeText(string text) => text.Replace("\\", "\\\\").Replace("\r", "\\r").Replace("\n", "\\n");
+	}
+
 	static void WriteTarEntry(TarWriter writer, Package.Entry item, string name = null)
 	{
 		using var stream = item.IsDirectory ? null : item.OpenRead();
@@ -248,8 +282,6 @@ partial class Generator
 		static string Quote(string value) => string.IsNullOrEmpty(value) ? "''" : $"'{value.Replace("'", "'\"'\"'")}'";
 	}
 
-	static string NormalizeScript(string script) => string.IsNullOrWhiteSpace(script) ? ":" : script.Trim().ReplaceLineEndings("\n");
-
 	static string CreateRootInstallScript(Package.Entry[] entries)
 	{
 		if(entries == null || entries.Length == 0)
@@ -295,5 +327,6 @@ partial class Generator
 
 	static string Quote(string value) => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\"", "\\\"");
 	static string ShellQuote(string value) => string.IsNullOrEmpty(value) ? "''" : $"'{value.Replace("'", "'\"'\"'")}'";
+	static string NormalizeScript(string script) => string.IsNullOrWhiteSpace(script) ? ":" : script.Trim().ReplaceLineEndings("\n");
 	#endregion
 }
