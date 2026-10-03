@@ -530,6 +530,10 @@ Tar writes manufacturer as the PAX global attribute `Manufacturer`, Debian write
 
 ## Packager version metadata
 
+The complete field mapping is in [README application metadata](../README.md#application-metadata). `Generator.GetSummary` chooses the first nonblank Summary, Title, or application Name; `GetDescription` uses a nonblank Description or that effective summary. All three generators use these helpers. Debian combines a normalized one-line synopsis with independent long-description continuation lines, preserving internal indentation and encoding blank lines as ` .`; if both texts are identical, only the synopsis is written. Tar escapes its two text values, while RPM retains literal text. Blank License and Homepage values are omitted in every format. Debian's required Maintainer fallback (`Unknown`) and native category defaults (`utils` / `Applications/System`) remain format-specific.
+
+Debian adds `PackageSize` in invariant-culture bytes alongside its native KiB `Installed-Size`, and adds `InstallPath`. RPM adds the nonblank installation path as application string tag `1000002`, retaining deprecated tag `1056` for existing readers. The application tag is informational: adding `PREFIXES` would advertise relocation support that the lifecycle scripts do not provide. Modern RPM query formats do not expose unregistered application tags or the deprecated `DEFAULTPREFIX` name; readers must inspect the numeric header entries.
+
 The effective application listener comes from the same `ApplicationHost` result used by service generation. `Package.Listen` exposes it only for a generated host. The generators omit absent/empty listeners, and hosts using an existing service or disabled daemon never advertise an ignored `--listen` value. Tar stores `Listen` in its PAX global attributes, Debian adds a control `Listen` field, and RPM stores a single string in application tag `1000001`. This tag is the Zongsoft package contract, not an upstream registered RPM tag; it stays outside the standard tag numbers ([upstream tag definitions](https://github.com/rpm-software-management/rpm/blob/master/include/rpm/rpmtag.h)). The RPM header digest covers it. No extra installed metadata file or payload entry is generated. `ListenerMetadataTest` checks all three formats, variable expansion, port normalization, service/metadata consistency and omission for unused settings.
 
 Each package records the generator identity, logically `Packager:Zongsoft.Tools.Packager@<assembly-version>`. The value is `assembly-name@version`, read from the packager assembly independently of the host application version. No additional option or migration configuration is required.
@@ -584,7 +588,7 @@ install.sh
 uninstall.sh
 ```
 
-A PAX global extended record starts the archive; it is not an installed file. `GetTarMetadata` writes `Packager`, `PackageName`, `Version`, `Manufacturer`, `Architecture`, `Summary`, `Description`, and `PackageSize`. Nonblank `License`, `Homepage`, `Maintainer`, `InstallPath`, `Dependencies`, and `Category` values are also written. No `BuildTime` attribute is written.
+A PAX global extended record starts the archive; it is not an installed file. `GetTarMetadata` writes `Packager`, `PackageName`, `Version`, `Manufacturer`, `Architecture`, `Summary`, `Description`, and `PackageSize`. Nonblank `License`, `Homepage`, `Maintainer`, `InstallPath`, `Listen`, `Dependencies`, and `Category` values are also written. No `BuildTime` attribute is written.
 
 `PackageName` uses `package.PackageName`, preserving the final system package name determined by the daemon identity and Edition; it does not use the application identity or archive filename. `Version` uses the full `package.Version.ToString()` and matches the generated `.version`. `Architecture` uses `package.Architecture.ToString().ToLowerInvariant()`, matching the filename's architecture value (for example `x64`, `arm64`, `x86`, or `arm`). All values remain readable after the archive is renamed, without additional options or payload entries.
 
@@ -727,10 +731,13 @@ Section: <category-or-utils>
 Priority: optional
 Architecture: <debian-architecture>
 Installed-Size: <payload-size-in-KiB>
+PackageSize: <payload-size-in-bytes>
 Maintainer: <maintainer>
 Manufacturer: <manufacturer>
 Homepage: <homepage>
 License: <license>
+InstallPath: <default-installation-path>
+Listen: <generated-host-listener>
 Depends: <dependencies>
 Description: <summary-or-title-or-name>
  <long-description-line>
@@ -744,7 +751,7 @@ Details:
 - The first `Description` line is the short description.
 - Every long-description line starts with one space.
 - Blank lines become ` .`.
-- `License`, `Manufacturer`, and `Packager` are additional fields. `Packager`, application `Version`, and `Maintainer` hold distinct information.
+- `License`, `Manufacturer`, `Packager`, `PackageSize`, `InstallPath`, and `Listen` are additional fields. Optional blank fields are omitted; `PackageSize` always records exact payload bytes, including `0`. `Installed-Size` retains the rounded KiB estimate with a minimum of 1. `Packager`, application `Version`, and `Maintainer` hold distinct information.
 
 ### Debian architecture mapping
 
@@ -885,7 +892,7 @@ Written tags:
 | `62` | Immutable signature region, BIN type, 16-byte trailer. |
 | `269` | SHA-1 digest of the metadata header. |
 | `273` | SHA-256 digest of the metadata header. |
-| `1000` | Byte length of metadata header + payload. |
+| `1000` / `270` | Byte length of metadata header + payload, unsigned 32-bit / 64-bit. |
 | `1004` | MD5 digest of metadata header + payload. |
 
 The signature section ends on an 8-byte boundary. Both headers write indexes in ascending tag order; the main header's immutable-region tag is `63`. The region trailer sits at the end of the store, with a negative offset representing the region index byte count. Digests cover the complete metadata header, including magic, indexes, store, and trailer. These are integrity digests, not a publisher OpenPGP signature. See [RPM V4 format](https://rpm-software-management.github.io/rpm/manual/format_v4.html) and [header structure](https://rpm-software-management.github.io/rpm/manual/format_header.html).
@@ -915,7 +922,7 @@ Common tags:
 | `1005` | Description. |
 | `1006` | Build time. |
 | `1007` | Build host. |
-| `1009` | Installed size. |
+| `1009` / `5009` | Payload file bytes, unsigned 32-bit / 64-bit. |
 | `1011` | Manufacturer/vendor. |
 | `1014` | License. |
 | `1015` | Maintainer/packager. |
@@ -924,7 +931,7 @@ Common tags:
 | `1021` | OS, fixed to `linux`. |
 | `1022` | RPM architecture. |
 | `1023..1026` | Pre/post install and pre/post uninstall scripts. |
-| `1028` | File-size array. |
+| `1028` | Unsigned 32-bit file-size array. |
 | `1030` | File-mode array. |
 | `1034` | File-modification-time array. |
 | `1035` | File SHA-256 digest array. |
@@ -933,8 +940,10 @@ Common tags:
 | `1048..1050` | Requires flags/name/version. |
 | `1047`, `1112`, `1113` | Provides name/flags/version. |
 | `1053..1055` | Conflicts flags/name/version. |
-| `1056` | Install prefix. |
+| `1056` | Deprecated default installation path, retained for existing readers. |
 | `1064` | Generator identity, `assembly-name@version`. |
+| `1046` / `271` | Uncompressed cpio archive bytes, unsigned 32-bit / 64-bit. |
+| `1000001` / `1000002` | Application string tags: effective generated-host listener / default installation path. |
 | `1116..1118` | File directory indexes, basenames, and directory names. |
 | `1124` | Payload format, fixed to `cpio`. |
 | `1125` | Payload compressor, fixed to `gzip`. |
@@ -1062,7 +1071,7 @@ RPM uses ordinary flags/name/version entries for single comparisons. A finite ra
 - File owner/group are fixed to root; build-host UID/GID are not inherited, and custom ownership options are unavailable.
 - Systemd is the only script-generation strategy.
 - File links read target content; selected directory links may expand, internal directory links are skipped, and symbolic links themselves are not preserved.
-- Large packages depend on available temporary disk space and retain container-field size limits.
+- Large packages depend on available temporary disk space and retain container-field size limits. RPM's `newc` file size is an eight-digit hexadecimal value, so individual files above `uint.MaxValue` are rejected before publication. Aggregate package/archive/signature sizes use unsigned 32-bit values through `uint.MaxValue`, then standard 64-bit tags (`5009`, `271`, `270`); they are not clamped at `int.MaxValue`. Read installed size with `LONGSIZE`, which also covers a stored 32-bit `SIZE`. This does not implement RPM's alternative large-file payload encoding.
 
 ## Migration artifact integration
 
@@ -1094,6 +1103,8 @@ Cake's `--edition` selects the same configuration for restore, build, tests, and
 `VersionFileTest`, `PackageVersionTest`, and `PackageArtifactTest` cover source versions and memory entries.
 
 `Package_Provenance_RecordsGeneratorAndPreservesApplicationMetadata` covers generator identity, application version, manufacturer values and defaults, and independent homepage and maintainer fields in all three formats.
+
+`PackageMetadataTest` reads actual three-format packages field by field for x64, x86, arm64, and arm. It checks all shared application metadata, generated/version/rooted payload byte totals, dependency encoding, independent summary/description selection, blank optional fields, native defaults, and both RPM installation-path tags. Header boundary tests cover sizes at 2 GiB, `uint.MaxValue`, 4 GiB, and larger 64-bit values without allocating large payloads.
 
 `Tar_Metadata_IsReadableFromRenamedArchive` reads the final package name, including the daemon identity and Edition, and x64, arm64, x86, and arm architecture values from the PAX global header after renaming the archive. It also covers the added metadata, Unicode/multiline text, dependency ranges and alternatives, no BuildTime, and unchanged payload entries. Additional tar metadata tests cover payload byte totals and version identity, omitted empty optional values, summary/description fallback, and distinct escaping of backslashes, CR, and LF. Invalid dependency tests include tar and verify that existing artifacts survive failure. The provenance test also covers the package name without a daemon identity or Edition.
 

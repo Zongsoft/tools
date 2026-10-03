@@ -906,7 +906,7 @@ dotnet-pack deb \
 
 ## 包格式
 
-三种格式共享同一套元数据和载荷，差异只在容器结构和安装方式：
+三种格式共享应用元数据和载荷，通过各格式的原生字段及扩展编码。字段映射及仍需保留的格式差异见[应用元数据](#应用元数据)：
 
 | 格式 | 容器结构 | 安装方式 |
 | --- | --- | --- |
@@ -938,10 +938,11 @@ tar 命令生成 `.tar.gz` 包及同名 `.sh` 安装脚本。tar 包包含应用
 | `Summary` | 摘要；为空时依次回退到标题、应用名。 |
 | `Description` | 完整描述；为空时回退到有效摘要，通过下述文本转义保留 Unicode 和换行。 |
 | `InstallPath` | 默认安装路径；支持安装时覆盖的场景仍按既有规则执行。 |
+| `Listen` | 自动生成宿主的有效监听地址；已有服务、禁用宿主或空值时省略。 |
 | `Dependencies` | 校验后的统一输入语法，各组以 `; ` 分隔，仅作声明。 |
 | `Category` | 显式包分类，不套用 Debian 或 RPM 的默认分类。 |
 
-可选值（`License`、`Homepage`、`Maintainer`、`InstallPath`、`Dependencies`、`Category`）为空白时省略；空载荷的 `PackageSize` 为 `0`。不写入 `BuildTime` 属性。
+可选值（`License`、`Homepage`、`Maintainer`、`InstallPath`、`Listen`、`Dependencies`、`Category`）为空白时省略；空载荷的 `PackageSize` 为 `0`。不写入 `BuildTime` 属性。
 
 .NET PAX 写入器不接受属性值中的实际换行，因此 `Summary` 和 `Description` 将反斜杠、回车、换行分别转义为 `\\`、`\r`、`\n`；读取时应解码这些序列以还原原文。其他属性沿用普通文本表示。
 
@@ -1002,11 +1003,37 @@ sudo rpm -Uvh ./.packages/zongsoft.web@1.0.0-x64.rpm
 
 `--homepage` 表示应用主页，`--manufacturer` 表示软件生产厂家，`--maintainer` 表示软件包维护者。变量 `homepage`、`manufacturer`、`maintainer` 按既有的默认值 → 环境变量 → 祖先 `.env` → 显式选项顺序加载。厂家值解析后为 null 或空字符串时使用 `Zongsoft`，纯空白不使用默认值。
 
-| 格式 | 主页 | 生产厂家 | 维护者 |
+| 应用字段 | tar.gz PAX 全局属性 | deb control 字段 | rpm 主 Header 标签 |
 | --- | --- | --- | --- |
-| tar.gz | PAX 全局扩展属性 `Homepage` | PAX 全局扩展属性 `Manufacturer` | PAX 全局扩展属性 `Maintainer` |
-| deb | `Homepage` | 自定义 control 字段 `Manufacturer` | `Maintainer` |
-| rpm | `URL`（1020） | `VENDOR`（1011） | `PACKAGER`（1015） |
+| 包名 | `PackageName` | `Package` | `NAME`（1000） |
+| 应用版本 | `Version` | `Version` | `VERSION`（1001） |
+| 生成工具身份 | `Packager` | `Packager`（自定义） | `RPMVERSION`（1064） |
+| 载荷字节数 | `PackageSize` | `PackageSize`（自定义）；另有 KiB 单位的 `Installed-Size` | `SIZE`（1009）；超过 32 位范围时使用 `LONGSIZE`（5009） |
+| CPU 架构 | `Architecture` | `Architecture` | `ARCH`（1022） |
+| 生产厂家 | `Manufacturer` | `Manufacturer`（自定义） | `VENDOR`（1011） |
+| 维护者 | `Maintainer` | `Maintainer` | `PACKAGER`（1015） |
+| 主页 | `Homepage` | `Homepage` | `URL`（1020） |
+| 许可证 | `License` | `License`（自定义） | `LICENSE`（1014） |
+| 摘要 | `Summary` | `Description` 首行 | `SUMMARY`（1004） |
+| 完整描述 | `Description` | `Description` 续行；没有续行时取首行 | `DESCRIPTION`（1005） |
+| 默认安装路径 | `InstallPath` | `InstallPath`（自定义） | 应用字符串标签 `1000002`；保留旧 `DEFAULTPREFIX`（1056） |
+| 生成宿主监听地址 | `Listen` | `Listen`（自定义） | 应用字符串标签 `1000001` |
+| 依赖 | `Dependencies` | `Depends` | `REQUIRENAME` / `REQUIREFLAGS` / `REQUIREVERSION`（1049 / 1048 / 1050） |
+| 分类 | `Category` | `Section` | `GROUP`（1016） |
+
+三格式的摘要都按 `Summary`、`Title`、应用名顺序选择首个非空白值；描述为空白时回退到该摘要。Debian 写入单行摘要，并在完整描述与摘要不同时写入独立的长描述；多行摘要合并为单行。长描述将换行统一为 LF，保留内部缩进，空行写为 ` .`。Tar 使用前述转义，RPM 保留原始文本。
+
+架构名称遵循目标格式，例如 `x64` / `amd64` / `x86_64`，以及 `arm64` / `arm64` / `aarch64`。`PackageSize` 始终表示载荷文件字节数，不表示压缩包大小或文件系统占用。Debian 保留原生 `Installed-Size` 估计值，向上取整为 KiB 且最小为 1；额外的字节字段避免精度损失，空载荷为 `0`。RPM 大小查询应使用 `%{LONGSIZE}`，它也能读取使用 32 位 `SIZE` 标签的包。
+
+三格式均省略空白许可证和主页。Debian 必须提供 `Maintainer`，空白时使用 `Unknown`；tar 与 RPM 省略空白维护者。分类为空白时 tar 省略，Debian 使用 `utils`，RPM 使用 `Applications/System`。这些默认值及 Debian 的空白规范化属于格式差异。
+
+依赖在各格式中以原生语法表达相同输入约束；RPM 还会记录 `rpmlib(...)` 包管理器能力依赖。Tar 的依赖仅作声明，没有依赖求解器。原生 `Provides`/`Conflicts` 及 Debian 的 `Replaces`/`Breaks`/`Recommends`/`Suggests` 保留既有的格式专属语义。
+
+RPM 额外记录 `RELEASE`、`OS`、`BUILDTIME`、`BUILDHOST`、文件摘要、载荷细节和完整性头；Debian 有 `Priority`、`conffiles`；tar 有 PAX 条目属性及安装脚本。这些容器与包管理器字段不跨格式复制，tar 和 Debian 不新增 `BuildTime`。应用名与 Edition 保留在生成的 `.version` 中；`Title` 提供摘要回退值，`Framework` 不作为独立包头字段。
+
+当前 RPM 的 `newc` 载荷编码单文件最多支持 `4 GiB - 1` 字节，超限在产物发布前拒绝；总载荷与归档大小在需要时使用 64 位 RPM 标签。这是所选载荷编码的限制，不是 RPM 缺少 64 位大小元数据。
+
+`dpkg-deb --info` 和 `rpm -qip` 是格式化概览。完整 Debian 字段可用 `dpkg-deb -f <安装包.deb>` 查看；已注册的 RPM 字段用 `--queryformat` 查看。未注册的 RPM 监听及安装路径标签需要识别应用标签 `1000001`、`1000002` 的 Header 读取器；现代 RPM 查询不识别已弃用的 `DEFAULTPREFIX` 名称。这些路径字段描述制包时的默认安装路径，不将包声明为可重定位包。
 
 Debian 文本字段遵循既有规范化规则：去除外围空白，纯空白的厂家字段不写入；tar 与 RPM 保留厂家值。这些字段属于格式元数据，不增加安装目录文件。
 

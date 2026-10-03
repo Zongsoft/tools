@@ -1,8 +1,8 @@
-﻿/*
+/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
- *   / /__/ /_/ / / / / /_/ /\_ \/ /_/ / __/ /_
+ *   / /__/ /_/ / / / /_/ /\_ \/ /_/ / __/ /_
  *  /____/\____/_/ /_/\__  /____/\____/_/  \__/
  *                   /____/
  *
@@ -11,7 +11,7 @@
  *
  * The MIT License (MIT)
  *
- * Copyright (C) 2020-2026 Zongsoft Corporation <http://www.zongsoft.com>
+ * Copyright (C) 2026 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -32,21 +32,39 @@
  */
 
 using System;
+using System.IO;
 
-namespace Zongsoft.Tools.Packager;
+using Xunit;
 
-public static partial class Generator
+using Zongsoft.Tools.Containerizer.Execution;
+using Zongsoft.Tools.Containerizer.Protocol;
+
+namespace Zongsoft.Tools.Containerizer.Executor.Tests;
+
+public sealed class BootstrapTests
 {
-	#region 私有方法
-	private static string GetSummary(Package package) =>
-		!string.IsNullOrWhiteSpace(package.Summary) ? package.Summary :
-		!string.IsNullOrWhiteSpace(package.Title) ? package.Title : package.Name;
-
-	private static string GetDescription(Package package) => !string.IsNullOrWhiteSpace(package.Description) ? package.Description : GetSummary(package);
-	private static string GetIdentity()
+	[Fact]
+	public void AptCachePreservesOriginalBytesAndRejectsCollidingPackageNames()
 	{
-		var name = typeof(Generator).Assembly.GetName();
-		return $"{name.Name}@{name.Version}";
+		var root = Path.Combine(Path.GetTempPath(), "containerizer-bootstrap-" + Guid.NewGuid().ToString("N"));
+		Directory.CreateDirectory(root);
+
+		try
+		{
+			var package = Path.Combine(root, "dependency.deb");
+			File.WriteAllBytes(package, [0, 1, 2, 255]);
+
+			var cache = DockerHost.PrepareAptCache([package], Path.Combine(root, "cache"));
+			Assert.Equal(File.ReadAllBytes(package), File.ReadAllBytes(Path.Combine(cache, "dependency.deb")));
+
+			Directory.CreateDirectory(Path.Combine(root, "other"));
+			var collision = Path.Combine(root, "other", "dependency.deb");
+			File.WriteAllText(collision, "conflicting content");
+
+			Assert.Equal(4, Assert.Throws<ContainerizationException>(() => DockerHost.PrepareAptCache([package, collision], cache)).Code);
+			Assert.Equal([0, 1, 2, 255], File.ReadAllBytes(Path.Combine(cache, "dependency.deb")));
+			Assert.Equal([0, 1, 2, 255], File.ReadAllBytes(package));
+		}
+		finally { Directory.Delete(root, true); }
 	}
-	#endregion
 }

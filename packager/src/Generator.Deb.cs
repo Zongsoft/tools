@@ -76,10 +76,12 @@ partial class Generator
 		builder.AppendLine($"Priority: optional");
 		builder.AppendLine($"Architecture: {GetDebianArchitecture(package.Architecture)}");
 		builder.AppendLine($"Installed-Size: {Math.Max(1, (package.GetPackageSize() + 1023) / 1024)}");
+		builder.AppendLine($"PackageSize: {package.GetPackageSize().ToString(System.Globalization.CultureInfo.InvariantCulture)}");
 		builder.AppendLine($"Maintainer: {NormalizeDebText(package.Maintainer) ?? "Unknown"}");
 		AppendDebField(builder, "Manufacturer", package.Manufacturer);
 		AppendDebField(builder, "Homepage", package.Homepage);
 		AppendDebField(builder, "License", package.License);
+		AppendDebField(builder, "InstallPath", package.InstallPath);
 		AppendDebField(builder, "Listen", package.Listen);
 
 		if(package is Package.Deb deb)
@@ -88,36 +90,14 @@ partial class Generator
 				AppendDebField(builder, name, deb.GetRelationship(name));
 		}
 
-		string description;
+		var summary = NormalizeDebText(GetSummary(package));
+		var description = GetDescription(package).Trim().ReplaceLineEndings("\n");
+		builder.AppendLine($"Description: {summary}");
 
-		if(string.IsNullOrWhiteSpace(package.Description))
+		if(description != summary)
 		{
-			if(!string.IsNullOrWhiteSpace(package.Summary))
-				description = package.Summary.Trim();
-			else if(!string.IsNullOrWhiteSpace(package.Title))
-				description = package.Title.Trim();
-			else
-				description = $"{package.Name}@{package.Version}";
-		}
-		else
-		{
-			if(string.IsNullOrWhiteSpace(package.Summary))
-				description = package.Description.Trim();
-			else
-				description = package.Summary.Trim() + "\n\n" + package.Description.Trim();
-		}
-
-		if(!string.IsNullOrWhiteSpace(description))
-		{
-			using var memory = new MemoryStream(Encoding.UTF8.GetBytes(description));
-			using var reader = new StreamReader(memory);
-
-			builder.AppendLine($"Description: {NormalizeDebText(reader.ReadLine())}");
-
-			while((description = reader.ReadLine()) != null)
-			{
-				builder.AppendLine(string.IsNullOrWhiteSpace(description) ? " ." : $" {NormalizeDebText(description)}");
-			}
+			foreach(var line in description.Split('\n'))
+				builder.AppendLine(string.IsNullOrWhiteSpace(line) ? " ." : " " + line.TrimEnd());
 		}
 
 		return builder.ToString().ReplaceLineEndings("\n");

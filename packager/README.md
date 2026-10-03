@@ -906,7 +906,7 @@ dotnet-pack deb \
 
 ## Package formats
 
-All three formats share the same metadata and payload; they differ only in container structure and installation:
+All three formats share application metadata and payloads, encoded through each format's native fields and extensions. See [Application metadata](#application-metadata) for field mappings and remaining format differences:
 
 | Format | Container | Installed by |
 | --- | --- | --- |
@@ -938,10 +938,11 @@ The archive records the following metadata as PAX global attributes. All attribu
 | `Summary` | Summary, falling back to the title and then the application name when blank. |
 | `Description` | Full description, falling back to the effective summary when blank; Unicode and line breaks are preserved through the text escaping described below. |
 | `InstallPath` | Default installation path; installation-time overrides still apply where supported. |
+| `Listen` | Effective listening address of the generated host; omitted for an existing service, disabled host, or blank value. |
 | `Dependencies` | Validated dependency declarations in the shared input syntax, with required groups separated by `; `; informational only. |
 | `Category` | Explicit package category, without Debian or RPM default categories. |
 
-Blank optional values (`License`, `Homepage`, `Maintainer`, `InstallPath`, `Dependencies`, and `Category`) are omitted. `PackageSize` is `0` for an empty payload. No `BuildTime` attribute is written.
+Blank optional values (`License`, `Homepage`, `Maintainer`, `InstallPath`, `Listen`, `Dependencies`, and `Category`) are omitted. `PackageSize` is `0` for an empty payload. No `BuildTime` attribute is written.
 
 The .NET PAX writer rejects literal line breaks in attribute values. `Summary` and `Description` therefore escape backslashes, carriage returns, and line feeds as `\\`, `\r`, and `\n`, respectively; readers must decode these sequences to restore the original text. Other attributes retain their existing plain-text representation.
 
@@ -1002,11 +1003,37 @@ Root-level entries under `/etc/` are marked as RPM configuration files.
 
 `--homepage` identifies the application's home page. `--manufacturer` identifies the software manufacturer, while `--maintainer` identifies the package maintainer. The variables `homepage`, `manufacturer`, and `maintainer` follow the usual defaults → environment → ancestor `.env` → explicit options order. Manufacturer values that resolve to null or an empty string use `Zongsoft`; a value consisting only of whitespace does not use the default.
 
-| Format | Homepage | Manufacturer | Maintainer |
+| Application field | tar.gz PAX global attribute | deb control field | rpm main-header tag |
 | --- | --- | --- | --- |
-| tar.gz | PAX global extended attribute `Homepage` | PAX global extended attribute `Manufacturer` | PAX global extended attribute `Maintainer` |
-| deb | `Homepage` | Custom control field `Manufacturer` | `Maintainer` |
-| rpm | `URL` (1020) | `VENDOR` (1011) | `PACKAGER` (1015) |
+| Package name | `PackageName` | `Package` | `NAME` (1000) |
+| Application version | `Version` | `Version` | `VERSION` (1001) |
+| Generator identity | `Packager` | `Packager` (custom) | `RPMVERSION` (1064) |
+| Payload bytes | `PackageSize` | `PackageSize` (custom); also `Installed-Size` in KiB | `SIZE` (1009), or `LONGSIZE` (5009) above the 32-bit limit |
+| CPU architecture | `Architecture` | `Architecture` | `ARCH` (1022) |
+| Manufacturer | `Manufacturer` | `Manufacturer` (custom) | `VENDOR` (1011) |
+| Maintainer | `Maintainer` | `Maintainer` | `PACKAGER` (1015) |
+| Homepage | `Homepage` | `Homepage` | `URL` (1020) |
+| License | `License` | `License` (custom) | `LICENSE` (1014) |
+| Summary | `Summary` | First line of `Description` | `SUMMARY` (1004) |
+| Full description | `Description` | Continuation lines of `Description`; synopsis if absent | `DESCRIPTION` (1005) |
+| Default installation path | `InstallPath` | `InstallPath` (custom) | Application string tag `1000002`; legacy `DEFAULTPREFIX` (1056) retained |
+| Generated host listener | `Listen` | `Listen` (custom) | Application string tag `1000001` |
+| Dependencies | `Dependencies` | `Depends` | `REQUIRENAME` / `REQUIREFLAGS` / `REQUIREVERSION` (1049 / 1048 / 1050) |
+| Category | `Category` | `Section` | `GROUP` (1016) |
+
+Summary selects the first nonblank value from `Summary`, `Title`, and application name in every format. A blank description falls back to that summary. Debian writes a single-line synopsis and a separate long description when it differs; multiline summaries are flattened to one line. Long descriptions normalize line endings to LF, preserve internal indentation, and encode blank lines as ` .`. Tar uses the escaping described above; RPM retains literal text.
+
+Architecture names follow the target format: for example, `x64` / `amd64` / `x86_64`, and `arm64` / `arm64` / `aarch64`. `PackageSize` always means payload file bytes, not compressed package size or filesystem allocation. Debian retains its native `Installed-Size` estimate, rounded up to KiB with a minimum of 1; the additional byte field avoids losing precision, including an empty payload's `0`. RPM size queries should use `%{LONGSIZE}`, which also reads packages storing the 32-bit `SIZE` tag.
+
+Blank license and homepage values are omitted in every format. Debian requires `Maintainer` and uses `Unknown` when blank; tar and RPM omit a blank maintainer. A blank category is omitted in tar, while Debian uses `utils` and RPM uses `Applications/System`. These defaults and Debian whitespace normalization are format differences.
+
+Dependencies express the same input constraints through each format's syntax; RPM also records package-manager capabilities as `rpmlib(...)` requirements. Tar declarations are informational and have no dependency solver. Native `Provides`/`Conflicts` and Debian `Replaces`/`Breaks`/`Recommends`/`Suggests` retain their existing format-specific semantics.
+
+RPM additionally records `RELEASE`, `OS`, `BUILDTIME`, `BUILDHOST`, file digests, payload details, and integrity headers; Debian has `Priority` and `conffiles`; tar has PAX entry attributes and installer scripts. These container and package-manager fields are not duplicated across formats. No `BuildTime` is added to tar or Debian. Application name and Edition remain in the generated `.version`; `Title` supplies the summary fallback, while `Framework` is not a separate package-header field.
+
+The current RPM `newc` payload supports at most `4 GiB - 1` bytes per file and rejects larger files before publication. Total payload and archive sizes use 64-bit RPM tags when necessary. This limit belongs to the selected payload encoding, not a lack of 64-bit size metadata in RPM.
+
+`dpkg-deb --info` and `rpm -qip` are formatted summaries. Inspect the full Debian stanza with `dpkg-deb -f <package.deb>`; inspect registered RPM fields with `--queryformat`. The unregistered RPM listener and installation-path tags require a header reader that knows application tags `1000001` and `1000002`. Modern RPM does not recognize the deprecated `DEFAULTPREFIX` name in queries. These path fields describe the built-in installation path and do not mark the package as relocatable.
 
 Debian text fields follow the existing normalization rules: surrounding whitespace is trimmed, and a whitespace-only manufacturer field is omitted. Tar and RPM retain the manufacturer value. These fields are format metadata and add no installed files.
 

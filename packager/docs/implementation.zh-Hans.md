@@ -530,6 +530,10 @@ tar 以 PAX 全局属性 `Manufacturer` 保存厂家，Debian 写入自定义 co
 
 ## 打包器版本元数据
 
+完整字段映射见 [README 应用元数据](../README.zh-Hans.md#应用元数据)。`Generator.GetSummary` 按 Summary、Title、应用 Name 顺序选择首个非空白值；`GetDescription` 使用非空白 Description，否则回退到有效摘要。三格式共用这两个方法。Debian 组合规范化的单行摘要及独立长描述续行，保留内部缩进，空行写为 ` .`；两个文本相同时仅写摘要。Tar 对两个文本字段转义，RPM 保留原始文本。三格式均省略空白 License 与 Homepage；Debian 必填 Maintainer 的 `Unknown` 回退，以及原生分类默认值 `utils` / `Applications/System`，保留格式差异。
+
+Debian 在原生 KiB 单位的 `Installed-Size` 之外，增加按不变区域格式输出的字节数 `PackageSize`，并增加 `InstallPath`。RPM 将非空白安装路径写入应用字符串标签 `1000002`，同时保留已弃用的 `1056`，兼容既有读取器。应用标签仅作声明；使用 `PREFIXES` 会声明生命周期脚本未提供的重定位能力。现代 RPM 查询格式不暴露未注册的应用标签或已弃用的 `DEFAULTPREFIX` 名称，读取器须按编号检查 Header 条目。
+
 应用有效监听地址来自生成服务共用的 `ApplicationHost` 结果，`Package.Listen` 仅在宿主为 Generated 时提供该值。未指定或空值省略；已有服务及禁用 daemon 不声明实际被忽略的 `--listen`。Tar 在 PAX 全局属性中写入 `Listen`，Debian 添加 control `Listen` 字段，RPM 在应用标签 `1000001` 中写入单个字符串。该编号是 Zongsoft 包契约，不是上游注册的 RPM 标签，位于标准标签编号之外（[上游标签定义](https://github.com/rpm-software-management/rpm/blob/master/include/rpm/rpmtag.h)）；RPM Header 摘要覆盖该字段。不生成额外安装元数据文件或载荷条目。`ListenerMetadataTest` 覆盖三格式、变量展开、端口规范化、服务与元数据一致性以及未使用设置的省略。
 
 每个安装包自动记录当前生成工具的身份，逻辑内容为 `Packager:Zongsoft.Tools.Packager@<assembly-version>`。值采用 `程序集名@版本号`，从打包器自身程序集读取，独立于宿主应用版本；无需指定额外选项或启用升迁。
@@ -584,7 +588,7 @@ install.sh
 uninstall.sh
 ```
 
-归档开头包含 PAX 全局扩展记录，它不是安装文件。`GetTarMetadata` 写入 `Packager`、`PackageName`、`Version`、`Manufacturer`、`Architecture`、`Summary`、`Description`、`PackageSize`；还写入非空白的 `License`、`Homepage`、`Maintainer`、`InstallPath`、`Dependencies`、`Category`。不写入 `BuildTime` 属性。
+归档开头包含 PAX 全局扩展记录，它不是安装文件。`GetTarMetadata` 写入 `Packager`、`PackageName`、`Version`、`Manufacturer`、`Architecture`、`Summary`、`Description`、`PackageSize`；还写入非空白的 `License`、`Homepage`、`Maintainer`、`InstallPath`、`Listen`、`Dependencies`、`Category`。不写入 `BuildTime` 属性。
 
 `PackageName` 使用 `package.PackageName`，保留 daemon 身份和 Edition 确定的最终系统包名，不使用应用身份或归档文件名。`Version` 保留 `package.Version.ToString()` 的完整文本，与生成的 `.version` 一致。`Architecture` 使用 `package.Architecture.ToString().ToLowerInvariant()`，与文件名的架构值一致（如 `x64`、`arm64`、`x86` 或 `arm`）。全部属性在归档改名后仍可读取，不增加选项或载荷条目。
 
@@ -727,10 +731,13 @@ Section: <category-or-utils>
 Priority: optional
 Architecture: <debian-architecture>
 Installed-Size: <payload-size-in-KiB>
+PackageSize: <payload-size-in-bytes>
 Maintainer: <maintainer>
 Manufacturer: <manufacturer>
 Homepage: <homepage>
 License: <license>
+InstallPath: <default-installation-path>
+Listen: <generated-host-listener>
 Depends: <dependencies>
 Description: <summary-or-title-or-name>
  <long-description-line>
@@ -744,7 +751,7 @@ Description: <summary-or-title-or-name>
 - `Description` 第一行是短描述。
 - 长描述每行前置一个空格。
 - 空行写为 ` .`。
-- `License`、`Manufacturer` 与 `Packager` 作为额外字段写入；`Packager` 与宿主 `Version`、`Maintainer` 分别保存不同信息。
+- `License`、`Manufacturer`、`Packager`、`PackageSize`、`InstallPath` 与 `Listen` 作为额外字段写入。可选空白字段省略，`PackageSize` 始终记录精确载荷字节数，空载荷为 `0`；`Installed-Size` 保留向上取整的 KiB 估计值，最小为 1。`Packager` 与宿主 `Version`、`Maintainer` 分别保存不同信息。
 
 ### Debian 架构映射
 
@@ -885,7 +892,7 @@ signature section 使用与 RPM header 相同的索引/存储区结构。
 | `62` | Signature 不可变区域，BIN 类型、16 字节 trailer。 |
 | `269` | metadata header 的 SHA-1 digest。 |
 | `273` | metadata header 的 SHA-256 digest。 |
-| `1000` | metadata header + payload 的字节长度。 |
+| `1000` / `270` | metadata header + payload 的字节长度，无符号 32 位 / 64 位。 |
 | `1004` | metadata header + payload 的 MD5 digest。 |
 
 signature section 末尾按 8 字节对齐。两个 header 的索引均按 tag 升序写入；主 header 的不可变区域 tag 为 `63`。区域 trailer 位于 store 尾部，其负偏移为区域索引字节数，摘要覆盖完整 metadata header（包含 magic、索引、store 与 trailer）。这是完整性摘要，不是发布者的 OpenPGP 签名。格式依据 [RPM V4 格式](https://rpm-software-management.github.io/rpm/manual/format_v4.html) 和 [Header 结构](https://rpm-software-management.github.io/rpm/manual/format_header.html)。
@@ -915,7 +922,7 @@ signature section 末尾按 8 字节对齐。两个 header 的索引均按 tag �
 | `1005` | 描述。 |
 | `1006` | 构建时间。 |
 | `1007` | 构建主机。 |
-| `1009` | 安装大小。 |
+| `1009` / `5009` | 载荷文件字节数，无符号 32 位 / 64 位。 |
 | `1011` | 生产厂家/供应商。 |
 | `1014` | 许可证。 |
 | `1015` | 维护者/打包者。 |
@@ -924,7 +931,7 @@ signature section 末尾按 8 字节对齐。两个 header 的索引均按 tag �
 | `1021` | OS，固定 `linux`。 |
 | `1022` | RPM 架构。 |
 | `1023..1026` | pre/post install、pre/post uninstall 脚本。 |
-| `1028` | 文件大小数组。 |
+| `1028` | 无符号 32 位文件大小数组。 |
 | `1030` | 文件模式数组。 |
 | `1034` | 文件修改时间数组。 |
 | `1035` | 文件 SHA-256 digest 数组。 |
@@ -933,8 +940,10 @@ signature section 末尾按 8 字节对齐。两个 header 的索引均按 tag �
 | `1048..1050` | Requires flags/name/version。 |
 | `1047`, `1112`, `1113` | Provides name/flags/version。 |
 | `1053..1055` | Conflicts flags/name/version。 |
-| `1056` | Install prefix。 |
+| `1056` | 已弃用的默认安装路径，兼容既有读取器。 |
 | `1064` | 生成工具身份，`程序集名@版本号`。 |
+| `1046` / `271` | 未压缩 cpio 归档字节数，无符号 32 位 / 64 位。 |
+| `1000001` / `1000002` | 应用字符串标签：生成宿主有效监听地址 / 默认安装路径。 |
 | `1116..1118` | 文件目录索引、文件基本名、目录名。 |
 | `1124` | Payload format，固定 `cpio`。 |
 | `1125` | Payload compressor，固定 `gzip`。 |
@@ -1062,7 +1071,7 @@ RPM 的单比较使用普通 flags/name/version 条目；有限区间转换为 `
 - 文件所有者/组固定为 root，不继承构建机 UID/GID，也不提供自定义所有者选项。
 - systemd 是当前唯一脚本生成策略。
 - 文件链接读取目标内容，选中的目录链接可展开；载荷内部目录链接跳过，不保留符号链接本身。
-- 大载荷制包依赖临时磁盘容量，既有容器字段的大小上限仍然适用。
+- 大载荷制包依赖临时磁盘容量，容器字段的大小上限仍然适用。RPM `newc` 文件大小为八位十六进制值，单文件超过 `uint.MaxValue` 时在产物发布前拒绝；包/归档/签名的总大小在 `uint.MaxValue` 内使用无符号 32 位，超限使用标准 64 位标签（`5009`、`271`、`270`），不再按 `int.MaxValue` 截断。安装大小使用 `LONGSIZE` 查询，它也能读取 32 位 `SIZE`。此改动未实现 RPM 的另一种大文件载荷编码。
 
 ## 升迁产物集成
 
@@ -1094,6 +1103,8 @@ Cake 的 `--edition` 同时用于依赖还原、编译、测试和制包；`rest
 源版本与内存条目的回归由 VersionFileTest、PackageVersionTest 和 PackageArtifactTest 覆盖。
 
 打包器版本元数据回归 `Package_Provenance_RecordsGeneratorAndPreservesApplicationMetadata` 覆盖三格式生成工具身份、应用版本、厂家值和默认值，以及独立的主页和维护者字段。
+
+`PackageMetadataTest` 在 x64、x86、arm64、arm 的实际三格式包中逐项读取字段，核查全部共有应用元数据、生成/版本/根路径载荷字节总数、依赖编码、摘要与描述独立选择、可选空白字段、格式默认值及 RPM 新旧安装路径标签。Header 边界测试覆盖 2 GiB、`uint.MaxValue`、4 GiB 和更大的 64 位值，不分配大载荷。
 
 `Tar_Metadata_IsReadableFromRenamedArchive` 在归档改名后从 PAX 全局头读取包含 daemon 身份和 Edition 的最终包名以及 x64、arm64、x86、arm 架构值，同时覆盖新增元数据、Unicode/多行文本、依赖区间和替代项、不写入 BuildTime 及载荷条目不变。其他 tar 元数据测试覆盖载荷字节总数与版本身份、空可选值省略、摘要/描述回退及反斜杠、CR、LF 的独立转义；非法依赖测试加入 tar，验证失败保留既有产物。来源元数据测试同时覆盖没有 daemon 身份和 Edition 的包名。
 

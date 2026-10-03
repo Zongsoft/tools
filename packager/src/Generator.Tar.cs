@@ -86,8 +86,6 @@ partial class Generator
 	#region 私有方法
 	static IEnumerable<KeyValuePair<string, string>> GetTarMetadata(Package package)
 	{
-		var summary = !string.IsNullOrWhiteSpace(package.Summary) ? package.Summary :
-			!string.IsNullOrWhiteSpace(package.Title) ? package.Title : package.Name;
 		var dependencies = Dependency.Split(string.Join("; ", package.Dependencies ?? []));
 
 		Dependency.Parse(dependencies);
@@ -100,8 +98,8 @@ partial class Generator
 			new("PackageSize", package.GetPackageSize().ToString(CultureInfo.InvariantCulture)),
 			new("Architecture", package.Architecture.ToString().ToLowerInvariant()),
 			new("Manufacturer", package.Manufacturer),
-			new("Summary", EncodeText(summary)),
-			new("Description", EncodeText(string.IsNullOrWhiteSpace(package.Description) ? summary : package.Description)),
+			new("Summary", EncodeText(GetSummary(package))),
+			new("Description", EncodeText(GetDescription(package))),
 		};
 
 		Add("License", package.License);

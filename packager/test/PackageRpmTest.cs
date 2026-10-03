@@ -281,6 +281,7 @@ public sealed class PackageRpmTest
 			using var directory = new MigrationTestDirectory();
 			var source = directory.Write(SERVICE_NAME, SERVICE);
 			var package = Create("rpm", directory.Path, SERVICE_NAME);
+			package.InstallPath += new string('p', metadataLength);
 			package.Summary = "Host " + new string('s', metadataLength);
 			package.Description = "Zongsoft host " + new string('d', metadataLength * 2);
 			package.Scriptor.Script();

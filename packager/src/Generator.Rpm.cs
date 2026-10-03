@@ -54,8 +54,9 @@ partial class Generator
 	const int RPM_FILE_TYPE_REGULAR = 0x8000;
 	const int RPM_FILE_TYPE_DIRECTORY = 0x4000;
 
-	// Zongsoft Listen metadata; application tag outside RPM's standard tag space.
+	// Zongsoft application metadata outside RPM's standard tag space.
 	const int RPM_TAG_LISTEN = 1000001;
+	const int RPM_TAG_INSTALL_PATH = 1000002;
 	#endregion
 
 	#region 公共方法
@@ -123,9 +124,10 @@ partial class Generator
 
 	static void WriteCpioEntry(Stream stream, int inode, string name, int fileType, UnixFileMode mode, long size, long mtime, Stream data)
 	{
+		var fileSize = checked((uint)size);
 		var rawMode = fileType | (int)mode;
 		var namesize = Encoding.UTF8.GetByteCount(name) + 1;
-		var header = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"070701{inode:x8}{rawMode:x8}{0:x8}{0:x8}{1:x8}{mtime:x8}{size:x8}{0:x8}{0:x8}{0:x8}{0:x8}{namesize:x8}{0:x8}");
+		var header = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"070701{inode:x8}{rawMode:x8}{0:x8}{0:x8}{1:x8}{mtime:x8}{fileSize:x8}{0:x8}{0:x8}{0:x8}{0:x8}{namesize:x8}{0:x8}");
 
 		stream.Write(Encoding.ASCII.GetBytes(header));
 		stream.Write(Encoding.UTF8.GetBytes(name));
@@ -476,7 +478,7 @@ partial class Generator
 
 			header.AddString(269, Convert.ToHexString(SHA1.HashData(metadata)).ToLowerInvariant());
 			header.AddString(273, Convert.ToHexString(SHA256.HashData(metadata)).ToLowerInvariant());
-			header.AddInt32(1000, checked((int)(metadata.LongLength + payload.Length)));
+			header.AddSize(1000, 270, metadata.LongLength + payload.Length);
 			header.AddBinary(1004, digest);
 
 			return header.Build(true);
@@ -497,23 +499,23 @@ partial class Generator
 			builder.AddString(1000, package.PackageName);
 			builder.AddString(1001, package.Version.ToString());
 			builder.AddString(1002, GetRpmRelease(package));
-			builder.AddInternationalString(1004, package.Summary ?? package.Title ?? package.Name);
-			builder.AddInternationalString(1005, package.Description ?? package.Summary ?? package.Name);
+			builder.AddInternationalString(1004, GetSummary(package));
+			builder.AddInternationalString(1005, GetDescription(package));
 			builder.AddInt32(1006, buildTime);
 			builder.AddString(1007, Environment.MachineName);
-			builder.AddInt32(1009, (int)Math.Min(int.MaxValue, package.GetPackageSize()));
+			builder.AddSize(1009, 5009, package.GetPackageSize());
 			builder.AddString(1011, package.Manufacturer);
-			builder.AddString(1014, package.License);
-			builder.AddString(1015, package.Maintainer);
-			builder.AddString(1016, package.Category ?? "Applications/System");
-			builder.AddString(1020, package.Homepage);
+			builder.AddOptionalString(1014, package.License);
+			builder.AddOptionalString(1015, package.Maintainer);
+			builder.AddString(1016, string.IsNullOrWhiteSpace(package.Category) ? "Applications/System" : package.Category);
+			builder.AddOptionalString(1020, package.Homepage);
 			builder.AddString(1021, "linux");
 			builder.AddString(1022, GetRpmArchitecture(package.Architecture));
 			builder.AddScript(1023, package.Scripts.Installing);
 			builder.AddScript(1024, string.Join('\n', package.Scripts.Delivered, package.Scripts.Installed));
 			builder.AddScript(1025, GuardRpmUninstallScript(package.Scripts.Uninstalling));
 			builder.AddScript(1026, GuardRpmUninstallScript(package.Scripts.Uninstalled));
-			builder.AddInt32Array(1028, rpmEntries.ConvertAll(entry => (int)Math.Min(int.MaxValue, entry.Size)));
+			builder.AddInt32Array(1028, rpmEntries.ConvertAll(entry => unchecked((int)checked((uint)entry.Size))));
 			builder.AddInt16Array(1030, rpmEntries.ConvertAll(entry => (short)(entry.FileType | (int)entry.Mode)));
 			builder.AddInt16Array(1033, rpmEntries.ConvertAll(_ => (short)0));
 			builder.AddInt32Array(1034, rpmEntries.ConvertAll(entry => (int)entry.ModifiedTime));
@@ -523,7 +525,7 @@ partial class Generator
 			builder.AddStringArray(1039, rpmEntries.ConvertAll(_ => "root"));
 			builder.AddStringArray(1040, rpmEntries.ConvertAll(_ => "root"));
 			builder.AddInt32Array(1045, rpmEntries.ConvertAll(_ => -1));
-			builder.AddInt32(1046, (int)Math.Min(int.MaxValue, archiveSize));
+			builder.AddSize(1046, 271, archiveSize);
 			builder.AddStringArray(1047, provides.ConvertAll(item => item.Name));
 			builder.AddInt32Array(1048, requires.ConvertAll(item => item.Flags));
 			builder.AddStringArray(1049, requires.ConvertAll(item => item.Name));
@@ -537,6 +539,7 @@ partial class Generator
 			}
 
 			builder.AddString(1056, package.InstallPath);
+			builder.AddOptionalString(RPM_TAG_INSTALL_PATH, package.InstallPath);
 			builder.AddString(1064, GetIdentity());
 			builder.AddString(1124, "cpio");
 			builder.AddString(1125, "gzip");
@@ -580,6 +583,25 @@ partial class Generator
 
 		public void AddString(int tag, string value) => this.Add(tag, 6, 1, () => this.WriteString(value ?? string.Empty));
 		public void AddInternationalString(int tag, string value) => this.Add(tag, 9, 1, () => this.WriteString(value ?? string.Empty));
+
+		public void AddOptionalString(int tag, string value)
+		{
+			if(!string.IsNullOrWhiteSpace(value))
+				this.AddString(tag, value);
+		}
+
+		public void AddSize(int tag, int longTag, long value)
+		{
+			if(value <= uint.MaxValue)
+				this.AddInt32(tag, unchecked((int)checked((uint)value)));
+			else
+				this.Add(longTag, 5, 1, () =>
+				{
+					Span<byte> buffer = stackalloc byte[8];
+					BinaryPrimitives.WriteInt64BigEndian(buffer, value);
+					_store.Write(buffer);
+				});
+		}
 
 		public void AddScript(int tag, string value)
 		{
