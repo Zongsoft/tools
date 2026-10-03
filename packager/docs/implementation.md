@@ -530,6 +530,8 @@ Tar writes manufacturer as the PAX global attribute `Manufacturer`, Debian write
 
 ## Packager version metadata
 
+The effective application listener comes from the same `ApplicationHost` result used by service generation. `Package.Listen` exposes it only for a generated host. The generators omit absent/empty listeners, and hosts using an existing service or disabled daemon never advertise an ignored `--listen` value. Tar stores `Listen` in its PAX global attributes, Debian adds a control `Listen` field, and RPM stores a single string in application tag `1000001`. This tag is the Zongsoft package contract, not an upstream registered RPM tag; it stays outside the standard tag numbers ([upstream tag definitions](https://github.com/rpm-software-management/rpm/blob/master/include/rpm/rpmtag.h)). The RPM header digest covers it. No extra installed metadata file or payload entry is generated. `ListenerMetadataTest` checks all three formats, variable expansion, port normalization, service/metadata consistency and omission for unused settings.
+
 Each package records the generator identity, logically `Packager:Zongsoft.Tools.Packager@<assembly-version>`. The value is `assembly-name@version`, read from the packager assembly independently of the host application version. No additional option or migration configuration is required.
 
 | Format | Location | Inspection |

@@ -530,6 +530,8 @@ tar 以 PAX 全局属性 `Manufacturer` 保存厂家，Debian 写入自定义 co
 
 ## 打包器版本元数据
 
+应用有效监听地址来自生成服务共用的 `ApplicationHost` 结果，`Package.Listen` 仅在宿主为 Generated 时提供该值。未指定或空值省略；已有服务及禁用 daemon 不声明实际被忽略的 `--listen`。Tar 在 PAX 全局属性中写入 `Listen`，Debian 添加 control `Listen` 字段，RPM 在应用标签 `1000001` 中写入单个字符串。该编号是 Zongsoft 包契约，不是上游注册的 RPM 标签，位于标准标签编号之外（[上游标签定义](https://github.com/rpm-software-management/rpm/blob/master/include/rpm/rpmtag.h)）；RPM Header 摘要覆盖该字段。不生成额外安装元数据文件或载荷条目。`ListenerMetadataTest` 覆盖三格式、变量展开、端口规范化、服务与元数据一致性以及未使用设置的省略。
+
 每个安装包自动记录当前生成工具的身份，逻辑内容为 `Packager:Zongsoft.Tools.Packager@<assembly-version>`。值采用 `程序集名@版本号`，从打包器自身程序集读取，独立于宿主应用版本；无需指定额外选项或启用升迁。
 
 | 格式 | 存放位置 | 查看方式 |

@@ -108,6 +108,7 @@ partial class Generator
 		Add("Homepage", package.Homepage);
 		Add("Maintainer", package.Maintainer);
 		Add("InstallPath", package.InstallPath);
+		Add("Listen", package.Listen);
 		Add("Dependencies", string.Join("; ", dependencies));
 		Add("Category", package.Category);
 

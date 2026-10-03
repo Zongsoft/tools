@@ -53,6 +53,9 @@ partial class Generator
 	const int RPM_FILE_CONFIG = 1;
 	const int RPM_FILE_TYPE_REGULAR = 0x8000;
 	const int RPM_FILE_TYPE_DIRECTORY = 0x4000;
+
+	// Zongsoft Listen metadata; application tag outside RPM's standard tag space.
+	const int RPM_TAG_LISTEN = 1000001;
 	#endregion
 
 	#region 公共方法
@@ -538,6 +541,10 @@ partial class Generator
 			builder.AddString(1124, "cpio");
 			builder.AddString(1125, "gzip");
 			builder.AddString(1126, "9");
+
+			if(!string.IsNullOrWhiteSpace(package.Listen))
+				builder.AddString(RPM_TAG_LISTEN, package.Listen);
+
 			builder.AddInt32Array(1095, rpmEntries.ConvertAll(_ => 1));
 			builder.AddInt32Array(1096, rpmEntries.ConvertAll(entry => entry.Inode));
 			builder.AddStringArray(1097, rpmEntries.ConvertAll(_ => string.Empty));

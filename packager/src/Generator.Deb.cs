@@ -80,6 +80,7 @@ partial class Generator
 		AppendDebField(builder, "Manufacturer", package.Manufacturer);
 		AppendDebField(builder, "Homepage", package.Homepage);
 		AppendDebField(builder, "License", package.License);
+		AppendDebField(builder, "Listen", package.Listen);
 
 		if(package is Package.Deb deb)
 		{

@@ -100,6 +100,7 @@ public abstract partial class Package
 	public EntryCollection Entries { get; }
 	public InstallScripts Scripts { get; set; }
 	public Migrator Migrator { get; set; }
+	public IScriptor Scriptor { get; protected set; }
 	#endregion
 
 	#region 内部属性
@@ -107,8 +108,8 @@ public abstract partial class Package
 	internal ApplicationHost Host { get; set; }
 	internal Web.Configurator.Result Web { get; set; }
 	internal abstract string FileName { get; }
-	public IScriptor Scriptor { get; protected set; }
 	internal virtual string EntryPrefix => this.InstallPath.TrimStart('/');
+	internal string Listen => this.Host?.Kind == ApplicationHost.HostKind.Generated ? this.Host.Listen : null;
 	#endregion
 
 	#region 公共方法
