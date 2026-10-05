@@ -15,6 +15,9 @@ Provides a suite of tools to assist in development, including:
 - [packager](packager/README.md)
 	> Packaging Tool: Creates application installation package. _(first use the deployment tool to prepare the content to be packaged)_
 
+- [containerizer](containerizer/README.md)
+	> Container Tool: Builds Linux node deliveries and a native lifecycle executor. Platform and image combinations remain subject to the documented acceptance gates.
+
 - [regular](regular/README.md)
 	> Regular Expression Tool: A Windows GUI for matching expressions and inspecting matches, groups, and captures.
 

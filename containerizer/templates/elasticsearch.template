@@ -1,0 +1,15 @@
+version=1
+image=docker.elastic.co/elasticsearch/elasticsearch
+kind=infrastructure
+platforms=x64;arm64
+health=["CMD-SHELL","curl -fk https://127.0.0.1:9200/_cluster/health -u \"elastic:$$ELASTIC_PASSWORD\""]
+
+[ports]
+default=127.0.0.1:9200:9200
+
+[data]
+data=/usr/share/elasticsearch/data
+
+[settings password]
+environment=ELASTIC_PASSWORD
+required=true

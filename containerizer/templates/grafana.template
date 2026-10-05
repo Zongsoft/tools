@@ -1,0 +1,15 @@
+version=1
+image=docker.io/grafana/grafana
+kind=infrastructure
+platforms=x64;arm64
+health=["CMD-SHELL","wget -q -O /dev/null http://127.0.0.1:3000/api/health"]
+
+[ports]
+default=127.0.0.1:3000:3000
+
+[data]
+data=/var/lib/grafana
+
+[settings admin-password]
+environment=GF_SECURITY_ADMIN_PASSWORD
+required=true

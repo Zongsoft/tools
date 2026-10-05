@@ -1,0 +1,23 @@
+version=1
+image=docker.io/library/postgres
+kind=infrastructure
+platforms=x64;arm64
+health=["CMD-SHELL","pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+
+[ports]
+default=127.0.0.1:5432:5432
+
+[data]
+data=/var/lib/postgresql
+
+[settings password]
+environment=POSTGRES_PASSWORD
+required=true
+
+[settings user]
+environment=POSTGRES_USER
+default=postgres
+
+[settings database]
+environment=POSTGRES_DB
+default=postgres

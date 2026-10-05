@@ -1,0 +1,11 @@
+version=1
+image=docker.io/library/zookeeper
+kind=infrastructure
+platforms=x64;arm64
+health=["CMD","zkServer.sh","status"]
+
+[ports]
+default=127.0.0.1:2181:2181
+
+[data]
+data=/data

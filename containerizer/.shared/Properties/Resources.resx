@@ -1,0 +1,663 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms</value>
+  </resheader>
+  <data name="ApplicationBuilder.1.Message" xml:space="preserve">
+    <value>The installation package requires a matching distribution family.</value>
+  </data>
+  <data name="ApplicationBuilder.10.Message" xml:space="preserve">
+    <value>The explicit runtime constraint conflicts with runtimeconfig.json.</value>
+  </data>
+  <data name="ApplicationBuilder.11.Message" xml:space="preserve">
+    <value>A precise supported runtime version is required.</value>
+  </data>
+  <data name="ApplicationBuilder.3.Message" xml:space="preserve">
+    <value>The package must supply one unambiguous service entry and working directory.</value>
+  </data>
+  <data name="ApplicationBuilder.4.Message" xml:space="preserve">
+    <value>The package has unsupported or ambiguous systemd startup arguments.</value>
+  </data>
+  <data name="ApplicationBuilder.5.Message" xml:space="preserve">
+    <value>The package must supply a foreground executable service entry.</value>
+  </data>
+  <data name="ApplicationBuilder.6.Message" xml:space="preserve">
+    <value>The package has an unsupported systemd environment declaration.</value>
+  </data>
+  <data name="ApplicationBuilder.7.Message" xml:space="preserve">
+    <value>The package listener cannot be converted into a container binding.</value>
+  </data>
+  <data name="ApplicationBuilder.8.Message" xml:space="preserve">
+    <value>The application healthcheck could not be inferred from package metadata.</value>
+  </data>
+  <data name="ApplicationBuilder.9.Message" xml:space="preserve">
+    <value>The entry runtimeconfig.json is missing or ambiguous.</value>
+  </data>
+  <data name="Arguments.1.Message" xml:space="preserve">
+    <value>A command is required.</value>
+  </data>
+  <data name="Arguments.10.Message" xml:space="preserve">
+    <value>list does not accept --name.</value>
+  </data>
+  <data name="Arguments.11.Message" xml:space="preserve">
+    <value>--name is required.</value>
+  </data>
+  <data name="Arguments.2.Message" xml:space="preserve">
+    <value>Unknown command.</value>
+  </data>
+  <data name="Arguments.3.Message" xml:space="preserve">
+    <value>An option was specified more than once.</value>
+  </data>
+  <data name="Arguments.4.Message" xml:space="preserve">
+    <value>--tail requires a nonnegative number.</value>
+  </data>
+  <data name="Arguments.5.Message" xml:space="preserve">
+    <value>Unknown option or option not valid for this command.</value>
+  </data>
+  <data name="Arguments.6.Message" xml:space="preserve">
+    <value>An option value is missing.</value>
+  </data>
+  <data name="Arguments.7.Message" xml:space="preserve">
+    <value>Exactly one node bundle path is required.</value>
+  </data>
+  <data name="Arguments.8.Message" xml:space="preserve">
+    <value>At most one component is allowed.</value>
+  </data>
+  <data name="Arguments.9.Message" xml:space="preserve">
+    <value>This command has no positional arguments.</value>
+  </data>
+  <data name="BootstrapBuilder.1.Message" xml:space="preserve">
+    <value>No base image profile is available.</value>
+  </data>
+  <data name="BootstrapBuilder.2.Message" xml:space="preserve">
+    <value>RHEL bootstrap requires an entitled BaseOS/AppStream resolver profile; UBI/Rocky packages are not substitutes. Configure and validate the RHEL repository profile before building.</value>
+  </data>
+  <data name="BootstrapBuilder.3.Message" xml:space="preserve">
+    <value>Bootstrap package metadata is incomplete.</value>
+  </data>
+  <data name="BootstrapBuilder.4.Message" xml:space="preserve">
+    <value>The bootstrap dependency closure is incomplete.</value>
+  </data>
+  <data name="BootstrapBuilder.5.Message" xml:space="preserve">
+    <value>Bootstrap profile identity or dependency metadata is incomplete.</value>
+  </data>
+  <data name="BootstrapBuilder.6.Message" xml:space="preserve">
+    <value>Bootstrap package metadata is invalid.</value>
+  </data>
+  <data name="BootstrapBuilder.7.Message" xml:space="preserve">
+    <value>Bootstrap package content does not match its lock.</value>
+  </data>
+  <data name="BootstrapBuilder.8.Message" xml:space="preserve">
+    <value>Bootstrap package architecture does not match its profile.</value>
+  </data>
+  <data name="Bundle.1.Message" xml:space="preserve">
+    <value>Expected a node bundle directory or .tar.gz archive.</value>
+  </data>
+  <data name="Bundle.10.Message" xml:space="preserve">
+    <value>Invalid service identity or kind.</value>
+  </data>
+  <data name="Bundle.11.Message" xml:space="preserve">
+    <value>Invalid locked image identity.</value>
+  </data>
+  <data name="Bundle.12.Message" xml:space="preserve">
+    <value>Offline image archive is missing.</value>
+  </data>
+  <data name="Bundle.13.Message" xml:space="preserve">
+    <value>Application images must be offline.</value>
+  </data>
+  <data name="Bundle.14.Message" xml:space="preserve">
+    <value>Invalid locked migration list.</value>
+  </data>
+  <data name="Bundle.15.Message" xml:space="preserve">
+    <value>Migration identity mismatch.</value>
+  </data>
+  <data name="Bundle.16.Message" xml:space="preserve">
+    <value>Invalid application or component identity.</value>
+  </data>
+  <data name="Bundle.17.Message" xml:space="preserve">
+    <value>Unsafe Linux path.</value>
+  </data>
+  <data name="Bundle.2.Message" xml:space="preserve">
+    <value>Unsupported node protocol schema.</value>
+  </data>
+  <data name="Bundle.3.Message" xml:space="preserve">
+    <value>Invalid node identity or target.</value>
+  </data>
+  <data name="Bundle.4.Message" xml:space="preserve">
+    <value>Invalid or duplicate file checksum record.</value>
+  </data>
+  <data name="Bundle.5.Message" xml:space="preserve">
+    <value>Bundle integrity check failed: {0}</value>
+  </data>
+  <data name="Bundle.6.Message" xml:space="preserve">
+    <value>Required bundle asset is missing: {0}</value>
+  </data>
+  <data name="Bundle.7.Message" xml:space="preserve">
+    <value>Invalid checksums.sha256.</value>
+  </data>
+  <data name="Bundle.8.Message" xml:space="preserve">
+    <value>Checksum manifest differs from the node lock.</value>
+  </data>
+  <data name="Bundle.9.Message" xml:space="preserve">
+    <value>Untracked file in node bundle.</value>
+  </data>
+  <data name="DockerHost.1.Message" xml:space="preserve">
+    <value>The installation executor requires Linux.</value>
+  </data>
+  <data name="DockerHost.10.Message" xml:space="preserve">
+    <value>The exact bootstrap package is unavailable.</value>
+  </data>
+  <data name="DockerHost.11.Message" xml:space="preserve">
+    <value>Downloaded bootstrap package failed integrity checks.</value>
+  </data>
+  <data name="DockerHost.12.Message" xml:space="preserve">
+    <value>Bootstrap package checksum mismatch.</value>
+  </data>
+  <data name="DockerHost.13.Message" xml:space="preserve">
+    <value>Bootstrap package transaction failed with exit code {0}; application state was retained.</value>
+  </data>
+  <data name="DockerHost.14.Message" xml:space="preserve">
+    <value>Imported image identity/platform mismatch.</value>
+  </data>
+  <data name="DockerHost.15.Message" xml:space="preserve">
+    <value>A persistent path overlaps another application's registered data.</value>
+  </data>
+  <data name="DockerHost.16.Message" xml:space="preserve">
+    <value>A nonempty persistent directory has no matching ownership record.</value>
+  </data>
+  <data name="DockerHost.17.Message" xml:space="preserve">
+    <value>Persistent directory ownership marker differs from the registry.</value>
+  </data>
+  <data name="DockerHost.18.Message" xml:space="preserve">
+    <value>Expected exactly one container for a service.</value>
+  </data>
+  <data name="DockerHost.19.Message" xml:space="preserve">
+    <value>Service container is missing or ambiguous.</value>
+  </data>
+  <data name="DockerHost.2.Message" xml:space="preserve">
+    <value>Installation commands require root.</value>
+  </data>
+  <data name="DockerHost.20.Message" xml:space="preserve">
+    <value>Service has no protocol/template healthcheck.</value>
+  </data>
+  <data name="DockerHost.21.Message" xml:space="preserve">
+    <value>Service failed its healthcheck; maintenance is retained.</value>
+  </data>
+  <data name="DockerHost.22.Message" xml:space="preserve">
+    <value>A preexisting directory is not owned exclusively; cleanup is incomplete.</value>
+  </data>
+  <data name="DockerHost.23.Message" xml:space="preserve">
+    <value>Data ownership cannot be verified; cleanup is incomplete.</value>
+  </data>
+  <data name="DockerHost.24.Message" xml:space="preserve">
+    <value>No managed release is available.</value>
+  </data>
+  <data name="DockerHost.25.Message" xml:space="preserve">
+    <value>Unknown component.</value>
+  </data>
+  <data name="DockerHost.26.Message" xml:space="preserve">
+    <value>A nested mount prevents recursive cleanup.</value>
+  </data>
+  <data name="DockerHost.27.Message" xml:space="preserve">
+    <value>{0} {1} failed (exit {2}); managed state was retained.</value>
+  </data>
+  <data name="DockerHost.28.Message" xml:space="preserve">
+    <value>A system directory cannot be registered as application-owned data.</value>
+  </data>
+  <data name="DockerHost.29.Message" xml:space="preserve">
+    <value>Conflicting ownership requirements for a persistent directory.</value>
+  </data>
+  <data name="DockerHost.3.Message" xml:space="preserve">
+    <value>The node architecture differs from the running executor.</value>
+  </data>
+  <data name="DockerHost.30.Message" xml:space="preserve">
+    <value>Persistent directory ownership must be a numeric UID:GID.</value>
+  </data>
+  <data name="DockerHost.31.Message" xml:space="preserve">
+    <value>A requested interface or host port is unavailable.</value>
+  </data>
+  <data name="DockerHost.4.Message" xml:space="preserve">
+    <value>This bundle targets a different Linux distribution profile.</value>
+  </data>
+  <data name="DockerHost.5.Message" xml:space="preserve">
+    <value>Insufficient storage for managed assets and image staging.</value>
+  </data>
+  <data name="DockerHost.6.Message" xml:space="preserve">
+    <value>An unknown global containerizer executable already exists; it was preserved.</value>
+  </data>
+  <data name="DockerHost.7.Message" xml:space="preserve">
+    <value>The candidate executor cannot handle all retained application records.</value>
+  </data>
+  <data name="DockerHost.8.Message" xml:space="preserve">
+    <value>The candidate executor protocol is incompatible.</value>
+  </data>
+  <data name="DockerHost.9.Message" xml:space="preserve">
+    <value>The bootstrap package set is empty.</value>
+  </data>
+  <data name="Engine.1.Message" xml:space="preserve">
+    <value>{0} {1} failed (exit {2}). Verify engine connectivity, source availability and target-platform support.</value>
+  </data>
+  <data name="Engine.10.Message" xml:space="preserve">
+    <value>Cannot resolve the image user. Declare numeric data-owner in the template.</value>
+  </data>
+  <data name="Engine.2.Message" xml:space="preserve">
+    <value>No usable build engine and Compose provider were found. Ensure Docker or Podman is running and its Compose provider is installed. On Windows, check `podman machine list` and start the selected machine with `podman machine start`.
+{0}</value>
+  </data>
+  <data name="Engine.3.Message" xml:space="preserve">
+    <value>The acquired image does not match the fixed platform manifest digest.</value>
+  </data>
+  <data name="Engine.4.Message" xml:space="preserve">
+    <value>The acquired image has the wrong platform.</value>
+  </data>
+  <data name="Engine.5.Message" xml:space="preserve">
+    <value>The engine did not provide a verifiable registry manifest digest.</value>
+  </data>
+  <data name="Engine.7.Message" xml:space="preserve">
+    <value>The image index must contain exactly one matching target platform.</value>
+  </data>
+  <data name="Engine.8.Message" xml:space="preserve">
+    <value>Invalid image reference.</value>
+  </data>
+  <data name="Engine.9.Message" xml:space="preserve">
+    <value>A service needs an executable readiness check in its template or locked image.</value>
+  </data>
+  <data name="Executor.Failure.Message" xml:space="preserve">
+    <value>Operation failed ({0}); inspect retained state.</value>
+  </data>
+  <data name="Executor.Interrupted.Message" xml:space="preserve">
+    <value>Interrupted; inspect status and use recover before resuming.</value>
+  </data>
+  <data name="Files.1.Message" xml:space="preserve">
+    <value>Empty JSON: {0}</value>
+  </data>
+  <data name="Files.2.Message" xml:space="preserve">
+    <value>Unsafe relative path: {0}</value>
+  </data>
+  <data name="Files.3.Message" xml:space="preserve">
+    <value>Path escapes its root: {0}</value>
+  </data>
+  <data name="Files.4.Message" xml:space="preserve">
+    <value>Symbolic link/reparse point is not allowed: {0}</value>
+  </data>
+  <data name="Files.5.Message" xml:space="preserve">
+    <value>Unsupported or duplicate archive entry: {0}</value>
+  </data>
+  <data name="Files.6.Message" xml:space="preserve">
+    <value>Archive exceeds the extraction limit.</value>
+  </data>
+  <data name="InstallationStore.1.Message" xml:space="preserve">
+    <value>The application is not registered.</value>
+  </data>
+  <data name="InstallationStore.2.Message" xml:space="preserve">
+    <value>Unsupported or inconsistent installation record.</value>
+  </data>
+  <data name="InstallationStore.3.Message" xml:space="preserve">
+    <value>Another operation holds the application/host lock.</value>
+  </data>
+  <data name="InstallationStore.4.Message" xml:space="preserve">
+    <value>Managed release identity mismatch.</value>
+  </data>
+  <data name="Lifecycle.1.Message" xml:space="preserve">
+    <value>--name differs from the bundle identity.</value>
+  </data>
+  <data name="Lifecycle.10.Message" xml:space="preserve">
+    <value>The original transaction assets changed.</value>
+  </data>
+  <data name="Lifecycle.11.Message" xml:space="preserve">
+    <value>--retry-migration must select one failed/interrupted migration in this transaction.</value>
+  </data>
+  <data name="Lifecycle.12.Message" xml:space="preserve">
+    <value>The application is uninstalled; reinstall its retained bundle first.</value>
+  </data>
+  <data name="Lifecycle.13.Message" xml:space="preserve">
+    <value>The target transaction is not ReadyToStart. Prepare alone cannot authorize activation.</value>
+  </data>
+  <data name="Lifecycle.14.Message" xml:space="preserve">
+    <value>restart cannot bypass maintenance or an uncommitted transaction.</value>
+  </data>
+  <data name="Lifecycle.15.Message" xml:space="preserve">
+    <value>Specify a component belonging to this application; infrastructure-only deployments need an explicit target.</value>
+  </data>
+  <data name="Lifecycle.16.Message" xml:space="preserve">
+    <value>Uninstall/cleanup is incomplete; retained state lists the remaining failure.</value>
+  </data>
+  <data name="Lifecycle.17.Message" xml:space="preserve">
+    <value>No committed release exists.</value>
+  </data>
+  <data name="Lifecycle.18.Message" xml:space="preserve">
+    <value>The upgrade changes the deployment identity or platform.</value>
+  </data>
+  <data name="Lifecycle.19.Message" xml:space="preserve">
+    <value>Infrastructure changes are not supported by application upgrades.</value>
+  </data>
+  <data name="Lifecycle.2.Message" xml:space="preserve">
+    <value>--name differs from the launcher bundle identity.</value>
+  </data>
+  <data name="Lifecycle.20.Message" xml:space="preserve">
+    <value>The upgrade changes bootstrap dependencies.</value>
+  </data>
+  <data name="Lifecycle.21.Message" xml:space="preserve">
+    <value>Invalid or cyclic local service dependency.</value>
+  </data>
+  <data name="Lifecycle.3.Message" xml:space="preserve">
+    <value>upgrade requires an existing registration.</value>
+  </data>
+  <data name="Lifecycle.4.Message" xml:space="preserve">
+    <value>A different transaction is pending. Recover or finish it before selecting another bundle.</value>
+  </data>
+  <data name="Lifecycle.5.Message" xml:space="preserve">
+    <value>A failed transaction requires recover; install does not clear failure state.</value>
+  </data>
+  <data name="Lifecycle.6.Message" xml:space="preserve">
+    <value>Migration {0} requires explicit recovery; it was not rerun.</value>
+  </data>
+  <data name="Lifecycle.7.Message" xml:space="preserve">
+    <value>A previous migration success no longer passes the companion fingerprint check.</value>
+  </data>
+  <data name="Lifecycle.8.Message" xml:space="preserve">
+    <value>Migration {0} failed; handle partial execution before requesting an explicit retry.</value>
+  </data>
+  <data name="Lifecycle.9.Message" xml:space="preserve">
+    <value>There is no failed or interrupted transaction to recover.</value>
+  </data>
+  <data name="Lifecycle.Recovery" xml:space="preserve">
+    <value>Recover {0}: target {1}, phase {2}.</value>
+  </data>
+  <data name="Manifest.1.Message" xml:space="preserve">
+    <value>A .container manifest must be the only positional input.</value>
+  </data>
+  <data name="Manifest.10.Message" xml:space="preserve">
+    <value>{0}: invalid digest.</value>
+  </data>
+  <data name="Manifest.11.Message" xml:space="preserve">
+    <value>The nginx shorthand conflicts with an explicit component.</value>
+  </data>
+  <data name="Manifest.12.Message" xml:space="preserve">
+    <value>The existing manifest has different effective content: {0}</value>
+  </data>
+  <data name="Manifest.13.Message" xml:space="preserve">
+    <value>Variable evaluation failed: {0} ({1}).</value>
+  </data>
+  <data name="Manifest.14.Message" xml:space="preserve">
+    <value>Identity must contain letters, digits, '.', '_' or '-' and must not contain traversal segments.</value>
+  </data>
+  <data name="Manifest.15.Message" xml:space="preserve">
+    <value>Version must contain two to four numeric parts and must not be zero.</value>
+  </data>
+  <data name="Manifest.16.Message" xml:space="preserve">
+    <value>{0}({1},1): {2}</value>
+  </data>
+  <data name="Manifest.17.Message" xml:space="preserve">
+    <value>{0}({1},1): Invalid section.</value>
+  </data>
+  <data name="Manifest.18.Message" xml:space="preserve">
+    <value>{0}({1},1): Duplicate key: {2}</value>
+  </data>
+  <data name="Manifest.2.Message" xml:space="preserve">
+    <value>Source directory does not exist: {0}</value>
+  </data>
+  <data name="Manifest.20.Message" xml:space="preserve">
+    <value>Unsupported application dependence; use runtime constraints, nginx shorthand or template dependencies.</value>
+  </data>
+  <data name="Manifest.3.Message" xml:space="preserve">
+    <value>Invalid architecture, imaging, bootstrap or engine.</value>
+  </data>
+  <data name="Manifest.4.Message" xml:space="preserve">
+    <value>This name/tag/version already has a release. Change version or output.</value>
+  </data>
+  <data name="Manifest.5.Message" xml:space="preserve">
+    <value>At least one component is required.</value>
+  </data>
+  <data name="Manifest.6.Message" xml:space="preserve">
+    <value>Duplicate component: {0}</value>
+  </data>
+  <data name="Manifest.8.Message" xml:space="preserve">
+    <value>{0}: {1} is not allowed for this component kind.</value>
+  </data>
+  <data name="Manifest.9.Message" xml:space="preserve">
+    <value>{0}: package architecture does not match the node.</value>
+  </data>
+  <data name="Manifest.EnvironmentName.Message" xml:space="preserve">
+    <value>Invalid environment variable name.</value>
+  </data>
+  <data name="Manifest.MigrationSequence.Message" xml:space="preserve">
+    <value>Invalid or duplicate migration sequence.</value>
+  </data>
+  <data name="Manifest.NestedComponent.Message" xml:space="preserve">
+    <value>Nested component sections are not supported.</value>
+  </data>
+  <data name="Manifest.UnknownComponentKey.Message" xml:space="preserve">
+    <value>Unknown component key: {0}</value>
+  </data>
+  <data name="Manifest.UnknownRootKey.Message" xml:space="preserve">
+    <value>Unknown root key: {0}</value>
+  </data>
+  <data name="MigrationInput.1.Message" xml:space="preserve">
+    <value>Invalid migration artifact name: {0}</value>
+  </data>
+  <data name="MigrationInput.2.Message" xml:space="preserve">
+    <value>Migration versions must be unique, ascending and match the node architecture.</value>
+  </data>
+  <data name="MigrationInput.3.Message" xml:space="preserve">
+    <value>Migration archive and companion script are both required: {0}</value>
+  </data>
+  <data name="MigrationInput.4.Message" xml:space="preserve">
+    <value>Migration directory does not exist: {0}</value>
+  </data>
+  <data name="MigrationInput.5.Message" xml:space="preserve">
+    <value>Missing migration companion: {0}</value>
+  </data>
+  <data name="MigrationInput.6.Message" xml:space="preserve">
+    <value>Multiple candidates require an interactive choice or an explicit manifest.</value>
+  </data>
+  <data name="MigrationInput.7.Message" xml:space="preserve">
+    <value>Invalid selection.</value>
+  </data>
+  <data name="MigrationInput.NoMigrations" xml:space="preserve">
+    <value>No matching migrations were found; this build has no migrations.</value>
+  </data>
+  <data name="NodeBuilder.1.Message" xml:space="preserve">
+    <value>{0}: required environment/setting {1} is missing.</value>
+  </data>
+  <data name="NodeBuilder.10.Message" xml:space="preserve">
+    <value>Multiple applications require an explicit Nginx routing configuration.</value>
+  </data>
+  <data name="NodeBuilder.11.Message" xml:space="preserve">
+    <value>Nginx shorthand requires one unambiguous application HTTP port or an explicit routing configuration.</value>
+  </data>
+  <data name="NodeBuilder.2.Message" xml:space="preserve">
+    <value>Invalid component imaging value.</value>
+  </data>
+  <data name="NodeBuilder.3.Message" xml:space="preserve">
+    <value>The release was created by another build; existing output was preserved.</value>
+  </data>
+  <data name="NodeBuilder.4.Message" xml:space="preserve">
+    <value>The bundled executor is not a matching Linux ELF binary.</value>
+  </data>
+  <data name="NodeBuilder.5.Message" xml:space="preserve">
+    <value>The Native AOT executor is missing. Publish the target RID before packaging this tool.</value>
+  </data>
+  <data name="NodeBuilder.6.Message" xml:space="preserve">
+    <value>Unresolved local dependency: {0}</value>
+  </data>
+  <data name="NodeBuilder.7.Message" xml:space="preserve">
+    <value>Two services publish a conflicting host port.</value>
+  </data>
+  <data name="NodeBuilder.8.Message" xml:space="preserve">
+    <value>Local service dependency cycle.</value>
+  </data>
+  <data name="NodeBuilder.9.Message" xml:space="preserve">
+    <value>A service cannot depend on a later installation phase.</value>
+  </data>
+  <data name="NodeBuilder.FailedBuild.Message" xml:space="preserve">
+    <value>Cannot clean the temporary directory; remaining path: {0}. {1}</value>
+  </data>
+  <data name="NodeBuilder.PrepareImage" xml:space="preserve">
+    <value>Prepare image: {0}</value>
+  </data>
+  <data name="NodeBuilder.ResolveBootstrap" xml:space="preserve">
+    <value>Resolve bootstrap dependency closure.</value>
+  </data>
+  <data name="NodeBuilder.ResolveImage" xml:space="preserve">
+    <value>Resolve image: {0}</value>
+  </data>
+  <data name="PackageReader.1.Message" xml:space="preserve">
+    <value>Package architecture mismatch: {0}</value>
+  </data>
+  <data name="PackageReader.10.Message" xml:space="preserve">
+    <value>This package compression is not supported. Supply a packager-generated gzip Debian package.</value>
+  </data>
+  <data name="PackageReader.11.Message" xml:space="preserve">
+    <value>Debian control metadata is missing.</value>
+  </data>
+  <data name="PackageReader.12.Message" xml:space="preserve">
+    <value>Invalid RPM lead.</value>
+  </data>
+  <data name="PackageReader.13.Message" xml:space="preserve">
+    <value>This RPM compression is not supported. Supply a packager-generated gzip RPM.</value>
+  </data>
+  <data name="PackageReader.14.Message" xml:space="preserve">
+    <value>Invalid RPM cpio entry.</value>
+  </data>
+  <data name="PackageReader.15.Message" xml:space="preserve">
+    <value>Invalid cpio filename length.</value>
+  </data>
+  <data name="PackageReader.16.Message" xml:space="preserve">
+    <value>Invalid RPM header.</value>
+  </data>
+  <data name="PackageReader.17.Message" xml:space="preserve">
+    <value>RPM header exceeds limits.</value>
+  </data>
+  <data name="PackageReader.18.Message" xml:space="preserve">
+    <value>Invalid RPM string offset.</value>
+  </data>
+  <data name="PackageReader.19.Message" xml:space="preserve">
+    <value>Unterminated RPM string.</value>
+  </data>
+  <data name="PackageReader.2.Message" xml:space="preserve">
+    <value>Package input does not exist: {0}</value>
+  </data>
+  <data name="PackageReader.3.Message" xml:space="preserve">
+    <value>No matching installation package in {0} or its .packages directory.</value>
+  </data>
+  <data name="PackageReader.4.Message" xml:space="preserve">
+    <value>Package does not exist: {0}</value>
+  </data>
+  <data name="PackageReader.5.Message" xml:space="preserve">
+    <value>Tar installation companion is missing: {0}.sh</value>
+  </data>
+  <data name="PackageReader.6.Message" xml:space="preserve">
+    <value>Expected a .deb, .rpm or .tar.gz installation package.</value>
+  </data>
+  <data name="PackageReader.7.Message" xml:space="preserve">
+    <value>Missing or unsupported package architecture: {0}</value>
+  </data>
+  <data name="PackageReader.8.Message" xml:space="preserve">
+    <value>Invalid Debian ar header.</value>
+  </data>
+  <data name="PackageReader.9.Message" xml:space="preserve">
+    <value>Invalid Debian ar entry.</value>
+  </data>
+  <data name="ProcessRunner.1.Message" xml:space="preserve">
+    <value>Required executable is unavailable: {0}</value>
+  </data>
+  <data name="Selection.MigrationPrompt" xml:space="preserve">
+    <value>Select migration numbers separated by commas: </value>
+  </data>
+  <data name="Selection.PackagePrompt" xml:space="preserve">
+    <value>Select one package number: </value>
+  </data>
+  <data name="ServiceSource.1.Message" xml:space="preserve">
+    <value>An explicit supported template is required for {0}: {1}</value>
+  </data>
+  <data name="ServiceSource.10.Message" xml:space="preserve">
+    <value>Command arguments must be strings.</value>
+  </data>
+  <data name="ServiceSource.11.Message" xml:space="preserve">
+    <value>Expected an absolute Linux path without traversal.</value>
+  </data>
+  <data name="ServiceSource.12.Message" xml:space="preserve">
+    <value>Ports require [IPv4:]host:container[/tcp|udp].</value>
+  </data>
+  <data name="ServiceSource.13.Message" xml:space="preserve">
+    <value>Unsupported template protocol version.</value>
+  </data>
+  <data name="ServiceSource.14.Message" xml:space="preserve">
+    <value>Application configuration must come from its installation package.</value>
+  </data>
+  <data name="ServiceSource.2.Message" xml:space="preserve">
+    <value>{0}: unknown template key {1}.</value>
+  </data>
+  <data name="ServiceSource.3.Message" xml:space="preserve">
+    <value>{0}: template does not support the selected architecture.</value>
+  </data>
+  <data name="ServiceSource.4.Message" xml:space="preserve">
+    <value>Unknown template setting field: {0}</value>
+  </data>
+  <data name="ServiceSource.5.Message" xml:space="preserve">
+    <value>{0}: invalid value for {1}.</value>
+  </data>
+  <data name="ServiceSource.6.Message" xml:space="preserve">
+    <value>Configuration file is missing: {0}</value>
+  </data>
+  <data name="ServiceSource.7.Message" xml:space="preserve">
+    <value>Unknown template section: {0}</value>
+  </data>
+  <data name="ServiceSource.8.Message" xml:space="preserve">
+    <value>{0}: unknown setting {1}.</value>
+  </data>
+  <data name="ServiceSource.9.Message" xml:space="preserve">
+    <value>Tool template is missing: {0}</value>
+  </data>
+  <data name="ApplicationHealth.Invalid.Message" xml:space="preserve">
+    <value>{0}: invalid application listener or HTTP health configuration ({1}).</value>
+  </data>
+  <data name="Manifest.19.Message" xml:space="preserve">
+    <value>Invalid or unvalidated Linux distribution profile.</value>
+  </data>
+  <data name="NodeBuilder.Readme" xml:space="preserve">
+    <value># {0} {1}
+
+Target: {2}, {3}.
+
+Services: {4}.
+
+Migrations: {5}.
+
+1. Define cross-node order, remote readiness and downtime with the delivery owner.
+2. Verify the installation archive and run `containerizer prepare {6}.tar.gz --name {0}`.
+3. Stop affected application nodes with `containerizer stop --name {0}`.
+4. Install/upgrade with `--no-start` in the agreed migration order.
+5. After all migrations succeed, run `containerizer start --name {0}` on each node.
+
+Recovery never automatically reruns an interrupted migration. Ordinary uninstall retains data; `--purge` removes owned local data and state.</value>
+  </data>
+  <data name="BuildResources.Cleanup.Message" xml:space="preserve">
+    <value>Warning: could not remove build resource {0} with {1}. {2}</value>
+  </data>
+  <data name="Settings.Invalid" xml:space="preserve">
+    <value>Invalid settings. Use name=value pairs separated by semicolons; quote values containing semicolons.</value>
+  </data>
+  <data name="Settings.File" xml:space="preserve">
+    <value>Invalid .settings file: {0}. Expected component sections containing tag, repository and settings.</value>
+  </data>
+  <data name="Settings.Conflict" xml:space="preserve">
+    <value>{0}: conflicting settings and explicit environment entry {1}.</value>
+  </data>
+  <data name="Make.Input" xml:space="preserve">
+    <value>make requires exactly one .container input.</value>
+  </data>
+  <data name="Make.Options" xml:space="preserve">
+    <value>With a .container input, only version, source, output and engine options may override the manifest.</value>
+  </data>
+</root>

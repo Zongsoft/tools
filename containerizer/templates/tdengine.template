@@ -1,0 +1,11 @@
+version=1
+image=docker.io/tdengine/tsdb
+kind=infrastructure
+platforms=x64;arm64
+health=["CMD","taos","-s","select server_version();"]
+
+[ports]
+default=127.0.0.1:6041:6041
+
+[data]
+data=/var/lib/taos

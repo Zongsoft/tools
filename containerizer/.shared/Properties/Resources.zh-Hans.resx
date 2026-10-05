@@ -1,0 +1,663 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms</value>
+  </resheader>
+  <data name="ApplicationBuilder.1.Message" xml:space="preserve">
+    <value>安装包需要匹配的发行版系列。</value>
+  </data>
+  <data name="ApplicationBuilder.10.Message" xml:space="preserve">
+    <value>显式运行时约束与 runtimeconfig.json 冲突。</value>
+  </data>
+  <data name="ApplicationBuilder.11.Message" xml:space="preserve">
+    <value>需要精确且受支持的运行时版本。</value>
+  </data>
+  <data name="ApplicationBuilder.3.Message" xml:space="preserve">
+    <value>安装包必须提供唯一服务入口和工作目录。</value>
+  </data>
+  <data name="ApplicationBuilder.4.Message" xml:space="preserve">
+    <value>安装包的 systemd 启动参数不受支持或存在歧义。</value>
+  </data>
+  <data name="ApplicationBuilder.5.Message" xml:space="preserve">
+    <value>安装包必须提供前台可执行程序的服务入口。</value>
+  </data>
+  <data name="ApplicationBuilder.6.Message" xml:space="preserve">
+    <value>安装包的 systemd 环境声明不受支持。</value>
+  </data>
+  <data name="ApplicationBuilder.7.Message" xml:space="preserve">
+    <value>安装包监听地址无法转换为容器绑定。</value>
+  </data>
+  <data name="ApplicationBuilder.8.Message" xml:space="preserve">
+    <value>无法从包元数据推导应用健康检查。</value>
+  </data>
+  <data name="ApplicationBuilder.9.Message" xml:space="preserve">
+    <value>入口 runtimeconfig.json 缺失或存在歧义。</value>
+  </data>
+  <data name="Arguments.1.Message" xml:space="preserve">
+    <value>必须指定命令。</value>
+  </data>
+  <data name="Arguments.10.Message" xml:space="preserve">
+    <value>list 不接受 --name。</value>
+  </data>
+  <data name="Arguments.11.Message" xml:space="preserve">
+    <value>必须指定 --name。</value>
+  </data>
+  <data name="Arguments.2.Message" xml:space="preserve">
+    <value>未知命令。</value>
+  </data>
+  <data name="Arguments.3.Message" xml:space="preserve">
+    <value>同一选项被重复指定。</value>
+  </data>
+  <data name="Arguments.4.Message" xml:space="preserve">
+    <value>--tail 必须是非负整数。</value>
+  </data>
+  <data name="Arguments.5.Message" xml:space="preserve">
+    <value>未知选项，或选项不适用于当前命令。</value>
+  </data>
+  <data name="Arguments.6.Message" xml:space="preserve">
+    <value>缺少选项值。</value>
+  </data>
+  <data name="Arguments.7.Message" xml:space="preserve">
+    <value>必须指定且只能指定一个节点交付物路径。</value>
+  </data>
+  <data name="Arguments.8.Message" xml:space="preserve">
+    <value>最多指定一个组件。</value>
+  </data>
+  <data name="Arguments.9.Message" xml:space="preserve">
+    <value>此命令不接受位置参数。</value>
+  </data>
+  <data name="BootstrapBuilder.1.Message" xml:space="preserve">
+    <value>没有可用的基础镜像配置档。</value>
+  </data>
+  <data name="BootstrapBuilder.2.Message" xml:space="preserve">
+    <value>RHEL bootstrap 需要对应的授权 BaseOS/AppStream 依赖集合，不能使用 UBI/Rocky 包替代。请先导入并验证匹配的 RHEL 配置档。</value>
+  </data>
+  <data name="BootstrapBuilder.3.Message" xml:space="preserve">
+    <value>Bootstrap 包元数据不完整。</value>
+  </data>
+  <data name="BootstrapBuilder.4.Message" xml:space="preserve">
+    <value>Bootstrap 依赖闭包不完整。</value>
+  </data>
+  <data name="BootstrapBuilder.5.Message" xml:space="preserve">
+    <value>Bootstrap 配置档身份或依赖元数据不完整。</value>
+  </data>
+  <data name="BootstrapBuilder.6.Message" xml:space="preserve">
+    <value>Bootstrap 包元数据无效。</value>
+  </data>
+  <data name="BootstrapBuilder.7.Message" xml:space="preserve">
+    <value>Bootstrap 包内容与锁不一致。</value>
+  </data>
+  <data name="BootstrapBuilder.8.Message" xml:space="preserve">
+    <value>Bootstrap 包架构与配置档不一致。</value>
+  </data>
+  <data name="Bundle.1.Message" xml:space="preserve">
+    <value>需要节点交付目录或 .tar.gz 归档。</value>
+  </data>
+  <data name="Bundle.10.Message" xml:space="preserve">
+    <value>服务身份或类型无效。</value>
+  </data>
+  <data name="Bundle.11.Message" xml:space="preserve">
+    <value>锁定镜像身份无效。</value>
+  </data>
+  <data name="Bundle.12.Message" xml:space="preserve">
+    <value>缺少离线镜像归档。</value>
+  </data>
+  <data name="Bundle.13.Message" xml:space="preserve">
+    <value>应用镜像必须离线交付。</value>
+  </data>
+  <data name="Bundle.14.Message" xml:space="preserve">
+    <value>锁定升迁列表无效。</value>
+  </data>
+  <data name="Bundle.15.Message" xml:space="preserve">
+    <value>升迁身份不一致。</value>
+  </data>
+  <data name="Bundle.16.Message" xml:space="preserve">
+    <value>应用或组件身份无效。</value>
+  </data>
+  <data name="Bundle.17.Message" xml:space="preserve">
+    <value>Linux 路径不安全。</value>
+  </data>
+  <data name="Bundle.2.Message" xml:space="preserve">
+    <value>不支持此节点协议版本。</value>
+  </data>
+  <data name="Bundle.3.Message" xml:space="preserve">
+    <value>节点身份或目标无效。</value>
+  </data>
+  <data name="Bundle.4.Message" xml:space="preserve">
+    <value>文件校验记录无效或重复。</value>
+  </data>
+  <data name="Bundle.5.Message" xml:space="preserve">
+    <value>交付物完整性校验失败：{0}</value>
+  </data>
+  <data name="Bundle.6.Message" xml:space="preserve">
+    <value>缺少必需的交付资产：{0}</value>
+  </data>
+  <data name="Bundle.7.Message" xml:space="preserve">
+    <value>checksums.sha256 无效。</value>
+  </data>
+  <data name="Bundle.8.Message" xml:space="preserve">
+    <value>校验清单与节点锁不一致。</value>
+  </data>
+  <data name="Bundle.9.Message" xml:space="preserve">
+    <value>节点交付物中存在未登记文件。</value>
+  </data>
+  <data name="DockerHost.1.Message" xml:space="preserve">
+    <value>安装执行器需要 Linux。</value>
+  </data>
+  <data name="DockerHost.10.Message" xml:space="preserve">
+    <value>无法获取精确锁定的 bootstrap 包。</value>
+  </data>
+  <data name="DockerHost.11.Message" xml:space="preserve">
+    <value>下载的 bootstrap 包未通过完整性校验。</value>
+  </data>
+  <data name="DockerHost.12.Message" xml:space="preserve">
+    <value>Bootstrap 包校验和不一致。</value>
+  </data>
+  <data name="DockerHost.13.Message" xml:space="preserve">
+    <value>Bootstrap 包事务失败，退出码为 {0}；已保留应用状态。</value>
+  </data>
+  <data name="DockerHost.14.Message" xml:space="preserve">
+    <value>导入镜像的身份或平台不匹配。</value>
+  </data>
+  <data name="DockerHost.15.Message" xml:space="preserve">
+    <value>持久路径与另一应用登记的数据重叠。</value>
+  </data>
+  <data name="DockerHost.16.Message" xml:space="preserve">
+    <value>非空持久目录没有匹配的归属记录。</value>
+  </data>
+  <data name="DockerHost.17.Message" xml:space="preserve">
+    <value>持久目录归属标记与注册记录不同。</value>
+  </data>
+  <data name="DockerHost.18.Message" xml:space="preserve">
+    <value>每个服务必须且只能对应一个容器。</value>
+  </data>
+  <data name="DockerHost.19.Message" xml:space="preserve">
+    <value>服务容器缺失或存在歧义。</value>
+  </data>
+  <data name="DockerHost.2.Message" xml:space="preserve">
+    <value>安装命令需要 root 权限。</value>
+  </data>
+  <data name="DockerHost.20.Message" xml:space="preserve">
+    <value>服务没有协议级或模板健康检查。</value>
+  </data>
+  <data name="DockerHost.21.Message" xml:space="preserve">
+    <value>服务未通过健康检查，保持维护状态。</value>
+  </data>
+  <data name="DockerHost.22.Message" xml:space="preserve">
+    <value>既有目录不是独占自有资产，清理未完成。</value>
+  </data>
+  <data name="DockerHost.23.Message" xml:space="preserve">
+    <value>无法核实数据归属，清理未完成。</value>
+  </data>
+  <data name="DockerHost.24.Message" xml:space="preserve">
+    <value>没有可用的受管发行资产。</value>
+  </data>
+  <data name="DockerHost.25.Message" xml:space="preserve">
+    <value>未知组件。</value>
+  </data>
+  <data name="DockerHost.26.Message" xml:space="preserve">
+    <value>嵌套挂载阻止递归清理。</value>
+  </data>
+  <data name="DockerHost.27.Message" xml:space="preserve">
+    <value>{0} {1} 失败，退出码为 {2}；已保留受管状态。</value>
+  </data>
+  <data name="DockerHost.28.Message" xml:space="preserve">
+    <value>系统目录不能登记为应用自有数据。</value>
+  </data>
+  <data name="DockerHost.29.Message" xml:space="preserve">
+    <value>同一持久目录的归属要求冲突。</value>
+  </data>
+  <data name="DockerHost.3.Message" xml:space="preserve">
+    <value>节点架构与正在运行的执行器不同。</value>
+  </data>
+  <data name="DockerHost.30.Message" xml:space="preserve">
+    <value>持久目录归属必须是数字 UID:GID。</value>
+  </data>
+  <data name="DockerHost.31.Message" xml:space="preserve">
+    <value>请求的网络接口或宿主端口不可用。</value>
+  </data>
+  <data name="DockerHost.4.Message" xml:space="preserve">
+    <value>交付物面向不同的 Linux 发行版配置档。</value>
+  </data>
+  <data name="DockerHost.5.Message" xml:space="preserve">
+    <value>存储空间不足，无法保存受管资产及暂存镜像。</value>
+  </data>
+  <data name="DockerHost.6.Message" xml:space="preserve">
+    <value>已存在未知归属的全局 containerizer 程序，已保留该文件。</value>
+  </data>
+  <data name="DockerHost.7.Message" xml:space="preserve">
+    <value>候选执行器不能处理全部保留的应用记录。</value>
+  </data>
+  <data name="DockerHost.8.Message" xml:space="preserve">
+    <value>候选执行器协议不兼容。</value>
+  </data>
+  <data name="DockerHost.9.Message" xml:space="preserve">
+    <value>Bootstrap 包集合为空。</value>
+  </data>
+  <data name="Engine.1.Message" xml:space="preserve">
+    <value>{0} {1} 失败，退出码为 {2}。请检查引擎连接、来源可用性及目标平台支持。</value>
+  </data>
+  <data name="Engine.10.Message" xml:space="preserve">
+    <value>无法解析镜像用户，请在模板中声明数字 data-owner。</value>
+  </data>
+  <data name="Engine.2.Message" xml:space="preserve">
+    <value>未找到可用的构建引擎及 Compose provider。请确认 Docker 或 Podman 已运行并安装 Compose provider；Windows 上可通过 `podman machine list` 查看虚拟机，并用 `podman machine start` 启动选定虚拟机。
+{0}</value>
+  </data>
+  <data name="Engine.3.Message" xml:space="preserve">
+    <value>取得的镜像与固定的平台摘要不匹配。</value>
+  </data>
+  <data name="Engine.4.Message" xml:space="preserve">
+    <value>获取的镜像平台不匹配。</value>
+  </data>
+  <data name="Engine.5.Message" xml:space="preserve">
+    <value>引擎未提供可验证的仓库 manifest digest。</value>
+  </data>
+  <data name="Engine.7.Message" xml:space="preserve">
+    <value>镜像索引必须恰好包含一个匹配的目标平台。</value>
+  </data>
+  <data name="Engine.8.Message" xml:space="preserve">
+    <value>镜像引用无效。</value>
+  </data>
+  <data name="Engine.9.Message" xml:space="preserve">
+    <value>服务的模板或固定镜像必须具有可执行的就绪检查。</value>
+  </data>
+  <data name="Executor.Failure.Message" xml:space="preserve">
+    <value>操作失败（{0}），请检查保留的状态。</value>
+  </data>
+  <data name="Executor.Interrupted.Message" xml:space="preserve">
+    <value>操作已中断，请检查状态并使用 recover 恢复。</value>
+  </data>
+  <data name="Files.1.Message" xml:space="preserve">
+    <value>JSON 内容为空：{0}</value>
+  </data>
+  <data name="Files.2.Message" xml:space="preserve">
+    <value>相对路径不安全：{0}</value>
+  </data>
+  <data name="Files.3.Message" xml:space="preserve">
+    <value>路径越出根目录：{0}</value>
+  </data>
+  <data name="Files.4.Message" xml:space="preserve">
+    <value>不允许符号链接或重解析点：{0}</value>
+  </data>
+  <data name="Files.5.Message" xml:space="preserve">
+    <value>归档条目不支持或重复：{0}</value>
+  </data>
+  <data name="Files.6.Message" xml:space="preserve">
+    <value>归档超过解包大小限制。</value>
+  </data>
+  <data name="InstallationStore.1.Message" xml:space="preserve">
+    <value>应用尚未登记。</value>
+  </data>
+  <data name="InstallationStore.2.Message" xml:space="preserve">
+    <value>安装记录不支持或内部不一致。</value>
+  </data>
+  <data name="InstallationStore.3.Message" xml:space="preserve">
+    <value>另一个操作正在持有应用或主机锁。</value>
+  </data>
+  <data name="InstallationStore.4.Message" xml:space="preserve">
+    <value>受管发行身份不一致。</value>
+  </data>
+  <data name="Lifecycle.1.Message" xml:space="preserve">
+    <value>--name 与交付物身份不同。</value>
+  </data>
+  <data name="Lifecycle.10.Message" xml:space="preserve">
+    <value>原事务资产发生变化。</value>
+  </data>
+  <data name="Lifecycle.11.Message" xml:space="preserve">
+    <value>--retry-migration 必须选择当前事务中一个失败或中断的升迁。</value>
+  </data>
+  <data name="Lifecycle.12.Message" xml:space="preserve">
+    <value>应用已卸载，请先从保留交付物重新安装。</value>
+  </data>
+  <data name="Lifecycle.13.Message" xml:space="preserve">
+    <value>目标事务未达到 ReadyToStart；仅 prepare 不能允许启动。</value>
+  </data>
+  <data name="Lifecycle.14.Message" xml:space="preserve">
+    <value>restart 不能绕过维护或未提交事务。</value>
+  </data>
+  <data name="Lifecycle.15.Message" xml:space="preserve">
+    <value>请指定属于本应用的组件；纯基础设施部署必须明确目标。</value>
+  </data>
+  <data name="Lifecycle.16.Message" xml:space="preserve">
+    <value>卸载或清理尚未完成，保留状态中记录了剩余失败。</value>
+  </data>
+  <data name="Lifecycle.17.Message" xml:space="preserve">
+    <value>没有已提交的发行版本。</value>
+  </data>
+  <data name="Lifecycle.18.Message" xml:space="preserve">
+    <value>升级改变了部署身份或平台。</value>
+  </data>
+  <data name="Lifecycle.19.Message" xml:space="preserve">
+    <value>应用升级不支持改变基础设施。</value>
+  </data>
+  <data name="Lifecycle.2.Message" xml:space="preserve">
+    <value>--name 与脚本交付物身份不同。</value>
+  </data>
+  <data name="Lifecycle.20.Message" xml:space="preserve">
+    <value>升级改变了 bootstrap 依赖。</value>
+  </data>
+  <data name="Lifecycle.21.Message" xml:space="preserve">
+    <value>本节点服务依赖无效或存在循环。</value>
+  </data>
+  <data name="Lifecycle.3.Message" xml:space="preserve">
+    <value>upgrade 需要已有注册记录。</value>
+  </data>
+  <data name="Lifecycle.4.Message" xml:space="preserve">
+    <value>另一个事务尚未完成，请恢复或完成原事务后再选择其它交付物。</value>
+  </data>
+  <data name="Lifecycle.5.Message" xml:space="preserve">
+    <value>失败事务必须使用 recover；install 不清除失败状态。</value>
+  </data>
+  <data name="Lifecycle.6.Message" xml:space="preserve">
+    <value>升迁 {0} 需要显式恢复，没有重新执行。</value>
+  </data>
+  <data name="Lifecycle.7.Message" xml:space="preserve">
+    <value>既有升迁成功记录未通过配套脚本指纹检查。</value>
+  </data>
+  <data name="Lifecycle.8.Message" xml:space="preserve">
+    <value>升迁 {0} 失败；请求显式重试前请先处理部分执行结果。</value>
+  </data>
+  <data name="Lifecycle.9.Message" xml:space="preserve">
+    <value>没有可恢复的失败或中断事务。</value>
+  </data>
+  <data name="Lifecycle.Recovery" xml:space="preserve">
+    <value>恢复 {0}：目标版本 {1}，阶段 {2}。</value>
+  </data>
+  <data name="Manifest.1.Message" xml:space="preserve">
+    <value>.container 清单必须是唯一位置输入。</value>
+  </data>
+  <data name="Manifest.10.Message" xml:space="preserve">
+    <value>{0}：digest 无效。</value>
+  </data>
+  <data name="Manifest.11.Message" xml:space="preserve">
+    <value>nginx 简写与显式组件冲突。</value>
+  </data>
+  <data name="Manifest.12.Message" xml:space="preserve">
+    <value>已有清单的有效内容不同：{0}</value>
+  </data>
+  <data name="Manifest.13.Message" xml:space="preserve">
+    <value>变量求值失败：{0}（{1}）。</value>
+  </data>
+  <data name="Manifest.14.Message" xml:space="preserve">
+    <value>身份只能包含字母、数字、点、下划线和连字符，且不能包含路径穿越片段。</value>
+  </data>
+  <data name="Manifest.15.Message" xml:space="preserve">
+    <value>版本必须为二至四段数字且不能为零。</value>
+  </data>
+  <data name="Manifest.16.Message" xml:space="preserve">
+    <value>{0}({1},1)：{2}</value>
+  </data>
+  <data name="Manifest.17.Message" xml:space="preserve">
+    <value>{0}({1},1)：段落无效。</value>
+  </data>
+  <data name="Manifest.18.Message" xml:space="preserve">
+    <value>{0}({1},1)：键重复：{2}</value>
+  </data>
+  <data name="Manifest.2.Message" xml:space="preserve">
+    <value>源目录不存在：{0}</value>
+  </data>
+  <data name="Manifest.20.Message" xml:space="preserve">
+    <value>不支持此应用依赖，请使用运行时约束或 nginx 简写。</value>
+  </data>
+  <data name="Manifest.3.Message" xml:space="preserve">
+    <value>architecture、imaging、bootstrap 或 engine 无效。</value>
+  </data>
+  <data name="Manifest.4.Message" xml:space="preserve">
+    <value>相同 name/tag/version 已有发行产物，请调整 version 或 output。</value>
+  </data>
+  <data name="Manifest.5.Message" xml:space="preserve">
+    <value>至少需要一个组件。</value>
+  </data>
+  <data name="Manifest.6.Message" xml:space="preserve">
+    <value>组件重复：{0}</value>
+  </data>
+  <data name="Manifest.8.Message" xml:space="preserve">
+    <value>{0}：此组件类型不允许 {1}。</value>
+  </data>
+  <data name="Manifest.9.Message" xml:space="preserve">
+    <value>{0}：包架构与节点不匹配。</value>
+  </data>
+  <data name="Manifest.EnvironmentName.Message" xml:space="preserve">
+    <value>环境变量名称无效。</value>
+  </data>
+  <data name="Manifest.MigrationSequence.Message" xml:space="preserve">
+    <value>升迁序号无效或重复。</value>
+  </data>
+  <data name="Manifest.NestedComponent.Message" xml:space="preserve">
+    <value>不支持嵌套组件段落。</value>
+  </data>
+  <data name="Manifest.UnknownComponentKey.Message" xml:space="preserve">
+    <value>未知的组件字段：{0}</value>
+  </data>
+  <data name="Manifest.UnknownRootKey.Message" xml:space="preserve">
+    <value>未知的根字段：{0}</value>
+  </data>
+  <data name="MigrationInput.1.Message" xml:space="preserve">
+    <value>升迁产物名称无效：{0}</value>
+  </data>
+  <data name="MigrationInput.2.Message" xml:space="preserve">
+    <value>升迁版本必须唯一、升序排列并匹配节点架构。</value>
+  </data>
+  <data name="MigrationInput.3.Message" xml:space="preserve">
+    <value>升迁归档和配套脚本缺一不可：{0}</value>
+  </data>
+  <data name="MigrationInput.4.Message" xml:space="preserve">
+    <value>升迁目录不存在：{0}</value>
+  </data>
+  <data name="MigrationInput.5.Message" xml:space="preserve">
+    <value>缺少配套升迁脚本：{0}</value>
+  </data>
+  <data name="MigrationInput.6.Message" xml:space="preserve">
+    <value>多个候选需要交互选择或显式清单。</value>
+  </data>
+  <data name="MigrationInput.7.Message" xml:space="preserve">
+    <value>选择无效。</value>
+  </data>
+  <data name="MigrationInput.NoMigrations" xml:space="preserve">
+    <value>未找到匹配的升迁产物，本次构建不包含升迁。</value>
+  </data>
+  <data name="NodeBuilder.1.Message" xml:space="preserve">
+    <value>{0}：缺少必填环境或设置 {1}。</value>
+  </data>
+  <data name="NodeBuilder.10.Message" xml:space="preserve">
+    <value>多个应用需要显式 Nginx 路由配置。</value>
+  </data>
+  <data name="NodeBuilder.11.Message" xml:space="preserve">
+    <value>nginx 简写需要唯一明确的应用 HTTP 端口，或显式路由配置。</value>
+  </data>
+  <data name="NodeBuilder.2.Message" xml:space="preserve">
+    <value>组件 imaging 配置无效。</value>
+  </data>
+  <data name="NodeBuilder.3.Message" xml:space="preserve">
+    <value>另一个构建已创建相同发行产物，已保留既有输出。</value>
+  </data>
+  <data name="NodeBuilder.4.Message" xml:space="preserve">
+    <value>随包执行器不是匹配的 Linux ELF 文件。</value>
+  </data>
+  <data name="NodeBuilder.5.Message" xml:space="preserve">
+    <value>缺少 Native AOT 执行器，请在制作工具包前发布目标 RID。</value>
+  </data>
+  <data name="NodeBuilder.6.Message" xml:space="preserve">
+    <value>本节点依赖无法解析：{0}</value>
+  </data>
+  <data name="NodeBuilder.7.Message" xml:space="preserve">
+    <value>两个服务发布的宿主端口冲突。</value>
+  </data>
+  <data name="NodeBuilder.8.Message" xml:space="preserve">
+    <value>本节点服务存在依赖循环。</value>
+  </data>
+  <data name="NodeBuilder.9.Message" xml:space="preserve">
+    <value>服务不能依赖更晚安装阶段的组件。</value>
+  </data>
+  <data name="NodeBuilder.FailedBuild.Message" xml:space="preserve">
+    <value>临时目录清理失败，残留路径：{0}。{1}</value>
+  </data>
+  <data name="NodeBuilder.PrepareImage" xml:space="preserve">
+    <value>准备镜像：{0}</value>
+  </data>
+  <data name="NodeBuilder.ResolveBootstrap" xml:space="preserve">
+    <value>解析 bootstrap 依赖闭包。</value>
+  </data>
+  <data name="NodeBuilder.ResolveImage" xml:space="preserve">
+    <value>解析镜像：{0}</value>
+  </data>
+  <data name="PackageReader.1.Message" xml:space="preserve">
+    <value>包架构不匹配：{0}</value>
+  </data>
+  <data name="PackageReader.10.Message" xml:space="preserve">
+    <value>不支持此包压缩方式，请提供 packager 生成的 gzip Debian 包。</value>
+  </data>
+  <data name="PackageReader.11.Message" xml:space="preserve">
+    <value>缺少 Debian control 元数据。</value>
+  </data>
+  <data name="PackageReader.12.Message" xml:space="preserve">
+    <value>RPM lead 无效。</value>
+  </data>
+  <data name="PackageReader.13.Message" xml:space="preserve">
+    <value>不支持此 RPM 压缩方式，请提供 packager 生成的 gzip RPM。</value>
+  </data>
+  <data name="PackageReader.14.Message" xml:space="preserve">
+    <value>RPM cpio 条目无效。</value>
+  </data>
+  <data name="PackageReader.15.Message" xml:space="preserve">
+    <value>cpio 文件名长度无效。</value>
+  </data>
+  <data name="PackageReader.16.Message" xml:space="preserve">
+    <value>RPM 文件头无效。</value>
+  </data>
+  <data name="PackageReader.17.Message" xml:space="preserve">
+    <value>RPM 文件头超过大小限制。</value>
+  </data>
+  <data name="PackageReader.18.Message" xml:space="preserve">
+    <value>RPM 字符串偏移无效。</value>
+  </data>
+  <data name="PackageReader.19.Message" xml:space="preserve">
+    <value>RPM 字符串缺少结束符。</value>
+  </data>
+  <data name="PackageReader.2.Message" xml:space="preserve">
+    <value>包输入不存在：{0}</value>
+  </data>
+  <data name="PackageReader.3.Message" xml:space="preserve">
+    <value>在 {0} 及其 .packages 子目录中没有匹配安装包。</value>
+  </data>
+  <data name="PackageReader.4.Message" xml:space="preserve">
+    <value>安装包不存在：{0}</value>
+  </data>
+  <data name="PackageReader.5.Message" xml:space="preserve">
+    <value>缺少 tar 安装配套脚本：{0}.sh</value>
+  </data>
+  <data name="PackageReader.6.Message" xml:space="preserve">
+    <value>需要 .deb、.rpm 或 .tar.gz 安装包。</value>
+  </data>
+  <data name="PackageReader.7.Message" xml:space="preserve">
+    <value>包架构缺失或不支持：{0}</value>
+  </data>
+  <data name="PackageReader.8.Message" xml:space="preserve">
+    <value>Debian ar 文件头无效。</value>
+  </data>
+  <data name="PackageReader.9.Message" xml:space="preserve">
+    <value>Debian ar 条目无效。</value>
+  </data>
+  <data name="ProcessRunner.1.Message" xml:space="preserve">
+    <value>必需的可执行程序不可用：{0}</value>
+  </data>
+  <data name="Selection.MigrationPrompt" xml:space="preserve">
+    <value>请选择升迁序号，多个序号用逗号分隔：</value>
+  </data>
+  <data name="Selection.PackagePrompt" xml:space="preserve">
+    <value>请选择一个安装包序号：</value>
+  </data>
+  <data name="ServiceSource.1.Message" xml:space="preserve">
+    <value>{0} 需要显式受支持模板：{1}</value>
+  </data>
+  <data name="ServiceSource.10.Message" xml:space="preserve">
+    <value>命令参数必须是字符串。</value>
+  </data>
+  <data name="ServiceSource.11.Message" xml:space="preserve">
+    <value>需要不含穿越片段的 Linux 绝对路径。</value>
+  </data>
+  <data name="ServiceSource.12.Message" xml:space="preserve">
+    <value>端口格式应为 [IPv4:]宿主端口:容器端口[/tcp|udp]。</value>
+  </data>
+  <data name="ServiceSource.13.Message" xml:space="preserve">
+    <value>不支持此模板协议版本。</value>
+  </data>
+  <data name="ServiceSource.14.Message" xml:space="preserve">
+    <value>应用配置必须来自安装包。</value>
+  </data>
+  <data name="ServiceSource.2.Message" xml:space="preserve">
+    <value>{0}：未知模板键 {1}。</value>
+  </data>
+  <data name="ServiceSource.3.Message" xml:space="preserve">
+    <value>{0}：模板不支持所选架构。</value>
+  </data>
+  <data name="ServiceSource.4.Message" xml:space="preserve">
+    <value>未知模板设置字段：{0}</value>
+  </data>
+  <data name="ServiceSource.5.Message" xml:space="preserve">
+    <value>{0}：{1} 的值无效。</value>
+  </data>
+  <data name="ServiceSource.6.Message" xml:space="preserve">
+    <value>配置文件缺失：{0}</value>
+  </data>
+  <data name="ServiceSource.7.Message" xml:space="preserve">
+    <value>未知模板段落：{0}</value>
+  </data>
+  <data name="ServiceSource.8.Message" xml:space="preserve">
+    <value>{0}：未知设置 {1}。</value>
+  </data>
+  <data name="ServiceSource.9.Message" xml:space="preserve">
+    <value>工具模板缺失：{0}</value>
+  </data>
+  <data name="ApplicationHealth.Invalid.Message" xml:space="preserve">
+    <value>{0}：应用监听地址或 HTTP 健康检查配置无效（{1}）。</value>
+  </data>
+  <data name="Manifest.19.Message" xml:space="preserve">
+    <value>无效或未验证的 Linux 发行版配置。</value>
+  </data>
+  <data name="NodeBuilder.Readme" xml:space="preserve">
+    <value># {0} {1}
+
+目标系统：{2}，{3}。
+
+服务：{4}。
+
+升迁版本：{5}。
+
+1. 请由交付负责人明确不同节点的执行顺序、远端就绪条件和停机窗口。
+2. 校验交付归档，然后运行 `containerizer prepare {6}.tar.gz --name {0}`。
+3. 使用 `containerizer stop --name {0}` 停止受影响的应用节点。
+4. 按约定的升迁顺序使用 `--no-start` 安装或升级。
+5. 全部升迁成功后，在每个节点运行 `containerizer start --name {0}`。
+
+恢复操作不会自动重跑中断的升迁。普通卸载会保留数据；`--purge` 会删除工具管理的本地数据和状态。</value>
+  </data>
+  <data name="BuildResources.Cleanup.Message" xml:space="preserve">
+    <value>警告：无法使用 {1} 清理本次制作资源 {0}。{2}</value>
+  </data>
+  <data name="Settings.Invalid" xml:space="preserve">
+    <value>settings 格式无效。使用分号分隔的 name=value，包含分号的值使用引号。</value>
+  </data>
+  <data name="Settings.File" xml:space="preserve">
+    <value>无效的 .settings 文件：{0}。请使用组件段落及 tag、repository、settings 条目。</value>
+  </data>
+  <data name="Settings.Conflict" xml:space="preserve">
+    <value>{0}：settings 与显式环境条目 {1} 冲突。</value>
+  </data>
+  <data name="Make.Input" xml:space="preserve">
+    <value>make 必须传入且仅传入一个 .container 文件。</value>
+  </data>
+  <data name="Make.Options" xml:space="preserve">
+    <value>输入 .container 时，仅允许 version、source、output、engine 命名选项覆盖清单。</value>
+  </data>
+</root>

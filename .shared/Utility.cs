@@ -46,11 +46,13 @@ namespace Zongsoft.Tools.Deployer;
 namespace Zongsoft.Tools.Packager;
 #elif MIGRATOR
 namespace Zongsoft.Tools.Migrator;
+#elif CONTAINERIZER
+namespace Zongsoft.Tools.Containerizer;
 #else
 namespace Zongsoft.Tools;
 #endif
 
-/// <summary>三个独立工具共用的命令与文件辅助方法。</summary>
+/// <summary>独立制作工具共用的命令与文件辅助方法。</summary>
 internal static partial class Utility
 {
 	#region 命令方法

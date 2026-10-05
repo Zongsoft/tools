@@ -1,0 +1,8 @@
+version=1
+image=docker.io/otel/opentelemetry-collector-contrib
+kind=infrastructure
+platforms=x64;arm64
+health=["CMD","/otelcol-contrib","validate","--config=/etc/otelcol-contrib/config.yaml"]
+
+[ports]
+default=127.0.0.1:4317:4317

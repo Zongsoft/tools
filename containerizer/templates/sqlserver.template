@@ -1,0 +1,19 @@
+version=1
+image=mcr.microsoft.com/mssql/server
+kind=infrastructure
+platforms=x64
+health=["CMD-SHELL","/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q \"SELECT 1\" -b"]
+
+[ports]
+default=127.0.0.1:1433:1433
+
+[data]
+data=/var/opt/mssql
+
+[settings password]
+environment=MSSQL_SA_PASSWORD
+required=true
+
+[settings accept-eula]
+environment=ACCEPT_EULA
+required=true

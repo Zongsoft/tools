@@ -1,0 +1,11 @@
+version=1
+image=docker.io/apache/kafka
+kind=infrastructure
+platforms=x64;arm64
+health=["CMD","/opt/kafka/bin/kafka-broker-api-versions.sh","--bootstrap-server","localhost:9092"]
+
+[ports]
+default=127.0.0.1:9092:9092
+
+[data]
+data=/var/lib/kafka/data

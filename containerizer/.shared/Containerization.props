@@ -1,0 +1,21 @@
+<Project>
+	<ItemGroup>
+		<Compile Include="$(MSBuildThisFileDirectory)**\*.cs" Link="Protocol\%(RecursiveDir)%(Filename)%(Extension)" />
+		<Compile Include="$(MSBuildThisFileDirectory)..\..\.shared\ArtifactPublisher.cs" Link="Shared\ArtifactPublisher.cs" />
+
+		<EmbeddedResource Include="$(MSBuildThisFileDirectory)Properties\Resources*.resx" Link="Properties\%(Filename)%(Extension)">
+			<ManifestResourceName>Zongsoft.Tools.Containerizer.Properties.%(Filename)</ManifestResourceName>
+		</EmbeddedResource>
+		<EmbeddedResource Update="$(MSBuildThisFileDirectory)Properties\Resources.resx">
+			<Generator>ResXFileCodeGenerator</Generator>
+			<LastGenOutput>Resources.Designer.cs</LastGenOutput>
+			<CustomToolNamespace>Zongsoft.Tools.Containerizer.Properties</CustomToolNamespace>
+		</EmbeddedResource>
+
+		<Compile Update="$(MSBuildThisFileDirectory)Properties\Resources.Designer.cs">
+			<AutoGen>True</AutoGen>
+			<DesignTime>True</DesignTime>
+			<DependentUpon>Resources.resx</DependentUpon>
+		</Compile>
+	</ItemGroup>
+</Project>

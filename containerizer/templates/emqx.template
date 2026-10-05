@@ -1,0 +1,11 @@
+version=1
+image=docker.io/emqx/emqx
+kind=infrastructure
+platforms=x64;arm64
+health=["CMD","emqx","ctl","status"]
+
+[ports]
+default=127.0.0.1:1883:1883
+
+[data]
+data=/opt/emqx/data

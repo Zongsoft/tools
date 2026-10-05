@@ -3,15 +3,17 @@
 - 新建文本文件使用 CRLF 换行符，代码文件使用 Tab 缩进；保持既有生成文件和局部格式。
 - 第三方文件保留上游原始字节、编码、换行及缩进，不应用本仓库的格式转换；通过 Git 属性防止自动换行转换。
 - 开始工作前阅读目标工具就近的 `AGENTS.md`、`SKILL.md`、README、解决方案、项目文件和构建脚本。
-- 四个工具保留独立解决方案、构建和发布流程；根 Directory.Packages.props 仅集中管理 Core、代码分析器和测试等通用包版本。专用依赖在所属项目使用 PackageReference 的 VersionOverride 维护；引用关系、目标框架和工具版本仍在各项目中定义。
+- 各工具保留独立解决方案、构建和发布流程；根 Directory.Packages.props 仅集中管理 Core、代码分析器和测试等通用包版本。专用依赖在所属项目使用 PackageReference 的 VersionOverride 维护；引用关系、目标框架和工具版本仍在各项目中定义。
 - 保留用户未提交的修改，不重置、不覆盖、不格式化任务范围外的文件。
 - 文档不重复记录工具或依赖的当前版本号，优先引用项目和版本配置，安装示例自动读取版本；仅在语法示例、最低兼容要求或固定第三方快照等必要场景保留具体版本。中英文文档同步更新。
+- 工具若定义工作源目录 `--source`，该选项自身相对于调用时的当前目录解析；受其管理的本地相对输入、输出路径均相对于最终 source，包括 `./`、`../`，绝对路径保持原义。此规则不改变配置文件内部引用、安装目标路径或没有该选项的命令的既有路径基准。
 
 ## 仓库概览
 
 - `deployer`：读取 `.deploy` 描述文件，将本地文件或 NuGet 包内容部署到目标目录；命令为 `dotnet-deploy`/`dotnet deploy`。
 - `packager`：生成 `.tar.gz`、`.deb`、`.rpm` 和安装生命周期脚本；命令为 `dotnet-pack`。
 - `migrator`：独立制作升迁归档和脚本，并提供 Native AOT 执行器；命令为 `dotnet-migrate`。
+- `containerizer`：制作单节点 Linux 容器交付物；制作命令为 `dotnet-containerize`，现场 Native AOT 命令为 `containerizer`。实现和平台验收范围见其双语说明，不把交叉编译视为目标运行验证。
 - `regular`：面向 Windows 的正则表达式 WinForms 测试器，并通过独立启动器提供 `dotnet-regular` 工具命令。
 
 `deployer`、`packager` 与 `migrator` 支持 .NET 8、9、10；deployer 在构建时生成 NuGet 工具包，packager 独立构建，migrator 先准备三平台原生执行器再生成工具包。`regular` 的 GUI 目标为 `net10.0-windows`，单个工具包由 `net10.0` 启动器携带 Windows x64 GUI 发布产物生成；开发时仍直接运行 GUI `.exe`。

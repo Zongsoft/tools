@@ -1,0 +1,19 @@
+version=1
+image=docker.io/library/mongo
+kind=infrastructure
+platforms=x64;arm64
+health=["CMD","mongosh","--quiet","--eval","quit(db.adminCommand({ping:1}).ok ? 0 : 1)"]
+
+[ports]
+default=127.0.0.1:27017:27017
+
+[data]
+data=/data/db
+
+[settings root-user]
+environment=MONGO_INITDB_ROOT_USERNAME
+required=true
+
+[settings root-password]
+environment=MONGO_INITDB_ROOT_PASSWORD
+required=true

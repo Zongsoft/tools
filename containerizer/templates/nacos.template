@@ -1,0 +1,27 @@
+version=1
+image=docker.io/nacos/nacos-server
+kind=infrastructure
+platforms=x64;arm64
+health=["CMD-SHELL","curl -fsS http://127.0.0.1:8848/nacos/v1/console/health/readiness"]
+
+[ports]
+default=127.0.0.1:8848:8848
+
+[data]
+data=/home/nacos/data
+
+[settings mode]
+environment=MODE
+default=standalone
+
+[settings auth-token]
+environment=NACOS_AUTH_TOKEN
+required=true
+
+[settings identity-key]
+environment=NACOS_AUTH_IDENTITY_KEY
+required=true
+
+[settings identity-value]
+environment=NACOS_AUTH_IDENTITY_VALUE
+required=true

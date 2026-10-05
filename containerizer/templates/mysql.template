@@ -1,0 +1,25 @@
+version=1
+image=docker.io/library/mysql
+kind=infrastructure
+platforms=x64;arm64
+health=["CMD-SHELL","mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+
+[ports]
+default=127.0.0.1:3306:3306
+
+[data]
+data=/var/lib/mysql
+
+[settings root-password]
+environment=MYSQL_ROOT_PASSWORD
+variable=mysql_root_password
+required=true
+
+[settings database]
+environment=MYSQL_DATABASE
+
+[settings user]
+environment=MYSQL_USER
+
+[settings password]
+environment=MYSQL_PASSWORD

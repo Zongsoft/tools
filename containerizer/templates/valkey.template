@@ -1,0 +1,18 @@
+version=1
+image=docker.io/valkey/valkey
+kind=infrastructure
+platforms=x64;arm64
+health=["CMD","valkey-cli","ping"]
+command=["valkey-server"]
+
+[ports]
+default=127.0.0.1:6379:6379
+
+[data]
+data=/data
+
+[settings maxmemory]
+argument=--maxmemory
+
+[settings maxmemory-policy]
+argument=--maxmemory-policy

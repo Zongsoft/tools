@@ -1,0 +1,8 @@
+version=1
+image=docker.io/library/memcached
+kind=infrastructure
+platforms=x64;arm64
+health=["CMD-SHELL","printf \"version\\r\\n\" | nc -w 2 127.0.0.1 11211 | grep VERSION"]
+
+[ports]
+default=127.0.0.1:11211:11211

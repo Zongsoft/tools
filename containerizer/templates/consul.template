@@ -1,0 +1,11 @@
+version=1
+image=docker.io/hashicorp/consul
+kind=infrastructure
+platforms=x64;arm64
+health=["CMD","consul","members"]
+
+[ports]
+default=127.0.0.1:8500:8500
+
+[data]
+data=/consul/data

@@ -1,0 +1,8 @@
+version=1
+image=docker.io/library/haproxy
+kind=ingress
+platforms=x64;arm64
+health=["CMD","haproxy","-c","-f","/usr/local/etc/haproxy/haproxy.cfg"]
+
+[ports]
+default=127.0.0.1:80:80

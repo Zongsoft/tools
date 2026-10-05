@@ -1,0 +1,11 @@
+version=1
+image=docker.io/library/caddy
+kind=ingress
+platforms=x64;arm64
+health=["CMD","caddy","validate","--config","/etc/caddy/Caddyfile"]
+
+[ports]
+default=127.0.0.1:80:80
+
+[data]
+data=/data

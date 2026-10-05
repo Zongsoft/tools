@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+		<DefineConstants>$(DefineConstants);CONTAINERIZER</DefineConstants>
+		<Version>0.1.0</Version>
+		<PackAsTool>true</PackAsTool>
+		<ToolCommandName>dotnet-containerize</ToolCommandName>
+		<PackageDescription>The Zongsoft Containerization .NET Tool.</PackageDescription>
+		<Product>Zongsoft Containerizer</Product>
+		<PackageProjectUrl>https://github.com/Zongsoft/tools/tree/main/containerizer</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/Zongsoft/tools/tree/main/containerizer</RepositoryUrl>
+		<ApplicationIcon>..\..\zongsoft-logo.ico</ApplicationIcon>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="..\README*.md" Pack="true" PackagePath="\" />
+		<InternalsVisibleTo Include="Zongsoft.Tools.Containerizer.Tests" />
+		<Content Include="..\templates\**\*" Link="templates\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Pack="true" PackagePath="tools/%(Link)" />
+		<Content Include="../executor/src/bin/$(Configuration)/net10.0/linux-x64/publish/**/*" Link=".containerizer/linux-x64/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Pack="true" PackagePath="tools/.containerizer/linux-x64/" />
+		<Content Include="../executor/src/bin/$(Configuration)/net10.0/linux-arm64/publish/**/*" Link=".containerizer/linux-arm64/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Pack="true" PackagePath="tools/.containerizer/linux-arm64/" />
+		<Content Remove="@(Content->WithMetadataValue('Extension', '.pdb'));@(Content->WithMetadataValue('Extension', '.dbg'))" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Compile Include="..\..\.shared\Utility.cs" Link="Shared\Utility.cs" />
+		<Compile Include="..\..\.shared\VariableEvaluator.cs" Link="Shared\VariableEvaluator.cs" />
+	</ItemGroup>
+
+	<Choose>
+		<When Condition="$(Configuration)=='Debug'">
+			<ItemGroup>
+				<Reference Include="Zongsoft.Core">
+					<HintPath>..\..\..\framework\Zongsoft.Core\src\bin\$(Configuration)\$(TargetFramework)\Zongsoft.Core.dll</HintPath>
+				</Reference>
+			</ItemGroup>
+		</When>
+		<Otherwise>
+			<ItemGroup><PackageReference Include="Zongsoft.Core" /></ItemGroup>
+		</Otherwise>
+	</Choose>
+
+	<Import Project="..\.shared\Containerization.props" />
+
+	<Target Name="ValidateNativeExecutors" BeforeTargets="GenerateNuspec">
+		<Error Condition="!Exists('../executor/src/bin/$(Configuration)/net10.0/linux-x64/publish/containerizer')" Text="Publish the linux-x64 executor before packing containerizer." />
+		<Error Condition="!Exists('../executor/src/bin/$(Configuration)/net10.0/linux-arm64/publish/containerizer')" Text="Publish the linux-arm64 executor before packing containerizer." />
+	</Target>
+
+	<Target Name="PackSharedContainerizationAssets" AfterTargets="PackTool">
+		<ItemGroup>
+			<TfmSpecificPackageFile Remove="$(PublishDir).containerizer/**/*;$(PublishDir)templates/**/*" />
+		</ItemGroup>
+	</Target>
+</Project>

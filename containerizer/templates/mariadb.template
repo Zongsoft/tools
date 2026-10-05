@@ -1,0 +1,24 @@
+version=1
+image=docker.io/library/mariadb
+kind=infrastructure
+platforms=x64;arm64
+health=["CMD","healthcheck.sh","--connect","--innodb_initialized"]
+
+[ports]
+default=127.0.0.1:3306:3306
+
+[data]
+data=/var/lib/mysql
+
+[settings root-password]
+environment=MARIADB_ROOT_PASSWORD
+required=true
+
+[settings database]
+environment=MARIADB_DATABASE
+
+[settings user]
+environment=MARIADB_USER
+
+[settings password]
+environment=MARIADB_PASSWORD

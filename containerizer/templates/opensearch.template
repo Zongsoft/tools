@@ -1,0 +1,15 @@
+version=1
+image=docker.io/opensearchproject/opensearch
+kind=infrastructure
+platforms=x64;arm64
+health=["CMD-SHELL","curl -fk https://127.0.0.1:9200/_cluster/health -u \"admin:$$OPENSEARCH_INITIAL_ADMIN_PASSWORD\""]
+
+[ports]
+default=127.0.0.1:9200:9200
+
+[data]
+data=/usr/share/opensearch/data
+
+[settings password]
+environment=OPENSEARCH_INITIAL_ADMIN_PASSWORD
+required=true

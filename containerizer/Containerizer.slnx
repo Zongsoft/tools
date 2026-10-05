@@ -1,0 +1,6 @@
+<Solution>
+	<Project Path="src/Zongsoft.Tools.Containerizer.csproj" />
+	<Project Path="test/Zongsoft.Tools.Containerizer.Tests.csproj" />
+	<Project Path="executor/src/Zongsoft.Tools.Containerizer.Executor.csproj" />
+	<Project Path="executor/test/Zongsoft.Tools.Containerizer.Executor.Tests.csproj" />
+</Solution>

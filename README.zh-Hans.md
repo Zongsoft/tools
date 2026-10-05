@@ -15,6 +15,9 @@
 - [packager](packager/README.zh-Hans.md)
 	> 打包工具：提供应用程序安装包的制作 _(先使用部署工具准备好待打包的内容)_。
 
+- [containerizer](containerizer/README.zh-Hans.md)
+	> 容器化工具：制作 Linux 节点交付物并提供原生生命周期执行器；平台和镜像组合仍需通过文档列出的验收门槛。
+
 - [regular](regular/README.zh-Hans.md)
 	> 正则工具：用于匹配正则表达式并查看匹配、分组与捕获结果的 Windows 图形程序。
 

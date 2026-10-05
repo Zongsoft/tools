@@ -1,0 +1,20 @@
+version=1
+image=docker.io/library/rabbitmq
+kind=infrastructure
+platforms=x64;arm64
+health=["CMD","rabbitmq-diagnostics","-q","ping"]
+
+[ports]
+default=127.0.0.1:5672:5672
+management=127.0.0.1:15672:15672
+
+[data]
+data=/var/lib/rabbitmq
+
+[settings user]
+environment=RABBITMQ_DEFAULT_USER
+required=true
+
+[settings password]
+environment=RABBITMQ_DEFAULT_PASS
+required=true

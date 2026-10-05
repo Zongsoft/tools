@@ -1,0 +1,11 @@
+version=1
+image=docker.io/clickhouse/clickhouse-server
+kind=infrastructure
+platforms=x64;arm64
+health=["CMD","clickhouse-client","--query","SELECT 1"]
+
+[ports]
+default=127.0.0.1:8123:8123
+
+[data]
+data=/var/lib/clickhouse

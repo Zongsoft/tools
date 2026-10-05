@@ -1,0 +1,21 @@
+version=1
+image=docker.io/rustfs/rustfs
+kind=infrastructure
+platforms=x64;arm64
+health=["CMD-SHELL","curl -fsS http://127.0.0.1:9000/health"]
+
+[ports]
+default=127.0.0.1:9000:9000
+
+[data]
+data=/data
+
+[settings access-key]
+environment=RUSTFS_ACCESS_KEY
+variable=rustfs_access_key
+required=true
+
+[settings secret-key]
+environment=RUSTFS_SECRET_KEY
+variable=rustfs_secret_key
+required=true
