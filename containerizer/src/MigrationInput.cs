@@ -55,7 +55,7 @@ internal static partial class MigrationInput
 			throw new ContainerizationException(2, string.Format(Properties.Resources.MigrationInput_1_Message, Path.GetFileName(path)));
 
 		var version = match.Groups["version"].Value;
-		return new(ContainerManifest.VersionNumber(version), version, match.Groups["rid"].Value, $"{path[..^7]}.sh");
+		return new(ContainerManifest.GetVersionNumber(version), version, match.Groups["rid"].Value, $"{path[..^7]}.sh");
 	}
 
 	public static void Validate(IReadOnlyList<string> paths, string architecture)

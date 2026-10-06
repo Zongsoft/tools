@@ -46,15 +46,16 @@ namespace Zongsoft.Tools.Containerizer;
 partial class ApplicationImageBuilder
 {
 	#region 私有方法
-	private static bool PrepareImage(string path, string dependences, PackageReader.Descriptor package, ServiceBuildContext source, string distribution, ImagePlan baseline, string runtime, string directory)
+	private static void PrepareImage(string path, PackageReader.Descriptor package, ServiceBuildContext source, string distribution, string directory)
 	{
-		Files.PrivateDirectory(directory);
+		var input = Path.Combine(directory, "input");
+		Files.PrivateDirectory(input);
 
 		var filename = Path.GetFileName(path);
-		File.Copy(path, Path.Combine(directory, filename));
+		File.Copy(path, Path.Combine(input, filename));
 
 		if(package.Format == "tar")
-			File.Copy($"{path[..^7]}.sh", Path.Combine(directory, $"{filename[..^7]}.sh"));
+			File.Copy($"{path[..^7]}.sh", Path.Combine(input, $"{filename[..^7]}.sh"));
 
 		var nativeInstall = package.Format switch
 		{
@@ -67,17 +68,14 @@ partial class ApplicationImageBuilder
 		if(package.Format == "deb" && !debian || package.Format == "rpm" && debian)
 			throw new ContainerizationException(2, Properties.Resources.ApplicationBuilder_1_Message);
 
-		var installRuntime = $"{ProbeInstall(distribution, source.HealthUsesCurl)}{RuntimeInstall(distribution, runtime)}";
 		var root = TemplateCatalog.LinuxPath(source.Plan.WorkingDirectory);
-		var ingress = (dependences ?? "").Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Contains("nginx", StringComparer.Ordinal);
 		var dockerfile = new StringBuilder()
-			.AppendLine($"FROM {baseline.Repository}@{baseline.Digest} AS installed")
+			.AppendLine("FROM scratch AS installed")
+			.AppendLine("ADD runtime.tar /")
+			.AppendLine(File.ReadAllText(Path.Combine(directory, "runtime.env")))
 			.AppendLine("ENV HOSTER_WEB_ACTIVATION=0")
-			.AppendLine("COPY . /input/")
-			.AppendLine($"RUN {installRuntime}{nativeInstall}");
-
-		if(ingress)
-			dockerfile.AppendLine($"RUN mkdir -p {Quote($"{root}/.web/nginx")}");
+			.AppendLine("COPY input/ /input/")
+			.AppendLine($"RUN {nativeInstall}");
 
 		dockerfile.Append("RUN rm -rf /input /tmp/* /var/tmp/* /var/log/* /var/cache/apt/* /var/lib/apt/lists/* /var/cache/dnf/* /var/lib/rpm /usr/lib/sysimage/rpm /var/lib/dpkg/info /etc/systemd/system /usr/lib/systemd/system; ")
 			.AppendLine($"find {Quote(root)} -type f \\( -name '*.log' -o -name '*.bak' -o -name '*.old' \\) -delete")
@@ -87,19 +85,6 @@ partial class ApplicationImageBuilder
 			.AppendLine($"ENTRYPOINT {JsonSerializer.Serialize(source.Plan.Entrypoint)}");
 		Files.Write(Path.Combine(directory, "Dockerfile"), dockerfile.ToString(), true);
 
-		return ingress;
-	}
-
-	private async Task ReadIngressAsync(ServiceBuildContext source, string image, string directory, BuildResources resources, CancellationToken cancellation)
-	{
-		var container = resources.Container();
-		await engine.RunAsync(["create", "--name", container, image], directory, cancellation);
-		var output = Path.Combine(directory, "ingress");
-		Directory.CreateDirectory(output);
-		await engine.RunAsync(["cp", $"{container}:{source.Plan.WorkingDirectory}/.web/nginx/.", output], directory, cancellation);
-
-		foreach(var file in Directory.EnumerateFiles(output, "*.conf"))
-			source.Ingress.Add(Path.GetFileName(file), file);
 	}
 	#endregion
 }

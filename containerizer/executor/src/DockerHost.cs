@@ -46,9 +46,10 @@ using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Execution;
 
-internal sealed partial class DockerHost(InstallationStore store, IProcessRunner runner) : IInstallationHost
+internal sealed partial class DockerHost(InstallationStore store, IProcessRunner runner, RegistryMirrors mirrors = null) : IInstallationHost
 {
 	#region 常量定义
+	private const string ENGINE = BootstrapPlan.ENGINE;
 	private const string OWNER = "org.zongsoft.containerizer.name";
 	private const string SERVICE = "org.zongsoft.containerizer.service";
 	#endregion
@@ -118,7 +119,7 @@ internal sealed partial class DockerHost(InstallationStore store, IProcessRunner
 		var result = await runner.RunAsync(executable, arguments, directory, cancellation);
 
 		if(result.ExitCode != 0)
-			throw new ContainerizationException(4, string.Format(Properties.Resources.DockerHost_27_Message, executable, arguments[0], result.ExitCode));
+			throw new ContainerizationException(4, $"{string.Format(Properties.Resources.DockerHost_27_Message, executable, arguments[0], result.ExitCode)}{(string.IsNullOrWhiteSpace(result.Error) ? "" : $"{Environment.NewLine}{result.Error.Trim()}")}");
 
 		return result.Output;
 	}

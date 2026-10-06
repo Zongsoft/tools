@@ -10,8 +10,8 @@
 
 namespace Zongsoft.Tools.Containerizer.Properties {
     using System;
-    
-    
+
+
     /// <summary>
     ///   一个强类型的资源类，用于查找本地化的字符串等。
     /// </summary>
@@ -23,15 +23,15 @@ namespace Zongsoft.Tools.Containerizer.Properties {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
     internal class Resources {
-        
+
         private static global::System.Resources.ResourceManager resourceMan;
-        
+
         private static global::System.Globalization.CultureInfo resourceCulture;
-        
+
         [global::System.Diagnostics.CodeAnalysis.SuppressMessageAttribute("Microsoft.Performance", "CA1811:AvoidUncalledPrivateCode")]
         internal Resources() {
         }
-        
+
         /// <summary>
         ///   返回此类使用的缓存的 ResourceManager 实例。
         /// </summary>
@@ -45,7 +45,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return resourceMan;
             }
         }
-        
+
         /// <summary>
         ///   使用此强类型资源类，为所有资源查找
         ///   重写当前线程的 CurrentUICulture 属性。
@@ -59,7 +59,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 resourceCulture = value;
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The installation package requires a matching distribution family. 的本地化字符串。
         /// </summary>
@@ -68,7 +68,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ApplicationBuilder.1.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The explicit runtime constraint conflicts with runtimeconfig.json. 的本地化字符串。
         /// </summary>
@@ -77,7 +77,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ApplicationBuilder.10.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 A precise supported runtime version is required. 的本地化字符串。
         /// </summary>
@@ -86,7 +86,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ApplicationBuilder.11.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The package must supply one unambiguous service entry and working directory. 的本地化字符串。
         /// </summary>
@@ -95,7 +95,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ApplicationBuilder.3.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The package has unsupported or ambiguous systemd startup arguments. 的本地化字符串。
         /// </summary>
@@ -104,7 +104,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ApplicationBuilder.4.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The package must supply a foreground executable service entry. 的本地化字符串。
         /// </summary>
@@ -113,7 +113,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ApplicationBuilder.5.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The package has an unsupported systemd environment declaration. 的本地化字符串。
         /// </summary>
@@ -122,7 +122,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ApplicationBuilder.6.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The package listener cannot be converted into a container binding. 的本地化字符串。
         /// </summary>
@@ -131,7 +131,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ApplicationBuilder.7.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The application healthcheck could not be inferred from package metadata. 的本地化字符串。
         /// </summary>
@@ -140,7 +140,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ApplicationBuilder.8.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The entry runtimeconfig.json is missing or ambiguous. 的本地化字符串。
         /// </summary>
@@ -149,7 +149,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ApplicationBuilder.9.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 {0}: invalid application listener or HTTP health configuration ({1}). 的本地化字符串。
         /// </summary>
@@ -158,7 +158,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ApplicationHealth.Invalid.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 A command is required. 的本地化字符串。
         /// </summary>
@@ -167,7 +167,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Arguments.1.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 list does not accept --name. 的本地化字符串。
         /// </summary>
@@ -176,7 +176,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Arguments.10.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 --name is required. 的本地化字符串。
         /// </summary>
@@ -185,7 +185,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Arguments.11.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Unknown command. 的本地化字符串。
         /// </summary>
@@ -194,7 +194,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Arguments.2.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 An option was specified more than once. 的本地化字符串。
         /// </summary>
@@ -203,7 +203,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Arguments.3.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 --tail requires a nonnegative number. 的本地化字符串。
         /// </summary>
@@ -212,7 +212,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Arguments.4.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Unknown option or option not valid for this command. 的本地化字符串。
         /// </summary>
@@ -221,7 +221,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Arguments.5.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 An option value is missing. 的本地化字符串。
         /// </summary>
@@ -230,7 +230,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Arguments.6.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Exactly one node bundle path is required. 的本地化字符串。
         /// </summary>
@@ -239,7 +239,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Arguments.7.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 At most one component is allowed. 的本地化字符串。
         /// </summary>
@@ -248,7 +248,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Arguments.8.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 This command has no positional arguments. 的本地化字符串。
         /// </summary>
@@ -257,7 +257,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Arguments.9.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 No base image profile is available. 的本地化字符串。
         /// </summary>
@@ -266,7 +266,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("BootstrapBuilder.1.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 RHEL bootstrap requires an entitled BaseOS/AppStream resolver profile; UBI/Rocky packages are not substitutes. Configure and validate the RHEL repository profile before building. 的本地化字符串。
         /// </summary>
@@ -275,7 +275,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("BootstrapBuilder.2.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Bootstrap package metadata is incomplete. 的本地化字符串。
         /// </summary>
@@ -284,7 +284,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("BootstrapBuilder.3.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The bootstrap dependency closure is incomplete. 的本地化字符串。
         /// </summary>
@@ -293,7 +293,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("BootstrapBuilder.4.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Bootstrap profile identity or dependency metadata is incomplete. 的本地化字符串。
         /// </summary>
@@ -302,7 +302,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("BootstrapBuilder.5.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Bootstrap package metadata is invalid. 的本地化字符串。
         /// </summary>
@@ -311,7 +311,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("BootstrapBuilder.6.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Bootstrap package content does not match its lock. 的本地化字符串。
         /// </summary>
@@ -320,7 +320,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("BootstrapBuilder.7.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Bootstrap package architecture does not match its profile. 的本地化字符串。
         /// </summary>
@@ -329,7 +329,43 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("BootstrapBuilder.8.Message", resourceCulture);
             }
         }
-        
+
+        /// <summary>
+        ///   查找类似 Verify asset checksums 的本地化字符串。
+        /// </summary>
+        internal static string Build_Checksums {
+            get {
+                return ResourceManager.GetString("Build.Checksums", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Compress delivery 的本地化字符串。
+        /// </summary>
+        internal static string Build_Compression {
+            get {
+                return ResourceManager.GetString("Build.Compression", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Publish delivery 的本地化字符串。
+        /// </summary>
+        internal static string Build_Publish {
+            get {
+                return ResourceManager.GetString("Build.Publish", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Complete delivery 的本地化字符串。
+        /// </summary>
+        internal static string Build_Total {
+            get {
+                return ResourceManager.GetString("Build.Total", resourceCulture);
+            }
+        }
+
         /// <summary>
         ///   查找类似 Warning: could not remove build resource {0} with {1}. {2} 的本地化字符串。
         /// </summary>
@@ -338,7 +374,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("BuildResources.Cleanup.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Expected a node bundle directory or .tar.gz archive. 的本地化字符串。
         /// </summary>
@@ -347,7 +383,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Bundle.1.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid service identity or kind. 的本地化字符串。
         /// </summary>
@@ -356,7 +392,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Bundle.10.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid locked image identity. 的本地化字符串。
         /// </summary>
@@ -365,7 +401,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Bundle.11.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Offline image archive is missing. 的本地化字符串。
         /// </summary>
@@ -374,7 +410,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Bundle.12.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Application images must be offline. 的本地化字符串。
         /// </summary>
@@ -383,7 +419,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Bundle.13.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid locked migration list. 的本地化字符串。
         /// </summary>
@@ -392,7 +428,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Bundle.14.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Migration identity mismatch. 的本地化字符串。
         /// </summary>
@@ -401,7 +437,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Bundle.15.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid application or component identity. 的本地化字符串。
         /// </summary>
@@ -410,7 +446,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Bundle.16.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Unsafe Linux path. 的本地化字符串。
         /// </summary>
@@ -419,7 +455,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Bundle.17.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Unsupported node protocol schema. 的本地化字符串。
         /// </summary>
@@ -428,7 +464,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Bundle.2.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid node identity or target. 的本地化字符串。
         /// </summary>
@@ -437,7 +473,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Bundle.3.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid or duplicate file checksum record. 的本地化字符串。
         /// </summary>
@@ -446,7 +482,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Bundle.4.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Bundle integrity check failed: {0} 的本地化字符串。
         /// </summary>
@@ -455,7 +491,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Bundle.5.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Required bundle asset is missing: {0} 的本地化字符串。
         /// </summary>
@@ -464,7 +500,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Bundle.6.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid checksums.sha256. 的本地化字符串。
         /// </summary>
@@ -473,7 +509,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Bundle.7.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Checksum manifest differs from the node lock. 的本地化字符串。
         /// </summary>
@@ -482,7 +518,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Bundle.8.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Untracked file in node bundle. 的本地化字符串。
         /// </summary>
@@ -491,7 +527,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Bundle.9.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The installation executor requires Linux. 的本地化字符串。
         /// </summary>
@@ -500,7 +536,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.1.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The exact bootstrap package is unavailable. 的本地化字符串。
         /// </summary>
@@ -509,7 +545,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.10.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Downloaded bootstrap package failed integrity checks. 的本地化字符串。
         /// </summary>
@@ -518,7 +554,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.11.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Bootstrap package checksum mismatch. 的本地化字符串。
         /// </summary>
@@ -527,7 +563,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.12.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Bootstrap package transaction failed with exit code {0}; application state was retained. 的本地化字符串。
         /// </summary>
@@ -536,7 +572,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.13.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Imported image identity/platform mismatch. 的本地化字符串。
         /// </summary>
@@ -545,7 +581,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.14.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 A persistent path overlaps another application&apos;s registered data. 的本地化字符串。
         /// </summary>
@@ -554,7 +590,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.15.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 A nonempty persistent directory has no matching ownership record. 的本地化字符串。
         /// </summary>
@@ -563,7 +599,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.16.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Persistent directory ownership marker differs from the registry. 的本地化字符串。
         /// </summary>
@@ -572,7 +608,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.17.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Expected exactly one container for a service. 的本地化字符串。
         /// </summary>
@@ -581,16 +617,16 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.18.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
-        ///   查找类似 Service container is missing or ambiguous. 的本地化字符串。
+        ///   查找类似 Service {0}: container is missing or ambiguous. 的本地化字符串。
         /// </summary>
         internal static string DockerHost_19_Message {
             get {
                 return ResourceManager.GetString("DockerHost.19.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Installation commands require root. 的本地化字符串。
         /// </summary>
@@ -599,25 +635,25 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.2.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
-        ///   查找类似 Service has no protocol/template healthcheck. 的本地化字符串。
+        ///   查找类似 Service {0} has no protocol/template healthcheck. 的本地化字符串。
         /// </summary>
         internal static string DockerHost_20_Message {
             get {
                 return ResourceManager.GetString("DockerHost.20.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
-        ///   查找类似 Service failed its healthcheck; maintenance is retained. 的本地化字符串。
+        ///   查找类似 Service {0} (container {1}) failed its healthcheck; maintenance is retained. 的本地化字符串。
         /// </summary>
         internal static string DockerHost_21_Message {
             get {
                 return ResourceManager.GetString("DockerHost.21.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 A preexisting directory is not owned exclusively; cleanup is incomplete. 的本地化字符串。
         /// </summary>
@@ -626,7 +662,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.22.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Data ownership cannot be verified; cleanup is incomplete. 的本地化字符串。
         /// </summary>
@@ -635,7 +671,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.23.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 No managed release is available. 的本地化字符串。
         /// </summary>
@@ -644,7 +680,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.24.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Unknown component. 的本地化字符串。
         /// </summary>
@@ -653,7 +689,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.25.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 A nested mount prevents recursive cleanup. 的本地化字符串。
         /// </summary>
@@ -662,7 +698,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.26.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 {0} {1} failed (exit {2}); managed state was retained. 的本地化字符串。
         /// </summary>
@@ -671,7 +707,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.27.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 A system directory cannot be registered as application-owned data. 的本地化字符串。
         /// </summary>
@@ -680,7 +716,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.28.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Conflicting ownership requirements for a persistent directory. 的本地化字符串。
         /// </summary>
@@ -689,7 +725,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.29.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The node architecture differs from the running executor. 的本地化字符串。
         /// </summary>
@@ -698,7 +734,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.3.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Persistent directory ownership must be a numeric UID:GID. 的本地化字符串。
         /// </summary>
@@ -707,7 +743,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.30.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 A requested interface or host port is unavailable. 的本地化字符串。
         /// </summary>
@@ -716,7 +752,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.31.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 This bundle targets a different Linux distribution profile. 的本地化字符串。
         /// </summary>
@@ -725,7 +761,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.4.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Insufficient storage for managed assets and image staging. 的本地化字符串。
         /// </summary>
@@ -734,7 +770,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.5.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 An unknown global containerizer executable already exists; it was preserved. 的本地化字符串。
         /// </summary>
@@ -743,7 +779,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.6.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The candidate executor cannot handle all retained application records. 的本地化字符串。
         /// </summary>
@@ -752,7 +788,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.7.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The candidate executor protocol is incompatible. 的本地化字符串。
         /// </summary>
@@ -761,7 +797,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.8.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The bootstrap package set is empty. 的本地化字符串。
         /// </summary>
@@ -770,7 +806,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("DockerHost.9.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 {0} {1} failed (exit {2}). Verify engine connectivity, source availability and target-platform support. 的本地化字符串。
         /// </summary>
@@ -779,26 +815,28 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Engine.1.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
-        ///   查找类似 Cannot resolve the image user. Declare numeric data-owner in the template. 的本地化字符串。
+        ///   查找类似 Cannot resolve the image data owner. Declare an existing image account or numeric UID:GID as data-owner in the template. 的本地化字符串。
         /// </summary>
         internal static string Engine_10_Message {
             get {
                 return ResourceManager.GetString("Engine.10.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
-        ///   查找类似 No usable build engine and Compose provider were found. Ensure Docker or Podman is running and its Compose provider is installed. On Windows, check `podman machine list` and start the selected machine with `podman machine start`.
-        ///{0} 的本地化字符串。
+        ///   查找类似 No usable container engine was found ({0}).
+        ///{1}
+        ///Probe details:
+        ///{2} 的本地化字符串。
         /// </summary>
         internal static string Engine_2_Message {
             get {
                 return ResourceManager.GetString("Engine.2.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The acquired image does not match the fixed platform manifest digest. 的本地化字符串。
         /// </summary>
@@ -807,7 +845,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Engine.3.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The acquired image has the wrong platform. 的本地化字符串。
         /// </summary>
@@ -816,7 +854,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Engine.4.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The engine did not provide a verifiable registry manifest digest. 的本地化字符串。
         /// </summary>
@@ -825,7 +863,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Engine.5.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The image index must contain exactly one matching target platform. 的本地化字符串。
         /// </summary>
@@ -834,7 +872,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Engine.7.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid image reference. 的本地化字符串。
         /// </summary>
@@ -843,7 +881,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Engine.8.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 A service needs an executable readiness check in its template or locked image. 的本地化字符串。
         /// </summary>
@@ -852,7 +890,34 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Engine.9.Message", resourceCulture);
             }
         }
-        
+
+        /// <summary>
+        ///   查找类似 Building deliveries also requires the selected engine&apos;s Compose provider. 的本地化字符串。
+        /// </summary>
+        internal static string Engine_Compose_Requirement {
+            get {
+                return ResourceManager.GetString("Engine.Compose.Requirement", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 {0}: check {0} info. On Windows, start {1} and confirm its Linux engine is ready. 的本地化字符串。
+        /// </summary>
+        internal static string Engine_Docker_Guidance {
+            get {
+                return ResourceManager.GetString("Engine.Docker.Guidance", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 {0}: check {0} info. On Windows, list machines with {0} machine list and start the selected machine with {0} machine start &lt;name&gt;. 的本地化字符串。
+        /// </summary>
+        internal static string Engine_Podman_Guidance {
+            get {
+                return ResourceManager.GetString("Engine.Podman.Guidance", resourceCulture);
+            }
+        }
+
         /// <summary>
         ///   查找类似 Operation failed ({0}); inspect retained state. 的本地化字符串。
         /// </summary>
@@ -861,7 +926,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Executor.Failure.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Interrupted; inspect status and use recover before resuming. 的本地化字符串。
         /// </summary>
@@ -870,7 +935,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Executor.Interrupted.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Empty JSON: {0} 的本地化字符串。
         /// </summary>
@@ -879,7 +944,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Files.1.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Unsafe relative path: {0} 的本地化字符串。
         /// </summary>
@@ -888,7 +953,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Files.2.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Path escapes its root: {0} 的本地化字符串。
         /// </summary>
@@ -897,7 +962,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Files.3.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Symbolic link/reparse point is not allowed: {0} 的本地化字符串。
         /// </summary>
@@ -906,7 +971,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Files.4.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Unsupported or duplicate archive entry: {0} 的本地化字符串。
         /// </summary>
@@ -915,7 +980,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Files.5.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Archive exceeds the extraction limit. 的本地化字符串。
         /// </summary>
@@ -924,7 +989,106 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Files.6.Message", resourceCulture);
             }
         }
-        
+
+        /// <summary>
+        ///   查找类似 Apply data migrations 的本地化字符串。
+        /// </summary>
+        internal static string Installation_Phase_ApplyMigration {
+            get {
+                return ResourceManager.GetString("Installation.Phase.ApplyMigration", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Check service health 的本地化字符串。
+        /// </summary>
+        internal static string Installation_Phase_CheckHealth {
+            get {
+                return ResourceManager.GetString("Installation.Phase.CheckHealth", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Check infrastructure service health 的本地化字符串。
+        /// </summary>
+        internal static string Installation_Phase_CheckLocalInfrastructure {
+            get {
+                return ResourceManager.GetString("Installation.Phase.CheckLocalInfrastructure", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Commit the current release 的本地化字符串。
+        /// </summary>
+        internal static string Installation_Phase_CommitRelease {
+            get {
+                return ResourceManager.GetString("Installation.Phase.CommitRelease", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Prepare container engine and runtime dependencies 的本地化字符串。
+        /// </summary>
+        internal static string Installation_Phase_PrepareBootstrap {
+            get {
+                return ResourceManager.GetString("Installation.Phase.PrepareBootstrap", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Prepare container images 的本地化字符串。
+        /// </summary>
+        internal static string Installation_Phase_PrepareImages {
+            get {
+                return ResourceManager.GetString("Installation.Phase.PrepareImages", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Prepare to start applications 的本地化字符串。
+        /// </summary>
+        internal static string Installation_Phase_ReadyToStart {
+            get {
+                return ResourceManager.GetString("Installation.Phase.ReadyToStart", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Stage delivery files 的本地化字符串。
+        /// </summary>
+        internal static string Installation_Phase_StageInstallation {
+            get {
+                return ResourceManager.GetString("Installation.Phase.StageInstallation", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Start applications 的本地化字符串。
+        /// </summary>
+        internal static string Installation_Phase_StartApplications {
+            get {
+                return ResourceManager.GetString("Installation.Phase.StartApplications", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Start infrastructure services 的本地化字符串。
+        /// </summary>
+        internal static string Installation_Phase_StartInfrastructure {
+            get {
+                return ResourceManager.GetString("Installation.Phase.StartInfrastructure", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Start ingress services 的本地化字符串。
+        /// </summary>
+        internal static string Installation_Phase_StartIngress {
+            get {
+                return ResourceManager.GetString("Installation.Phase.StartIngress", resourceCulture);
+            }
+        }
+
         /// <summary>
         ///   查找类似 The application is not registered. 的本地化字符串。
         /// </summary>
@@ -933,7 +1097,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("InstallationStore.1.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Unsupported or inconsistent installation record. 的本地化字符串。
         /// </summary>
@@ -942,7 +1106,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("InstallationStore.2.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Another operation holds the application/host lock. 的本地化字符串。
         /// </summary>
@@ -951,7 +1115,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("InstallationStore.3.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Managed release identity mismatch. 的本地化字符串。
         /// </summary>
@@ -960,7 +1124,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("InstallationStore.4.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 --name differs from the bundle identity. 的本地化字符串。
         /// </summary>
@@ -969,7 +1133,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Lifecycle.1.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The original transaction assets changed. 的本地化字符串。
         /// </summary>
@@ -978,7 +1142,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Lifecycle.10.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 --retry-migration must select one failed/interrupted migration in this transaction. 的本地化字符串。
         /// </summary>
@@ -987,7 +1151,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Lifecycle.11.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The application is uninstalled; reinstall its retained bundle first. 的本地化字符串。
         /// </summary>
@@ -996,7 +1160,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Lifecycle.12.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The target transaction is not ReadyToStart. Prepare alone cannot authorize activation. 的本地化字符串。
         /// </summary>
@@ -1005,7 +1169,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Lifecycle.13.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 restart cannot bypass maintenance or an uncommitted transaction. 的本地化字符串。
         /// </summary>
@@ -1014,7 +1178,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Lifecycle.14.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Specify a component belonging to this application; infrastructure-only deployments need an explicit target. 的本地化字符串。
         /// </summary>
@@ -1023,7 +1187,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Lifecycle.15.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Uninstall/cleanup is incomplete; retained state lists the remaining failure. 的本地化字符串。
         /// </summary>
@@ -1032,7 +1196,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Lifecycle.16.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 No committed release exists. 的本地化字符串。
         /// </summary>
@@ -1041,7 +1205,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Lifecycle.17.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The upgrade changes the deployment identity or platform. 的本地化字符串。
         /// </summary>
@@ -1050,7 +1214,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Lifecycle.18.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Infrastructure changes are not supported by application upgrades. 的本地化字符串。
         /// </summary>
@@ -1059,7 +1223,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Lifecycle.19.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 --name differs from the launcher bundle identity. 的本地化字符串。
         /// </summary>
@@ -1068,7 +1232,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Lifecycle.2.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The upgrade changes bootstrap dependencies. 的本地化字符串。
         /// </summary>
@@ -1077,7 +1241,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Lifecycle.20.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid or cyclic local service dependency. 的本地化字符串。
         /// </summary>
@@ -1086,7 +1250,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Lifecycle.21.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 upgrade requires an existing registration. 的本地化字符串。
         /// </summary>
@@ -1095,7 +1259,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Lifecycle.3.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 A different transaction is pending. Recover or finish it before selecting another bundle. 的本地化字符串。
         /// </summary>
@@ -1104,7 +1268,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Lifecycle.4.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 A failed transaction requires recover; install does not clear failure state. 的本地化字符串。
         /// </summary>
@@ -1113,7 +1277,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Lifecycle.5.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Migration {0} requires explicit recovery; it was not rerun. 的本地化字符串。
         /// </summary>
@@ -1122,7 +1286,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Lifecycle.6.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 A previous migration success no longer passes the companion fingerprint check. 的本地化字符串。
         /// </summary>
@@ -1131,7 +1295,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Lifecycle.7.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Migration {0} failed; handle partial execution before requesting an explicit retry. 的本地化字符串。
         /// </summary>
@@ -1140,7 +1304,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Lifecycle.8.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 There is no failed or interrupted transaction to recover. 的本地化字符串。
         /// </summary>
@@ -1149,7 +1313,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Lifecycle.9.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Recover {0}: target {1}, phase {2}. 的本地化字符串。
         /// </summary>
@@ -1158,25 +1322,25 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Lifecycle.Recovery", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 make requires exactly one .container input. 的本地化字符串。
         /// </summary>
-        internal static string Make_Input {
+        internal static string Make_Input_Message {
             get {
-                return ResourceManager.GetString("Make.Input", resourceCulture);
+                return ResourceManager.GetString("Make.Input.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 With a .container input, only version, source, output and engine options may override the manifest. 的本地化字符串。
         /// </summary>
-        internal static string Make_Options {
+        internal static string Make_Options_Message {
             get {
-                return ResourceManager.GetString("Make.Options", resourceCulture);
+                return ResourceManager.GetString("Make.Options.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 A .container manifest must be the only positional input. 的本地化字符串。
         /// </summary>
@@ -1185,7 +1349,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.1.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 {0}: invalid digest. 的本地化字符串。
         /// </summary>
@@ -1194,7 +1358,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.10.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The nginx shorthand conflicts with an explicit component. 的本地化字符串。
         /// </summary>
@@ -1203,7 +1367,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.11.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The existing manifest has different effective content: {0} 的本地化字符串。
         /// </summary>
@@ -1212,7 +1376,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.12.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Variable evaluation failed: {0} ({1}). 的本地化字符串。
         /// </summary>
@@ -1221,7 +1385,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.13.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Identity must contain letters, digits, &apos;.&apos;, &apos;_&apos; or &apos;-&apos; and must not contain traversal segments. 的本地化字符串。
         /// </summary>
@@ -1230,7 +1394,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.14.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Version must contain two to four numeric parts and must not be zero. 的本地化字符串。
         /// </summary>
@@ -1239,7 +1403,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.15.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 {0}({1},1): {2} 的本地化字符串。
         /// </summary>
@@ -1248,7 +1412,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.16.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 {0}({1},1): Invalid section. 的本地化字符串。
         /// </summary>
@@ -1257,7 +1421,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.17.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 {0}({1},1): Duplicate key: {2} 的本地化字符串。
         /// </summary>
@@ -1266,7 +1430,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.18.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid or unvalidated Linux distribution profile. 的本地化字符串。
         /// </summary>
@@ -1275,7 +1439,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.19.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Source directory does not exist: {0} 的本地化字符串。
         /// </summary>
@@ -1284,7 +1448,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.2.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Unsupported application dependence; use runtime constraints, nginx shorthand or template dependencies. 的本地化字符串。
         /// </summary>
@@ -1293,7 +1457,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.20.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid architecture, imaging, bootstrap or engine. 的本地化字符串。
         /// </summary>
@@ -1302,7 +1466,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.3.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 This name/tag/version already has a release. Change version or output. 的本地化字符串。
         /// </summary>
@@ -1311,7 +1475,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.4.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 At least one component is required. 的本地化字符串。
         /// </summary>
@@ -1320,7 +1484,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.5.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Duplicate component: {0} 的本地化字符串。
         /// </summary>
@@ -1329,7 +1493,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.6.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 {0}: {1} is not allowed for this component kind. 的本地化字符串。
         /// </summary>
@@ -1338,7 +1502,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.8.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 {0}: package architecture does not match the node. 的本地化字符串。
         /// </summary>
@@ -1347,7 +1511,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.9.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid environment variable name. 的本地化字符串。
         /// </summary>
@@ -1356,7 +1520,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.EnvironmentName.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid or duplicate migration sequence. 的本地化字符串。
         /// </summary>
@@ -1365,7 +1529,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.MigrationSequence.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Nested component sections are not supported. 的本地化字符串。
         /// </summary>
@@ -1374,7 +1538,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.NestedComponent.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Unknown component key: {0} 的本地化字符串。
         /// </summary>
@@ -1383,7 +1547,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.UnknownComponentKey.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Unknown root key: {0} 的本地化字符串。
         /// </summary>
@@ -1392,7 +1556,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Manifest.UnknownRootKey.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid migration artifact name: {0} 的本地化字符串。
         /// </summary>
@@ -1401,7 +1565,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("MigrationInput.1.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Migration versions must be unique, ascending and match the node architecture. 的本地化字符串。
         /// </summary>
@@ -1410,7 +1574,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("MigrationInput.2.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Migration archive and companion script are both required: {0} 的本地化字符串。
         /// </summary>
@@ -1419,7 +1583,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("MigrationInput.3.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Migration directory does not exist: {0} 的本地化字符串。
         /// </summary>
@@ -1428,7 +1592,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("MigrationInput.4.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Missing migration companion: {0} 的本地化字符串。
         /// </summary>
@@ -1437,7 +1601,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("MigrationInput.5.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Multiple candidates require an interactive choice or an explicit manifest. 的本地化字符串。
         /// </summary>
@@ -1446,7 +1610,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("MigrationInput.6.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid selection. 的本地化字符串。
         /// </summary>
@@ -1455,7 +1619,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("MigrationInput.7.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 No matching migrations were found; this build has no migrations. 的本地化字符串。
         /// </summary>
@@ -1464,7 +1628,44 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("MigrationInput.NoMigrations", resourceCulture);
             }
         }
-        
+
+        /// <summary>
+        ///   查找类似 Unable to retrieve the requested image from any source for {0}:
+        ///{1} 的本地化字符串。
+        /// </summary>
+        internal static string Mirrors_Failed_Message {
+            get {
+                return ResourceManager.GetString("Mirrors.Failed.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Invalid mirror configuration {0}: use root registry=mirror[;mirror] entries without sections. 的本地化字符串。
+        /// </summary>
+        internal static string Mirrors_File_Message {
+            get {
+                return ResourceManager.GetString("Mirrors.File.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Mirror rules require a registry host and one or more host[/prefix] locations, separated by semicolons; omit schemes, tags, digests and credentials. 的本地化字符串。
+        /// </summary>
+        internal static string Mirrors_Invalid_Message {
+            get {
+                return ResourceManager.GetString("Mirrors.Invalid.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似   → Image source {0} failed: {1} 的本地化字符串。
+        /// </summary>
+        internal static string Mirrors_SourceFailed {
+            get {
+                return ResourceManager.GetString("Mirrors.SourceFailed", resourceCulture);
+            }
+        }
+
         /// <summary>
         ///   查找类似 {0}: required environment/setting {1} is missing. 的本地化字符串。
         /// </summary>
@@ -1473,25 +1674,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("NodeBuilder.1.Message", resourceCulture);
             }
         }
-        
-        /// <summary>
-        ///   查找类似 Multiple applications require an explicit Nginx routing configuration. 的本地化字符串。
-        /// </summary>
-        internal static string NodeBuilder_10_Message {
-            get {
-                return ResourceManager.GetString("NodeBuilder.10.Message", resourceCulture);
-            }
-        }
-        
-        /// <summary>
-        ///   查找类似 Nginx shorthand requires one unambiguous application HTTP port or an explicit routing configuration. 的本地化字符串。
-        /// </summary>
-        internal static string NodeBuilder_11_Message {
-            get {
-                return ResourceManager.GetString("NodeBuilder.11.Message", resourceCulture);
-            }
-        }
-        
+
         /// <summary>
         ///   查找类似 Invalid component imaging value. 的本地化字符串。
         /// </summary>
@@ -1500,7 +1683,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("NodeBuilder.2.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The release was created by another build; existing output was preserved. 的本地化字符串。
         /// </summary>
@@ -1509,7 +1692,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("NodeBuilder.3.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The bundled executor is not a matching Linux ELF binary. 的本地化字符串。
         /// </summary>
@@ -1518,7 +1701,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("NodeBuilder.4.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 The Native AOT executor is missing. Publish the target RID before packaging this tool. 的本地化字符串。
         /// </summary>
@@ -1527,7 +1710,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("NodeBuilder.5.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Unresolved local dependency: {0} 的本地化字符串。
         /// </summary>
@@ -1536,7 +1719,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("NodeBuilder.6.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Two services publish a conflicting host port. 的本地化字符串。
         /// </summary>
@@ -1545,7 +1728,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("NodeBuilder.7.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Local service dependency cycle. 的本地化字符串。
         /// </summary>
@@ -1554,7 +1737,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("NodeBuilder.8.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 A service cannot depend on a later installation phase. 的本地化字符串。
         /// </summary>
@@ -1563,7 +1746,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("NodeBuilder.9.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Cannot clean the temporary directory; remaining path: {0}. {1} 的本地化字符串。
         /// </summary>
@@ -1572,7 +1755,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("NodeBuilder.FailedBuild.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Prepare image: {0} 的本地化字符串。
         /// </summary>
@@ -1581,7 +1764,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("NodeBuilder.PrepareImage", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 # {0} {1}
         ///
@@ -1604,7 +1787,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("NodeBuilder.Readme", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Resolve bootstrap dependency closure. 的本地化字符串。
         /// </summary>
@@ -1613,7 +1796,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("NodeBuilder.ResolveBootstrap", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Resolve image: {0} 的本地化字符串。
         /// </summary>
@@ -1622,7 +1805,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("NodeBuilder.ResolveImage", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Package architecture mismatch: {0} 的本地化字符串。
         /// </summary>
@@ -1631,7 +1814,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("PackageReader.1.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 This package compression is not supported. Supply a packager-generated gzip Debian package. 的本地化字符串。
         /// </summary>
@@ -1640,7 +1823,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("PackageReader.10.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Debian control metadata is missing. 的本地化字符串。
         /// </summary>
@@ -1649,7 +1832,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("PackageReader.11.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid RPM lead. 的本地化字符串。
         /// </summary>
@@ -1658,7 +1841,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("PackageReader.12.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 This RPM compression is not supported. Supply a packager-generated gzip RPM. 的本地化字符串。
         /// </summary>
@@ -1667,7 +1850,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("PackageReader.13.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid RPM cpio entry. 的本地化字符串。
         /// </summary>
@@ -1676,7 +1859,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("PackageReader.14.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid cpio filename length. 的本地化字符串。
         /// </summary>
@@ -1685,7 +1868,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("PackageReader.15.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid RPM header. 的本地化字符串。
         /// </summary>
@@ -1694,7 +1877,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("PackageReader.16.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 RPM header exceeds limits. 的本地化字符串。
         /// </summary>
@@ -1703,7 +1886,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("PackageReader.17.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid RPM string offset. 的本地化字符串。
         /// </summary>
@@ -1712,7 +1895,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("PackageReader.18.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Unterminated RPM string. 的本地化字符串。
         /// </summary>
@@ -1721,7 +1904,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("PackageReader.19.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Package input does not exist: {0} 的本地化字符串。
         /// </summary>
@@ -1730,7 +1913,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("PackageReader.2.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 No matching installation package in {0} or its .packages directory. 的本地化字符串。
         /// </summary>
@@ -1739,7 +1922,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("PackageReader.3.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Package does not exist: {0} 的本地化字符串。
         /// </summary>
@@ -1748,7 +1931,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("PackageReader.4.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Tar installation companion is missing: {0}.sh 的本地化字符串。
         /// </summary>
@@ -1757,7 +1940,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("PackageReader.5.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Expected a .deb, .rpm or .tar.gz installation package. 的本地化字符串。
         /// </summary>
@@ -1766,7 +1949,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("PackageReader.6.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Missing or unsupported package architecture: {0} 的本地化字符串。
         /// </summary>
@@ -1775,7 +1958,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("PackageReader.7.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid Debian ar header. 的本地化字符串。
         /// </summary>
@@ -1784,7 +1967,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("PackageReader.8.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid Debian ar entry. 的本地化字符串。
         /// </summary>
@@ -1793,7 +1976,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("PackageReader.9.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Required executable is unavailable: {0} 的本地化字符串。
         /// </summary>
@@ -1802,7 +1985,399 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ProcessRunner.1.Message", resourceCulture);
             }
         }
-        
+
+        /// <summary>
+        ///   查找类似 This package requires {0}, but the engine is {1}. Cross-architecture emulation is not used. 的本地化字符串。
+        /// </summary>
+        internal static string Run_Architecture_Message {
+            get {
+                return ResourceManager.GetString("Run.Architecture.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 The verification image name is occupied by an image with different ownership: {0}. 的本地化字符串。
+        /// </summary>
+        internal static string Run_BaseConflict_Message {
+            get {
+                return ResourceManager.GetString("Run.BaseConflict.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Verification cache is occupied or has different ownership: {0}. 的本地化字符串。
+        /// </summary>
+        internal static string Run_CacheConflict_Message {
+            get {
+                return ResourceManager.GetString("Run.CacheConflict.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Image cache {0} will be discarded because it could not be cleaned: {1}. 的本地化字符串。
+        /// </summary>
+        internal static string Run_CacheDiscarded {
+            get {
+                return ResourceManager.GetString("Run.CacheDiscarded", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Verification resources removed: {0}. Only the clean base and current infrastructure images remain cached. 的本地化字符串。
+        /// </summary>
+        internal static string Run_Cleaned {
+            get {
+                return ResourceManager.GetString("Run.Cleaned", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Could not finish cleanup for {0}: {1}. Inspect the reported owned resources before manually removing them. 的本地化字符串。
+        /// </summary>
+        internal static string Run_CleanupFailed {
+            get {
+                return ResourceManager.GetString("Run.CleanupFailed", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Verification container: {0}
+        ///Inspect inner {2} services:
+        ///  {1} exec {0} {2} ps -a
+        ///Inspect inner {2} service logs:
+        ///  {1} exec {0} {2} logs &lt;inner-container&gt; 的本地化字符串。
+        /// </summary>
+        internal static string Run_Container {
+            get {
+                return ResourceManager.GetString("Run.Container", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似   {0}: internal health check passed; verify its business behavior through its logs. 的本地化字符串。
+        /// </summary>
+        internal static string Run_Daemon {
+            get {
+                return ResourceManager.GetString("Run.Daemon", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似   → {0}: {1} s 的本地化字符串。
+        /// </summary>
+        internal static string Run_Elapsed {
+            get {
+                return ResourceManager.GetString("Run.Elapsed", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 A verification environment already exists: {0}. Inspect it with {1} ps --all; close its run session, or explicitly remove the abandoned container and its anonymous volumes. It will not be replaced. 的本地化字符串。
+        /// </summary>
+        internal static string Run_Existing_Message {
+            get {
+                return ResourceManager.GetString("Run.Existing.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Verification failed: {0}
+        ///The environment {1} is retained for inspection. Press Ctrl+C to remove it. Installation and migrations will not be retried automatically. 的本地化字符串。
+        /// </summary>
+        internal static string Run_Failed {
+            get {
+                return ResourceManager.GetString("Run.Failed", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Optional local entry for {0} is unavailable: {1}. Its installed service remains in the verification environment. 的本地化字符串。
+        /// </summary>
+        internal static string Run_ForwardFailed {
+            get {
+                return ResourceManager.GetString("Run.ForwardFailed", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 run installs an existing delivery in a fresh local verification container. Web and published TCP entries bind to 127.0.0.1. Keep this window open; Ctrl+C removes the environment and test data. The first base-image preparation may need Internet access. 的本地化字符串。
+        /// </summary>
+        internal static string Run_Help {
+            get {
+                return ResourceManager.GetString("Run.Help", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似   → {0}: reuse verified image cache 的本地化字符串。
+        /// </summary>
+        internal static string Run_ImageCached {
+            get {
+                return ResourceManager.GetString("Run.ImageCached", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似   → {0}: image prepared in {1} s 的本地化字符串。
+        /// </summary>
+        internal static string Run_ImagePrepared {
+            get {
+                return ResourceManager.GetString("Run.ImagePrepared", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Installing {0} using its original install.sh inside the verification container… 的本地化字符串。
+        /// </summary>
+        internal static string Run_Install {
+            get {
+                return ResourceManager.GetString("Run.Install", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 install.sh exited with code {0}. 的本地化字符串。
+        /// </summary>
+        internal static string Run_InstallFailed_Message {
+            get {
+                return ResourceManager.GetString("Run.InstallFailed.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 A verification session for {0} is already managed by another process. 的本地化字符串。
+        /// </summary>
+        internal static string Run_Locked_Message {
+            get {
+                return ResourceManager.GetString("Run.Locked.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Preparing the clean verification base for {0} / {1}; the first build may require Internet access. 的本地化字符串。
+        /// </summary>
+        internal static string Run_Prepare {
+            get {
+                return ResourceManager.GetString("Run.Prepare", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 The local entry did not respond before the deadline. 的本地化字符串。
+        /// </summary>
+        internal static string Run_ProbeTimeout_Message {
+            get {
+                return ResourceManager.GetString("Run.ProbeTimeout.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 {0} is ready for manual verification. 的本地化字符串。
+        /// </summary>
+        internal static string Run_Ready {
+            get {
+                return ResourceManager.GetString("Run.Ready", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Keep this window open; press {0} to exit and remove this environment and all test data. 的本地化字符串。
+        /// </summary>
+        internal static string Run_ReadyHint {
+            get {
+                return ResourceManager.GetString("Run.ReadyHint", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似   Redirect response: {0} (target not requested). 的本地化字符串。
+        /// </summary>
+        internal static string Run_Redirect_Message {
+            get {
+                return ResourceManager.GetString("Run.Redirect.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Prepare verification base 的本地化字符串。
+        /// </summary>
+        internal static string Run_StageBase {
+            get {
+                return ResourceManager.GetString("Run.StageBase", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Prepare image cache 的本地化字符串。
+        /// </summary>
+        internal static string Run_StageCache {
+            get {
+                return ResourceManager.GetString("Run.StageCache", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Copy delivery assets 的本地化字符串。
+        /// </summary>
+        internal static string Run_StageCopy {
+            get {
+                return ResourceManager.GetString("Run.StageCopy", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Verify local entries 的本地化字符串。
+        /// </summary>
+        internal static string Run_StageForward {
+            get {
+                return ResourceManager.GetString("Run.StageForward", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Install and check services 的本地化字符串。
+        /// </summary>
+        internal static string Run_StageInstall {
+            get {
+                return ResourceManager.GetString("Run.StageInstall", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Extract and verify delivery 的本地化字符串。
+        /// </summary>
+        internal static string Run_StageVerify {
+            get {
+                return ResourceManager.GetString("Run.StageVerify", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Too many published ports for the verification environment. 的本地化字符串。
+        /// </summary>
+        internal static string Run_TooManyPorts_Message {
+            get {
+                return ResourceManager.GetString("Run.TooManyPorts.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 {0}: TCP access only; custom ingress configuration has no browser entry metadata. Verify the application&apos;s declared Web entry separately. 的本地化字符串。
+        /// </summary>
+        internal static string Run_UnknownEntry {
+            get {
+                return ResourceManager.GetString("Run.UnknownEntry", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Verification ended without success; see the preceding diagnostics. 的本地化字符串。
+        /// </summary>
+        internal static string Run_Unsuccessful_Message {
+            get {
+                return ResourceManager.GetString("Run.Unsuccessful.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Usage: dotnet-containerize run &lt;archive.tar.gz&gt; [--engine:{0}] 的本地化字符串。
+        /// </summary>
+        internal static string Run_Usage_Message {
+            get {
+                return ResourceManager.GetString("Run.Usage.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Verifying delivery: {0} 的本地化字符串。
+        /// </summary>
+        internal static string Run_Verify {
+            get {
+                return ResourceManager.GetString("Run.Verify", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似   Browser domains require DNS pointing here, actual port {0}, and trusted HTTPS certificates. Requested engine publication: 0.0.0.0; LAN access also depends on VM forwarding and firewall rules. 的本地化字符串。
+        /// </summary>
+        internal static string Run_WebBrowser {
+            get {
+                return ResourceManager.GetString("Run.WebBrowser", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Web is not reachable at {0}: {1}. Check Web bindings, port mappings, certificates and application/hoster logs. 的本地化字符串。
+        /// </summary>
+        internal static string Run_WebFailed_Message {
+            get {
+                return ResourceManager.GetString("Run.WebFailed.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似   Local interfaces/port (LAN reachability not probed; named sites still require Host/SNI): {0} 的本地化字符串。
+        /// </summary>
+        internal static string Run_WebInterfaces {
+            get {
+                return ResourceManager.GetString("Run.WebInterfaces", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Web entry metadata is missing for {0}; regenerate the delivery before reporting local Web readiness. 的本地化字符串。
+        /// </summary>
+        internal static string Run_WebMetadata_Message {
+            get {
+                return ResourceManager.GetString("Run.WebMetadata.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 --refresh rebuilds the required public runtime environments for make/complete delivery. It is not saved in .container; plan/run do not refresh. 的本地化字符串。
+        /// </summary>
+        internal static string RuntimeCache_Help {
+            get {
+                return ResourceManager.GetString("RuntimeCache.Help", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似   → Reusing public runtime: {0} 的本地化字符串。
+        /// </summary>
+        internal static string RuntimeCache_Hit {
+            get {
+                return ResourceManager.GetString("RuntimeCache.Hit", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似   → Preparing public runtime: {0} 的本地化字符串。
+        /// </summary>
+        internal static string RuntimeCache_Prepare {
+            get {
+                return ResourceManager.GetString("RuntimeCache.Prepare", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似   → Refreshing public runtime: {0} 的本地化字符串。
+        /// </summary>
+        internal static string RuntimeCache_Refresh {
+            get {
+                return ResourceManager.GetString("RuntimeCache.Refresh", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 A public runtime image must not declare volumes; exporting its root filesystem would omit their contents. 的本地化字符串。
+        /// </summary>
+        internal static string RuntimeCache_Volumes {
+            get {
+                return ResourceManager.GetString("RuntimeCache.Volumes", resourceCulture);
+            }
+        }
+
         /// <summary>
         ///   查找类似 Select migration numbers separated by commas:  的本地化字符串。
         /// </summary>
@@ -1811,7 +2386,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Selection.MigrationPrompt", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Select one package number:  的本地化字符串。
         /// </summary>
@@ -1820,7 +2395,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("Selection.PackagePrompt", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 An explicit supported template is required for {0}: {1} 的本地化字符串。
         /// </summary>
@@ -1829,7 +2404,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ServiceSource.1.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Command arguments must be strings. 的本地化字符串。
         /// </summary>
@@ -1838,7 +2413,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ServiceSource.10.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Expected an absolute Linux path without traversal. 的本地化字符串。
         /// </summary>
@@ -1847,7 +2422,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ServiceSource.11.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Ports require [IPv4:]host:container[/tcp|udp]. 的本地化字符串。
         /// </summary>
@@ -1856,7 +2431,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ServiceSource.12.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Unsupported template protocol version. 的本地化字符串。
         /// </summary>
@@ -1865,7 +2440,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ServiceSource.13.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Application configuration must come from its installation package. 的本地化字符串。
         /// </summary>
@@ -1874,7 +2449,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ServiceSource.14.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 {0}: unknown template key {1}. 的本地化字符串。
         /// </summary>
@@ -1883,7 +2458,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ServiceSource.2.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 {0}: template does not support the selected architecture. 的本地化字符串。
         /// </summary>
@@ -1892,7 +2467,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ServiceSource.3.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Unknown template setting field: {0} 的本地化字符串。
         /// </summary>
@@ -1901,7 +2476,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ServiceSource.4.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 {0}: invalid value for {1}. 的本地化字符串。
         /// </summary>
@@ -1910,7 +2485,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ServiceSource.5.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Configuration file is missing: {0} 的本地化字符串。
         /// </summary>
@@ -1919,7 +2494,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ServiceSource.6.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Unknown template section: {0} 的本地化字符串。
         /// </summary>
@@ -1928,7 +2503,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ServiceSource.7.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 {0}: unknown setting {1}. 的本地化字符串。
         /// </summary>
@@ -1937,7 +2512,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ServiceSource.8.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Tool template is missing: {0} 的本地化字符串。
         /// </summary>
@@ -1946,31 +2521,49 @@ namespace Zongsoft.Tools.Containerizer.Properties {
                 return ResourceManager.GetString("ServiceSource.9.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 {0}: conflicting settings and explicit environment entry {1}. 的本地化字符串。
         /// </summary>
-        internal static string Settings_Conflict {
+        internal static string Settings_Conflict_Message {
             get {
-                return ResourceManager.GetString("Settings.Conflict", resourceCulture);
+                return ResourceManager.GetString("Settings.Conflict.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid .settings file: {0}. Expected component sections containing tag, repository and settings. 的本地化字符串。
         /// </summary>
-        internal static string Settings_File {
+        internal static string Settings_File_Message {
             get {
-                return ResourceManager.GetString("Settings.File", resourceCulture);
+                return ResourceManager.GetString("Settings.File.Message", resourceCulture);
             }
         }
-        
+
         /// <summary>
         ///   查找类似 Invalid settings. Use name=value pairs separated by semicolons; quote values containing semicolons. 的本地化字符串。
         /// </summary>
-        internal static string Settings_Invalid {
+        internal static string Settings_Invalid_Message {
             get {
-                return ResourceManager.GetString("Settings.Invalid", resourceCulture);
+                return ResourceManager.GetString("Settings.Invalid.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 {0}: invalid or incomplete Web handoff ({1}). 的本地化字符串。
+        /// </summary>
+        internal static string Web_Invalid_Message {
+            get {
+                return ResourceManager.GetString("Web.Invalid.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似   {0} / {1}: {2}; hosts={3}; publication={4} 的本地化字符串。
+        /// </summary>
+        internal static string Web_Plan {
+            get {
+                return ResourceManager.GetString("Web.Plan", resourceCulture);
             }
         }
     }

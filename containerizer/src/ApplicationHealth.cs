@@ -66,8 +66,22 @@ internal static class ApplicationHealth
 		arguments.AddRange(["--urls", string.Join(';', bindings)]);
 		source.Plan.Entrypoint = arguments.ToArray();
 
-		foreach(var port in listeners.Select(listener => listener.Port).Distinct())
-			source.Plan.Ports.Add(new() { Address = "127.0.0.1", Host = port, Container = port, Protocol = "tcp" });
+		foreach(var entry in listeners.Where(_ => package.Web == null).DistinctBy(listener => (listener.Port, listener.Scheme, listener.Host)))
+		{
+			var name = "web-" + entry.Port;
+			if(!source.Plan.Ports.Any(port => port.Name == name))
+				source.Plan.Ports.Add(new() { Name = name, Address = "127.0.0.1", Host = entry.Port, Container = entry.Port });
+
+			var hostname = Uri.CheckHostName(entry.Host) == UriHostNameType.Dns ? entry.Host : "127.0.0.1";
+			source.Plan.Web.Add(new()
+			{
+				Application = source.Plan.Id,
+				Name = "listen-" + source.Plan.Web.Count,
+				Hosts = hostname == "127.0.0.1" ? [] : [hostname],
+				ProbeHosts = [hostname],
+				Bindings = [new() { Scheme = entry.Scheme, Address = "0.0.0.0", Port = entry.Port, Publication = name, IsDefault = true }],
+			});
+		}
 
 		if(source.Plan.Health.TimeoutSeconds < 1)
 			throw Invalid(package.Name, "health-timeout");
@@ -95,7 +109,6 @@ internal static class ApplicationHealth
 		var command = $"curl --noproxy '*' --silent --show-error --output /dev/null --max-time {timeout}{argumentsText} {ApplicationImageBuilder.Quote(url)}";
 
 		source.Plan.Health.Test = ["CMD-SHELL", command];
-		source.HealthUsesCurl = true;
 	}
 
 	internal static Uri[] ParseListeners(string value, string name)

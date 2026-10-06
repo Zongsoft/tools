@@ -63,11 +63,8 @@ partial class PackageReader
 				result.InstallPath = global.GlobalExtendedAttributes.GetValueOrDefault("InstallPath");
 				result.Listen = global.GlobalExtendedAttributes.GetValueOrDefault("Listen");
 			}
-			else if(entry.DataStream != null && IsMetadata(entry.Name) && entry.Length <= 1024 * 1024)
-			{
-				using var text = new StreamReader(entry.DataStream, leaveOpen: true);
-				result.Texts.Add(NormalizeName(entry.Name), text.ReadToEnd());
-			}
+			else
+				Capture(result, entry.Name, entry.DataStream, entry.Length, entry.EntryType is TarEntryType.RegularFile or TarEntryType.V7RegularFile, entry.EntryType is TarEntryType.SymbolicLink or TarEntryType.HardLink);
 		}
 	}
 	#endregion

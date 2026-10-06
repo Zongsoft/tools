@@ -13,16 +13,16 @@ public sealed class ApplicationImageBuilderTests
 	[Fact]
 	public void UbuntuBackportsSuppliesTheCompatibleRuntimeLine()
 	{
-		var command = ApplicationImageBuilder.RuntimeInstall("ubuntu@22.04", "dotnet-runtime-10.0.0");
+		var command = RuntimeEnvironmentCache.RuntimeInstall("ubuntu@22.04", "dotnet-runtime-10.0.0");
 
 		Assert.Contains("ppa:dotnet/backports", command);
 		Assert.Contains("dotnet-runtime-10.0 &&", command);
 		Assert.DoesNotContain("packages.microsoft.com", command);
-		Assert.Equal("dotnet-runtime-10.0.8", ApplicationImageBuilder.InstalledRuntime(
+		Assert.Equal("dotnet-runtime-10.0.8", RuntimeEnvironmentCache.InstalledRuntime(
 			"dotnet-runtime-10.0.0",
 			"Microsoft.NETCore.App 9.0.9 [/usr/share/dotnet]\nMicrosoft.NETCore.App 10.0.8 [/usr/share/dotnet]\nMicrosoft.NETCore.App 10.0.10-preview [/usr/share/dotnet]\n"));
 
-		Assert.Throws<ContainerizationException>(() => ApplicationImageBuilder.InstalledRuntime("dotnet-runtime-10.0.2", "Microsoft.NETCore.App 10.0.1 [/usr/share/dotnet]\n"));
+		Assert.Throws<ContainerizationException>(() => RuntimeEnvironmentCache.InstalledRuntime("dotnet-runtime-10.0.2", "Microsoft.NETCore.App 10.0.1 [/usr/share/dotnet]\n"));
 	}
 
 	[Fact]

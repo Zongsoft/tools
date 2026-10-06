@@ -60,6 +60,7 @@ internal sealed class ServicePlan
 	public string EnvironmentFile { get; set; }
 	public List<string> Dependencies { get; set; } = [];
 	public List<PortPlan> Ports { get; set; } = [];
+	public List<WebSitePlan> Web { get; set; } = [];
 	public List<MountPlan> Mounts { get; set; } = [];
 	public HealthPlan Health { get; set; } = new();
 	public string Memory { get; set; }

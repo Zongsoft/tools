@@ -4,7 +4,7 @@
 
 模板采用 Core Profile，声明 `version=1`，仅用于基础设施/入口的制作输入，不是可执行钩子。内置定义见 [templates](../templates)；文件存在不代表对应镜像版本/平台组合已经验收。
 
-根字段：`image`（默认仓库）、`kind`（`infrastructure`、`ingress`）、`platforms`（分号分隔的 `x64`/`arm64`）、JSON 字符串数组 `entrypoint`、`command`、`health`，以及 `workdir`、`user`、数字 `data-owner`（`UID:GID`）、`restart`、`stop-signal`、`health-timeout`（秒）、`dependencies`（分号分隔的本节点服务 ID）。`version` 是模板协议版本。
+根字段：`image`（默认仓库）、`kind`（`infrastructure`、`ingress`）、`platforms`（分号分隔的 `x64`/`arm64`）、JSON 字符串数组 `entrypoint`、`command`、`health`，以及 `workdir`、`user`、`data-owner`（镜像账号或数字 `UID:GID`）、`restart`、`stop-signal`、`health-timeout`（秒）、`dependencies`（分号分隔的本节点服务 ID）。`version` 是模板协议版本。
 
 | 段落 | 契约 |
 | --- | --- |
@@ -22,7 +22,7 @@
 
 固定模板元数据及默认值保持字面值；不同构建间变化的值才使用变量，例如在 `[settings maxmemory]` 中写 `default=$(redis_limit)` 或 `default=%redis_limit%`。既有内置参数映射也允许在清单的 settings 值中引用变量，无需修改模板。
 
-非 root 镜像的数据归属从锁定镜像的用户元数据及停止状态检查容器中的账号文件解析为数字 UID/GID，也可用 data-owner 显式指定。配置在宿主受保护并只读绑定，可写路径记录归属。RHEL 系列绑定请求私有 SELinux 标签。
+非 root 镜像的数据归属从锁定镜像的用户元数据及停止状态检查容器中的账号文件解析为数字 UID/GID，也可用 data-owner 显式指定数字 UID:GID 或镜像账号（可带组名）。命名账号从固定镜像解析，即使入口程序先以 root 启动再切换账号也适用。Redis/Valkey 模板声明数据账号，在启动前设置目录归属，同时保留清理所需的归属标记。配置在宿主受保护并只读绑定，可写路径记录归属。RHEL 系列绑定请求私有 SELinux 标签。
 
 应用不支持模板、配套模板查找或模板 settings。前台启动命令、工作目录和服务环境来自安装包；packager 从 hosting/.deploy/<scheme>/ 选定的应用配置保留在应用镜像内，不按扩展名提取或生成应用配置挂载。显式 `environment!NAME` 可覆盖服务环境。
 
@@ -38,4 +38,4 @@ Ubuntu 22.04 的 .NET 9 及以后应用镜像按[官方安装说明](https://lea
 
 原始 Pod/Compose YAML 输入、来源前缀及服务选择器已移除。自定义运行描述使用 `template`，仓库覆盖使用 `repository`；生成的 Compose 资产仍随交付提供。模板的 `image` 和协议 `version` 保持其含义，与 `.container` 字段分开；镜像软件标签及 ENV 版本不用于选择或改写 tag。
 
-所有声明的端口提供参数入口：`default` 对应 `port`，其它命名端口对应 `名称-port` 且默认不发布。有 `[data]` 的模板统一提供 `storage=persistent|temporary`；临时存储使用匿名卷，普通停止/启动保留，由工具卸载容器时清理。Redis/Valkey 共用 persistence/password 转换，无需重复维护两套行为。完整参数及默认值见 [README](../README.zh-Hans.md#内置基础服务参数参考)。本轮不新增模板继承、通用 config 输入或 `.settings template`；自定义模板详细设计延期。
+所有声明的端口提供参数入口：`default` 对应 `port`，其它命名端口对应 `名称-port`，默认不发布，除非对应的 `[settings 名称-port]` 声明默认值。RustFS 声明 `console-port=127.0.0.1:9001`；`console-port=none` 可关闭发布。其它可选端口包括 EMQX 管理界面/WebSocket、NATS 监控、ClickHouse 原生 TCP、OTLP HTTP 及 Nacos 控制台/gRPC。端口发布不会启用所选上游镜像缺少的功能。有 `[data]` 的模板统一提供 `storage=persistent|temporary`；临时存储使用匿名卷，普通停止/启动保留，由工具卸载容器时清理。Redis/Valkey 共用 persistence/password 转换，无需重复维护两套行为。完整参数及默认值见 [README](../README.zh-Hans.md#内置基础服务参数参考)。本轮不新增模板继承、通用 config 输入或 `.settings template`；自定义模板详细设计延期。

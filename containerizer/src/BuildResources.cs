@@ -61,7 +61,7 @@ internal sealed class BuildResources(ContainerEngine engine) : IAsyncDisposable
 				await engine.RunAsync(resource.Kind switch
 				{
 					ResourceKind.Image => ["image", "rm", resource.Name],
-					ResourceKind.Container => ["container", "rm", resource.Name],
+					ResourceKind.Container => ["container", "rm", "--volumes", resource.Name],
 					_ => ["buildx", "rm", resource.Name],
 				}, null, CancellationToken.None, timeout);
 			}

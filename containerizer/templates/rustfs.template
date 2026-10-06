@@ -6,9 +6,13 @@ health=["CMD-SHELL","curl -fsS http://127.0.0.1:9000/health"]
 
 [ports]
 default=127.0.0.1:9000:9000
+console=127.0.0.1:9001:9001
 
 [data]
 data=/data
+
+[settings console-port]
+default=127.0.0.1:9001
 
 [settings access-key]
 environment=RUSTFS_ACCESS_KEY

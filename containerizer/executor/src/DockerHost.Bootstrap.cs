@@ -125,9 +125,9 @@ partial class DockerHost
 		var version = await runner.RunAsync("sh", ["-c", "command -v docker"], null, cancellation, 30);
 		if(version.ExitCode == 0)
 		{
-			await this.RunAsync("docker", ["version", "--format", "{{.Server.Version}}"], null, cancellation);
-			await this.RunAsync("docker", ["compose", "version"], null, cancellation);
-			await this.RunAsync("docker", ["compose", "up", "--help"], null, cancellation);
+			await this.RunAsync(ENGINE, ["version", "--format", "{{.Server.Version}}"], null, cancellation);
+			await this.RunAsync(ENGINE, ["compose", "version"], null, cancellation);
+			await this.RunAsync(ENGINE, ["compose", "up", "--help"], null, cancellation);
 
 			return;
 		}
@@ -206,8 +206,8 @@ partial class DockerHost
 		if(result.ExitCode != 0)
 			throw new ContainerizationException(5, string.Format(Properties.Resources.DockerHost_13_Message, result.ExitCode));
 
-		await this.RunAsync("systemctl", ["enable", "--now", "docker"], null, cancellation);
-		await this.RunAsync("docker", ["compose", "version"], null, cancellation);
+		await this.RunAsync("systemctl", ["enable", "--now", ENGINE], null, cancellation);
+		await this.RunAsync(ENGINE, ["compose", "version"], null, cancellation);
 	}
 	#endregion
 

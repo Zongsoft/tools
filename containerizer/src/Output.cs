@@ -32,6 +32,7 @@
  */
 
 using System;
+using System.Diagnostics;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
@@ -42,6 +43,7 @@ namespace Zongsoft.Tools.Containerizer;
 internal static partial class Output
 {
 	#region 公共方法
+	public static IDisposable Measure(Action<CommandOutletContent> output, string stage) => new Measurement(output, stage);
 	public static CommandOutletContent Message(string format, params string[] arguments) => Message(format, null, arguments);
 	public static CommandOutletContent Message(string format, CommandOutletColor? color, params string[] arguments)
 	{
@@ -90,5 +92,13 @@ internal static partial class Output
 	private static partial Regex ParameterRegex();
 	[GeneratedRegex(@"--[\w-]+|<[^>]+>|(?<=:)[a-z0-9|]+")]
 	private static partial Regex SyntaxRegex();
+	#endregion
+
+	#region 嵌套类型
+	private sealed class Measurement(Action<CommandOutletContent> output, string stage) : IDisposable
+	{
+		private readonly Stopwatch _timer = Stopwatch.StartNew();
+		public void Dispose() => output(Message(Properties.Resources.Run_Elapsed, stage, _timer.Elapsed.TotalSeconds.ToString("0.0", CultureInfo.CurrentCulture)));
+	}
 	#endregion
 }

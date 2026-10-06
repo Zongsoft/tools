@@ -42,8 +42,9 @@ partial class ContainerizeCommand
 	internal static void Help()
 	{
 		Syntax("dotnet containerize", " <components...> [options]");
+		Syntax("dotnet containerize run", $" <archive.tar.gz> [--engine:{ContainerEngine.OPTIONS}]");
 		Syntax("dotnet containerize plan", " <components... | file.container> [options]");
-		Syntax("dotnet containerize [make]", " <file.container> [--version:<version>] [--source:<directory>] [--output:<directory>] [--engine:auto|docker|podman]");
+		Syntax("dotnet containerize [make]", $" <file.container> [--version:<version>] [--source:<directory>] [--output:<directory>] [--engine:{ContainerEngine.OPTIONS}] [--refresh]");
 
 		Terminal.WriteLine();
 		Terminal.WriteLine(CommandOutletStyles.Bold, "Component-list options:");
@@ -57,15 +58,20 @@ partial class ContainerizeCommand
 			"[--source:<directory>]",
 			"[--output:<directory>]",
 			"[--architecture:x64|arm64]",
-			"[--engine:auto|docker|podman]",
+			$"[--engine:{ContainerEngine.OPTIONS}]",
 			"[--imaging:offline|online]",
 			"[--bootstrap:offline|online]",
 			"[--migration:<directory>]",
 			"[--title:<text>] [--description:<text>]",
+			"[--refresh]",
 		];
 
 		foreach(var option in options)
 			Terminal.WriteLine(Output.Syntax($"\t{option}"));
+
+		Terminal.WriteLine();
+		Terminal.WriteLine(Properties.Resources.Run_Help);
+		Terminal.WriteLine(Properties.Resources.RuntimeCache_Help);
 
 		static void Syntax(string command, string arguments) => Terminal.WriteLine(
 			CommandOutletContent.Create(CommandOutletStyles.Bold, CommandOutletColor.Cyan, command).Append(Output.Syntax(arguments)));

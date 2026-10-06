@@ -24,6 +24,7 @@ public sealed class PlanningTests : IDisposable
 		var manifest = this.Create("redis", "rustfs");
 		var path = new DeliveryBuilder(new RejectRunner()).Plan(manifest);
 		var draft = ContainerManifest.Read(path);
+
 		Assert.Equal("plan", draft["stage"]);
 		Assert.False(draft.IsGenerated);
 		Assert.Equal("$(cache_password)", draft.Components[0].Settings["password"]);
@@ -43,12 +44,28 @@ public sealed class PlanningTests : IDisposable
 		var arguments = new List<string> { "redis", "--source:" + _root, "--name:example", "--version:1.0", "--distribution:debian" };
 		if(option != null)
 			arguments.Add("--imaging:" + option);
+
 		var manifest = ContainerManifest.From(Context([.. arguments]), planning: true);
 		var path = new DeliveryBuilder(new RejectRunner()).Plan(manifest);
 		var make = ContainerManifest.From(Context(path), make: true);
+
 		Assert.Equal(expected, make["imaging"]);
 		Assert.Equal("offline", make["bootstrap"]);
 		Assert.False(make.Root.ContainsKey("mode"));
+	}
+
+	[Fact]
+	public void RefreshIsAnExecutionOptionAndIsNeverWrittenToTheManifest()
+	{
+		var manifest = this.Create("redis", "--refresh");
+		var path = new DeliveryBuilder(new RejectRunner(), refresh: true).Plan(manifest);
+		var context = Context(path, "--refresh");
+
+		Assert.True(context.Options.Switch("refresh"));
+		Assert.False(Context(path).Options.Switch("refresh"));
+		Assert.False(Context(path, "--refresh:false").Options.Switch("refresh"));
+		Assert.False(ContainerManifest.From(context, make: true).Root.ContainsKey("refresh"));
+		Assert.DoesNotContain("refresh", File.ReadAllText(path));
 	}
 
 	[Fact]
@@ -57,8 +74,10 @@ public sealed class PlanningTests : IDisposable
 		var manifest = this.Create("nacos");
 		manifest.Components[0]["settings"] = "mode=standalone";
 		manifest.Components[0]["imaging"] = "online";
+
 		var path = new DeliveryBuilder(new RejectRunner()).Plan(manifest);
 		var component = Assert.Single(ContainerManifest.Read(path).Components);
+
 		Assert.Equal("standalone", component.Settings["mode"]);
 		Assert.Equal("online", component["imaging"]);
 		Assert.False(component.Values.ContainsKey("mode"));
@@ -73,11 +92,14 @@ public sealed class PlanningTests : IDisposable
 		manifest["architecture"] = architecture;
 		var path = new DeliveryBuilder(new RejectRunner()).Plan(manifest);
 		var draft = ContainerManifest.Read(path);
+
 		Assert.Equal(architecture, draft["architecture"]);
 		Assert.Equal("debian@13", draft["distribution"]);
+
 		var component = Assert.Single(draft.Components);
 		Assert.False(component.Values.ContainsKey("platform"));
 		Assert.False(component.Values.ContainsKey("architecture"));
+
 		var make = ContainerManifest.From(Context(path), make: true);
 		Assert.Equal(architecture, make["architecture"]);
 		Assert.Single(DeliveryBuilder.PrepareSources(make));
@@ -124,6 +146,7 @@ public sealed class PlanningTests : IDisposable
 		manifest.Variables["test_password"] = "a;b=c\"d$(literal)";
 		manifest.Variables["literal"] = "value";
 		var source = Assert.Single(DeliveryBuilder.PrepareSources(manifest));
+
 		Assert.Contains("a;b=c\"dvalue", source.Plan.Command);
 		Assert.Contains("a;b=c\"dvalue", source.Plan.Health.Test);
 		Assert.Equal("a;b=c\"dvalue", manifest.Components[0].Settings["password"]);
@@ -148,6 +171,77 @@ public sealed class PlanningTests : IDisposable
 	}
 
 	[Theory]
+	[InlineData("redis")]
+	[InlineData("valkey")]
+	public void CacheTemplatesDeclareTheDataAccountIndependentlyOfTheEntrypointUser(string name)
+	{
+		var manifest = this.Create(name);
+		var source = new TemplateCatalog().Read(manifest.Components[0], manifest);
+		Assert.Equal(name, Assert.Single(source.Plan.Mounts).User);
+		Assert.Null(source.Plan.User);
+	}
+
+	[Theory]
+	[InlineData(null, 9001)]
+	[InlineData("none", 0)]
+	[InlineData("127.0.0.1:19001", 19001)]
+	public void RustfsConsoleDefaultsToLoopbackAndAllowsAnExplicitOverride(string value, int host)
+	{
+		var manifest = this.Create("rustfs");
+		if(value != null)
+			manifest.Components[0]["settings"] = $"console-port={value}";
+
+		var source = new TemplateCatalog().Read(manifest.Components[0], manifest);
+		var console = Assert.Single(source.Plan.Ports, port => port.Name == "console-port");
+
+		Assert.Equal(9001, console.Container);
+		Assert.Equal(host, console.Host);
+		Assert.Equal("127.0.0.1", console.Address);
+		Assert.Equal(value ?? "127.0.0.1:9001", source.Settings["console-port"]);
+	}
+
+	[Theory]
+	[InlineData("emqx", "dashboard-port", 18083)]
+	[InlineData("emqx", "websocket-port", 8083)]
+	[InlineData("nats", "monitoring-port", 8222)]
+	[InlineData("clickhouse", "native-port", 9000)]
+	[InlineData("otel", "http-port", 4318)]
+	[InlineData("nacos", "console-port", 8080)]
+	[InlineData("nacos", "grpc-port", 9848)]
+	public void SecondaryTemplatePortsAreOptionalAndUseTheCommonPortSettings(string name, string setting, int target)
+	{
+		var manifest = this.Create(name);
+		var source = new TemplateCatalog().Read(manifest.Components[0], manifest);
+		Assert.Equal(0, Assert.Single(source.Plan.Ports, port => port.Name == setting).Host);
+
+		manifest.Components[0]["settings"] = $"{setting}=127.0.0.1:19001";
+		source = new TemplateCatalog().Read(manifest.Components[0], manifest);
+		var port = Assert.Single(source.Plan.Ports, port => port.Name == setting);
+
+		Assert.Equal(19001, port.Host);
+		Assert.Equal(target, port.Container);
+	}
+
+	[Theory]
+	[InlineData(null, 6060)]
+	[InlineData("none", 0)]
+	[InlineData("127.0.0.1:16060", 16060)]
+	public void TdengineSharesRestAndWebsocketAndPublishesExplorer(string value, int host)
+	{
+		var manifest = this.Create("tdengine");
+		if(value != null)
+			manifest.Components[0]["settings"] = $"console-port={value}";
+
+		var source = new TemplateCatalog().Read(manifest.Components[0], manifest);
+		Assert.Equal(2, source.Plan.Ports.Count);
+		var adapter = Assert.Single(source.Plan.Ports, port => port.Container == 6041);
+		Assert.Equal(6041, adapter.Host);
+		var console = Assert.Single(source.Plan.Ports, port => port.Container == 6060);
+		Assert.Equal(host, console.Host);
+		Assert.Equal("127.0.0.1", console.Address);
+	}
+
+	[Theory]
 	[InlineData("none", "temporary", "", "no")]
 	[InlineData("rdb", "persistent", "3600 1 300 100 60 10000", "no")]
 	[InlineData("aof", "temporary", "", "yes")]
@@ -158,17 +252,21 @@ public sealed class PlanningTests : IDisposable
 		manifest.Components[0]["settings"] = $"persistence={persistence};storage={storage};port=none";
 		var source = Assert.Single(DeliveryBuilder.PrepareSources(manifest));
 		var command = source.Plan.Command;
+
 		Assert.Equal(snapshot, command[Array.IndexOf(command, "--save") + 1]);
 		Assert.Equal(append, command[Array.IndexOf(command, "--appendonly") + 1]);
 		Assert.Equal(storage == "temporary", Assert.Single(source.Plan.Mounts).Temporary);
 		Assert.Equal(6379, Assert.Single(source.Plan.Ports).Container);
+
 		source.Plan.Image.Tag = "example";
 		source.Plan.Image.Platform = "linux/amd64";
 		ComposeWriter.Write(new DeliveryPlan { Project = "example" }, [source], _root);
 		using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(_root, "compose.yaml")));
 		var service = json.RootElement.GetProperty("services").GetProperty("redis");
+
 		Assert.False(service.TryGetProperty("ports", out _));
 		var volume = service.GetProperty("volumes")[0];
+
 		Assert.Equal(storage == "temporary" ? "volume" : "bind", volume.GetProperty("type").GetString());
 		Assert.Equal(storage != "temporary", volume.TryGetProperty("source", out _));
 
@@ -209,14 +307,17 @@ public sealed class PlanningTests : IDisposable
 		manifest.Components[0]["settings"] = ServiceSettings.Format(new Dictionary<string, string> { ["password"] = "$(absent);%absent%" });
 		manifest.Components[0]["digest"] = "sha256:" + new string('a', 64);
 		manifest.Prepare(_root);
+
 		var original = File.ReadAllBytes(manifest.ManifestPath);
 		var clone = ContainerManifest.From(Context(manifest.ManifestPath, "--version:2.0"), planning: true);
 		var path = new DeliveryBuilder(new RejectRunner()).Plan(clone);
 		var remake = ContainerManifest.From(Context(path));
 		var source = Assert.Single(DeliveryBuilder.PrepareSources(remake));
+
 		Assert.Contains("$(absent);%absent%", source.Plan.Command);
 		Assert.Equal(manifest.Components[0]["digest"], remake.Components[0]["digest"]);
 		Assert.Equal(original, File.ReadAllBytes(manifest.ManifestPath));
+
 		File.WriteAllText(path, File.ReadAllText(path).Replace("tag=latest", "tag=new", StringComparison.Ordinal));
 		Assert.Null(ContainerManifest.Read(path).Components[0]["digest"]);
 	}
@@ -261,6 +362,7 @@ public sealed class PlanningTests : IDisposable
 		var manifest = this.Create("redis");
 		manifest.Components[0]["settings"] = "port=" + value;
 		var mapped = Assert.Single(Assert.Single(DeliveryBuilder.PrepareSources(manifest)).Plan.Ports);
+
 		Assert.Equal(address, mapped.Address);
 		Assert.Equal(port, mapped.Host);
 		Assert.Equal(6379, mapped.Container);
@@ -283,10 +385,12 @@ public sealed class PlanningTests : IDisposable
 		var manifest = this.Create("mysql");
 		manifest.Variables["mysql_root_password"] = "";
 		Assert.Contains("root-password", new TemplateCatalog().Read(manifest.Components[0], manifest).MissingSettings);
+
 		manifest.Components[0]["environment!MYSQL_ROOT_PASSWORD"] = "explicit";
 		var source = new TemplateCatalog().Read(manifest.Components[0], manifest);
 		Assert.Empty(source.MissingSettings);
 		Assert.Equal("explicit", source.Settings["root-password"]);
+
 		manifest.Components[0]["settings"] = "root-password=different";
 		Assert.Throws<ContainerizationException>(() => new TemplateCatalog().Read(manifest.Components[0], manifest));
 	}
@@ -300,29 +404,13 @@ public sealed class PlanningTests : IDisposable
 	}
 
 	[Fact]
-	public void PackagedNginxFragmentsAreTransferredUnchanged()
-	{
-		var manifest = this.Create("nginx");
-		manifest.Components.Add(new ContainerManifest.Component { Name = "web", ["package"] = "app.tar.gz", ["dependences"] = "nginx" });
-		var nginx = new ServiceBuildContext { Plan = new() { Id = "nginx" } };
-		var web = new ServiceBuildContext { Plan = new() { Id = "web" } };
-		var config = this.Write("app.conf", "server { listen 80; }\n");
-		web.Ingress.Add("app.conf", config);
-		DeliveryBuilder.ConfigureIngress(manifest, [nginx, web], _root);
-		Assert.Equal(config, nginx.Configuration["/etc/nginx/conf.d/app.conf"]);
-		Assert.Contains("web", nginx.Plan.Dependencies);
-		Assert.Single(web.Ingress);
-		Assert.Empty(web.Configuration);
-		Assert.False(File.Exists(Path.Combine(_root, "nginx.generated.conf")));
-	}
-
-	[Fact]
 	public void EnvironmentOverridesUnmanagedDefaultsAndTemplateNamesAreCaseInsensitive()
 	{
 		var source = new ServiceBuildContext();
 		source.Environment["LANG"] = "old";
 		TemplateCatalog.ApplyEnvironment(new ContainerManifest.Component { ["environment!LANG"] = "new" }, source);
 		Assert.Equal("new", source.Environment["LANG"]);
+
 		var manifest = this.Create("Redis");
 		var cache = new TemplateCatalog().Read(manifest.Components[0], manifest);
 		Assert.Equal("both", cache.Settings["persistence"]);

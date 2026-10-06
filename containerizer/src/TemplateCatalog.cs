@@ -248,7 +248,7 @@ internal sealed class TemplateCatalog
 					if(!File.Exists(input))
 						throw new ContainerizationException(2, string.Format(Properties.Resources.ServiceSource_6_Message, input));
 
-					source.Configuration.Add(LinuxPath(entry.Name), input);
+					source.Configuration.Add(LinuxPath(entry.Name), (input, null));
 				}
 			}
 			else
@@ -281,7 +281,7 @@ internal sealed class TemplateCatalog
 			{
 				var deferred = manifest?.IsPlanning == true && (ContainerManifest.HasVariables(mapped) || ContainerManifest.HasVariables(value));
 				if(!deferred)
-					throw new ContainerizationException(2, string.Format(Properties.Resources.Settings_Conflict, component.Name, pair.Key));
+					throw new ContainerizationException(2, string.Format(Properties.Resources.Settings_Conflict_Message, component.Name, pair.Key));
 			}
 
 			source.Environment[name] = value;

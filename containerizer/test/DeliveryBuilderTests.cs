@@ -79,6 +79,18 @@ public sealed class DeliveryBuilderTests : IDisposable
 		Assert.Equal(1, node.Schema);
 		Assert.Equal("linux/amd64", Assert.Single(node.Services).Image.Platform);
 		Assert.Equal(serviceImaging ?? mode, Assert.Single(node.Services).Image.Mode);
+		var image = Assert.Single(node.Services).Image;
+		Assert.StartsWith("containerizer/" + node.Project + "/redis:", image.Tag, StringComparison.Ordinal);
+		using var compose = JsonDocument.Parse(File.ReadAllText(Path.Combine(unpacked, "compose.yaml")));
+		Assert.Equal(image.Tag, compose.RootElement.GetProperty("services").GetProperty("redis").GetProperty("image").GetString());
+		Assert.DoesNotContain(runner.Calls, arguments => arguments[0] == "tag" && arguments[^1] == image.Tag);
+		var exports = runner.Calls.Where(arguments => arguments[0] == "save" || arguments.Take(2).SequenceEqual(["image", "save"])).ToArray();
+
+		if(image.Mode == "offline")
+			Assert.Equal(image.Id, Assert.Single(exports)[^1]);
+		else
+			Assert.Empty(exports);
+
 		Assert.Equal(Files.Hash(manifest.ManifestPath), node.SourceHash);
 		Assert.Contains(node.Files, file => file.Path == Path.GetFileName(manifest.ManifestPath) && file.Hash == node.SourceHash);
 		Assert.Contains(node.Files, file => file.Path == "README.md");
@@ -121,6 +133,7 @@ public sealed class DeliveryBuilderTests : IDisposable
 		Assert.False(Directory.Exists(runner.Workspace));
 		Assert.Equal([".settings"], Directory.GetFiles(manifest["output"]).Select(Path.GetFileName));
 		Assert.Equal("[redis]\r\ntag=8.4\r\n", File.ReadAllText(defaults));
+		Assert.DoesNotContain(runner.Calls, arguments => arguments[0] == "tag" && arguments[^1].StartsWith("containerizer/", StringComparison.Ordinal));
 		Assert.True(File.Exists(Path.Combine(_root, "input.container")));
 	}
 
@@ -213,6 +226,30 @@ public sealed class DeliveryBuilderTests : IDisposable
 		Assert.Equal(File.ReadAllBytes(draft), File.ReadAllBytes(Path.Combine(unpacked, Path.GetFileName(draft))));
 	}
 
+	[Theory]
+	[InlineData("podman", "offline")]
+	[InlineData("podman", "online")]
+	[InlineData("docker", "offline")]
+	[InlineData("docker", "online")]
+	public async Task InfrastructureImagesReuseOneCacheAcrossReleaseVersions(string engine, string mode)
+	{
+		var manifest = this.CreateManifest(mode);
+		manifest["engine"] = engine;
+		var runner = new BuildRunner();
+		var first = await this.Builder(runner).BuildAsync(manifest, CancellationToken.None);
+		var replay = ContainerManifest.From(Context(manifest.ManifestPath, "--version:2.0", "--output:second"));
+		var second = await this.Builder(runner).BuildAsync(replay, CancellationToken.None);
+
+		Assert.NotEqual(first, second);
+		Assert.True(File.Exists(first));
+		Assert.True(File.Exists(second));
+		var cacheTag = "localhost/containerizer/cache/" + Files.HashText("docker.io/library/redis") + ":x64-" + _digest[7..];
+		var tags = runner.Calls.Where(arguments => arguments[0] == "tag").Select(arguments => arguments[^1]).ToArray();
+		Assert.Equal(2, tags.Count(tag => tag == cacheTag));
+		Assert.All(tags, tag => Assert.True(tag == cacheTag || tag == "docker.io/library/redis:latest", tag));
+		Assert.DoesNotContain(runner.Calls, arguments => arguments.Contains("prune") || arguments.Contains("--force") || arguments.Contains("-f"));
+	}
+
 	private DeliveryBuilder Builder(BuildRunner runner) => new(runner, Path.Combine(_root, "cache"), Path.Combine(_root, "executor"));
 
 	[Theory]
@@ -231,8 +268,9 @@ public sealed class DeliveryBuilderTests : IDisposable
 		Assert.DoesNotContain(runner.Calls, arguments => arguments.Contains("prune") || arguments.Contains("--force") || arguments.Contains("-f"));
 		Assert.All(runner.Calls.Where(arguments => arguments.Length > 1 && arguments[1] == "rm"), arguments => Assert.StartsWith(arguments[0] == "image" ? "localhost/containerizer-build-" : "containerizer-build-", arguments[^1], StringComparison.Ordinal));
 		Assert.DoesNotContain(runner.Calls, arguments => arguments[0] == "tag" && arguments[^1].EndsWith("-base", StringComparison.Ordinal));
-		Assert.Single(runner.Calls, arguments => arguments[0] == "build" || arguments.Take(2).SequenceEqual(["buildx", "build"]));
-		Assert.DoesNotContain(runner.Calls, arguments => arguments[0] is "create" or "cp");
+		Assert.Single(runner.Calls, arguments => (arguments[0] == "build" || arguments.Take(2).SequenceEqual(["buildx", "build"])) && arguments.Contains("final"));
+		Assert.All(runner.Calls.Where(arguments => arguments[0] == "create"), arguments => Assert.Contains("/bin/true", arguments));
+		Assert.All(runner.Calls.Where(arguments => arguments[0] == "cp"), arguments => Assert.EndsWith(":/etc/passwd", arguments[1], StringComparison.Ordinal));
 		Assert.DoesNotContain("collect.sh", runner.Dockerfile);
 		Assert.DoesNotContain("containerizer-config", runner.Dockerfile);
 		Assert.Contains("COPY --from=installed / /", runner.Dockerfile);
@@ -257,22 +295,24 @@ public sealed class DeliveryBuilderTests : IDisposable
 	[Theory]
 	[InlineData("podman")]
 	[InlineData("docker")]
-	public async Task OnlyPackagedIngressFragmentsAreCopiedWithoutApplicationConfigurationMounts(string engine)
+	public async Task PackagedWebTemplateBecomesProtectedIngressConfiguration(string engine)
 	{
 		var manifest = this.CreateApplication(engine);
 		manifest.Components[0]["dependences"] = "nginx";
 		manifest.Components.Add(new() { Name = "nginx" });
 		var configuration = "server { listen 80; location / { proxy_pass http://application:8080; } }\n";
-		var runner = new BuildRunner { IngressConfiguration = configuration };
+		WebFixtures.WritePackage(manifest.Components[0]["package"], "application", "[api]\nbind=http://0.0.0.0:80\n", configuration);
+		manifest.Validate();
+		var runner = new BuildRunner();
 		var archive = await this.Builder(runner).BuildAsync(manifest, CancellationToken.None);
 		var unpacked = Path.Combine(_root, "ingress-delivery");
 		Files.Extract(archive, unpacked);
 		var node = Files.Load(Path.Combine(unpacked, "containerizer.json"), ProtocolJson.Default.DeliveryPlan);
 		Assert.Empty(node.Services.Single(service => service.Kind == "application").Mounts);
-		var mount = Assert.Single(node.Services.Single(service => service.Id == "nginx").Mounts, item => item.ReadOnly);
-		Assert.Equal("/etc/nginx/conf.d/application.conf", mount.Target);
-		Assert.Equal(configuration, File.ReadAllText(Files.Below(unpacked, mount.Source)));
-		Assert.EndsWith(":/opt/application/.web/nginx/.", Assert.Single(runner.Calls, arguments => arguments[0] == "cp")[1], StringComparison.Ordinal);
+		var mount = Assert.Single(node.Services.Single(service => service.Id == "nginx").Mounts, item => item.Target == "/etc/nginx/containerizer/application.conf");
+		Assert.Equal("/etc/nginx/containerizer/application.conf", mount.Target);
+		Assert.Equal(configuration.ReplaceLineEndings("\r\n"), File.ReadAllText(Files.Below(unpacked, mount.Source)));
+		Assert.DoesNotContain(runner.Calls, arguments => arguments[0] == "cp" && !arguments[1].EndsWith("/etc/passwd", StringComparison.Ordinal));
 		Assert.Empty(runner.Images);
 		Assert.Empty(runner.Containers);
 	}
@@ -283,8 +323,6 @@ public sealed class DeliveryBuilderTests : IDisposable
 	public async Task FailedContainerCreationCleansThePartiallyCreatedContainerAndImage(string engine)
 	{
 		var manifest = this.CreateApplication(engine);
-		manifest.Components[0]["dependences"] = "nginx";
-		manifest.Components.Add(new() { Name = "nginx" });
 		var runner = new BuildRunner { FailCreate = true };
 		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => this.Builder(runner).BuildAsync(manifest, CancellationToken.None));
 		Assert.Contains("create failed", exception.Message);
@@ -360,6 +398,7 @@ public sealed class DeliveryBuilderTests : IDisposable
 	{
 		var manifest = this.CreateManifest("offline");
 		Directory.Delete(Path.Combine(_root, ".containerizer"), true);
+		manifest.Components[0].Values.Remove("dependences");
 		var runner = new BuildRunner { FailCreate = true };
 		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => this.Builder(runner).BuildAsync(manifest, CancellationToken.None));
 		Assert.Contains("create failed", exception.Message);
@@ -367,7 +406,28 @@ public sealed class DeliveryBuilderTests : IDisposable
 		Assert.Empty(runner.Containers);
 	}
 
-	private ContainerManifest CreateApplication(string engine)
+	[Fact]
+	public async Task ChangedPackageContentsWithTheSameVersionAlwaysRebuildTheApplication()
+	{
+		var runner = new BuildRunner();
+		var first = this.CreateApplication("podman", "first payload");
+		first["output"] = Path.Combine(_root, "first");
+		await this.Builder(runner).BuildAsync(first, TestContext.Current.CancellationToken);
+		var second = this.CreateApplication("podman", "revised payload");
+		second["output"] = Path.Combine(_root, "second");
+		await this.Builder(runner).BuildAsync(second, TestContext.Current.CancellationToken);
+
+		Assert.Equal(first["version"], second["version"]);
+		Assert.Equal(2, runner.PackageHashes.Count);
+		Assert.NotEqual(runner.PackageHashes[0], runner.PackageHashes[1]);
+		Assert.Equal(Files.Hash(second.Components[0]["package"]), runner.PackageHashes[1]);
+		Assert.Equal(2, runner.FinalImages.Count);
+		Assert.Single(runner.Calls, arguments => arguments[0] == "build" && !arguments.Contains("final"));
+		Assert.Empty(runner.Images);
+		Assert.Empty(runner.Containers);
+	}
+
+	private ContainerManifest CreateApplication(string engine, string payload = "application payload")
 	{
 		var manifest = this.CreateManifest("offline");
 		manifest["engine"] = engine;
@@ -380,6 +440,8 @@ public sealed class DeliveryBuilderTests : IDisposable
 			writer.WriteEntry(new PaxGlobalExtendedAttributesTarEntry(new Dictionary<string, string> { ["PackageName"] = "application", ["Architecture"] = "x64", ["Version"] = "1.0.0", ["InstallPath"] = "/opt/application" }));
 			using var service = new MemoryStream(Encoding.UTF8.GetBytes("[Service]\nWorkingDirectory=/opt/application\nExecStart=/opt/application/application\n"));
 			writer.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, "application.service") { DataStream = service });
+			using var contents = new MemoryStream(Encoding.UTF8.GetBytes(payload));
+			writer.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, "application") { DataStream = contents });
 		}
 
 		File.WriteAllText(path[..^7] + ".sh", "#!/bin/sh\nexit 0\n");
@@ -441,8 +503,8 @@ public sealed class DeliveryBuilderTests : IDisposable
 		public Func<bool> Published { get; set; }
 		public CancellationTokenSource Cancellation { get; set; }
 		public List<string[]> Calls { get; } = [];
+		public List<string> PackageHashes { get; } = [];
 		public string Dockerfile { get; private set; }
-		public string IngressConfiguration { get; set; }
 		public HashSet<string> Images { get; } = [];
 		public HashSet<string> FinalImages { get; } = [];
 		public HashSet<string> Containers { get; } = [];
@@ -453,12 +515,16 @@ public sealed class DeliveryBuilderTests : IDisposable
 			if(arguments[0] == "build" || arguments.Take(2).SequenceEqual(["buildx", "build"]))
 			{
 				this.Dockerfile = File.ReadAllText(Path.Combine(directory, "Dockerfile"));
-				this.Workspace = Directory.GetParent(directory).FullName;
+				if(arguments.Contains("final"))
+					this.Workspace = Directory.GetParent(directory).FullName;
 				var tag = arguments[Array.IndexOf(arguments.ToArray(), "-t") + 1];
 				this.Images.Add(tag);
 
 				if(arguments.Contains("final"))
+				{
 					this.FinalImages.Add(tag);
+					this.PackageHashes.Add(Files.Hash(Path.Combine(directory, "input", "application.tar.gz")));
+				}
 			}
 
 			if(arguments[0] == "create")
@@ -468,8 +534,14 @@ public sealed class DeliveryBuilderTests : IDisposable
 				return Task.FromResult(this.FailCreate ? new ProcessResult(125, "", "create failed") : new ProcessResult(0, name, ""));
 			}
 
-			if(arguments[0] == "cp" && this.IngressConfiguration != null)
-				File.WriteAllText(Path.Combine(arguments[^1], "application.conf"), this.IngressConfiguration);
+			if(arguments[0] == "export")
+				File.WriteAllText(arguments[Array.IndexOf(arguments.ToArray(), "--output") + 1], "public runtime files");
+
+			if(arguments[0] == "cp")
+			{
+				if(arguments[1].EndsWith("/etc/passwd", StringComparison.Ordinal))
+					File.WriteAllText(arguments[^1], "redis:x:999:999::/home/redis:/bin/sh\n");
+			}
 
 			if(arguments[0] is "image" or "container")
 			{

@@ -33,6 +33,8 @@
 
 using System;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 
 using Zongsoft.Tools.Containerizer.Protocol;
 
@@ -53,6 +55,20 @@ internal static class BuildStorage
 		var directory = Path.Combine(cacheRoot ?? CacheRoot, "locks");
 		Files.PrivateDirectory(directory);
 		return new FileStream(Path.Combine(directory, $"{ProjectKey(output)}.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+	}
+
+	public static async Task<FileStream> LockAsync(string output, string cacheRoot, CancellationToken cancellation)
+	{
+		while(true)
+		{
+			cancellation.ThrowIfCancellationRequested();
+
+			try { return Lock(output, cacheRoot); }
+			catch(IOException exception) when((exception.HResult & 0xffff) is 11 or 32 or 33)
+			{
+				await Task.Delay(200, cancellation);
+			}
+		}
 	}
 
 	public static void Publish(ContainerManifest manifest, string prepared, string archive, string defaults)

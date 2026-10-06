@@ -88,6 +88,7 @@ partial class DeliveryBuilder
 			sources.Add(source);
 		}
 
+		WebIngress.Plan(manifest, sources);
 		ValidateServices(sources);
 		return sources;
 	}
@@ -143,43 +144,6 @@ partial class DeliveryBuilder
 
 		static int Rank(string kind) => kind == "infrastructure" ? 0 : kind == "application" ? 1 : 2;
 	}
-
-	internal static void ConfigureIngress(ContainerManifest manifest, IReadOnlyList<ServiceBuildContext> sources, string workspace)
-	{
-		var applications = manifest.Components.Where(component => component.IsApplication && (component["dependences"] ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Any(dependence => string.Equals(dependence, "nginx", StringComparison.Ordinal))).Select(component => sources.Single(source => string.Equals(source.Plan.Id, component.Name, StringComparison.OrdinalIgnoreCase))).ToArray();
-		if(applications.Length == 0)
-			return;
-
-		var ingress = sources.Single(source => source.Plan.Id == "nginx");
-		ingress.Plan.Dependencies.AddRange(applications.Select(source => source.Plan.Id));
-
-		foreach(var application in applications)
-		{
-			foreach(var pair in application.Ingress)
-				ingress.Configuration.Add($"/etc/nginx/conf.d/{pair.Key}", pair.Value);
-		}
-
-		if(ingress.Configuration.Count > 0)
-			return;
-		if(applications.Length != 1)
-			throw new ContainerizationException(2, Properties.Resources.NodeBuilder_10_Message);
-
-		var app = applications[0];
-		var ports = app.Plan.Ports.Select(port => port.Container).Distinct().ToArray();
-		var arguments = (app.Plan.Entrypoint ?? []).Concat(app.Plan.Command ?? []).ToArray();
-		var index = Array.IndexOf(arguments, "--urls");
-
-		if(ports.Length == 0 && index >= 0 && index + 1 < arguments.Length &&
-			Uri.TryCreate(arguments[index + 1], UriKind.Absolute, out var uri) &&
-			uri.Scheme == "http" && uri.AbsolutePath == "/" && string.IsNullOrEmpty(uri.Query))
-			ports = [uri.Port];
-		if(ports.Length != 1)
-			throw new ContainerizationException(2, Properties.Resources.NodeBuilder_11_Message);
-
-		var file = Path.Combine(workspace, "nginx.generated.conf");
-		Files.Write(file, $"server {{\n\tlisten 80;\n\tlocation / {{\n\t\tproxy_pass http://{app.Plan.Id}:{ports[0]};\n\t\tproxy_set_header Host $host;\n\t\tproxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n\t\tproxy_set_header X-Forwarded-Proto $scheme;\n\t}}\n}}\n", true);
-		ingress.Configuration.Add("/etc/nginx/conf.d/default.conf", file);
-	}
 	#endregion
 
 	#region 私有方法
@@ -191,14 +155,15 @@ partial class DeliveryBuilder
 	{
 		foreach(var pair in source.Configuration)
 		{
-			var relative = $"config/{source.Plan.Id}/{Files.HashText(pair.Key)[..16]}/{Path.GetFileName(pair.Value)}";
+			var path = pair.Value.RelativePath ?? $"{Files.HashText(pair.Key)[..16]}/{Path.GetFileName(pair.Value.Source)}";
+			var relative = $"config/{source.Plan.Id}/{path}";
 			var target = Files.Below(delivery, relative);
 			Directory.CreateDirectory(Path.GetDirectoryName(target));
 
-			if(Directory.Exists(pair.Value))
-				Files.CopyTree(pair.Value, target);
+			if(Directory.Exists(pair.Value.Source))
+				Files.CopyTree(pair.Value.Source, target);
 			else
-				File.Copy(pair.Value, target);
+				File.Copy(pair.Value.Source, target);
 
 			source.Plan.Mounts.Add(new() { Source = relative, Target = pair.Key, ReadOnly = true, Owned = true });
 		}

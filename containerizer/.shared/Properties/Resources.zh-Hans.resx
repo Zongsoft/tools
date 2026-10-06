@@ -181,16 +181,16 @@
     <value>每个服务必须且只能对应一个容器。</value>
   </data>
   <data name="DockerHost.19.Message" xml:space="preserve">
-    <value>服务容器缺失或存在歧义。</value>
+    <value>服务 {0}：容器缺失或存在歧义。</value>
   </data>
   <data name="DockerHost.2.Message" xml:space="preserve">
     <value>安装命令需要 root 权限。</value>
   </data>
   <data name="DockerHost.20.Message" xml:space="preserve">
-    <value>服务没有协议级或模板健康检查。</value>
+    <value>服务 {0} 没有协议级或模板健康检查。</value>
   </data>
   <data name="DockerHost.21.Message" xml:space="preserve">
-    <value>服务未通过健康检查，保持维护状态。</value>
+    <value>服务 {0}（容器 {1}）未通过健康检查，保持维护状态。</value>
   </data>
   <data name="DockerHost.22.Message" xml:space="preserve">
     <value>既有目录不是独占自有资产，清理未完成。</value>
@@ -247,11 +247,13 @@
     <value>{0} {1} 失败，退出码为 {2}。请检查引擎连接、来源可用性及目标平台支持。</value>
   </data>
   <data name="Engine.10.Message" xml:space="preserve">
-    <value>无法解析镜像用户，请在模板中声明数字 data-owner。</value>
+    <value>无法解析镜像数据所属账号，请在模板的 data-owner 中声明镜像内已有账号或数字 UID:GID。</value>
   </data>
   <data name="Engine.2.Message" xml:space="preserve">
-    <value>未找到可用的构建引擎及 Compose provider。请确认 Docker 或 Podman 已运行并安装 Compose provider；Windows 上可通过 `podman machine list` 查看虚拟机，并用 `podman machine start` 启动选定虚拟机。
-{0}</value>
+    <value>未找到可用的容器引擎（{0}）。
+{1}
+检查详情：
+{2}</value>
   </data>
   <data name="Engine.3.Message" xml:space="preserve">
     <value>取得的镜像与固定的平台摘要不匹配。</value>
@@ -306,6 +308,39 @@
   </data>
   <data name="InstallationStore.4.Message" xml:space="preserve">
     <value>受管发行身份不一致。</value>
+  </data>
+  <data name="Installation.Phase.StageInstallation" xml:space="preserve">
+    <value>暂存交付文件</value>
+  </data>
+  <data name="Installation.Phase.PrepareBootstrap" xml:space="preserve">
+    <value>准备容器引擎及运行依赖</value>
+  </data>
+  <data name="Installation.Phase.PrepareImages" xml:space="preserve">
+    <value>准备容器镜像</value>
+  </data>
+  <data name="Installation.Phase.StartInfrastructure" xml:space="preserve">
+    <value>启动基础服务</value>
+  </data>
+  <data name="Installation.Phase.CheckLocalInfrastructure" xml:space="preserve">
+    <value>检查基础服务健康状态</value>
+  </data>
+  <data name="Installation.Phase.ApplyMigration" xml:space="preserve">
+    <value>执行数据升迁</value>
+  </data>
+  <data name="Installation.Phase.ReadyToStart" xml:space="preserve">
+    <value>准备启动应用</value>
+  </data>
+  <data name="Installation.Phase.StartApplications" xml:space="preserve">
+    <value>启动应用程序</value>
+  </data>
+  <data name="Installation.Phase.StartIngress" xml:space="preserve">
+    <value>启动访问入口</value>
+  </data>
+  <data name="Installation.Phase.CheckHealth" xml:space="preserve">
+    <value>检查服务健康状态</value>
+  </data>
+  <data name="Installation.Phase.CommitRelease" xml:space="preserve">
+    <value>确认当前发行版本</value>
   </data>
   <data name="Lifecycle.1.Message" xml:space="preserve">
     <value>--name 与交付物身份不同。</value>
@@ -468,12 +503,6 @@
   </data>
   <data name="NodeBuilder.1.Message" xml:space="preserve">
     <value>{0}：缺少必填环境或设置 {1}。</value>
-  </data>
-  <data name="NodeBuilder.10.Message" xml:space="preserve">
-    <value>多个应用需要显式 Nginx 路由配置。</value>
-  </data>
-  <data name="NodeBuilder.11.Message" xml:space="preserve">
-    <value>nginx 简写需要唯一明确的应用 HTTP 端口，或显式路由配置。</value>
   </data>
   <data name="NodeBuilder.2.Message" xml:space="preserve">
     <value>组件 imaging 配置无效。</value>
@@ -645,19 +674,187 @@
   <data name="BuildResources.Cleanup.Message" xml:space="preserve">
     <value>警告：无法使用 {1} 清理本次制作资源 {0}。{2}</value>
   </data>
-  <data name="Settings.Invalid" xml:space="preserve">
+  <data name="Settings.Invalid.Message" xml:space="preserve">
     <value>settings 格式无效。使用分号分隔的 name=value，包含分号的值使用引号。</value>
   </data>
-  <data name="Settings.File" xml:space="preserve">
+  <data name="Settings.File.Message" xml:space="preserve">
     <value>无效的 .settings 文件：{0}。请使用组件段落及 tag、repository、settings 条目。</value>
   </data>
-  <data name="Settings.Conflict" xml:space="preserve">
+  <data name="Settings.Conflict.Message" xml:space="preserve">
     <value>{0}：settings 与显式环境条目 {1} 冲突。</value>
   </data>
-  <data name="Make.Input" xml:space="preserve">
+  <data name="Make.Input.Message" xml:space="preserve">
     <value>make 必须传入且仅传入一个 .container 文件。</value>
   </data>
-  <data name="Make.Options" xml:space="preserve">
+  <data name="Make.Options.Message" xml:space="preserve">
     <value>输入 .container 时，仅允许 version、source、output、engine 命名选项覆盖清单。</value>
   </data>
+  <data name="Run.Usage.Message" xml:space="preserve">
+    <value>用法：dotnet-containerize run &lt;archive.tar.gz&gt; [--engine:{0}]</value>
+  </data>
+  <data name="Run.Verify" xml:space="preserve">
+    <value>校验交付包：{0}</value>
+  </data>
+  <data name="Run.Unsuccessful.Message" xml:space="preserve">
+    <value>验证未成功结束，请查看前面的诊断信息。</value>
+  </data>
+  <data name="Run.Existing.Message" xml:space="preserve">
+    <value>已存在验证环境：{0}。使用 {1} ps --all 检查；请结束所属 run 会话，或明确清除遗留容器及其匿名卷。本次不会覆盖它。</value>
+  </data>
+  <data name="Run.Locked.Message" xml:space="preserve">
+    <value>另一个进程正在管理 {0} 的验证会话。</value>
+  </data>
+  <data name="Run.Container" xml:space="preserve">
+    <value>验证容器：{0}
+查看内部 {2} 服务状态：
+  {1} exec {0} {2} ps -a
+查看内部 {2} 服务日志：
+  {1} exec {0} {2} logs &lt;内部容器&gt;</value>
+  </data>
+  <data name="Run.Ready" xml:space="preserve">
+    <value>{0} 已就绪，可开始人工验证。</value>
+  </data>
+  <data name="Run.ReadyHint" xml:space="preserve">
+    <value>请保留此窗口；按 {0} 退出并清除本次环境及全部测试数据。</value>
+  </data>
+  <data name="Run.Failed" xml:space="preserve">
+    <value>验证失败：{0}
+保留环境 {1} 供检查。按 Ctrl+C 清除。不自动重试安装或升迁。</value>
+  </data>
+  <data name="Run.Cleaned" xml:space="preserve">
+    <value>已清除验证资源：{0}。仅保留干净底图及当前基础服务镜像缓存。</value>
+  </data>
+  <data name="Run.CleanupFailed" xml:space="preserve">
+    <value>未能完成 {0} 的清理：{1}。请检查报告的本次所属资源后手工清除。</value>
+  </data>
+  <data name="Run.Architecture.Message" xml:space="preserve">
+    <value>包要求 {0}，当前引擎为 {1}。不使用跨架构仿真。</value>
+  </data>
+  <data name="Run.BaseConflict.Message" xml:space="preserve">
+    <value>验证底图名称被其他归属的镜像占用：{0}。</value>
+  </data>
+  <data name="Run.Prepare" xml:space="preserve">
+    <value>准备 {0} / {1} 的干净验证底图；首次制作可能需要联网。</value>
+  </data>
+  <data name="Run.Install" xml:space="preserve">
+    <value>在验证容器内使用原始 install.sh 安装 {0} …</value>
+  </data>
+  <data name="Run.InstallFailed.Message" xml:space="preserve">
+    <value>install.sh 退出，错误码 {0}。</value>
+  </data>
+  <data name="Run.WebFailed.Message" xml:space="preserve">
+    <value>无法通过 {0} 访问 Web：{1}。请检查 Web 绑定、端口映射、证书及应用和托管器日志。</value>
+  </data>
+  <data name="Run.ForwardFailed" xml:space="preserve">
+    <value>{0} 的可选本机入口不可用：{1}。已安装的服务继续保留在验证环境内。</value>
+  </data>
+  <data name="Run.Daemon" xml:space="preserve">
+    <value>  {0}：内部健康检查通过；请通过日志验证业务行为。</value>
+  </data>
+  <data name="Run.WebMetadata.Message" xml:space="preserve">
+    <value>{0} 缺少 Web 入口元信息；请重新制作交付包后再验证本机 Web 就绪。</value>
+  </data>
+  <data name="Run.TooManyPorts.Message" xml:space="preserve">
+    <value>验证环境声明的发布端口过多。</value>
+  </data>
+  <data name="Run.ProbeTimeout.Message" xml:space="preserve">
+    <value>本机入口未在时限内响应。</value>
+  </data>
+  <data name="Run.Redirect.Message" xml:space="preserve">
+    <value>  收到重定向响应：{0}（未请求目标）。</value>
+  </data>
+  <data name="Run.UnknownEntry" xml:space="preserve">
+    <value>{0}：仅验证 TCP 访问；自定义入口配置缺少浏览器入口元信息。请另行验证应用已声明的 Web 入口。</value>
+  </data>
+  <data name="Run.Help" xml:space="preserve">
+    <value>run 将已有交付包安装到全新的本机验证容器中。Web 和已发布的 TCP 入口绑定 127.0.0.1。请保留窗口，按 Ctrl+C 清除环境和测试数据。首次准备底图可能需要联网。</value>
+  </data>
+  <data name="Engine.Podman.Guidance" xml:space="preserve">
+    <value>{0}：请用 {0} info 检查连接；Windows 上请用 {0} machine list 查看虚拟机，再用 {0} machine start &lt;名称&gt; 启动选定虚拟机。</value>
+  </data>
+  <data name="Engine.Compose.Requirement" xml:space="preserve">
+    <value>制作交付物还需要所选引擎的 Compose provider 可用。</value>
+  </data>
+  <data name="Engine.Docker.Guidance" xml:space="preserve">
+    <value>{0}：请用 {0} info 检查连接；Windows 上请启动 {1}，并确认 Linux 引擎已就绪。</value>
+  </data>
+  <data name="Run.Elapsed" xml:space="preserve">
+    <value>  → {0}：{1} 秒</value>
+  </data>
+  <data name="Run.StageVerify" xml:space="preserve">
+    <value>解包及校验交付包</value>
+  </data>
+  <data name="Run.StageBase" xml:space="preserve">
+    <value>准备验证底图</value>
+  </data>
+  <data name="Run.StageCache" xml:space="preserve">
+    <value>准备镜像缓存</value>
+  </data>
+  <data name="Run.StageCopy" xml:space="preserve">
+    <value>复制交付资产</value>
+  </data>
+  <data name="Run.StageInstall" xml:space="preserve">
+    <value>安装及检查服务</value>
+  </data>
+  <data name="Run.StageForward" xml:space="preserve">
+    <value>验证本机入口</value>
+  </data>
+  <data name="Run.CacheConflict.Message" xml:space="preserve">
+    <value>验证缓存正在使用或归属不符：{0}。</value>
+  </data>
+  <data name="Run.CacheDiscarded" xml:space="preserve">
+    <value>镜像缓存 {0} 无法清理，将整体删除：{1}。</value>
+  </data>
+  <data name="Run.ImageCached" xml:space="preserve">
+    <value>  → {0}：复用已校验的镜像缓存</value>
+  </data>
+  <data name="Run.ImagePrepared" xml:space="preserve">
+    <value>  → {0}：准备镜像耗时 {1} 秒</value>
+  </data>
+  <data name="Mirrors.File.Message" xml:space="preserve">
+    <value>镜像源配置 {0} 无效：使用无段落的 仓库=镜像源[;镜像源] 根条目。</value>
+  </data>
+  <data name="Mirrors.Invalid.Message" xml:space="preserve">
+    <value>镜像源规则必须指定仓库主机和一个或多个 主机[/路径前缀] 地址，以分号分隔；不包含协议、tag、digest 或凭据。</value>
+  </data>
+  <data name="Mirrors.Failed.Message" xml:space="preserve">
+    <value>无法从任何来源获取 {0} 所需的镜像：
+{1}</value>
+  </data>
+  <data name="Mirrors.SourceFailed" xml:space="preserve">
+    <value>  → 镜像来源 {0} 失败：{1}</value>
+  </data>
+  <data name="RuntimeCache.Hit" xml:space="preserve">
+    <value>  → 复用公共运行环境：{0}</value>
+  </data>
+  <data name="RuntimeCache.Refresh" xml:space="preserve">
+    <value>  → 刷新公共运行环境：{0}</value>
+  </data>
+  <data name="RuntimeCache.Prepare" xml:space="preserve">
+    <value>  → 准备公共运行环境：{0}</value>
+  </data>
+  <data name="RuntimeCache.Volumes" xml:space="preserve">
+    <value>公共运行环境镜像不能声明数据卷，否则导出根文件系统会遗漏卷内容。</value>
+  </data>
+  <data name="RuntimeCache.Help" xml:space="preserve">
+    <value>--refresh 为 make/完整制作重新准备所需公共运行环境。不写入 .container；plan/run 不刷新。</value>
+  </data>
+  <data name="Build.Total" xml:space="preserve">
+    <value>完整制作</value>
+  </data>
+  <data name="Build.Checksums" xml:space="preserve">
+    <value>校验交付资产</value>
+  </data>
+  <data name="Build.Compression" xml:space="preserve">
+    <value>压缩交付包</value>
+  </data>
+  <data name="Build.Publish" xml:space="preserve">
+    <value>发布交付物</value>
+  </data>
+  <data name="Web.Invalid.Message" xml:space="preserve">
+    <value>{0}：Web 交接信息无效或不完整（{1}）。</value>
+  </data>
+  <data name="Run.WebBrowser" xml:space="preserve"><value>  域名浏览访问需 DNS 指向本机、实际端口 {0} 及可信 HTTPS 证书。已请求引擎按 0.0.0.0 发布；局域网接入还取决于虚拟机转发与防火墙。</value></data>
+  <data name="Web.Plan" xml:space="preserve"><value>  {0} / {1}：{2}；主机名={3}；发布={4}</value></data>
+  <data name="Run.WebInterfaces" xml:space="preserve"><value>  本机网卡/端口（局域网可达性未探测；具名站点仍需正确的 Host/SNI）：{0}</value></data>
 </root>

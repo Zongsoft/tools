@@ -55,5 +55,7 @@ internal sealed class ImagePlan
 	public long? Size { get; set; }
 	[JsonIgnore]
 	public string Timestamp { get; set; }
+	[JsonIgnore]
+	public string SourceRepository { get; set; }
 	#endregion
 }

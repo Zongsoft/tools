@@ -94,18 +94,18 @@ partial class DockerHost
 		await this.StopApplicationsAsync(installation, cancellation);
 
 		foreach(var id in await this.ContainersAsync(installation.Name, null, cancellation))
-			await this.RunAsync("docker", ["rm", "-f", "-v", id], null, cancellation);
+			await this.RunAsync(ENGINE, ["rm", "-f", "-v", id], null, cancellation);
 
-		var networks = await this.RunAsync("docker", ["network", "ls", "--filter", $"label={OWNER}={installation.Name}", "--format", "{{.ID}}"], null, cancellation);
+		var networks = await this.RunAsync(ENGINE, ["network", "ls", "--filter", $"label={OWNER}={installation.Name}", "--format", "{{.ID}}"], null, cancellation);
 		foreach(var id in Lines(networks))
-			await this.RunAsync("docker", ["network", "rm", id], null, cancellation);
+			await this.RunAsync(ENGINE, ["network", "rm", id], null, cancellation);
 
 		if(!purge)
 			return;
 
 		foreach(var images in this.Plans(installation).SelectMany(plan => plan.Services).Select(service => service.Image).GroupBy(image => image.Tag, StringComparer.Ordinal))
 		{
-			var exists = await runner.RunAsync("docker", ["image", "inspect", images.Key], null, cancellation);
+			var exists = await runner.RunAsync(ENGINE, ["image", "inspect", images.Key], null, cancellation);
 
 			if(exists.ExitCode == 0)
 			{
@@ -113,7 +113,7 @@ partial class DockerHost
 				if(!images.Any(image => image.Id == json.RootElement[0].GetProperty("Id").GetString()))
 					throw new ContainerizationException(9, Properties.Resources.DockerHost_14_Message);
 
-				await this.RunAsync("docker", ["image", "rm", images.Key], null, cancellation);
+				await this.RunAsync(ENGINE, ["image", "rm", images.Key], null, cancellation);
 			}
 		}
 

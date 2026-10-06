@@ -181,16 +181,16 @@
     <value>Expected exactly one container for a service.</value>
   </data>
   <data name="DockerHost.19.Message" xml:space="preserve">
-    <value>Service container is missing or ambiguous.</value>
+    <value>Service {0}: container is missing or ambiguous.</value>
   </data>
   <data name="DockerHost.2.Message" xml:space="preserve">
     <value>Installation commands require root.</value>
   </data>
   <data name="DockerHost.20.Message" xml:space="preserve">
-    <value>Service has no protocol/template healthcheck.</value>
+    <value>Service {0} has no protocol/template healthcheck.</value>
   </data>
   <data name="DockerHost.21.Message" xml:space="preserve">
-    <value>Service failed its healthcheck; maintenance is retained.</value>
+    <value>Service {0} (container {1}) failed its healthcheck; maintenance is retained.</value>
   </data>
   <data name="DockerHost.22.Message" xml:space="preserve">
     <value>A preexisting directory is not owned exclusively; cleanup is incomplete.</value>
@@ -247,11 +247,13 @@
     <value>{0} {1} failed (exit {2}). Verify engine connectivity, source availability and target-platform support.</value>
   </data>
   <data name="Engine.10.Message" xml:space="preserve">
-    <value>Cannot resolve the image user. Declare numeric data-owner in the template.</value>
+    <value>Cannot resolve the image data owner. Declare an existing image account or numeric UID:GID as data-owner in the template.</value>
   </data>
   <data name="Engine.2.Message" xml:space="preserve">
-    <value>No usable build engine and Compose provider were found. Ensure Docker or Podman is running and its Compose provider is installed. On Windows, check `podman machine list` and start the selected machine with `podman machine start`.
-{0}</value>
+    <value>No usable container engine was found ({0}).
+{1}
+Probe details:
+{2}</value>
   </data>
   <data name="Engine.3.Message" xml:space="preserve">
     <value>The acquired image does not match the fixed platform manifest digest.</value>
@@ -306,6 +308,39 @@
   </data>
   <data name="InstallationStore.4.Message" xml:space="preserve">
     <value>Managed release identity mismatch.</value>
+  </data>
+  <data name="Installation.Phase.StageInstallation" xml:space="preserve">
+    <value>Stage delivery files</value>
+  </data>
+  <data name="Installation.Phase.PrepareBootstrap" xml:space="preserve">
+    <value>Prepare container engine and runtime dependencies</value>
+  </data>
+  <data name="Installation.Phase.PrepareImages" xml:space="preserve">
+    <value>Prepare container images</value>
+  </data>
+  <data name="Installation.Phase.StartInfrastructure" xml:space="preserve">
+    <value>Start infrastructure services</value>
+  </data>
+  <data name="Installation.Phase.CheckLocalInfrastructure" xml:space="preserve">
+    <value>Check infrastructure service health</value>
+  </data>
+  <data name="Installation.Phase.ApplyMigration" xml:space="preserve">
+    <value>Apply data migrations</value>
+  </data>
+  <data name="Installation.Phase.ReadyToStart" xml:space="preserve">
+    <value>Prepare to start applications</value>
+  </data>
+  <data name="Installation.Phase.StartApplications" xml:space="preserve">
+    <value>Start applications</value>
+  </data>
+  <data name="Installation.Phase.StartIngress" xml:space="preserve">
+    <value>Start ingress services</value>
+  </data>
+  <data name="Installation.Phase.CheckHealth" xml:space="preserve">
+    <value>Check service health</value>
+  </data>
+  <data name="Installation.Phase.CommitRelease" xml:space="preserve">
+    <value>Commit the current release</value>
   </data>
   <data name="Lifecycle.1.Message" xml:space="preserve">
     <value>--name differs from the bundle identity.</value>
@@ -468,12 +503,6 @@
   </data>
   <data name="NodeBuilder.1.Message" xml:space="preserve">
     <value>{0}: required environment/setting {1} is missing.</value>
-  </data>
-  <data name="NodeBuilder.10.Message" xml:space="preserve">
-    <value>Multiple applications require an explicit Nginx routing configuration.</value>
-  </data>
-  <data name="NodeBuilder.11.Message" xml:space="preserve">
-    <value>Nginx shorthand requires one unambiguous application HTTP port or an explicit routing configuration.</value>
   </data>
   <data name="NodeBuilder.2.Message" xml:space="preserve">
     <value>Invalid component imaging value.</value>
@@ -645,19 +674,187 @@ Recovery never automatically reruns an interrupted migration. Ordinary uninstall
   <data name="BuildResources.Cleanup.Message" xml:space="preserve">
     <value>Warning: could not remove build resource {0} with {1}. {2}</value>
   </data>
-  <data name="Settings.Invalid" xml:space="preserve">
+  <data name="Settings.Invalid.Message" xml:space="preserve">
     <value>Invalid settings. Use name=value pairs separated by semicolons; quote values containing semicolons.</value>
   </data>
-  <data name="Settings.File" xml:space="preserve">
+  <data name="Settings.File.Message" xml:space="preserve">
     <value>Invalid .settings file: {0}. Expected component sections containing tag, repository and settings.</value>
   </data>
-  <data name="Settings.Conflict" xml:space="preserve">
+  <data name="Settings.Conflict.Message" xml:space="preserve">
     <value>{0}: conflicting settings and explicit environment entry {1}.</value>
   </data>
-  <data name="Make.Input" xml:space="preserve">
+  <data name="Make.Input.Message" xml:space="preserve">
     <value>make requires exactly one .container input.</value>
   </data>
-  <data name="Make.Options" xml:space="preserve">
+  <data name="Make.Options.Message" xml:space="preserve">
     <value>With a .container input, only version, source, output and engine options may override the manifest.</value>
   </data>
+  <data name="Run.Usage.Message" xml:space="preserve">
+    <value>Usage: dotnet-containerize run &lt;archive.tar.gz&gt; [--engine:{0}]</value>
+  </data>
+  <data name="Run.Verify" xml:space="preserve">
+    <value>Verifying delivery: {0}</value>
+  </data>
+  <data name="Run.Unsuccessful.Message" xml:space="preserve">
+    <value>Verification ended without success; see the preceding diagnostics.</value>
+  </data>
+  <data name="Run.Existing.Message" xml:space="preserve">
+    <value>A verification environment already exists: {0}. Inspect it with {1} ps --all; close its run session, or explicitly remove the abandoned container and its anonymous volumes. It will not be replaced.</value>
+  </data>
+  <data name="Run.Locked.Message" xml:space="preserve">
+    <value>A verification session for {0} is already managed by another process.</value>
+  </data>
+  <data name="Run.Container" xml:space="preserve">
+    <value>Verification container: {0}
+Inspect inner {2} services:
+  {1} exec {0} {2} ps -a
+Inspect inner {2} service logs:
+  {1} exec {0} {2} logs &lt;inner-container&gt;</value>
+  </data>
+  <data name="Run.Ready" xml:space="preserve">
+    <value>{0} is ready for manual verification.</value>
+  </data>
+  <data name="Run.ReadyHint" xml:space="preserve">
+    <value>Keep this window open; press {0} to exit and remove this environment and all test data.</value>
+  </data>
+  <data name="Run.Failed" xml:space="preserve">
+    <value>Verification failed: {0}
+The environment {1} is retained for inspection. Press Ctrl+C to remove it. Installation and migrations will not be retried automatically.</value>
+  </data>
+  <data name="Run.Cleaned" xml:space="preserve">
+    <value>Verification resources removed: {0}. Only the clean base and current infrastructure images remain cached.</value>
+  </data>
+  <data name="Run.CleanupFailed" xml:space="preserve">
+    <value>Could not finish cleanup for {0}: {1}. Inspect the reported owned resources before manually removing them.</value>
+  </data>
+  <data name="Run.Architecture.Message" xml:space="preserve">
+    <value>This package requires {0}, but the engine is {1}. Cross-architecture emulation is not used.</value>
+  </data>
+  <data name="Run.BaseConflict.Message" xml:space="preserve">
+    <value>The verification image name is occupied by an image with different ownership: {0}.</value>
+  </data>
+  <data name="Run.Prepare" xml:space="preserve">
+    <value>Preparing the clean verification base for {0} / {1}; the first build may require Internet access.</value>
+  </data>
+  <data name="Run.Install" xml:space="preserve">
+    <value>Installing {0} using its original install.sh inside the verification container…</value>
+  </data>
+  <data name="Run.InstallFailed.Message" xml:space="preserve">
+    <value>install.sh exited with code {0}.</value>
+  </data>
+  <data name="Run.WebFailed.Message" xml:space="preserve">
+    <value>Web is not reachable at {0}: {1}. Check Web bindings, port mappings, certificates and application/hoster logs.</value>
+  </data>
+  <data name="Run.ForwardFailed" xml:space="preserve">
+    <value>Optional local entry for {0} is unavailable: {1}. Its installed service remains in the verification environment.</value>
+  </data>
+  <data name="Run.Daemon" xml:space="preserve">
+    <value>  {0}: internal health check passed; verify its business behavior through its logs.</value>
+  </data>
+  <data name="Run.WebMetadata.Message" xml:space="preserve">
+    <value>Web entry metadata is missing for {0}; regenerate the delivery before reporting local Web readiness.</value>
+  </data>
+  <data name="Run.TooManyPorts.Message" xml:space="preserve">
+    <value>Too many published ports for the verification environment.</value>
+  </data>
+  <data name="Run.ProbeTimeout.Message" xml:space="preserve">
+    <value>The local entry did not respond before the deadline.</value>
+  </data>
+  <data name="Run.Redirect.Message" xml:space="preserve">
+    <value>  Redirect response: {0} (target not requested).</value>
+  </data>
+  <data name="Run.UnknownEntry" xml:space="preserve">
+    <value>{0}: TCP access only; custom ingress configuration has no browser entry metadata. Verify the application's declared Web entry separately.</value>
+  </data>
+  <data name="Run.Help" xml:space="preserve">
+    <value>run installs an existing delivery in a fresh local verification container. Web and published TCP entries bind to 127.0.0.1. Keep this window open; Ctrl+C removes the environment and test data. The first base-image preparation may need Internet access.</value>
+  </data>
+  <data name="Engine.Podman.Guidance" xml:space="preserve">
+    <value>{0}: check {0} info. On Windows, list machines with {0} machine list and start the selected machine with {0} machine start &lt;name&gt;.</value>
+  </data>
+  <data name="Engine.Compose.Requirement" xml:space="preserve">
+    <value>Building deliveries also requires the selected engine&apos;s Compose provider.</value>
+  </data>
+  <data name="Engine.Docker.Guidance" xml:space="preserve">
+    <value>{0}: check {0} info. On Windows, start {1} and confirm its Linux engine is ready.</value>
+  </data>
+  <data name="Run.Elapsed" xml:space="preserve">
+    <value>  → {0}: {1} s</value>
+  </data>
+  <data name="Run.StageVerify" xml:space="preserve">
+    <value>Extract and verify delivery</value>
+  </data>
+  <data name="Run.StageBase" xml:space="preserve">
+    <value>Prepare verification base</value>
+  </data>
+  <data name="Run.StageCache" xml:space="preserve">
+    <value>Prepare image cache</value>
+  </data>
+  <data name="Run.StageCopy" xml:space="preserve">
+    <value>Copy delivery assets</value>
+  </data>
+  <data name="Run.StageInstall" xml:space="preserve">
+    <value>Install and check services</value>
+  </data>
+  <data name="Run.StageForward" xml:space="preserve">
+    <value>Verify local entries</value>
+  </data>
+  <data name="Run.CacheConflict.Message" xml:space="preserve">
+    <value>Verification cache is occupied or has different ownership: {0}.</value>
+  </data>
+  <data name="Run.CacheDiscarded" xml:space="preserve">
+    <value>Image cache {0} will be discarded because it could not be cleaned: {1}.</value>
+  </data>
+  <data name="Run.ImageCached" xml:space="preserve">
+    <value>  → {0}: reuse verified image cache</value>
+  </data>
+  <data name="Run.ImagePrepared" xml:space="preserve">
+    <value>  → {0}: image prepared in {1} s</value>
+  </data>
+  <data name="Mirrors.File.Message" xml:space="preserve">
+    <value>Invalid mirror configuration {0}: use root registry=mirror[;mirror] entries without sections.</value>
+  </data>
+  <data name="Mirrors.Invalid.Message" xml:space="preserve">
+    <value>Mirror rules require a registry host and one or more host[/prefix] locations, separated by semicolons; omit schemes, tags, digests and credentials.</value>
+  </data>
+  <data name="Mirrors.Failed.Message" xml:space="preserve">
+    <value>Unable to retrieve the requested image from any source for {0}:
+{1}</value>
+  </data>
+  <data name="Mirrors.SourceFailed" xml:space="preserve">
+    <value>  → Image source {0} failed: {1}</value>
+  </data>
+  <data name="RuntimeCache.Hit" xml:space="preserve">
+    <value>  → Reusing public runtime: {0}</value>
+  </data>
+  <data name="RuntimeCache.Refresh" xml:space="preserve">
+    <value>  → Refreshing public runtime: {0}</value>
+  </data>
+  <data name="RuntimeCache.Prepare" xml:space="preserve">
+    <value>  → Preparing public runtime: {0}</value>
+  </data>
+  <data name="RuntimeCache.Volumes" xml:space="preserve">
+    <value>A public runtime image must not declare volumes; exporting its root filesystem would omit their contents.</value>
+  </data>
+  <data name="RuntimeCache.Help" xml:space="preserve">
+    <value>--refresh rebuilds the required public runtime environments for make/complete delivery. It is not saved in .container; plan/run do not refresh.</value>
+  </data>
+  <data name="Build.Total" xml:space="preserve">
+    <value>Complete delivery</value>
+  </data>
+  <data name="Build.Checksums" xml:space="preserve">
+    <value>Verify asset checksums</value>
+  </data>
+  <data name="Build.Compression" xml:space="preserve">
+    <value>Compress delivery</value>
+  </data>
+  <data name="Build.Publish" xml:space="preserve">
+    <value>Publish delivery</value>
+  </data>
+  <data name="Web.Invalid.Message" xml:space="preserve">
+    <value>{0}: invalid or incomplete Web handoff ({1}).</value>
+  </data>
+  <data name="Run.WebBrowser" xml:space="preserve"><value>  Browser domains require DNS pointing here, actual port {0}, and trusted HTTPS certificates. Requested engine publication: 0.0.0.0; LAN access also depends on VM forwarding and firewall rules.</value></data>
+  <data name="Web.Plan" xml:space="preserve"><value>  {0} / {1}: {2}; hosts={3}; publication={4}</value></data>
+  <data name="Run.WebInterfaces" xml:space="preserve"><value>  Local interfaces/port (LAN reachability not probed; named sites still require Host/SNI): {0}</value></data>
 </root>

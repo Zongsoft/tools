@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
@@ -27,6 +28,29 @@ public sealed class InstallationManagerTests : IDisposable
 	public void Dispose() => Directory.Delete(_root, true);
 
 	[Theory]
+	[InlineData("zh-CN", "PrepareBootstrap", "准备容器引擎及运行依赖")]
+	[InlineData("zh-CN", "ApplyMigration", "执行数据升迁")]
+	[InlineData("zh-CN", "CheckHealth", "检查服务健康状态")]
+	[InlineData("en-US", "PrepareBootstrap", "Prepare container engine and runtime dependencies")]
+	[InlineData("en-US", "ApplyMigration", "Apply data migrations")]
+	[InlineData("en-US", "CheckHealth", "Check service health")]
+	[InlineData("zh-CN", "UnknownPhase", "UnknownPhase")]
+	public void PhaseDisplayUsesTheInterfaceLanguage(string culture, string phase, string expected)
+	{
+		var original = CultureInfo.CurrentUICulture;
+
+		try
+		{
+			CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo(culture);
+			Assert.Equal(expected, InstallationManager.GetPhaseText(phase));
+		}
+		finally
+		{
+			CultureInfo.CurrentUICulture = original;
+		}
+	}
+
+	[Theory]
 	[InlineData("upgrade", "--bundle", "input.tar.gz", "--name", "example")]
 	[InlineData("install")]
 	[InlineData("install", "one", "two")]
@@ -35,6 +59,25 @@ public sealed class InstallationManagerTests : IDisposable
 	[InlineData("start")]
 	[InlineData("list", "--name", "example")]
 	public void InvalidArgumentsFailBeforeAnyHostAction(params string[] arguments) => Assert.Equal(2, Assert.Throws<ContainerizationException>(() => ExecutorArguments.Parse(arguments)).Code);
+
+	[Theory]
+	[InlineData("missing")]
+	[InlineData("no-health")]
+	[InlineData("unhealthy")]
+	public async Task HealthFailuresIdentifyTheServiceAndRetainTheHealthExitCode(string failure)
+	{
+		using var bundle = DeliveryBundle.Open(this.CreateBundle("1.0", false));
+		var service = bundle.Plan.Services[0];
+		service.Health.StartSeconds = service.Health.Retries = service.Health.TimeoutSeconds = 0;
+		var host = new DockerHost(_store, new HealthRunner(failure));
+
+		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => host.HealthyAsync(bundle, service, TestContext.Current.CancellationToken));
+
+		Assert.Equal(6, exception.Code);
+		Assert.Contains(service.Id, exception.Message);
+		if(failure == "unhealthy")
+			Assert.Contains("redis-container-id", exception.Message);
+	}
 
 	[Fact]
 	public async Task BootstrapCacheOwnershipSurvivesLaterTransactionSaves()
@@ -69,28 +112,43 @@ public sealed class InstallationManagerTests : IDisposable
 		Assert.Equal(7, (await Assert.ThrowsAsync<ContainerizationException>(() => this.Run("recover", "--name", "example"))).Code);
 	}
 
-	[Fact]
-	public async Task NoStartCommitsOnlyAfterExplicitStartAndReusesMigrationSuccess()
+	[Theory]
+	[InlineData("zh-CN")]
+	[InlineData("en-US")]
+	public async Task NoStartCommitsOnlyAfterExplicitStartAndReusesMigrationSuccess(string culture)
 	{
-		var path = this.CreateBundle("1.0", true);
-		await this.Run("install", path, "--no-start");
+		var original = CultureInfo.CurrentUICulture;
 
-		var state = _store.Load("example");
-		Assert.Equal("ReadyToStart", state.Status);
-		Assert.True(state.Maintenance);
-		Assert.Null(state.Current);
-		Assert.Equal(1, _host.Applies);
-		Assert.DoesNotContain("start:web", _host.Calls);
+		try
+		{
+			CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo(culture);
+			var path = this.CreateBundle("1.0", true);
+			await this.Run("install", path, "--no-start");
 
-		Directory.Delete(path, true);
-		await this.Run("start", "--name", "example");
+			var state = _store.Load("example");
+			Assert.Equal("ReadyToStart", state.Status);
+			Assert.Equal("ReadyToStart", state.Pending.Phase);
+			Assert.Contains("PrepareBootstrap", state.Pending.Completed);
+			Assert.Contains(state.Pending.Events, item => item.Phase == "ApplyMigration" && item.Result == "Succeeded");
+			Assert.True(state.Maintenance);
+			Assert.Null(state.Current);
+			Assert.Equal(1, _host.Applies);
+			Assert.DoesNotContain("start:web", _host.Calls);
 
-		state = _store.Load("example");
-		Assert.Equal("Installed", state.Status);
-		Assert.False(state.Maintenance);
-		Assert.Equal("1.0", state.CurrentVersion);
-		Assert.Equal(1, _host.Applies);
-		Assert.Contains("start:web", _host.Calls);
+			Directory.Delete(path, true);
+			await this.Run("start", "--name", "example");
+
+			state = _store.Load("example");
+			Assert.Equal("Installed", state.Status);
+			Assert.False(state.Maintenance);
+			Assert.Equal("1.0", state.CurrentVersion);
+			Assert.Equal(1, _host.Applies);
+			Assert.Contains("start:web", _host.Calls);
+		}
+		finally
+		{
+			CultureInfo.CurrentUICulture = original;
+		}
 	}
 
 	[Fact]
@@ -257,12 +315,14 @@ public sealed class InstallationManagerTests : IDisposable
 	private Task Run(params string[] arguments) => _lifecycle.ExecuteAsync(ExecutorArguments.Parse(arguments), CancellationToken.None);
 
 	[Theory]
-	[InlineData(false)]
-	[InlineData(true)]
-	public async Task OfflineImportValidatesImageIdentityBeforePublishingDeliveryTags(bool wrongArchitecture)
+	[InlineData(false, false)]
+	[InlineData(true, false)]
+	[InlineData(false, true)]
+	[InlineData(true, true)]
+	public async Task OfflineImportValidatesImageIdentityBeforePublishingDeliveryTags(bool wrongArchitecture, bool cached)
 	{
 		using var bundle = DeliveryBundle.Open(this.CreateBundle("1.0", false));
-		var runner = new ImportedImageRunner(wrongArchitecture);
+		var runner = new ImportedImageRunner(wrongArchitecture, cached);
 		var host = new DockerHost(_store, runner);
 
 		if(wrongArchitecture)
@@ -275,6 +335,8 @@ public sealed class InstallationManagerTests : IDisposable
 			await host.ImagesAsync(bundle, CancellationToken.None);
 			Assert.Equal(bundle.Plan.Services.Select(service => service.Image.Tag), runner.PublishedTags);
 		}
+
+		Assert.Equal(cached ? 0 : 1, runner.Loads);
 	}
 
 	[Fact]
@@ -319,6 +381,7 @@ public sealed class InstallationManagerTests : IDisposable
 	[Theory]
 	[InlineData(0)]
 	[InlineData(2)]
+	[InlineData(3)]
 	public void OtherDeliveryProtocolsAreRejected(int schema)
 	{
 		var path = this.CreateBundle("1.0", false);
@@ -388,12 +451,60 @@ public sealed class InstallationManagerTests : IDisposable
 		return directory;
 	}
 
-	private sealed class ImportedImageRunner(bool wrongArchitecture) : IProcessRunner
+	[Theory]
+	[InlineData(false, false)]
+	[InlineData(true, false)]
+	[InlineData(false, true)]
+	public async Task OnlineMirrorsKeepPinnedIdentityAndReuseCachedImages(bool wrongMirror, bool cached)
+	{
+		using var bundle = DeliveryBundle.Open(this.CreateBundle("1.0", false));
+		bundle.Plan.Services.RemoveAt(1);
+		var image = bundle.Plan.Services[0].Image;
+		image.Mode = "online";
+		image.Repository = "docker.io/library/redis";
+		var runner = new OnlineImageRunner(image, wrongMirror, cached);
+		var sources = new RegistryMirrors { Registries = new() { ["docker.io"] = ["mirror.example.com/docker.io"] } };
+		await new DockerHost(_store, runner, sources).ImagesAsync(bundle, TestContext.Current.CancellationToken);
+		Assert.Equal(cached ? 0 : wrongMirror ? 2 : 1, runner.Calls.Count(arguments => arguments[0] == "pull"));
+		Assert.All(runner.Calls.Where(arguments => arguments[0] == "pull"), arguments => Assert.EndsWith($"@{image.Digest}", arguments[^1], StringComparison.Ordinal));
+		Assert.Equal(["tag", image.Id, image.Tag], Assert.Single(runner.Calls, arguments => arguments[0] == "tag"));
+		Assert.Equal("docker.io/library/redis", image.Repository);
+	}
+
+	private sealed class OnlineImageRunner(ImagePlan image, bool wrongMirror, bool cached) : IProcessRunner
+	{
+		public List<string[]> Calls { get; } = [];
+		private bool _pulled;
+		public Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation, int timeoutSeconds = 900)
+		{
+			this.Calls.Add(arguments.ToArray());
+			if(arguments[0] == "pull")
+				_pulled = true;
+
+			if(arguments[0] == "image")
+			{
+				if(!cached && !_pulled)
+					return Task.FromResult(new ProcessResult(1, "", "image missing"));
+				var reference = arguments[^1];
+				var id = wrongMirror && reference.StartsWith("mirror.example.com", StringComparison.Ordinal) ? $"sha256:{new string('f', 64)}" : image.Id;
+				return Task.FromResult(new ProcessResult(0, System.Text.Json.JsonSerializer.Serialize(new[] { new { Id = id, Os = "linux", Architecture = "amd64", RepoDigests = new[] { reference } } }), ""));
+			}
+
+			return Task.FromResult(new ProcessResult(0, "", ""));
+		}
+	}
+
+	private sealed class ImportedImageRunner(bool wrongArchitecture, bool cached) : IProcessRunner
 	{
 		public List<string> PublishedTags { get; } = [];
+		public int Loads { get; private set; }
 		public Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation, int timeoutSeconds = 900)
 		{
 			var id = "sha256:" + new string('a', 64);
+
+			if(arguments[0] == "image" && arguments[1] == "load")
+				this.Loads++;
+
 			if(arguments[0] == "tag")
 			{
 				Assert.Equal(id, arguments[1]);
@@ -402,7 +513,7 @@ public sealed class InstallationManagerTests : IDisposable
 
 			if(arguments[0] == "image" && arguments[1] == "inspect")
 			{
-				if(arguments[2] != id)
+				if(arguments[2] != id || !cached && this.Loads == 0)
 					return Task.FromResult(new ProcessResult(1, "", "Only the imported image ID and upstream localhost tag exist."));
 
 				return Task.FromResult(new ProcessResult(0, "[{\"Id\":\"" + id + "\",\"Os\":\"linux\",\"Architecture\":\"" + (wrongArchitecture ? "arm64" : "amd64") + "\"}]", ""));
@@ -416,6 +527,16 @@ public sealed class InstallationManagerTests : IDisposable
 	{
 		public Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation, int timeoutSeconds = 900) =>
 			Task.FromResult(new ProcessResult(executable == "sh" ? 1 : 0, "", ""));
+	}
+
+	private sealed class HealthRunner(string failure) : IProcessRunner
+	{
+		public Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation, int timeoutSeconds = 900)
+		{
+			var output = arguments[0] == "ps" ? failure == "missing" ? "" : "redis-container-id" :
+				failure == "no-health" ? "[{\"State\":{\"Running\":true}}]" : "[{\"State\":{\"Running\":false,\"Health\":{\"Status\":\"unhealthy\"}}}]";
+			return Task.FromResult(new ProcessResult(0, output, ""));
+		}
 	}
 
 	private sealed class FakeHost : IInstallationHost

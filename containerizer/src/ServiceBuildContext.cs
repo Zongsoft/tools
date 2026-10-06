@@ -44,13 +44,12 @@ internal sealed class ServiceBuildContext
 	public ServicePlan Plan { get; set; } = new();
 	public Dictionary<string, string> Environment { get; } = new(StringComparer.Ordinal);
 	public Dictionary<string, string> Settings { get; } = new(StringComparer.OrdinalIgnoreCase);
-	public Dictionary<string, string> Configuration { get; } = new(StringComparer.Ordinal);
-	public Dictionary<string, string> Ingress { get; } = new(StringComparer.Ordinal);
+	public Dictionary<string, (string Source, string RelativePath)> Configuration { get; } = new(StringComparer.Ordinal);
+	public PackageReader.Descriptor Package { get; set; }
 	public List<string> RequiredEnvironment { get; } = [];
 	public HashSet<string> ManagedEnvironment { get; } = new(StringComparer.Ordinal);
 	public List<string> MissingSettings { get; } = [];
 	public string SourceImage { get; set; }
-	public bool HealthUsesCurl { get; set; }
 	#endregion
 
 	#region 公共方法
@@ -61,10 +60,12 @@ internal sealed class ServiceBuildContext
 
 		var source = new ServiceBuildContext
 		{
+			Package = component.Package ?? PackageReader.Read(component["package"]),
 			Plan = new() { Id = component.Name.ToLowerInvariant(), Kind = "application", Restart = "unless-stopped", StopSignal = "SIGTERM", Health = new() },
 		};
 
 		TemplateCatalog.ApplyEnvironment(component, source, manifest);
+		ApplicationImageBuilder.ResolveEntry(source.Package, source);
 
 		return source;
 	}

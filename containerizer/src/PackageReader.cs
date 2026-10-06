@@ -85,12 +85,12 @@ internal static partial class PackageReader
 		throw new ContainerizationException(2, string.Format(Properties.Resources.PackageReader_3_Message, path));
 	}
 
-	public static Descriptor Read(string path)
+	public static Descriptor Read(string path, IReadOnlyDictionary<string, string> extraction = null)
 	{
 		if(!File.Exists(path))
 			throw new ContainerizationException(2, string.Format(Properties.Resources.PackageReader_4_Message, path));
 
-		var result = new Descriptor();
+		var result = new Descriptor { Extraction = extraction };
 		using var stream = File.OpenRead(path);
 
 		if(path.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase))
@@ -115,7 +115,7 @@ internal static partial class PackageReader
 			throw new ContainerizationException(2, Properties.Resources.PackageReader_6_Message);
 
 		ContainerManifest.Identity(result.Name);
-		ContainerManifest.VersionNumber(result.Version);
+		ContainerManifest.GetVersionNumber(result.Version);
 		result.Architecture = result.Architecture switch
 		{
 			"amd64" or "x86_64" or "x64" => "x64",
@@ -124,6 +124,7 @@ internal static partial class PackageReader
 		};
 
 		ApplicationHealth.ParseListeners(result.Listen, result.Name);
+		result.Web = WebPackage.Read(result);
 
 		return result;
 	}
@@ -131,7 +132,54 @@ internal static partial class PackageReader
 
 	#region 私有方法
 	private static string NormalizeName(string name) => name.StartsWith("./", StringComparison.Ordinal) ? name[2..] : name;
-	private static bool IsMetadata(string name) => NormalizeName(name) == "control" || name.EndsWith(".service", StringComparison.Ordinal) || name.EndsWith(".runtimeconfig.json", StringComparison.Ordinal) || name.EndsWith("/.version", StringComparison.Ordinal) || name == ".version";
+	private static bool IsMetadata(string name) => NormalizeName(name) == "control" || name.EndsWith(".service", StringComparison.Ordinal) || name.EndsWith(".runtimeconfig.json", StringComparison.Ordinal) || name.EndsWith("/.version", StringComparison.Ordinal) || name == ".version" || name.Contains("/.web/", StringComparison.Ordinal) && (name.EndsWith("/.bindings", StringComparison.Ordinal) || name.EndsWith(".conf", StringComparison.Ordinal) || name.EndsWith(".conf.template", StringComparison.Ordinal));
+
+	private static long Capture(Descriptor result, string name, Stream stream, long length, bool regular, bool linked = false)
+	{
+		name = NormalizeName(name).TrimEnd('/');
+		if(name.Length == 0 || name == ".")
+			return 0;
+
+		var path = result.Format == "tar" && !name.StartsWith('/') ?
+			name.StartsWith(".root/", StringComparison.Ordinal) ? name[5..] : $"{result.InstallPath}/{name}" : "/" + name.TrimStart('/');
+		if(path.Contains('\\') || path.Split('/').Any(part => part is "." or ".."))
+			throw WebPackage.Invalid(result.Name, path);
+		if(!result.Entries.TryAdd(path, regular) && regular)
+			throw WebPackage.Invalid(result.Name, path);
+		if(linked)
+			result.Links.Add(path);
+
+		var metadata = IsMetadata(path) || name == "control";
+		if(metadata && (!regular || length > 1024 * 1024) && !path.EndsWith("/.web/nginx", StringComparison.Ordinal))
+			throw WebPackage.Invalid(result.Name, path);
+
+		if(regular && result.Extraction != null && result.Extraction.TryGetValue(path, out var destination))
+		{
+			if(length > 16 * 1024 * 1024)
+				throw WebPackage.Invalid(result.Name, path);
+
+			var bytes = new byte[(int)length];
+			stream.ReadExactly(bytes);
+			File.WriteAllBytes(destination, bytes);
+
+			if(!OperatingSystem.IsWindows())
+				File.SetUnixFileMode(destination, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+
+			return length;
+		}
+
+		if(!regular || !metadata)
+			return 0;
+
+		var data = new byte[(int)length];
+		stream.ReadExactly(data);
+
+		var text = new UTF8Encoding(false, true).GetString(data);
+		result.Texts.Add(name, text);
+		result.WebTexts.Add(path, text);
+
+		return length;
+	}
 	#endregion
 
 	#region 嵌套类型
@@ -144,6 +192,11 @@ internal static partial class PackageReader
 		public string Format { get; set; }
 		public string InstallPath { get; set; }
 		public string Listen { get; set; }
+		public WebPackage Web { get; set; }
+		public IReadOnlyDictionary<string, string> Extraction { get; init; }
+		public Dictionary<string, bool> Entries { get; } = new(StringComparer.Ordinal);
+		public HashSet<string> Links { get; } = new(StringComparer.Ordinal);
+		public Dictionary<string, string> WebTexts { get; } = new(StringComparer.Ordinal);
 		public Dictionary<string, string> Texts { get; } = new(StringComparer.Ordinal);
 		#endregion
 	}

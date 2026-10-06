@@ -115,7 +115,7 @@ internal sealed partial class ContainerManifest
 			var component = new Component { Name = section.Name };
 			foreach(var entry in section.Entries)
 			{
-				if(!_componentKeys.Contains(entry.Name, StringComparer.OrdinalIgnoreCase) && !entry.Name.StartsWith("environment!", StringComparison.OrdinalIgnoreCase))
+				if(!ComponentKey(entry.Name))
 					throw At(entry, string.Format(Properties.Resources.Manifest_UnknownComponentKey_Message, entry.Name));
 				if(entry.Name.StartsWith("environment!", StringComparison.OrdinalIgnoreCase) && !EnvironmentNameRegex().IsMatch(entry.Name[12..]))
 					throw At(entry, Properties.Resources.Manifest_EnvironmentName_Message);
@@ -154,12 +154,13 @@ internal sealed partial class ContainerManifest
 			throw new ContainerizationException(2, Properties.Resources.Manifest_1_Message);
 
 		if(make && manifests.Length != 1)
-			throw new ContainerizationException(2, Properties.Resources.Make_Input);
-		if(manifests.Length == 1 && options.Keys.Any(key => key is not ("version" or "source" or "output" or "engine")))
-			throw new ContainerizationException(2, Properties.Resources.Make_Options);
+			throw new ContainerizationException(2, Properties.Resources.Make_Input_Message);
+		if(manifests.Length == 1 && options.Keys.Any(key => key is not ("version" or "source" or "output" or "engine" or "refresh")))
+			throw new ContainerizationException(2, Properties.Resources.Make_Options_Message);
 
 		var result = manifests.Length == 1 ? Read(Path.GetFullPath(manifests[0], start)) : new ContainerManifest();
 		result.IsPlanning = planning;
+
 		if(!options.ContainsKey("source") && !string.IsNullOrEmpty(result["source"]))
 			start = Path.GetFullPath(result.IsGenerated ? result["source"] : Evaluate(result["source"], initial), result.SourceOrigin ?? Path.GetDirectoryName(result.Input));
 		if(!Directory.Exists(start))
@@ -183,21 +184,22 @@ internal sealed partial class ContainerManifest
 
 		string[] acquisitionOptions = ["bootstrap", "imaging", "engine"];
 		foreach(var key in acquisitionOptions)
-			result[key] = string.IsNullOrEmpty(result[key]) ? key == "engine" ? "auto" : "offline" : result[key].ToLowerInvariant();
+			result[key] = string.IsNullOrEmpty(result[key]) ? key == "engine" ? ContainerEngine.AUTO : "offline" : result[key].ToLowerInvariant();
 
 		Identity(result["name"]);
 
 		if(!string.IsNullOrEmpty(result["tag"]))
 			Identity(result["tag"]);
+
 		if(result["architecture"] is not ("x64" or "arm64") ||
-			result["imaging"] is not ("online" or "offline") ||
-			result["bootstrap"] is not ("online" or "offline") ||
-			result["engine"] is not ("auto" or "docker" or "podman"))
+		   result["imaging"] is not ("online" or "offline") ||
+		   result["bootstrap"] is not ("online" or "offline") ||
+		   result["engine"] is not (ContainerEngine.AUTO or ContainerEngine.DOCKER or ContainerEngine.PODMAN))
 			throw new ContainerizationException(2, Properties.Resources.Manifest_3_Message);
 
 		var automatic = string.IsNullOrEmpty(result["version"]);
-		result["version"] = automatic ? DateVersion(DateTime.Today) : result["version"];
-		var releaseVersion = VersionNumber(result["version"]);
+		result["version"] = automatic ? GetDateVersion(DateTime.Today) : result["version"];
+		var releaseVersion = GetVersionNumber(result["version"]);
 
 		for(int suffix = 1; result.ReleaseExists(); suffix++)
 		{
@@ -242,7 +244,6 @@ internal sealed partial class ContainerManifest
 					var package = PackageReader.Select(input, result["name"], result["distribution"], result["architecture"]);
 					component = new() { Name = PackageReader.Read(package).Name };
 					component["package"] = package;
-
 				}
 
 				result.Components.Add(component);
@@ -265,8 +266,10 @@ internal sealed partial class ContainerManifest
 
 		result.Validate();
 		result.Defaults = result.Input != null ? new ServiceDefaults() : ServiceDefaults.Read(Path.Combine(result["output"], ".settings"));
+
 		foreach(var component in result.Components)
 			result.Defaults.Apply(component);
+
 		return result;
 	}
 
@@ -276,13 +279,16 @@ internal sealed partial class ContainerManifest
 			throw new ContainerizationException(2, Properties.Resources.Manifest_5_Message);
 
 		var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
 		foreach(var component in this.Components)
 		{
 			Identity(component.Name);
 
 			if(!names.Add(component.Name))
 				throw new ContainerizationException(2, string.Format(Properties.Resources.Manifest_6_Message, component.Name));
+
 			string[] prohibited = component.IsApplication ? ["tag", "timestamp", "repository", "size", "digest", "imaging", "template", "settings", "identity"] : ["dependences"];
+
 			foreach(var key in prohibited)
 			{
 				if(component.Values.ContainsKey(key))
@@ -291,7 +297,7 @@ internal sealed partial class ContainerManifest
 
 			foreach(var key in component.Values.Keys)
 			{
-				if(!_componentKeys.Contains(key, StringComparer.OrdinalIgnoreCase) && !key.StartsWith("environment!", StringComparison.OrdinalIgnoreCase))
+				if(!ComponentKey(key) || key.StartsWith("file!", StringComparison.OrdinalIgnoreCase) && (component["template"] ?? component.Name) != "nginx" || key.StartsWith("probe-host!", StringComparison.OrdinalIgnoreCase) && !component.IsApplication)
 					throw new ContainerizationException(2, string.Format(Properties.Resources.Manifest_8_Message, component.Name, key));
 			}
 
@@ -299,6 +305,10 @@ internal sealed partial class ContainerManifest
 			{
 				component["package"] = this.Resolve(component["package"]);
 				var metadata = PackageReader.Read(component["package"]);
+				component.Package = metadata;
+
+				if(metadata.Web != null && !(component["dependences"] ?? "").Split(';', StringSplitOptions.TrimEntries).Any(value => value == "nginx" || value.StartsWith("nginx@", StringComparison.Ordinal)))
+					component["dependences"] = string.IsNullOrEmpty(component["dependences"]) ? "nginx" : component["dependences"] + ";nginx";
 
 				if(metadata.Architecture != this["architecture"])
 					throw new ContainerizationException(2, string.Format(Properties.Resources.Manifest_9_Message, component.Name));
@@ -338,6 +348,9 @@ internal sealed partial class ContainerManifest
 				}
 
 				var version = dependencies[index] == "nginx" ? null : dependencies[index][6..];
+				if(component.Package.Web == null)
+					throw WebPackage.Invalid(component.Name, ".web/nginx/.bindings");
+
 				var existing = this.Components.Concat(additions).FirstOrDefault(item => item.Name.Equals("nginx", StringComparison.OrdinalIgnoreCase));
 
 				if(existing == null)
@@ -373,7 +386,6 @@ internal sealed partial class ContainerManifest
 		Files.Write(path, this.Serialize(planning));
 		return path;
 	}
-
 	#endregion
 
 	#region 内部方法
@@ -382,8 +394,6 @@ internal sealed partial class ContainerManifest
 	internal static string EscapeVariables(string value) => Expressions().Replace(value ?? "", match => match.Value[0] == '$' ? $"${match.Value}" : $"%{match.Value}%");
 	[GeneratedRegex(@"\$\([\w.\[\]-]+\)|%[\w.\[\]-]+%")]
 	private static partial Regex Expressions();
-
-	internal static string DateVersion(DateTime date) => new Versioning.Version.Number((ushort)(date.Year % 1000), (ushort)date.Month, (ushort)date.Day).ToString();
 
 	internal static string Evaluate(string value, IReadOnlyDictionary<string, string> variables, bool allowEscapes = false)
 	{
@@ -397,7 +407,8 @@ internal sealed partial class ContainerManifest
 			throw new ContainerizationException(2, Properties.Resources.Manifest_14_Message);
 	}
 
-	internal static Versioning.Version.Number VersionNumber(string value) => Versioning.Version.Number.TryParse(value, out var version) && !version.IsZero ? version : throw new ContainerizationException(2, Properties.Resources.Manifest_15_Message);
+	internal static string GetDateVersion(DateTime date) => new Versioning.Version.Number((ushort)(date.Year % 1000), (ushort)date.Month, (ushort)date.Day).ToString();
+	internal static Versioning.Version.Number GetVersionNumber(string value) => Versioning.Version.Number.TryParse(value, out var version) && !version.IsZero ? version : throw new ContainerizationException(2, Properties.Resources.Manifest_15_Message);
 	#endregion
 
 	#region 私有方法
@@ -435,11 +446,14 @@ internal sealed partial class ContainerManifest
 		return text.ToString().Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", "\r\n", StringComparison.Ordinal);
 	}
 
+	private static bool ComponentKey(string key) => _componentKeys.Contains(key, StringComparer.OrdinalIgnoreCase) || key.StartsWith("environment!", StringComparison.OrdinalIgnoreCase) || key.StartsWith("file!", StringComparison.OrdinalIgnoreCase) || key.StartsWith("probe-host!", StringComparison.OrdinalIgnoreCase);
 	private string ImageIdentity(Component component) => Files.HashText(string.Join("\n", component["repository"] ?? "", component["tag"] ?? "", "linux", this["architecture"] ?? ""));
-
-	private bool ReleaseExists() => File.Exists(Path.Combine(this["output"], $"{this.ReleaseName}.tar.gz")) ||
-		File.Exists(this.ManifestPath) && (this.IsPlanning || this.Input == null || !BuildStorage.SamePath(this.Input, this.ManifestPath));
 	private static ContainerizationException At(ProfileItem item, string message) => new(2, string.Format(Properties.Resources.Manifest_16_Message, item.Profile.FilePath, item.LineNumber + 1, message));
+
+	private bool ReleaseExists() =>
+		File.Exists(Path.Combine(this["output"], $"{this.ReleaseName}.tar.gz")) ||
+		File.Exists(this.ManifestPath) &&
+		(this.IsPlanning || this.Input == null || !BuildStorage.SamePath(this.Input, this.ManifestPath));
 
 	internal static void ValidateLines(string path, HashSet<string> declarations)
 	{
@@ -484,11 +498,20 @@ internal sealed partial class ContainerManifest
 	{
 		#region 公共属性
 		public string Name { get; set; }
-		public Dictionary<string, string> Values { get; } = new(StringComparer.OrdinalIgnoreCase);
+		public Dictionary<string, string> Values { get; } = new(ComponentKeyComparer.Instance);
+		public PackageReader.Descriptor Package { get; set; }
 		public string this[string key] { get => this.Values.GetValueOrDefault(key); set => this.Values[key] = value; }
 		public IReadOnlyDictionary<string, string> Settings => ServiceSettings.Parse(this["settings"]);
 		public bool IsApplication => !string.IsNullOrEmpty(this["package"]);
 		#endregion
+	}
+
+	private sealed class ComponentKeyComparer : IEqualityComparer<string>
+	{
+		public static readonly ComponentKeyComparer Instance = new();
+		public bool Equals(string left, string right) => StringComparer.Ordinal.Equals(Key(left), Key(right));
+		public int GetHashCode(string value) => StringComparer.Ordinal.GetHashCode(Key(value));
+		private static string Key(string value) => value.StartsWith("file!", StringComparison.OrdinalIgnoreCase) ? "FILE!" + value[5..] : value.ToUpperInvariant();
 	}
 	#endregion
 }

@@ -6,6 +6,7 @@ health=["CMD","clickhouse-client","--query","SELECT 1"]
 
 [ports]
 default=127.0.0.1:8123:8123
+native=127.0.0.1:9000:9000
 
 [data]
 data=/var/lib/clickhouse

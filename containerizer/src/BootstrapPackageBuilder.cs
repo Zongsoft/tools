@@ -72,13 +72,13 @@ internal sealed class BootstrapPackageBuilder(ContainerEngine engine, string cac
 		if(distribution == "rhel@9")
 			throw new ContainerizationException(3, Properties.Resources.BootstrapBuilder_2_Message);
 
-		var baseline = await engine.ResolveAsync(BaseImage(distribution), null, null, manifest["architecture"], null, cancellation);
+		var baseline = await engine.ResolveAsync(BaseImage(distribution), null, null, manifest["architecture"], cancellation);
 		var directory = Path.Combine(workspace, "bootstrap");
 		Files.PrivateDirectory(directory);
 
 		var scriptName = Distribution.IsDebian(distribution) ? "bootstrap-deb.sh" : "bootstrap-rpm.sh";
 		File.Copy(TemplateCatalog.Find(scriptName), Path.Combine(directory, "collect.sh"));
-		Files.Write(Path.Combine(directory, "Dockerfile"), $"FROM {baseline.Repository}@{baseline.Digest}\nCOPY collect.sh /collect.sh\nRUN sh /collect.sh\n", true);
+		Files.Write(Path.Combine(directory, "Dockerfile"), $"FROM {engine.BuildReference(baseline)}\nCOPY collect.sh /collect.sh\nRUN sh /collect.sh\n", true);
 
 		await using var resources = new BuildResources(engine);
 		var name = resources.Image();

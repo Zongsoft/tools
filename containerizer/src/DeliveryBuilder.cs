@@ -46,12 +46,24 @@ using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer;
 
-internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cacheRoot = null, string executorPath = null)
+internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cacheRoot = null, string executorPath = null, bool refresh = false)
 {
 	#region 公共方法
 	public string Plan(ContainerManifest manifest)
 	{
-		PrepareSources(manifest);
+		var sources = PrepareSources(manifest);
+
+		foreach(var source in sources)
+		{
+			foreach(var site in source.Plan.Web)
+			{
+				var ports = source.Plan.Ports.Where(port => site.Bindings.Any(binding => binding.Publication == port.Name));
+				Terminal.WriteLine(Output.Message(Properties.Resources.Web_Plan, source.Plan.Id, $"{site.Application}/{site.Name}",
+					string.Join(", ", site.Bindings.Select(WebPackage.Address)), string.Join(", ", site.Hosts),
+					string.Join(", ", ports.Select(port => $"{port.Container}:{port.Host}"))));
+			}
+		}
+
 		if(manifest.IsGenerated)
 		{
 			foreach(var component in manifest.Components)
@@ -68,17 +80,23 @@ internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cach
 		using var publisher = new ArtifactPublisher(manifest["output"], false, Path.GetFileName(manifest.ManifestPath));
 		manifest.Prepare(Path.GetDirectoryName(publisher.StagePath(Path.GetFileName(manifest.ManifestPath))), true);
 		publisher.Commit();
+
 		return manifest.ManifestPath;
 	}
 
 	public async Task<string> BuildAsync(ContainerManifest manifest, CancellationToken cancellation)
 	{
+		using var timing = Output.Measure(Terminal.WriteLine, Properties.Resources.Build_Total);
 		var sources = PrepareSources(manifest);
 		var executor = FindExecutor(manifest["architecture"], executorPath);
-		var engine = await ContainerEngine.ConnectAsync(manifest["engine"], runner, cancellation);
 		var workspace = Path.Combine(Path.GetTempPath(), $"containerizer-build-{Guid.NewGuid().ToString("N")}");
 		var delivery = Path.Combine(workspace, "node");
+
+		var engine = await ContainerEngine.ConnectAsync(manifest["engine"], runner, cancellation);
+		engine.Mirrors = RegistryMirrorSettings.Read(manifest["output"]);
+
 		var buildResources = new BuildResources(engine);
+		var environments = new RuntimeEnvironmentCache(engine, cacheRoot, refresh);
 
 		var node = new DeliveryPlan
 		{
@@ -97,6 +115,7 @@ internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cach
 		{
 			Files.PrivateDirectory(workspace);
 			Files.PrivateDirectory(delivery);
+			WebIngress.Render(manifest, sources, workspace);
 
 			for(int index = 0; index < sources.Count; index++)
 			{
@@ -108,7 +127,9 @@ internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cach
 
 				var pinned = component["digest"] != null;
 				Terminal.WriteLine(Output.Message(Properties.Resources.NodeBuilder_ResolveImage, component.Name));
-				source.Plan.Image = await engine.ResolveAsync(source.SourceImage, component["digest"], manifest.Defaults.SelectTag(component), node.Architecture, Tag(node, source.Plan.Id), cancellation);
+				using var resolveTiming = Output.Measure(Terminal.WriteLine, string.Format(Properties.Resources.NodeBuilder_ResolveImage, component.Name));
+				source.Plan.Image = await engine.ResolveAsync(source.SourceImage, component["digest"], manifest.Defaults.SelectTag(component), node.Architecture, cancellation);
+				source.Plan.Image.Tag = Tag(node, source.Plan.Id);
 				source.Plan.Image.Mode = component["imaging"] ?? manifest["imaging"];
 
 				if(source.Plan.Image.Mode is not ("offline" or "online"))
@@ -138,17 +159,17 @@ internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cach
 				Terminal.WriteLine(Output.Message(Properties.Resources.NodeBuilder_PrepareImage, source.Plan.Id));
 
 				if(manifest.Components[index].IsApplication)
-					await new ApplicationImageBuilder(engine, buildResources).BuildAsync(manifest.Components[index], source, manifest, workspace, delivery, Tag(node, source.Plan.Id), cancellation);
+					await new ApplicationImageBuilder(engine, buildResources, environments).BuildAsync(manifest.Components[index], source, manifest, workspace, delivery, Tag(node, source.Plan.Id), cancellation);
 				else if(source.Plan.Image.Mode == "offline")
 				{
+					using var exportTiming = Output.Measure(Terminal.WriteLine, string.Format(Properties.Resources.NodeBuilder_PrepareImage, source.Plan.Id));
 					source.Plan.Image.Archive = $"images/{source.Plan.Id}.tar";
-					await engine.ExportAsync(source.Plan.Image.Tag, Path.Combine(delivery, source.Plan.Image.Archive), cancellation);
+					await engine.ExportAsync(source.Plan.Image.Id, Path.Combine(delivery, source.Plan.Image.Archive), cancellation);
 				}
 
 				await engine.PrepareOwnershipAsync(source, workspace, cancellation);
 			}
 
-			ConfigureIngress(manifest, sources, workspace);
 			ValidateServices(sources);
 
 			foreach(var source in sources)
@@ -165,7 +186,9 @@ internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cach
 			}
 
 			Terminal.WriteLine(Properties.Resources.NodeBuilder_ResolveBootstrap);
-			node.Bootstrap = await new BootstrapPackageBuilder(engine, cacheRoot).BuildAsync(manifest, workspace, delivery, cancellation);
+
+			using(Output.Measure(Terminal.WriteLine, Properties.Resources.NodeBuilder_ResolveBootstrap))
+				node.Bootstrap = await new BootstrapPackageBuilder(engine, cacheRoot).BuildAsync(manifest, workspace, delivery, cancellation);
 
 			foreach(var path in manifest.Migrations)
 			{
@@ -206,16 +229,23 @@ internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cach
 				service.Health.Test = null;
 			}
 
-			node.Files = Directory.EnumerateFiles(delivery, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal).Select(path => new FileRecord { Path = Path.GetRelativePath(delivery, path).Replace('\\', '/'), Hash = Files.Hash(path), Length = new FileInfo(path).Length }).ToList();
+			using(Output.Measure(Terminal.WriteLine, Properties.Resources.Build_Checksums))
+				node.Files = Directory.EnumerateFiles(delivery, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal).Select(path => new FileRecord { Path = Path.GetRelativePath(delivery, path).Replace('\\', '/'), Hash = Files.Hash(path), Length = new FileInfo(path).Length }).ToList();
+
 			Files.Save(Path.Combine(delivery, DeliveryPlan.FileName), node, ProtocolJson.Default.DeliveryPlan);
 			Files.Write(Path.Combine(delivery, "checksums.sha256"), $"{string.Join('\n', node.Files.Append(new() { Path = DeliveryPlan.FileName, Hash = Files.Hash(Path.Combine(delivery, DeliveryPlan.FileName)) }).Select(file => $"{file.Hash}  {file.Path}"))}\n", true);
 
 			var archivePath = Path.Combine(workspace, $"{manifest.ReleaseName}.tar.gz");
-			Files.Archive(delivery, archivePath);
+
+			using(Output.Measure(Terminal.WriteLine, Properties.Resources.Build_Compression))
+				Files.Archive(delivery, archivePath);
+
 			cancellation.ThrowIfCancellationRequested();
 			using var publishLock = BuildStorage.Lock(manifest["output"], cacheRoot);
 			var defaults = ServiceDefaults.Prepare(manifest, workspace);
-			BuildStorage.Publish(manifest, prepared, archivePath, defaults);
+
+			using(Output.Measure(Terminal.WriteLine, Properties.Resources.Build_Publish))
+				BuildStorage.Publish(manifest, prepared, archivePath, defaults);
 			return Path.Combine(manifest["output"], Path.GetFileName(archivePath));
 		}
 		finally

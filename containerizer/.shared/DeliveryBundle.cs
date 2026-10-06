@@ -34,12 +34,11 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
-using Zongsoft.Tools.Containerizer.Protocol;
-
-namespace Zongsoft.Tools.Containerizer.Execution;
+namespace Zongsoft.Tools.Containerizer.Protocol;
 
 internal sealed partial class DeliveryBundle : IDisposable
 {
@@ -157,6 +156,15 @@ internal sealed partial class DeliveryBundle : IDisposable
 			if(service.Kind == "application" && service.Image.Mode != "offline")
 				throw new ContainerizationException(4, Properties.Resources.Bundle_13_Message);
 
+			foreach(var port in service.Ports)
+			{
+				if(port.Host is < 1 or > 65535 || port.Container is < 1 or > 65535 ||
+				   !IPAddress.TryParse(port.Address, out _) || port.Protocol is not ("tcp" or "udp"))
+					throw new ContainerizationException(4, Properties.Resources.Bundle_3_Message);
+			}
+
+			ValidateWeb(service, this.Plan.Services);
+
 			foreach(var mount in service.Mounts)
 			{
 				LinuxPath(mount.Target);
@@ -172,8 +180,8 @@ internal sealed partial class DeliveryBundle : IDisposable
 		foreach(var migration in this.Plan.Migrations)
 		{
 			if(!Version.TryParse(migration.Version, out var version) || !versions.Add(version) ||
-				!records.TryGetValue(migration.Archive, out var archive) ||
-				!records.TryGetValue(migration.Script, out var script))
+			   !records.TryGetValue(migration.Archive, out var archive) ||
+			   !records.TryGetValue(migration.Script, out var script))
 				throw new ContainerizationException(4, Properties.Resources.Bundle_14_Message);
 			if(Files.HashText($"{archive.Hash}{script.Hash}") != migration.Identity)
 				throw new ContainerizationException(4, Properties.Resources.Bundle_15_Message);
@@ -194,6 +202,54 @@ internal sealed partial class DeliveryBundle : IDisposable
 	#endregion
 
 	#region 私有方法
+	internal static void ValidateWeb(ServicePlan service, IReadOnlyList<ServicePlan> services)
+	{
+		var sites = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		if(service.Ports.Where(port => port.Name != null).GroupBy(port => port.Name, StringComparer.Ordinal).Any(group => group.Count() > 1))
+			throw new ContainerizationException(4, Properties.Resources.Bundle_3_Message);
+
+		foreach(var site in service.Web)
+		{
+			var ownsApplication = service.Kind switch
+			{
+				"application" => site.Application == service.Id,
+				"ingress" => service.Dependencies.Contains(site.Application),
+				_ => false,
+			};
+			if(!ownsApplication || !services.Any(application => application.Id == site.Application && application.Kind == "application") ||
+				string.IsNullOrWhiteSpace(site.Name) || !sites.Add(site.Application + "/" + site.Name) || site.Bindings.Count == 0 ||
+				site.ProbeHosts.Any(host => Uri.CheckHostName(host) == UriHostNameType.Unknown || host.Contains('*')) ||
+				site.Bindings.GroupBy(binding => (binding.Address, binding.Port)).Any(group => group.Count() > 1))
+				throw new ContainerizationException(4, Properties.Resources.Bundle_3_Message);
+
+			foreach(var binding in site.Bindings)
+			{
+				if(binding.Scheme is not ("http" or "https") || !IPAddress.TryParse(binding.Address, out _) || binding.Port is < 1 or > 65535)
+					throw new ContainerizationException(4, Properties.Resources.Bundle_3_Message);
+				if(binding.Publication == null)
+					continue;
+				if(site.ProbeHosts.Count == 0 || binding.Address is not ("0.0.0.0" or "::") ||
+					!service.Ports.Any(port => port.Name == binding.Publication && port.Container == binding.Port && port.Protocol == "tcp"))
+					throw new ContainerizationException(4, Properties.Resources.Bundle_3_Message);
+				if(binding.Address == "::" && !site.Bindings.Any(ipv4 =>
+					ipv4.Address == "0.0.0.0" && ipv4.Port == binding.Port && ipv4.Scheme == binding.Scheme &&
+					ipv4.Publication == binding.Publication && ipv4.IsDefault == binding.IsDefault && ipv4.ExplicitDefault == binding.ExplicitDefault))
+					throw new ContainerizationException(4, Properties.Resources.Bundle_3_Message);
+			}
+		}
+
+		if(service.Kind == "ingress")
+		{
+			foreach(var group in service.Web.SelectMany(site => site.Bindings).GroupBy(binding => (binding.Address, binding.Port)))
+			{
+				if(group.Count(binding => binding.IsDefault) != 1 || group.Count(binding => binding.ExplicitDefault) > 1 ||
+					group.Any(binding => binding.ExplicitDefault && !binding.IsDefault) ||
+					group.Select(binding => binding.Scheme).Distinct().Count() != 1 || group.Select(binding => binding.Publication).Distinct().Count() != 1)
+					throw new ContainerizationException(4, Properties.Resources.Bundle_3_Message);
+			}
+		}
+	}
+
 	[GeneratedRegex(@"^[a-z0-9][a-z0-9_-]*$")]
 	private static partial Regex ProjectRegex();
 

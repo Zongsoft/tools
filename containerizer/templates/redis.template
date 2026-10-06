@@ -4,6 +4,7 @@ kind=infrastructure
 platforms=x64;arm64
 health=["CMD","redis-cli","ping"]
 command=["redis-server"]
+data-owner=redis
 
 [ports]
 default=127.0.0.1:6379:6379

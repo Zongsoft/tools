@@ -35,10 +35,11 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
-using System.Text.Json;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Runtime.InteropServices;
 
@@ -51,27 +52,50 @@ partial class DockerHost
 	#region 公共方法
 	public async Task ImagesAsync(DeliveryBundle bundle, CancellationToken cancellation)
 	{
+		var sources = mirrors ?? ReadRuntimeMirrors();
 		foreach(var service in bundle.Plan.Services)
 		{
 			var image = service.Image;
+			var timer = Stopwatch.StartNew();
+			var cached = await runner.RunAsync(ENGINE, ["image", "inspect", image.Id], null, cancellation, 30);
 
-			if(image.Mode == "offline")
-				await this.RunAsync("docker", ["image", "load", "--input", Files.Below(bundle.Directory, image.Archive)], null, cancellation);
+			if(cached.ExitCode == 0)
+			{
+				VerifyImage(cached.Output, image);
+				Console.WriteLine(string.Format(Properties.Resources.Run_ImageCached, service.Id));
+			}
+			else if(image.Mode == "offline")
+				await this.RunAsync(ENGINE, ["image", "load", "--input", Files.Below(bundle.Directory, image.Archive)], null, cancellation);
 			else
 			{
-				await this.RunAsync("docker", ["pull", "--platform", image.Platform, $"{image.Repository}@{image.Digest}"], null, cancellation);
-				await this.RunAsync("docker", ["tag", $"{image.Repository}@{image.Digest}", image.Tag], null, cancellation);
+				await sources.ExecuteAsync(image.Repository, async repository =>
+				{
+					var reference = $"{repository}@{image.Digest}";
+					await this.RunAsync(ENGINE, ["pull", "--platform", image.Platform, reference], null, cancellation);
+					VerifyImage(await this.RunAsync(ENGINE, ["image", "inspect", reference], null, cancellation), image, repository);
+					return true;
+				}, cancellation, (repository, exception) => Console.Error.WriteLine(string.Format(Properties.Resources.Mirrors_SourceFailed, repository, exception.Message)));
 			}
 
-			using var json = JsonDocument.Parse(await this.RunAsync("docker", ["image", "inspect", image.Mode == "offline" ? image.Id : image.Tag], null, cancellation));
-			var actual = json.RootElement[0];
+			if(cached.ExitCode != 0)
+			{
+				VerifyImage(await this.RunAsync(ENGINE, ["image", "inspect", image.Id], null, cancellation), image);
+				Console.WriteLine(string.Format(Properties.Resources.Run_ImagePrepared, service.Id, timer.Elapsed.TotalSeconds.ToString("0.0", System.Globalization.CultureInfo.CurrentCulture)));
+			}
 
-			if(actual.GetProperty("Id").GetString() != image.Id || $"{actual.GetProperty("Os").GetString()}/{actual.GetProperty("Architecture").GetString()}" != image.Platform)
-				throw new ContainerizationException(4, Properties.Resources.DockerHost_14_Message);
-
-			if(image.Mode == "offline")
-				await this.RunAsync("docker", ["tag", image.Id, image.Tag], null, cancellation);
+			await this.RunAsync(ENGINE, ["tag", image.Id, image.Tag], null, cancellation);
 		}
+	}
+
+	private static void VerifyImage(string metadata, ImagePlan image, string repository = null)
+	{
+		using var json = JsonDocument.Parse(metadata);
+		var actual = json.RootElement[0];
+		if(actual.GetProperty("Id").GetString() != image.Id || $"{actual.GetProperty("Os").GetString()}/{actual.GetProperty("Architecture").GetString()}" != image.Platform)
+			throw new ContainerizationException(4, Properties.Resources.DockerHost_14_Message);
+
+		if(repository != null && (!actual.TryGetProperty("RepoDigests", out var digests) || digests.ValueKind != JsonValueKind.Array || !digests.EnumerateArray().Any(value => value.GetString() == $"{repository}@{image.Digest}")))
+			throw new ContainerizationException(4, Properties.Resources.DockerHost_14_Message);
 	}
 
 	public async Task StartAsync(DeliveryBundle bundle, ServicePlan service, CancellationToken cancellation)
@@ -89,7 +113,7 @@ partial class DockerHost
 
 			foreach(var id in await this.ContainersAsync(bundle.Plan.Name, service.Id, cancellation))
 			{
-				using var json = JsonDocument.Parse(await this.RunAsync("docker", ["inspect", id], null, cancellation));
+				using var json = JsonDocument.Parse(await this.RunAsync(ENGINE, ["inspect", id], null, cancellation));
 
 				temporary[id] = json.RootElement[0].GetProperty("Mounts").EnumerateArray()
 					.Where(mount => mount.GetProperty("Type").GetString() == "volume" && service.Mounts.Any(item => item.Temporary && item.Target == mount.GetProperty("Destination").GetString()))
@@ -105,16 +129,16 @@ partial class DockerHost
 		// Compose may leave replaced anonymous volumes behind; remove only captured, unused volumes.
 		foreach(var volume in temporary.Where(pair => !containers.Contains(pair.Key, StringComparer.Ordinal)).SelectMany(pair => pair.Value).Distinct(StringComparer.Ordinal))
 		{
-			var exists = await runner.RunAsync("docker", ["volume", "inspect", volume], null, cancellation);
+			var exists = await runner.RunAsync(ENGINE, ["volume", "inspect", volume], null, cancellation);
 
 			if(exists.ExitCode == 0)
-				await this.RunAsync("docker", ["volume", "rm", volume], null, cancellation);
+				await this.RunAsync(ENGINE, ["volume", "rm", volume], null, cancellation);
 		}
 
 		if(containers.Length != 1)
 			throw new ContainerizationException(6, Properties.Resources.DockerHost_18_Message);
 
-		await this.RunAsync("docker", ["update", $"--restart={(service.Kind == "infrastructure" ? service.Restart : "no")}", containers[0]], null, cancellation);
+		await this.RunAsync(ENGINE, ["update", $"--restart={(service.Kind == "infrastructure" ? service.Restart : "no")}", containers[0]], null, cancellation);
 	}
 
 	public async Task HealthyAsync(DeliveryBundle bundle, ServicePlan service, CancellationToken cancellation)
@@ -125,17 +149,17 @@ partial class DockerHost
 		{
 			var ids = await this.ContainersAsync(bundle.Plan.Name, service.Id, cancellation);
 			if(ids.Length != 1)
-				throw new ContainerizationException(6, Properties.Resources.DockerHost_19_Message);
+				throw new ContainerizationException(6, string.Format(Properties.Resources.DockerHost_19_Message, service.Id));
 
-			using var json = JsonDocument.Parse(await this.RunAsync("docker", ["inspect", ids[0]], null, cancellation));
+			using var json = JsonDocument.Parse(await this.RunAsync(ENGINE, ["inspect", ids[0]], null, cancellation));
 			var state = json.RootElement[0].GetProperty("State");
 
 			if(!state.TryGetProperty("Health", out var health))
-				throw new ContainerizationException(6, Properties.Resources.DockerHost_20_Message);
+				throw new ContainerizationException(6, string.Format(Properties.Resources.DockerHost_20_Message, service.Id));
 			if(state.GetProperty("Running").GetBoolean() && health.GetProperty("Status").GetString() == "healthy")
 				return;
 			if(DateTime.UtcNow >= deadline)
-				throw new ContainerizationException(6, Properties.Resources.DockerHost_21_Message);
+				throw new ContainerizationException(6, string.Format(Properties.Resources.DockerHost_21_Message, service.Id, ids[0]));
 
 			await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, service.Health.IntervalSeconds)), cancellation);
 		}
@@ -148,7 +172,7 @@ partial class DockerHost
 
 		foreach(var id in await this.ContainersAsync(installation.Name, null, cancellation))
 		{
-			using var json = JsonDocument.Parse(await this.RunAsync("docker", ["inspect", id], null, cancellation));
+			using var json = JsonDocument.Parse(await this.RunAsync(ENGINE, ["inspect", id], null, cancellation));
 			var item = json.RootElement[0];
 			var service = item.GetProperty("Config").GetProperty("Labels").GetProperty(SERVICE).GetString();
 			var plans = this.Plans(installation).ToArray();
@@ -166,8 +190,8 @@ partial class DockerHost
 				store.Save(installation);
 			}
 
-			await this.RunAsync("docker", ["update", "--restart=no", id], null, cancellation);
-			await this.RunAsync("docker", ["stop", id], null, cancellation);
+			await this.RunAsync(ENGINE, ["update", "--restart=no", id], null, cancellation);
+			await this.RunAsync(ENGINE, ["stop", id], null, cancellation);
 		}
 	}
 
@@ -178,7 +202,7 @@ partial class DockerHost
 		foreach(var service in bundle.Plan.Services)
 		{
 			foreach(var id in await this.ContainersAsync(bundle.Plan.Name, service.Id, cancellation))
-				await this.RunAsync("docker", ["update", $"--restart={installation.RestartPolicies.GetValueOrDefault(service.Id, service.Restart)}", id], null, cancellation);
+				await this.RunAsync(ENGINE, ["update", $"--restart={installation.RestartPolicies.GetValueOrDefault(service.Id, service.Restart)}", id], null, cancellation);
 		}
 	}
 
@@ -186,9 +210,9 @@ partial class DockerHost
 	{
 		var ids = await this.ContainersAsync(bundle.Plan.Name, service.Id, cancellation);
 		if(ids.Length != 1)
-			throw new ContainerizationException(6, Properties.Resources.DockerHost_19_Message);
+			throw new ContainerizationException(6, string.Format(Properties.Resources.DockerHost_19_Message, service.Id));
 
-		await this.RunAsync("docker", ["restart", ids[0]], null, cancellation);
+		await this.RunAsync(ENGINE, ["restart", ids[0]], null, cancellation);
 		await this.HealthyAsync(bundle, service, cancellation);
 	}
 
@@ -218,10 +242,10 @@ partial class DockerHost
 
 		if(runner is ProcessRunner process)
 		{
-			var code = await ProcessRunner.StreamAsync("docker", ComposeArguments(bundle, command), bundle.Directory, cancellation);
+			var code = await ProcessRunner.StreamAsync(ENGINE, ComposeArguments(bundle, command), bundle.Directory, cancellation);
 
 			if(code != 0)
-				throw new ContainerizationException(4, string.Format(Properties.Resources.DockerHost_27_Message, "docker", "compose logs", code));
+				throw new ContainerizationException(4, string.Format(Properties.Resources.DockerHost_27_Message, ENGINE, "compose logs", code));
 		}
 		else
 			Console.Write(await this.ComposeAsync(bundle, command, cancellation));
@@ -229,6 +253,19 @@ partial class DockerHost
 	#endregion
 
 	#region 私有方法
+	private static RegistryMirrors ReadRuntimeMirrors()
+	{
+		var path = Environment.GetEnvironmentVariable(RegistryMirrors.ENVIRONMENT);
+		if(string.IsNullOrEmpty(path))
+			return new();
+
+		var sources = Files.Load(path, ProtocolJson.Default.RegistryMirrors);
+		if(sources == null)
+			throw new ContainerizationException(2, Properties.Resources.Mirrors_Invalid_Message);
+		sources.Validate();
+		return sources;
+	}
+
 	private async Task CheckPortsAsync(DeliveryBundle bundle, Installation installation, CancellationToken cancellation)
 	{
 		var owned = new List<PortPlan>();
@@ -237,7 +274,7 @@ partial class DockerHost
 		{
 			foreach(var id in await this.ContainersAsync(installation.Name, null, cancellation))
 			{
-				using var json = JsonDocument.Parse(await this.RunAsync("docker", ["inspect", id], null, cancellation));
+				using var json = JsonDocument.Parse(await this.RunAsync(ENGINE, ["inspect", id], null, cancellation));
 				var item = json.RootElement[0];
 
 				if(!item.GetProperty("State").GetProperty("Running").GetBoolean())
@@ -293,11 +330,11 @@ partial class DockerHost
 		if(service != null)
 			arguments.AddRange(["--filter", $"label={SERVICE}={service}"]);
 
-		return Lines(await this.RunAsync("docker", arguments, null, cancellation));
+		return Lines(await this.RunAsync(ENGINE, arguments, null, cancellation));
 	}
 
 	private static string[] ComposeArguments(DeliveryBundle bundle, IReadOnlyList<string> command) => ["compose", "--project-name", bundle.Plan.Project, "--project-directory", bundle.Directory, "-f", Path.Combine(bundle.Directory, "compose.yaml"), .. command];
 
-	private Task<string> ComposeAsync(DeliveryBundle bundle, IReadOnlyList<string> command, CancellationToken cancellation) => this.RunAsync("docker", ComposeArguments(bundle, command), bundle.Directory, cancellation);
+	private Task<string> ComposeAsync(DeliveryBundle bundle, IReadOnlyList<string> command, CancellationToken cancellation) => this.RunAsync(ENGINE, ComposeArguments(bundle, command), bundle.Directory, cancellation);
 	#endregion
 }

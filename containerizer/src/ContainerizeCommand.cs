@@ -53,6 +53,7 @@ namespace Zongsoft.Tools.Containerizer;
 [CommandOption("migration", typeof(string))]
 [CommandOption("title", typeof(string))]
 [CommandOption("description", typeof(string))]
+[CommandOption("refresh", typeof(bool), false)]
 public partial class ContainerizeCommand : CommandBase<CommandContext>
 {
 	#region 重写方法
@@ -61,7 +62,7 @@ public partial class ContainerizeCommand : CommandBase<CommandContext>
 		var manifest = this.CreateManifest(context);
 		context.Output.WriteLine(Output.Message("{0}@{1} ({2})", manifest["name"], manifest["version"], manifest["architecture"]));
 		context.Output.WriteLine(Output.Message("  distribution={0}  engine={1}  bootstrap={2}  imaging={3}", manifest["distribution"], manifest["engine"], manifest["bootstrap"], manifest["imaging"]));
-		var builder = new DeliveryBuilder(new ProcessRunner());
+		var builder = new DeliveryBuilder(new ProcessRunner(), refresh: context.Options.Switch("refresh"));
 		var path = await this.BuildAsync(builder, manifest, cancellation);
 
 		context.Output.WriteLine(CommandOutletStyles.Bold, CommandOutletColor.Green, path);

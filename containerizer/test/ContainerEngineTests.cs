@@ -30,7 +30,7 @@ public sealed class ContainerEngineTests
 	public async Task InvalidPinnedDigestsFailBeforeAccessingTheEngine(string digest)
 	{
 		var runner = new ProbeRunner((_, _) => throw new InvalidOperationException("Must not contact the engine."));
-		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => new ContainerEngine("docker", runner).ResolveAsync(REPOSITORY, digest, "latest", "x64", null, CancellationToken.None));
+		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => new ContainerEngine("docker", runner).ResolveAsync(REPOSITORY, digest, "latest", "x64", CancellationToken.None));
 		Assert.Equal(2, exception.Code);
 		Assert.Empty(runner.Calls);
 	}
@@ -45,7 +45,7 @@ public sealed class ContainerEngineTests
 		var manifest = location == "single" ? JsonSerializer.Serialize(new { digest = invalid }) :
 			JsonSerializer.Serialize(new { digest = location == "index" ? invalid : _digest, manifests = new[] { new { digest = location == "child" ? invalid : _digest, platform = new { os = "linux", architecture = "amd64" } } } });
 		var runner = new ProbeRunner((_, arguments) => arguments[0] == "image" ? new(1, "", "not found") : new(0, manifest, ""));
-		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => new ContainerEngine("docker", runner).ResolveAsync(REPOSITORY, null, "latest", "x64", null, CancellationToken.None));
+		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => new ContainerEngine("docker", runner).ResolveAsync(REPOSITORY, null, "latest", "x64", CancellationToken.None));
 		Assert.Equal(4, exception.Code);
 		Assert.DoesNotContain(runner.Calls, call => call.StartsWith("docker pull", StringComparison.Ordinal) || call.StartsWith("docker tag", StringComparison.Ordinal));
 	}
@@ -55,7 +55,7 @@ public sealed class ContainerEngineTests
 	{
 		var manifest = JsonSerializer.Serialize(new { manifests = new[] { new { digest = "sha256:" + new string('c', 64), platform = new { os = "linux", architecture = "amd64" } } } });
 		var runner = new ProbeRunner((_, arguments) => arguments[0] == "image" ? new(1, "", "not found") : new(0, manifest, ""));
-		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => new ContainerEngine("docker", runner).ResolveAsync(REPOSITORY, _digest, "latest", "x64", null, CancellationToken.None));
+		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => new ContainerEngine("docker", runner).ResolveAsync(REPOSITORY, _digest, "latest", "x64", CancellationToken.None));
 		Assert.Equal(4, exception.Code);
 		Assert.DoesNotContain(runner.Calls, call => call.StartsWith("docker pull", StringComparison.Ordinal) || call.StartsWith("docker tag", StringComparison.Ordinal));
 	}
@@ -77,7 +77,7 @@ public sealed class ContainerEngineTests
 				pulled = true;
 			return new(0, "", "");
 		});
-		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => new ContainerEngine("podman", runner).ResolveAsync(REPOSITORY, null, "latest", "x64", null, CancellationToken.None));
+		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => new ContainerEngine("podman", runner).ResolveAsync(REPOSITORY, null, "latest", "x64", CancellationToken.None));
 		Assert.Equal(4, exception.Code);
 		Assert.DoesNotContain(runner.Calls, call => call.StartsWith("podman tag", StringComparison.Ordinal));
 	}
@@ -87,9 +87,9 @@ public sealed class ContainerEngineTests
 	[InlineData("podman", false)]
 	public async Task VerifiedLocalImagesAvoidRegistryAndPull(string executable, bool classic)
 	{
-		var cacheTag = "containerizer/cache/" + Files.HashText(REPOSITORY) + ":x64-" + _digest[7..];
+		var cacheTag = "localhost/containerizer/cache/" + Files.HashText(REPOSITORY) + ":x64-" + _digest[7..];
 		var runner = new ProbeRunner((_, arguments) => arguments[0] == "image" ? new(0, Inspect(classic ? null : _digest, [cacheTag], true), "") : new(0, "", ""));
-		var image = await new ContainerEngine(executable, runner).ResolveAsync(REPOSITORY, null, "latest", "x64", "delivery:test", CancellationToken.None);
+		var image = await new ContainerEngine(executable, runner).ResolveAsync(REPOSITORY, null, "latest", "x64", CancellationToken.None);
 		Assert.Equal(_digest, image.Digest);
 		Assert.Equal(_id, image.Id);
 		Assert.Equal("latest", image.Version);
@@ -97,6 +97,8 @@ public sealed class ContainerEngineTests
 		Assert.Equal(123456, image.Size);
 		Assert.DoesNotContain(runner.Calls, call => call.Contains("pull", StringComparison.Ordinal) || call.Contains("manifest", StringComparison.Ordinal) || call.Contains("imagetools", StringComparison.Ordinal));
 		Assert.Contains(executable + " tag " + _id + " " + REPOSITORY + ":latest", runner.Calls);
+		Assert.Equal(cacheTag, image.Tag);
+		Assert.Equal([executable + " tag " + _id + " " + REPOSITORY + ":latest", executable + " tag " + _id + " " + cacheTag], runner.Calls.Where(call => call.StartsWith(executable + " tag ", StringComparison.Ordinal)));
 	}
 
 	[Fact]
@@ -118,7 +120,7 @@ public sealed class ContainerEngineTests
 
 			return new(0, "", "");
 		});
-		var image = await new ContainerEngine("docker", runner).ResolveAsync(REPOSITORY, null, "8.4", "x64", "delivery:test", CancellationToken.None);
+		var image = await new ContainerEngine("docker", runner).ResolveAsync(REPOSITORY, null, "8.4", "x64", CancellationToken.None);
 		Assert.True(pulled);
 		Assert.Equal(_digest, image.Digest);
 		Assert.Equal("8.4", image.Version);
@@ -130,7 +132,7 @@ public sealed class ContainerEngineTests
 	public async Task ReplayNeverFallsBackToTheTagWhenTheDigestIsUnavailable()
 	{
 		var runner = new ProbeRunner((_, _) => new(1, "", "digest unavailable"));
-		await Assert.ThrowsAsync<ContainerizationException>(() => new ContainerEngine("docker", runner).ResolveAsync(REPOSITORY, _digest, "latest", "x64", "delivery:test", CancellationToken.None));
+		await Assert.ThrowsAsync<ContainerizationException>(() => new ContainerEngine("docker", runner).ResolveAsync(REPOSITORY, _digest, "latest", "x64", CancellationToken.None));
 		Assert.All(runner.Calls, call => Assert.DoesNotContain(":latest", call, StringComparison.Ordinal));
 		Assert.DoesNotContain(runner.Calls, call => call.StartsWith("docker pull", StringComparison.Ordinal));
 	}
@@ -151,7 +153,7 @@ public sealed class ContainerEngineTests
 				pulled = true;
 			return new(0, "", "");
 		});
-		var image = await new ContainerEngine("podman", runner).ResolveAsync(REPOSITORY, null, "latest", "x64", "delivery:test", CancellationToken.None);
+		var image = await new ContainerEngine("podman", runner).ResolveAsync(REPOSITORY, null, "latest", "x64", CancellationToken.None);
 		Assert.Equal(_digest, image.Digest);
 		Assert.Contains("podman pull --platform linux/amd64 " + REPOSITORY + ":latest", runner.Calls);
 	}
@@ -172,7 +174,7 @@ public sealed class ContainerEngineTests
 				pulled = true;
 			return new(0, "", "");
 		});
-		await Assert.ThrowsAsync<ContainerizationException>(() => new ContainerEngine("docker", runner).ResolveAsync(REPOSITORY, null, "latest", "x64", "delivery:test", CancellationToken.None));
+		await Assert.ThrowsAsync<ContainerizationException>(() => new ContainerEngine("docker", runner).ResolveAsync(REPOSITORY, null, "latest", "x64", CancellationToken.None));
 		Assert.DoesNotContain(runner.Calls, call => call.StartsWith("docker tag", StringComparison.Ordinal));
 	}
 
@@ -181,7 +183,7 @@ public sealed class ContainerEngineTests
 	{
 		var inspect = JsonSerializer.Serialize(new[] { new { Id = _id, Os = "linux", Architecture = "amd64", Digest = _digest, RepoDigests = new[] { REPOSITORY + "@" + _digest } } });
 		var runner = new ProbeRunner((_, arguments) => new(0, arguments[0] == "image" ? inspect : "", ""));
-		var image = await new ContainerEngine("podman", runner).ResolveAsync(REPOSITORY, _digest, "8.4", "x64", "delivery:test", CancellationToken.None);
+		var image = await new ContainerEngine("podman", runner).ResolveAsync(REPOSITORY, _digest, "8.4", "x64", CancellationToken.None);
 		Assert.Null(image.Timestamp);
 		Assert.Null(image.Size);
 		Assert.DoesNotContain(runner.Calls, call => call.Contains("manifest", StringComparison.Ordinal) || call.Contains("pull", StringComparison.Ordinal));
@@ -190,10 +192,10 @@ public sealed class ContainerEngineTests
 	[Fact]
 	public async Task ClassicDockerInspectionFallsBackWhenPlatformSelectionIsUnavailable()
 	{
-		var cacheTag = "containerizer/cache/" + Files.HashText(REPOSITORY) + ":x64-" + _digest[7..];
+		var cacheTag = "localhost/containerizer/cache/" + Files.HashText(REPOSITORY) + ":x64-" + _digest[7..];
 		var runner = new ProbeRunner((_, arguments) => arguments.Contains("--platform") ? new(1, "", "unknown flag: --platform") :
 			arguments[0] == "image" ? new(0, Inspect(null, [cacheTag], true), "") : new(0, "", ""));
-		var image = await new ContainerEngine("docker", runner).ResolveAsync(REPOSITORY, null, "latest", "x64", "delivery:test", CancellationToken.None);
+		var image = await new ContainerEngine("docker", runner).ResolveAsync(REPOSITORY, null, "latest", "x64", CancellationToken.None);
 		Assert.Equal(_digest, image.Digest);
 		Assert.Contains("docker image inspect " + REPOSITORY + ":latest", runner.Calls);
 		Assert.DoesNotContain(runner.Calls, call => call.Contains("pull", StringComparison.Ordinal) || call.Contains("imagetools", StringComparison.Ordinal));
@@ -249,6 +251,24 @@ public sealed class ContainerEngineTests
 		Assert.Equal(3, exception.Code);
 		Assert.Contains("podman compose version: provider unavailable", exception.Message);
 		Assert.Equal(["podman info", "podman compose version"], runner.Calls);
+	}
+
+	[Theory]
+	[InlineData("docker", true)]
+	[InlineData("podman", true)]
+	[InlineData("auto", false)]
+	public async Task UnavailableEngineGuidanceMatchesTheSelectionAndComposeRequirement(string choice, bool compose)
+	{
+		var runner = new ProbeRunner((_, _) => new(1, "", "unavailable"));
+		var failure = await Assert.ThrowsAsync<ContainerizationException>(() => ContainerEngine.ConnectAsync(choice, runner, TestContext.Current.CancellationToken, compose));
+
+		if(choice == "docker")
+			Assert.DoesNotContain("podman", failure.Message, StringComparison.OrdinalIgnoreCase);
+		if(choice == "podman")
+			Assert.DoesNotContain("docker", failure.Message, StringComparison.OrdinalIgnoreCase);
+		if(!compose)
+			Assert.DoesNotContain("Compose", failure.Message, StringComparison.OrdinalIgnoreCase);
+		Assert.Contains("info", failure.Message);
 	}
 
 	[Fact]

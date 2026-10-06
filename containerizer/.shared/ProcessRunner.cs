@@ -52,6 +52,8 @@ internal sealed class ProcessRunner : IProcessRunner
 			RedirectStandardOutput = true,
 			RedirectStandardError = true,
 			CreateNoWindow = true,
+			StandardOutputEncoding = Encoding.UTF8,
+			StandardErrorEncoding = Encoding.UTF8,
 			WorkingDirectory = directory ?? Environment.CurrentDirectory,
 		};
 
@@ -95,6 +97,8 @@ internal sealed class ProcessRunner : IProcessRunner
 			RedirectStandardOutput = true,
 			RedirectStandardError = true,
 			CreateNoWindow = true,
+			StandardOutputEncoding = Encoding.UTF8,
+			StandardErrorEncoding = Encoding.UTF8,
 			WorkingDirectory = directory ?? Environment.CurrentDirectory,
 		};
 

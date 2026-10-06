@@ -47,6 +47,14 @@ internal static class ServiceOptions
 	{
 		var settings = component.Settings;
 
+		if(source.Plan.Template == "nginx")
+		{
+			declared.Add("port");
+
+			if(settings.TryGetValue("port", out var ports))
+				source.Settings["port"] = manifest.ResolveValue(ports);
+		}
+
 		foreach(var port in source.Plan.Ports)
 		{
 			var value = Select(port.Name, port.Host == 0 ? "none" : $"{port.Address}:{port.Host.ToString(CultureInfo.InvariantCulture)}");
@@ -111,7 +119,7 @@ internal static class ServiceOptions
 		string Select(string name, string fallback)
 		{
 			declared.Add(name);
-			return source.Settings[name] = settings.TryGetValue(name, out var supplied) ? manifest.ResolveValue(supplied) : fallback;
+			return source.Settings[name] = settings.TryGetValue(name, out var supplied) ? manifest.ResolveValue(supplied) : source.Settings.GetValueOrDefault(name, fallback);
 		}
 	}
 }

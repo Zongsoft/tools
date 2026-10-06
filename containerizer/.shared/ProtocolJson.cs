@@ -41,6 +41,7 @@ namespace Zongsoft.Tools.Containerizer.Protocol;
 [JsonSerializable(typeof(Installation))]
 [JsonSerializable(typeof(ServicePlan))]
 [JsonSerializable(typeof(BootstrapPlan))]
+[JsonSerializable(typeof(RegistryMirrors))]
 [JsonSourceGenerationOptions
 (
 	WriteIndented = true,

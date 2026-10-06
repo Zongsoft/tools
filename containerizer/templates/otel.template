@@ -6,3 +6,4 @@ health=["CMD","/otelcol-contrib","validate","--config=/etc/otelcol-contrib/confi
 
 [ports]
 default=127.0.0.1:4317:4317
+http=127.0.0.1:4318:4318

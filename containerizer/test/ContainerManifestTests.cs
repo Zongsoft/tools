@@ -23,7 +23,7 @@ public sealed class ContainerManifestTests : IDisposable
 	[InlineData(2026, 10, 4, "26.10.4")]
 	[InlineData(2126, 1, 2, "126.1.2")]
 	[InlineData(2000, 2, 9, "0.2.9")]
-	public void AutomaticDateVersionUsesTheLastThreeYearDigits(int year, int month, int day, string expected) => Assert.Equal(expected, ContainerManifest.DateVersion(new DateTime(year, month, day)));
+	public void AutomaticDateVersionUsesTheLastThreeYearDigits(int year, int month, int day, string expected) => Assert.Equal(expected, ContainerManifest.GetDateVersion(new DateTime(year, month, day)));
 
 	[Theory]
 	[InlineData("name=a\nName=b\n[redis]\n")]
@@ -101,7 +101,7 @@ public sealed class ContainerManifestTests : IDisposable
 	[Fact]
 	public void AutomaticVersionsCheckBothFinalFilesAndIncludeArchitecture()
 	{
-		var date = ContainerManifest.DateVersion(DateTime.Today);
+		var date = ContainerManifest.GetDateVersion(DateTime.Today);
 		this.Write("example@" + date + "-x64.container", "occupied");
 		this.Write("example@" + date + ".1-x64.tar.gz", "occupied");
 		var manifest = ContainerManifest.From(Context("redis", "--name:example", "--distribution:debian", "--source:" + _root));
@@ -125,10 +125,12 @@ public sealed class ContainerManifestTests : IDisposable
 	public void SettingsUseConnectionSettingsSemantics()
 	{
 		var component = new ContainerManifest.Component();
-		component["settings"] = "a=first;A=last;empty=;x=a=b;";
+		component["settings"] = "a=last;empty=;x=a=b;";
 		Assert.Equal("last", component.Settings["a"]);
 		Assert.Equal("", component.Settings["empty"]);
 		Assert.Equal("a=b", component.Settings["x"]);
+		component["settings"] = "a=first;A=last";
+		Assert.Throws<ContainerizationException>(() => component.Settings);
 	}
 
 	[Theory]
@@ -346,7 +348,7 @@ public sealed class ContainerManifestTests : IDisposable
 		Assert.Equal(16379, Assert.Single(source.Plan.Ports).Host);
 		Assert.Equal("/cache", Assert.Single(source.Plan.Mounts).Target);
 		Assert.Equal("/var/lib/containerizer/data/example/redis", Assert.Single(source.Plan.Mounts).Source);
-		Assert.Equal(Path.GetFullPath(configuration), source.Configuration["/etc/redis.conf"]);
+		Assert.Equal(Path.GetFullPath(configuration), source.Configuration["/etc/redis.conf"].Source);
 	}
 
 	[Theory]
@@ -392,6 +394,8 @@ public sealed class ContainerManifestTests : IDisposable
 		using(var writer = new TarWriter(gzip))
 		{
 			writer.WriteEntry(new PaxGlobalExtendedAttributesTarEntry(new Dictionary<string, string> { ["PackageName"] = name, ["Architecture"] = architecture, ["Version"] = "1.0" }));
+			using var service = new MemoryStream(System.Text.Encoding.UTF8.GetBytes($"[Service]\nWorkingDirectory=/opt/{name}\nExecStart=/opt/{name}/{name}\n"));
+			writer.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, name + ".service") { DataStream = service });
 		}
 
 		File.WriteAllText(path[..^7] + ".sh", "#!/bin/sh\nexit 0\n");

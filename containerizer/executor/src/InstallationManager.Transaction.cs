@@ -45,6 +45,10 @@ namespace Zongsoft.Tools.Containerizer.Execution;
 
 partial class InstallationManager
 {
+	#region 内部方法
+	internal static string GetPhaseText(string phase) => Properties.Resources.ResourceManager.GetString($"Installation.Phase.{phase}", Properties.Resources.Culture) ?? phase;
+	#endregion
+
 	#region 私有方法
 	private async Task PhaseAsync(Installation installation, string phase, Func<Task> action)
 	{
@@ -52,7 +56,7 @@ partial class InstallationManager
 		installation.Pending.Events.Add(new() { Phase = phase, Result = "Started" });
 		store.Save(installation);
 
-		Console.WriteLine($"{installation.Name}: {phase}");
+		Console.WriteLine($"  → {installation.Name}: {GetPhaseText(phase)}");
 		await action();
 
 		if(!installation.Pending.Completed.Contains(phase))

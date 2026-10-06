@@ -56,14 +56,14 @@ internal sealed class ServiceDefaults
 		var profile = Profile.Load(path, new ProfileOptions { ImportBehavior = ProfileDirectiveBehavior.Suppressed });
 
 		if(profile.Entries.Count > 0)
-			throw new ContainerizationException(2, string.Format(Properties.Resources.Settings_File, path));
+			throw new ContainerizationException(2, string.Format(Properties.Resources.Settings_File_Message, path));
 
 		foreach(var section in profile.Sections)
 		{
 			ContainerManifest.Identity(section.Name);
 
 			if(section.Sections.Count > 0 || defaults._components.ContainsKey(section.Name))
-				throw new ContainerizationException(2, string.Format(Properties.Resources.Settings_File, path));
+				throw new ContainerizationException(2, string.Format(Properties.Resources.Settings_File_Message, path));
 
 			var component = new ContainerManifest.Component { Name = section.Name };
 

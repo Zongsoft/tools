@@ -92,14 +92,9 @@ partial class PackageReader
 			if(name == "TRAILER!!!")
 				break;
 
-			if(IsMetadata(name) && size <= 1024 * 1024)
-			{
-				var bytes = new byte[(int)size];
-				gzip.ReadExactly(bytes);
-				result.Texts.Add(NormalizeName(name), Encoding.UTF8.GetString(bytes));
-			}
-			else
-				Skip(gzip, size);
+			var mode = Convert.ToInt32(Encoding.ASCII.GetString(header, 14, 8), 16);
+			var consumed = Capture(result, name, gzip, size, (mode & 0xf000) == 0x8000, (mode & 0xf000) == 0xa000);
+			Skip(gzip, size - consumed);
 
 			Skip(gzip, (4 - size % 4) % 4);
 		}

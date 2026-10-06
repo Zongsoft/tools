@@ -50,14 +50,14 @@ internal static partial class ServiceSettings
 
 		text = text?.Trim() ?? "";
 		if(text.Contains('\r') || text.Contains('\n'))
-			throw new ContainerizationException(2, Properties.Resources.Settings_Invalid);
+			throw new ContainerizationException(2, Properties.Resources.Settings_Invalid_Message);
 
 		var position = 0;
 
 		foreach(Match match in Entries().Matches(text))
 		{
 			if(match.Index != position)
-				throw new ContainerizationException(2, Properties.Resources.Settings_Invalid);
+				throw new ContainerizationException(2, Properties.Resources.Settings_Invalid_Message);
 
 			position += match.Length;
 			var entry = match.Groups["entry"].Value.Trim();
@@ -67,11 +67,14 @@ internal static partial class ServiceSettings
 
 			var separator = entry.IndexOf('=');
 			if(separator < 1)
-				throw new ContainerizationException(2, Properties.Resources.Settings_Invalid);
+				throw new ContainerizationException(2, Properties.Resources.Settings_Invalid_Message);
 
 			var name = entry[..separator].Trim();
 			ContainerManifest.Identity(name);
 			var value = entry[(separator + 1)..].Trim();
+
+			if(result.ContainsKey(name))
+				throw new ContainerizationException(2, Properties.Resources.Settings_Invalid_Message);
 
 			if(value.StartsWith('"') || value.StartsWith('\''))
 			{
@@ -83,7 +86,7 @@ internal static partial class ServiceSettings
 		}
 
 		if(position != text.Length)
-			throw new ContainerizationException(2, Properties.Resources.Settings_Invalid);
+			throw new ContainerizationException(2, Properties.Resources.Settings_Invalid_Message);
 
 		return result;
 	}
@@ -92,7 +95,7 @@ internal static partial class ServiceSettings
 	private static string Quote(string value)
 	{
 		if(value.Contains('\r') || value.Contains('\n'))
-			throw new ContainerizationException(2, Properties.Resources.Settings_Invalid);
+			throw new ContainerizationException(2, Properties.Resources.Settings_Invalid_Message);
 
 		return value.IndexOfAny([';', '\"', '\'']) < 0 && value.Trim().Length == value.Length ?
 			value : $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";

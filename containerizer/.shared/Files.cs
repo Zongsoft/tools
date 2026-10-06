@@ -167,7 +167,7 @@ internal static class Files
 	{
 		ArtifactPublisher.Write(path, output =>
 		{
-			using var gzip = new GZipStream(output, CompressionLevel.Optimal, true);
+			using var gzip = new GZipStream(output, CompressionLevel.Fastest, true);
 			using var writer = new TarWriter(gzip, TarEntryFormat.Pax, true);
 
 			foreach(var file in Enumerate(source).Order(StringComparer.Ordinal))

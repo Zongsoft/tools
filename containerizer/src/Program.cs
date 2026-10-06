@@ -57,13 +57,14 @@ internal static class Program
 		executor.Root.Children.Add(new ContainerizeCommand());
 		executor.Root.Children.Add(new PlanCommand());
 		executor.Root.Children.Add(new MakeCommand());
+		executor.Root.Children.Add(new RunCommand());
 
 		var code = 0;
 		executor.Failed += OnFailed;
 
 		try
 		{
-			var command = arguments[0] is "plan" or "make" ? arguments[0] : "containerize";
+			var command = arguments[0] is "plan" or "make" or "run" ? arguments[0] : "containerize";
 			await executor.ExecuteAsync(Utility.FormatCommand(command, command == "containerize" ? arguments.AsSpan() : arguments.AsSpan(1)));
 			return code;
 		}

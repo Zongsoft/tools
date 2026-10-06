@@ -66,7 +66,8 @@ partial class InstallationManager
 				throw new ContainerizationException(7, Properties.Resources.Lifecycle_11_Message);
 		}
 
-		Console.WriteLine(string.Format(Properties.Resources.Lifecycle_Recovery, installation.Name, transaction.Version, transaction.Phase));
+		Console.WriteLine(string.Format(Properties.Resources.Lifecycle_Recovery, installation.Name, transaction.Version, GetPhaseText(transaction.Phase)));
+
 		await host.VerifyAsync(bundle, installation, cancellation);
 		await host.StopApplicationsAsync(installation, cancellation);
 
@@ -98,6 +99,7 @@ partial class InstallationManager
 			try
 			{
 				await this.CheckInfrastructureAsync(bundle, cancellation);
+
 				foreach(var service in Ordered(bundle.Plan).Where(service => service.Kind != "infrastructure"))
 				{
 					await host.StartAsync(bundle, service, cancellation);

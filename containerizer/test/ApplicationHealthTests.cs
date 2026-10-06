@@ -26,7 +26,6 @@ public sealed class ApplicationHealthTests
 		Assert.Contains("'" + probe + "'", source.Plan.Health.Test[1]);
 		Assert.DoesNotContain("--fail", source.Plan.Health.Test[1]);
 		Assert.Equal(8069, Assert.Single(source.Plan.Ports).Host);
-		Assert.True(source.HealthUsesCurl);
 	}
 
 	[Fact]
@@ -105,10 +104,10 @@ public sealed class ApplicationHealthTests
 	[InlineData("rocky@9", "dnf")]
 	public void ProbeDependenciesAreInstalledEvenForSelfContainedHosts(string distribution, string installer)
 	{
-		Assert.Contains(installer, ApplicationImageBuilder.ProbeInstall(distribution, true));
-		Assert.Contains("ca-certificates", ApplicationImageBuilder.ProbeInstall(distribution, true));
-		Assert.Contains("curl", ApplicationImageBuilder.ProbeInstall(distribution, true));
-		Assert.Empty(ApplicationImageBuilder.ProbeInstall(distribution, false));
+		Assert.Contains(installer, RuntimeEnvironmentCache.ProbeInstall(distribution, true));
+		Assert.Contains("ca-certificates", RuntimeEnvironmentCache.ProbeInstall(distribution, true));
+		Assert.Contains("curl", RuntimeEnvironmentCache.ProbeInstall(distribution, true));
+		Assert.Empty(RuntimeEnvironmentCache.ProbeInstall(distribution, false));
 	}
 	#endregion
 

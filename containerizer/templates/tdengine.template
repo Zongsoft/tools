@@ -6,6 +6,10 @@ health=["CMD","taos","-s","select server_version();"]
 
 [ports]
 default=127.0.0.1:6041:6041
+console=127.0.0.1:6060:6060
+
+[settings console-port]
+default=127.0.0.1:6060
 
 [data]
 data=/var/lib/taos

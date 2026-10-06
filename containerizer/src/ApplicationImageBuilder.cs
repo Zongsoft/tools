@@ -37,27 +37,25 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Text.RegularExpressions;
 
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer;
 
-internal sealed partial class ApplicationImageBuilder(ContainerEngine engine, BuildResources buildResources)
+internal sealed partial class ApplicationImageBuilder(ContainerEngine engine, BuildResources buildResources, RuntimeEnvironmentCache environments)
 {
 	#region 公共方法
 	public async Task BuildAsync(ContainerManifest.Component component, ServiceBuildContext source, ContainerManifest manifest, string workspace, string delivery, string tag, CancellationToken cancellation)
 	{
-		var package = PackageReader.Read(component["package"]);
-		ResolveEntry(package, source);
+		var package = source.Package;
 
 		var runtime = ResolveRuntime(package, component, source);
 		var distribution = manifest["distribution"];
-		var baseReference = BootstrapPackageBuilder.BaseImage(distribution);
-		var baseline = await engine.ResolveAsync(baseReference, null, null, manifest["architecture"], null, cancellation);
 		var directory = Path.Combine(workspace, source.Plan.Id);
+		var baseline = await environments.PrepareAsync(distribution, manifest["architecture"], runtime, directory, cancellation);
 
-		var ingress = PrepareImage(component["package"], component["dependences"], package, source, distribution, baseline, runtime, directory);
+		using var timing = Output.Measure(Zongsoft.Terminals.Terminal.WriteLine, string.Format(Properties.Resources.NodeBuilder_PrepareImage, source.Plan.Id));
+		PrepareImage(component["package"], package, source, distribution, directory);
 		var root = source.Plan.WorkingDirectory;
 
 		var reference = buildResources.Image();
@@ -65,10 +63,7 @@ internal sealed partial class ApplicationImageBuilder(ContainerEngine engine, Bu
 
 		await using var resources = new BuildResources(engine);
 		if(runtime != null)
-			runtime = InstalledRuntime(runtime, await engine.RunAsync(["run", "--name", resources.Container(), "--rm", "--network", "none", "--entrypoint", "dotnet", reference, "--list-runtimes"], directory, cancellation));
-
-		if(ingress)
-			await this.ReadIngressAsync(source, reference, directory, resources, cancellation);
+			runtime = RuntimeEnvironmentCache.InstalledRuntime(runtime, await engine.RunAsync(["run", "--name", resources.Container(), "--rm", "--network", "none", "--entrypoint", "dotnet", reference, "--list-runtimes"], directory, cancellation));
 
 		using var inspected = JsonDocument.Parse(await engine.InspectAsync(reference, cancellation));
 		var id = inspected.RootElement[0].GetProperty("Id").GetString();
@@ -147,34 +142,6 @@ internal sealed partial class ApplicationImageBuilder(ContainerEngine engine, Bu
 	}
 
 	internal static string Quote(string text) => $"'{text.Replace("'", "'\"'\"'", StringComparison.Ordinal)}'";
-	internal static string InstalledRuntime(string required, string output)
-	{
-		var match = RuntimeRegex().Match(required);
-		var minimum = Versioning.Version.Number.Parse(match.Groups[2].Value);
-		var framework = match.Groups[1].Value == "aspnetcore-runtime" ? "Microsoft.AspNetCore.App" : "Microsoft.NETCore.App";
-		var versions = output.Split('\n').Select(line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-			.Where(parts => parts.Length >= 2 && parts[0] == framework)
-			.Select(parts => Versioning.Version.Number.TryParse(parts[1], out var version) ? version : (Versioning.Version.Number?)null)
-			.OfType<Versioning.Version.Number>()
-			.Where(version => version.Major == minimum.Major && version.Minor == minimum.Minor && version >= minimum)
-			.OrderDescending().ToArray();
-
-		if(versions.Length == 0)
-			throw new ContainerizationException(2, Properties.Resources.ApplicationBuilder_10_Message);
-
-		return $"{match.Groups[1].Value}-{versions[0]}";
-	}
-
-	internal static string ProbeInstall(string distribution, bool required)
-	{
-		if(!required)
-			return string.Empty;
-
-		if(Distribution.IsDebian(distribution))
-			return "apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && ";
-
-		return "dnf install -y ca-certificates && (command -v curl >/dev/null 2>&1 || dnf install -y curl-minimal) && ";
-	}
 	#endregion
 
 	#region 私有方法
@@ -210,28 +177,5 @@ internal sealed partial class ApplicationImageBuilder(ContainerEngine engine, Bu
 		return runtime;
 	}
 
-	internal static string RuntimeInstall(string distribution, string runtime)
-	{
-		if(runtime == null)
-			return string.Empty;
-
-		var match = RuntimeRegex().Match(runtime);
-		if(!match.Success)
-			throw new ContainerizationException(2, Properties.Resources.ApplicationBuilder_11_Message);
-
-		var number = Versioning.Version.Number.Parse(match.Groups[2].Value);
-		var name = $"{match.Groups[1].Value}-{number.Major}.{number.Minor}";
-		var parts = distribution.Split('@');
-
-		if(distribution == "ubuntu@22.04" && number.Major >= 9)
-			return $"apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg software-properties-common && add-apt-repository -y ppa:dotnet/backports && apt-get update && apt-get install -y --no-install-recommends {name} && ";
-
-		if(parts[0] is "ubuntu" or "debian")
-			return $"apt-get update && apt-get install -y ca-certificates curl && curl -fsSL https://packages.microsoft.com/config/{parts[0]}/{parts[1]}/packages-microsoft-prod.deb -o /tmp/microsoft.deb && dpkg -i /tmp/microsoft.deb && apt-get update && apt-get install -y --no-install-recommends {name} && ";
-		return $"rpm --import https://packages.microsoft.com/keys/microsoft.asc && rpm -U https://packages.microsoft.com/config/rhel/9/packages-microsoft-prod.rpm && dnf install -y {name} && ";
-	}
-
-	[GeneratedRegex(@"^(dotnet-runtime|aspnetcore-runtime)-(\d+\.\d+\.\d+)$")]
-	private static partial Regex RuntimeRegex();
 	#endregion
 }
