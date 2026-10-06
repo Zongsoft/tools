@@ -1144,3 +1144,5 @@ rpm2cpio ./packages/zongsoft.web@1.0.0-x64.rpm | cpio -t
 - rpm.org: [RPM Package Format](https://rpm.org/docs/4.19.x/manual/format.html)
 - Linux Standard Base: [RPM Package File Format](https://refspecs.linuxfoundation.org/LSB_3.1.1/LSB-Core-generic/LSB-Core-generic/pkgformat.html)
 - GNU tar manual: [GNU tar](https://www.gnu.org/software/tar/manual/)
+
+Web packaging also emits .conf.template and, when fully representable, .bindings from the final hoster model. Lists in host/bind accept commas and semicolons; containerizer make renders the template and records frontend publication separately from application Listen. See [Web hosting](web.md).

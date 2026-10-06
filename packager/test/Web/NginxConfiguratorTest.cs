@@ -15,7 +15,7 @@ public class NginxConfiguratorTest
 	{
 		using var files = new MigrationTestDirectory();
 		var result = Configure(files, "[api]\nbind!secure=https://*,https://[::]\nserver=http://app\ncertificate-key=file:/keys/private.pem");
-		var content = Assert.Single(result.Files).Content;
+		var content = Assert.Single(result.Files, file => file.Path.EndsWith(".conf", StringComparison.Ordinal)).Content;
 		Assert.True(content.Relocatable);
 		var text = content.Render("/opt/new");
 		Assert.Contains("ssl_certificate \"/opt/new/.certificates/example.pem\";", text);
@@ -30,7 +30,7 @@ public class NginxConfiguratorTest
 	{
 		using var files = new MigrationTestDirectory();
 		var result = Configure(files, "[api]\nbind!legacy=$(absent)\nhost=$(absent)\nnginx:listen!80\nnginx:server_name=example.com\nserver=~\n[api home]\nnginx:proxy_pass=http://app");
-		var text = Assert.Single(result.Files).Content.Render("/opt/example");
+		var text = Assert.Single(result.Files, file => file.Path.EndsWith(".conf", StringComparison.Ordinal)).Content.Render("/opt/example");
 		Assert.Contains("listen 80;", text);
 		Assert.Contains("proxy_pass http://app;", text);
 		Assert.NotEmpty(result.Diagnostics);
@@ -41,7 +41,7 @@ public class NginxConfiguratorTest
 	{
 		using var files = new MigrationTestDirectory();
 		var result = Configure(files, "[api]\nbind!legacy=http://*\nserver!a=http://app1 weight=3\nserver!b=http://app2\nserver-health=/health?ready=1\nserver-health-status=200-299,3XX\n[api a]\npath=/a\n[api b]\npath=/b");
-		var text = Assert.Single(result.Files).Content.Render("/opt/example");
+		var text = Assert.Single(result.Files, file => file.Path.EndsWith(".conf", StringComparison.Ordinal)).Content.Render("/opt/example");
 		Assert.Equal(1, text.Split("upstream hoster_").Length - 1);
 		Assert.Equal(1, text.Split("health_check ").Length - 1);
 		Assert.Contains("status 200-399;", text);
@@ -70,7 +70,7 @@ public class NginxConfiguratorTest
 	{
 		using var files = new MigrationTestDirectory();
 		var result = Configure(files, "[api]\nbind!legacy=http://*\nserver=http://app\nnginx:proxy_set_header!Host=$(unused)\n[api route]\nmatch=regex\npath=^/items/[0-9]{2}$\nheader!Host=literal.example\nnginx:proxy_set_header!X-Remote=$remote_addr");
-		var text = Assert.Single(result.Files).Content.Render("/opt/example");
+		var text = Assert.Single(result.Files, file => file.Path.EndsWith(".conf", StringComparison.Ordinal)).Content.Render("/opt/example");
 		Assert.Contains("location ~* \"^/items/[0-9]{2}$\"", text);
 		Assert.Contains("proxy_set_header Host literal.example;", text);
 		Assert.Contains("proxy_set_header X-Remote $remote_addr;", text);

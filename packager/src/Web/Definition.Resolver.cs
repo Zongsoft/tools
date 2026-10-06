@@ -169,7 +169,7 @@ partial class Definition
 
 			foreach(var entry in values.Values.Values.Where(item => item.Name.StartsWith("bind!", StringComparison.OrdinalIgnoreCase)))
 			{
-				foreach(var address in this.Value(entry).Split(',', StringSplitOptions.TrimEntries))
+				foreach(var address in this.Value(entry).Split([',', ';'], StringSplitOptions.TrimEntries))
 				{
 					var match = _address.Match(address);
 					if(!match.Success || match.Groups["slash"].Length != 0)
@@ -201,7 +201,7 @@ partial class Definition
 			if(text == null)
 				return [];
 
-			var result = text.Split(',', StringSplitOptions.TrimEntries);
+			var result = text.Split([',', ';'], StringSplitOptions.TrimEntries);
 			if(result.Any(item => string.IsNullOrEmpty(item) || item.Any(char.IsWhiteSpace) || item.IndexOfAny([';', '{', '}', '#', '"', '\'', '$', '/', '\\']) >= 0))
 				throw DefinitionException.Create("Value", values.Source("host"), text);
 

@@ -1144,3 +1144,5 @@ rpm2cpio ./packages/zongsoft.web@1.0.0-x64.rpm | cpio -t
 - rpm.org: [RPM Package Format](https://rpm.org/docs/4.19.x/manual/format.html)
 - Linux Standard Base: [RPM Package File Format](https://refspecs.linuxfoundation.org/LSB_3.1.1/LSB-Core-generic/LSB-Core-generic/pkgformat.html)
 - GNU tar manual: [GNU tar](https://www.gnu.org/software/tar/manual/)
+
+Web 打包从最终托管模型生成 .conf.template，并在能够完整表达时生成 .bindings；host/bind 支持逗号与分号。containerizer make 渲染模板，分别记录前端发布及应用 Listen，详见 [Web 托管](web.zh-Hans.md).

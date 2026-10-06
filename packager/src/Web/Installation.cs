@@ -45,6 +45,9 @@ internal static partial class Installation
 	internal static void Attach(Package package, Configurator.Result result)
 	{
 		package.Web = result;
+		if(!result.Files.Any(file => file.Path == ".web/nginx/.bindings"))
+			package.Entries.RemoveGenerated(".web/nginx/.bindings");
+
 		Validate(package, false);
 
 		foreach(var file in result.Files)
@@ -86,9 +89,9 @@ internal static partial class Installation
 
 	internal static Scripts CreateScripts(Package package)
 	{
-		var current = package.Web?.Files.Single().Path;
+		var current = package.Web?.Files.Single(file => file.Path.EndsWith(".conf", StringComparison.Ordinal)).Path;
 		var setup = Context(package);
-		var delivered = setup + "\nHOSTER_WEB_CHANGED=0\n" + Nginx.Prune(current);
+		var delivered = setup + "\nHOSTER_WEB_CHANGED=0\n" + Nginx.Prune(current) + "\n" + Nginx.PruneCompanions(package.Web?.Files);
 
 		if(package is Package.Tar && package.Web != null)
 		{

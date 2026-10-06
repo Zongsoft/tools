@@ -50,7 +50,7 @@ dotnet-pack deb --name:Example.Web --version:1.0.0 --platform:linux --architectu
 
 生成的应用服务监听 `http://127.0.0.1:8069`，`server=~` 复用该地址。Nginx 的 IPv4/IPv6 HTTP 入口监听 80 端口。`bind` 控制 Nginx 入口，`--listen` 控制应用进程，二者互不替代。
 
-如果应用和 Nginx 分属不同容器，改为使用部署网络中的应用服务名：
+containerizer 通过生成的语义模板适配 server=~。如需显式固定后端，可使用部署网络中的应用服务名：
 
 ```ini
 [api]
@@ -126,7 +126,7 @@ websocket = true
 
 | 字段 | 可用层级 | 缺省或主要规则 |
 | --- | --- | --- |
-| `host` | 站点 | 可省略；逗号分隔请求主机名或 IP。 |
+| `host` | 站点 | 可省略；逗号或分号分隔请求主机名或 IP。 |
 | `bind!名称` | 站点 | 至少有公共绑定或当前托管器原始监听；不隐式补端口入口。 |
 | `certificate`、`certificate-key` | 站点 | HTTPS 的证书/私钥引用。 |
 | `path` | 路径 | prefix/exact 缺失或空为 `/`；regex 必填。 |
@@ -209,13 +209,13 @@ server = http://app:8069
 | `http://127.0.0.1:8080` | 仅 IPv4 回环地址 8080。 |
 | `https://[2001:db8::10]:8443` | 指定 IPv6 地址及非默认端口。 |
 
-每个逗号分隔项都是完整地址，不能写 `http://*,[::]`。逗号两侧空白可省略，空元素（如尾随逗号）非法。端口范围为 1–65535。IPv6 必须有方括号；绑定不接受域名、路径、查询或片段。`*` 只表示 IPv4，不把 IPv6 绑定当成跨平台的双栈捷径。
+每个逗号或分号分隔项都是完整地址，不能写 `http://*,[::]`。可混用两种分隔符并在两侧留空白，空元素和尾随分隔符非法。端口范围为 1–65535。IPv6 必须有方括号；绑定不接受域名、路径、查询或片段。`*` 只表示 IPv4，不把 IPv6 绑定当成跨平台的双栈捷径。
 
 绑定协议仅支持 http/https。WebSocket 使用路径上的 `websocket=true`，不写 `bind!x=ws://...` 或 `wss://...`。
 
 `host` 不是网卡地址，`host=192.0.2.10` 不会使 Nginx 只监听该 IP。省略时不附加公共主机名限制，不根据站点名补出域名；仍受同一监听入口的 Nginx 虚拟主机选择规则影响。
 
-host 的逗号两侧空白会去掉，同名值忽略大小写去重；显式空值、列表空元素和含空白的主机名报错。它只填写主机名或 IP，不带协议、路径和端口；监听端口放在 bind 中。更复杂的 Nginx server_name 表达式使用原始设置。
+host 支持逗号和分号混用，两侧空白会去掉，同名值忽略大小写去重；显式空值、列表空元素和含空白的主机名报错。它只填写主机名或 IP，不带协议、路径和端口；监听端口放在 bind 中。更复杂的 Nginx server_name 表达式使用原始设置。
 
 同名绑定组在导入后整体替换。例如共享文件的 `bind!legacy=http://*,http://[::]` 被本地 `bind!legacy=http://127.0.0.1:8080` 替换后，legacy 只剩一个监听。不同组展开后合并；同站点规范化后重复绑定只输出一次。
 
@@ -1248,7 +1248,7 @@ HOSTER_WEB_ACTIVATION=false rpm -Uvh /tmp/application.rpm
 HOSTER_WEB_ACTIVATION=0 sh /tmp/application.sh
 ```
 
-安装完成后，容器化工具在已知安装根的 `.web/nginx/*.conf` 查找直接子文件，读取并交付到 Nginx 镜像或挂载位置。不要依赖 /etc/nginx/conf.d 的链接存在；部署端负责地址、证书及 include 引用在 Nginx 容器中可用。不要在卸载后再收集，因为卸载会删除 .web。
+containerizer 在构建镜像前读取包内 .bindings 和 .conf.template。make 适配当前应用后端及已知文件引用、收集资源，并将站点、发布关系和探测身份写入 containerizer.json；run 使用该中间结果。声明托管器但交接不完整时失败，不回退到应用 Listen。普通 .conf 继续用于主机安装。
 
 ### 裸机自动激活条件
 
@@ -1381,3 +1381,22 @@ DESTDIR 前缀不写入默认引用；关闭激活或跳过生命周期仍必须
 - 正则路径需要适配 URL Rewrite 的大小写、顺序和相对路径输入；任意 Nginx 原始项不具备自动跨托管器转换能力。
 - `.web/<hoster>/` 是交付和发现约定，不改变目标运行时的要求。ANCM 的 web.config 仍需部署到应用内容根，不能仅放在 .web/iis/ 就认为已配置 IIS。参见 [IIS web.config 位置](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/iis/?view=aspnetcore-10.0#webconfig-file-location)。
 - Windows 证书存储、IIS 资源所有权、安装事务及 MSI/WiX 适配需由相应实现处理，不能机械套用 Linux PEM 路径或 Nginx 生命周期。
+
+## 容器交接文件
+
+每份生成的 Nginx 配置均有配套 `.conf.template`，静态配置也生成。两者来自同一份最终指令模型。保留标记 `{{zongsoft:application}}` 标识当前应用后端主机，协议及端口保持；引号中的 `{{zongsoft:file:BASE64}}` 标识已知证书/信任文件路径，以 UTF-8 Base64 编码。解码后的 `./` 相对于应用安装根，绝对路径保持原义；显式后端地址不改写。用户内容与保留标记冲突时生成失败。
+
+能完整表达最终前端时，同目录生成 `.bindings`。该文件采用无 BOM UTF-8、CRLF 的 INI，没有根级状态/版本字段。每个站点为有序段落：host 可选、bind 必填、default 可选。web.profile 与 .bindings 的 host、bind 均支持逗号与分号，default 也支持两者；输出统一逗号。绑定格式为 `http(s)://IP:port`，IPv6 使用方括号，IPv4 通配规范化为 0.0.0.0。default 必须是 bind 的子集，只记录显式 default_server，不伪造隐式默认关系。
+
+```ini
+[api]
+host=api.example.test,api-alt.example.test
+bind=https://0.0.0.0:443,https://[::]:443
+default=https://0.0.0.0:443,https://[::]:443
+[local]
+bind=http://0.0.0.0:8080
+```
+
+导出反映导入、继承、变量求值以及原始 listen/server_name 覆盖后的最终配置。合法原始配置无法完整表达时，例如正则主机名、监听域名、未支持的监听选项或站点 include，仍生成配置/模板，输出诊断并省略整份 .bindings，不生成部分内容或状态文件。无法导出时移除旧 .bindings 载荷；安装时清理不再交付的 .bindings/模板，不受 Web 激活开关控制。
+
+三种包格式均按普通载荷携带这些文件，不向包头重复写入绑定。make/run、端口映射、额外文件及通配域名探测身份见 [containerizer Web 契约](../../containerizer/README.zh-Hans.md#web-交接与端口发布)。

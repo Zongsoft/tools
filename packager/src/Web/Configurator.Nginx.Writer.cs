@@ -41,7 +41,7 @@ partial class Configurator
 {
 	partial class Nginx
 	{
-		internal sealed class Writer
+		internal sealed class Writer(bool template)
 		{
 			private readonly StringBuilder _text = new();
 			private readonly List<Result.ContentPart> _parts = [];
@@ -54,7 +54,20 @@ partial class Configurator
 				{
 					_text.Append(' ');
 
-					if(argument.Kind is ArgumentKind.Raw or ArgumentKind.Expression)
+					if(argument.Value?.Contains("{{zongsoft:", StringComparison.Ordinal) == true)
+						throw DefinitionException.Create("Conflict", default, "{{zongsoft:");
+
+					if(template && argument.Kind == ArgumentKind.Application)
+					{
+						var scheme = argument.Value.IndexOf("://", StringComparison.Ordinal);
+						_text.Append(scheme < 0 ? "" : argument.Value[..(scheme + 3)]).Append("{{zongsoft:application}}").Append(argument.Value[argument.Value.LastIndexOf(':')..]);
+					}
+					else if(template && argument.Kind == ArgumentKind.Resource)
+					{
+						var path = (argument.Relative ? "./" : "") + argument.Value;
+						_text.Append('"').Append("{{zongsoft:file:").Append(Convert.ToBase64String(Encoding.UTF8.GetBytes(path))).Append("}}\"");
+					}
+					else if(argument.Kind is ArgumentKind.Raw or ArgumentKind.Expression)
 						_text.Append(argument.Value);
 					else if(argument.Kind == ArgumentKind.Pattern)
 						_text.Append('"').Append(argument.Value.Replace("\\", "\\\\").Replace("\"", "\\\"")).Append('"');
@@ -118,8 +131,7 @@ partial class Configurator
 				return value.Replace("\\", "\\\\").Replace("\"", "\\\"");
 			}
 
-			private Writer() { }
-			internal static Result.Content Generate(IReadOnlyList<Directive> directives) => new Writer().Render(directives);
+			internal static Result.Content Generate(IReadOnlyList<Directive> directives, bool template = false) => new Writer(template).Render(directives);
 		}
 	}
 }

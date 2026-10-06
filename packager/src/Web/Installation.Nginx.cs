@@ -32,6 +32,8 @@
  */
 
 using System;
+using System.Linq;
+using System.Collections.Generic;
 
 namespace Zongsoft.Tools.Packager.Web;
 
@@ -39,6 +41,19 @@ partial class Installation
 {
 	private static class Nginx
 	{
+		internal static string PruneCompanions(IReadOnlyList<Configurator.Result.File> files)
+		{
+			var keep = files == null ? "" : string.Join("\n", files.Where(file => !file.Path.EndsWith(".conf", StringComparison.Ordinal)).Select(file => $"[ \"$hoster_web_old\" != \"$HOSTER_WEB_TARGET/{file.Path}\" ] || continue"));
+
+			return $$"""
+			for hoster_web_old in "$HOSTER_WEB_TARGET"/.web/nginx/*.conf.template "$HOSTER_WEB_TARGET"/.web/nginx/.bindings; do
+				[ -e "$hoster_web_old" ] || [ -L "$hoster_web_old" ] || continue
+				{{keep}}
+				rm -f -- "$hoster_web_old"
+			done
+			""";
+		}
+
 		internal static string Prune(string current) => $$"""
 		for hoster_web_old in "$HOSTER_WEB_TARGET"/.web/nginx/*.conf; do
 			[ -e "$hoster_web_old" ] || [ -L "$hoster_web_old" ] || continue

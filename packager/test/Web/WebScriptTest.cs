@@ -16,6 +16,30 @@ namespace Zongsoft.Tools.Packager.Tests.Web;
 
 public class WebScriptTest
 {
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public async Task DeliveredPrunesObsoleteCompanionsWithoutActivationAsync(bool keepWeb)
+	{
+		using var fixture = new ScriptFixture();
+		var bindings = Path.Combine(fixture.Root, ".web/nginx/.bindings");
+		var template = fixture.Configuration + ".template";
+		var old = Path.Combine(fixture.Root, ".web/nginx/old.conf.template");
+
+		File.WriteAllText(bindings, "current");
+		File.WriteAllText(template, "current");
+		File.WriteAllText(old, "old");
+
+		var scripts = Installation.CreateScripts(fixture.CreatePackage(keepWeb));
+		var result = await fixture.RunAsync(scripts.Delivered, "0");
+
+		Assert.Equal(0, result.Code);
+		Assert.Equal(keepWeb, File.Exists(bindings));
+		Assert.Equal(keepWeb, File.Exists(template));
+		Assert.False(File.Exists(old));
+		Assert.Empty(fixture.Calls);
+	}
+
 	[Fact]
 	public void ShellPathsHonorTemporaryDirectoryMount()
 	{
@@ -270,10 +294,13 @@ public class WebScriptTest
 		{
 			ShellEnvironment.GetRequired();
 			_files = new();
+
 			this.Root = Directory.CreateDirectory(Path.Combine(_files.Path, "installed application")).FullName;
 			this.SystemDirectory = Directory.CreateDirectory(Path.Combine(_files.Path, "mock-nginx")).FullName;
+
 			Directory.CreateDirectory(Path.Combine(this.SystemDirectory, "conf.d"));
 			Directory.CreateDirectory(Path.Combine(this.Root, ".web/nginx"));
+
 			this.Result = NginxConfiguratorTest.Configure(_files, "[api]\nbind!secure=https://*\nserver=http://app\nnginx:proxy_set_header!X-Remote=$remote_addr");
 			File.WriteAllText(this.Configuration, this.Result.Files[0].Content.Render("/opt/default"), new UTF8Encoding(false));
 			this.Scripts = Installation.CreateScripts(this.CreatePackage(true));

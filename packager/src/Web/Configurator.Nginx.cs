@@ -65,7 +65,20 @@ partial class Configurator
 			foreach(var site in model.Sites)
 				this.GenerateSite(site, context, blocks, listeners, cookies);
 
-			return new(this.Name, [new($".web/nginx/{context.PackageName}.conf", Writer.Generate(blocks), Utility.Unix.Mode644)], model.Diagnostics);
+			var path = $".web/nginx/{context.PackageName}.conf";
+			var files = new List<Result.File>
+			{
+				new(path, Writer.Generate(blocks), Utility.Unix.Mode644),
+				new(path + ".template", Writer.Generate(blocks, true), Utility.Unix.Mode644),
+			};
+
+			var diagnostics = model.Diagnostics.ToList();
+			var bindings = Bindings.Export(model.Sites, blocks, diagnostics);
+
+			if(bindings != null)
+				files.Add(new(".web/nginx/.bindings", new([new(bindings)]), Utility.Unix.Mode644));
+
+			return new(this.Name, files, diagnostics);
 		}
 
 		private void GenerateSite(Definition.Site site, Context context, List<Directive> blocks, Dictionary<string, Diagnostic.Location> listeners, Dictionary<string, string> cookies)
@@ -130,7 +143,7 @@ partial class Configurator
 					else
 						target = group.Members[0].Endpoint.Address;
 
-					directives.Add(Leaf("proxy_pass", target));
+					directives.Add(new("proxy_pass", [new(target, !pooled && group.Kind == Definition.ServerKind.Application ? ArgumentKind.Application : ArgumentKind.Literal)]));
 					Tls(policy.Tls, directives);
 
 					if(policy.Retry.Count == 0 || policy.Retry.Conditions.Contains("off"))
@@ -184,10 +197,12 @@ partial class Configurator
 				Number(member.Weight, route.Source, maximum);
 				Number(policy.FailureCount, route.Source, maximum);
 
-				body.Add(Leaf("server", member.Endpoint.Authority,
-					"weight=" + member.Weight.ToString(CultureInfo.InvariantCulture),
-					"max_fails=" + policy.FailureCount.ToString(CultureInfo.InvariantCulture),
-					"fail_timeout=" + Duration(policy.FailureTimeout, true, route.Source, maximum)));
+				body.Add(new("server", [
+					new(member.Endpoint.Authority, group.Kind == Definition.ServerKind.Application ? ArgumentKind.Application : ArgumentKind.Literal),
+					new("weight=" + member.Weight.ToString(CultureInfo.InvariantCulture)),
+					new("max_fails=" + policy.FailureCount.ToString(CultureInfo.InvariantCulture)),
+					new("fail_timeout=" + Duration(policy.FailureTimeout, true, route.Source, maximum)),
+				]));
 			}
 
 			if(policy.Affinity.Kind == "cookie")

@@ -44,7 +44,7 @@ partial class Configurator
 	{
 		internal sealed record Directive(string Name, IReadOnlyList<Argument> Arguments, IReadOnlyList<Directive> Children = null);
 		internal readonly record struct Argument(string Value, ArgumentKind Kind = ArgumentKind.Literal, bool Relative = false);
-		internal enum ArgumentKind { Literal, Raw, Expression, Resource, Pattern }
+		internal enum ArgumentKind { Literal, Raw, Expression, Resource, Pattern, Application }
 
 		internal static IReadOnlyList<string> Tokenize(string text, Diagnostic.Location source)
 		{
@@ -162,7 +162,9 @@ partial class Configurator
 				if(parameters.Count < minimum || singleArgument && parameters.Count != 1 || singleDirective && !counts.Add(entry.Name))
 					throw DefinitionException.Create("Directive", entry.Source, entry.Name);
 
-				result.Add(new(entry.Name, parameters.Select(item => new Argument(item, ArgumentKind.Raw)).ToArray()));
+				var resource = entry.Name is "ssl_certificate" or "ssl_certificate_key" or "proxy_ssl_trusted_certificate" or "proxy_ssl_crl";
+				result.Add(new(entry.Name, parameters.Select(item => resource && Literal(item) is { } path && path.StartsWith('/') ?
+					new Argument(path, ArgumentKind.Resource) : new Argument(item, ArgumentKind.Raw)).ToArray()));
 			}
 
 			return result;

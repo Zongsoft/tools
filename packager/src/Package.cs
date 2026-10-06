@@ -212,6 +212,19 @@ public abstract partial class Package
 		public int Count => _entries.Count;
 		public bool Contains(string name) => name != null && _entries.ContainsKey(name);
 
+		internal void RemoveGenerated(string name)
+		{
+			string[] keys = [Utility.NormalizePath(Path.Combine(_package.EntryPrefix ?? "", name)), "/" + Utility.NormalizePath(Path.Combine(_package.InstallPath, name)).TrimStart('/')];
+
+			foreach(var key in keys)
+			{
+				if(_entries.TryGetValue(key, out var entry) && entry.IsDirectory)
+					throw new InvalidOperationException(string.Format(Properties.Resources.GeneratedEntryConflicted_Message, name));
+
+				_entries.Remove(key);
+			}
+		}
+
 		internal void SetVersion(ApplicationIdentifier identifier)
 		{
 			var name = Utility.NormalizePath(Path.Combine(_package.EntryPrefix ?? "", ".version"));

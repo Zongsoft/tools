@@ -50,7 +50,7 @@ dotnet-pack deb --name:Example.Web --version:1.0.0 --platform:linux --architectu
 
 The generated application service listens on http://127.0.0.1:8069, reused by `~`. Nginx listens on IPv4/IPv6 HTTP port 80. bind controls Nginx; --listen controls the application.
 
-For separate containers, use the application service name in the deployment network:
+Containerizer adapts server=~ through the generated semantic template. To deliberately supply a fixed backend, use its service name:
 
 ```ini
 [api]
@@ -126,7 +126,7 @@ Root → site → route means an omitted child field inherits; an explicit decla
 
 | Field | Scope | Default or rule |
 | --- | --- | --- |
-| `host` | Site | Optional comma-separated request hosts or IP literals. |
+| `host` | Site | Optional request hosts or IP literals separated by commas or semicolons. |
 | `bind!name` | Site | A common binding or selected hoster's native listener is required. |
 | `certificate`, `certificate-key` | Site | Frontend HTTPS certificate/key references. |
 | `path` | Route | Missing/empty means / for prefix/exact; required for regex. |
@@ -209,11 +209,11 @@ server = http://app:8069
 | `http://127.0.0.1:8080` | IPv4 loopback 8080. |
 | `https://[2001:db8::10]:8443` | Specific IPv6 address and port. |
 
-Every comma element must be complete: http://*,[::] fails. Whitespace around commas is accepted; empty elements and trailing commas fail. Ports are 1–65535; IPv6 needs brackets. DNS names, paths, queries, and fragments are invalid bindings. * means IPv4 only, not a portable dual-stack shortcut.
+Every comma/semicolon element must be complete: http://*,[::] fails. Mixed separators and surrounding whitespace are accepted; empty elements and trailing separators fail. Ports are 1–65535; IPv6 needs brackets. DNS names, paths, queries, and fragments are invalid bindings. * means IPv4 only, not a portable dual-stack shortcut.
 
 Only http/https are supported. WebSocket uses websocket=true on routes, not ws/wss bind schemes. host=192.0.2.10 does not restrict the listening interface. Omitted host adds no common host-name restriction or inferred domain; Nginx virtual-host selection still applies.
 
-host trims spaces around commas and deduplicates names case-insensitively. Explicit empty, empty list elements, and names containing whitespace fail. Supply host names or IPs without scheme, path, or port; listening ports belong in bind. Use native settings for more complex Nginx server_name expressions.
+host accepts comma and semicolon separators, trims surrounding spaces and deduplicates names case-insensitively. Explicit empty, empty list elements, and names containing whitespace fail. Supply host names or IPs without scheme, path, or port; listening ports belong in bind. Use native settings for more complex Nginx server_name expressions.
 
 A local same-name binding group replaces the whole imported group. Replacing `bind!legacy=http://*,http://[::]` with `bind!legacy=http://127.0.0.1:8080` leaves one listener. Different groups are combined and normalized duplicates within a site emitted once.
 
@@ -1245,7 +1245,7 @@ HOSTER_WEB_ACTIVATION=false rpm -Uvh /tmp/application.rpm
 HOSTER_WEB_ACTIVATION=0 sh /tmp/application.sh
 ```
 
-After installation, discover direct files in .web/nginx/*.conf under the known installation root and transfer them to the Nginx image or mount. Do not require /etc/nginx/conf.d links. Deployment makes backend addresses, certificates, and includes valid in that container. Collect before uninstalling because uninstall removes .web.
+Containerizer reads the packaged .bindings and .conf.template companions before building images. Make adapts current-application backends and known file references, collects required resources and persists sites/publications/probe identities in containerizer.json. Run consumes that result. A declared hoster without a complete handoff fails; application Listen is not an ingress fallback. The ordinary .conf remains available for installation on a host.
 
 ### Bare-metal automatic activation
 
@@ -1378,3 +1378,22 @@ Inspect archives/generated files and validate the main configuration in an Nginx
 - Regex routes need URL Rewrite case/order/relative-path adaptation. Arbitrary Nginx native entries cannot automatically convert.
 - `.web/<hoster>/` defines delivery/discovery, not the target runtime location. ANCM web.config still belongs at the application content root; merely storing it in .web/iis/ does not configure IIS. See [IIS web.config location](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/iis/?view=aspnetcore-10.0#webconfig-file-location).
 - Windows certificate stores, IIS resource ownership, installation transactions, and MSI/WiX adaptation need their own implementation; Linux PEM paths and Nginx lifecycle cannot be mechanically reused.
+
+## Container handoff files
+
+Each generated Nginx configuration has a `.conf.template` companion, including static configurations. It is produced from the same final directive model. Reserved `{{zongsoft:application}}` markers identify current-application backend hosts, retaining scheme and port; quoted `{{zongsoft:file:BASE64}}` markers identify known certificate/trust paths encoded as UTF-8 Base64. A decoded `./` path is relative to the application installation root; an absolute path retains its meaning. Explicit backend addresses are never rewritten. Reserved marker collisions fail generation.
+
+The same directory contains `.bindings` when the complete final frontend can be represented. This UTF-8-without-BOM, CRLF INI file has no root status/version fields. Each site has its own ordered section: optional `host`, required `bind`, optional `default`. `host` and `bind` in both web.profile and .bindings accept commas and semicolons; `default` accepts both as well. Output uses commas. Bindings are `http(s)://IP:port` with bracketed IPv6; wildcards normalize to `0.0.0.0`. `default` is a subset of bind and records explicit `default_server`, without inventing an implicit default.
+
+```ini
+[api]
+host=api.example.test,api-alt.example.test
+bind=https://0.0.0.0:443,https://[::]:443
+default=https://0.0.0.0:443,https://[::]:443
+[local]
+bind=http://0.0.0.0:8080
+```
+
+The export reflects imports, inheritance, evaluated variables and final native listen/server_name overrides. Valid native configurations that cannot be fully represented (such as regex server names, listener hostnames, unsupported listener options or site includes) keep their configuration/template, emit a diagnostic and omit the entire .bindings file. No partial or status-only file is emitted. Stale .bindings payloads are removed when export is unavailable; installation prunes obsolete .bindings/template companions regardless of Web activation.
+
+All three package formats carry these files as ordinary payload, without duplicate package-header metadata. See the [containerizer Web contract](../../containerizer/README.md#web-handoff-and-publication) for make/run, port mappings, file inputs and wildcard probe identities.
