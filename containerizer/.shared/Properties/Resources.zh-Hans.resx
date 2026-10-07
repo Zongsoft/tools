@@ -767,7 +767,7 @@
     <value>{0}：仅验证 TCP 访问；自定义入口配置缺少浏览器入口元信息。请另行验证应用已声明的 Web 入口。</value>
   </data>
   <data name="Run.Help" xml:space="preserve">
-    <value>run 将已有交付包安装到全新的本机验证容器中。Web 和已发布的 TCP 入口绑定 127.0.0.1。请保留窗口，按 Ctrl+C 清除环境和测试数据。首次准备底图可能需要联网。</value>
+    <value>run 将已有交付包安装到全新的本机验证容器中。Web 入口发布到所有 IPv4 接口，其他已发布的 TCP 入口绑定 127.0.0.1。请保留窗口，按 Ctrl+C 清除环境和测试数据。首次准备底图可能需要联网。</value>
   </data>
   <data name="Engine.Podman.Guidance" xml:space="preserve">
     <value>{0}：请用 {0} info 检查连接；Windows 上请用 {0} machine list 查看虚拟机，再用 {0} machine start &lt;名称&gt; 启动选定虚拟机。</value>

@@ -2100,7 +2100,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
         }
 
         /// <summary>
-        ///   查找类似 run installs an existing delivery in a fresh local verification container. Web and published TCP entries bind to 127.0.0.1. Keep this window open; Ctrl+C removes the environment and test data. The first base-image preparation may need Internet access. 的本地化字符串。
+        ///   查找类似 run installs an existing delivery in a fresh local verification container. Web entries publish on all IPv4 interfaces, while other published TCP entries bind to 127.0.0.1. Keep this window open; Ctrl+C removes the environment and test data. The first base-image preparation may need Internet access. 的本地化字符串。
         /// </summary>
         internal static string Run_Help {
             get {

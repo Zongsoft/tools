@@ -767,7 +767,7 @@ The environment {1} is retained for inspection. Press Ctrl+C to remove it. Insta
     <value>{0}: TCP access only; custom ingress configuration has no browser entry metadata. Verify the application's declared Web entry separately.</value>
   </data>
   <data name="Run.Help" xml:space="preserve">
-    <value>run installs an existing delivery in a fresh local verification container. Web and published TCP entries bind to 127.0.0.1. Keep this window open; Ctrl+C removes the environment and test data. The first base-image preparation may need Internet access.</value>
+    <value>run installs an existing delivery in a fresh local verification container. Web entries publish on all IPv4 interfaces, while other published TCP entries bind to 127.0.0.1. Keep this window open; Ctrl+C removes the environment and test data. The first base-image preparation may need Internet access.</value>
   </data>
   <data name="Engine.Podman.Guidance" xml:space="preserve">
     <value>{0}: check {0} info. On Windows, list machines with {0} machine list and start the selected machine with {0} machine start &lt;name&gt;.</value>

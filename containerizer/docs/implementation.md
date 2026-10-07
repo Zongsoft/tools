@@ -45,7 +45,7 @@ Plan and make share service preparation. Plan does not connect to an engine, rea
 
 A .container accepts a fixed root/component vocabulary and rejects unknown fields, duplicate components/fields and nested components. Profile imports use Core; imported files participate in declaration validation, and source resolves relative to its declaring file. Imports are disabled for .settings and templates.
 
-Shared Utility gathers variables from defaults, the system environment, .env files from the filesystem root down to source, and command context in the established precedence order. Section names join with underscores. Final root fields enter the invocation's variable view. Input selection and root paths evaluate immediately; service settings/environment references survive plan and evaluate per value during make. Completed manifests replay literal values; replanning a completed manifest escapes literal references to prevent reevaluation.
+Shared Utility gathers variables from defaults, the system environment, .env files from the filesystem root down to source, and command context in the established precedence order. Section names join with underscores. Final root fields enter the invocation's variable view. Evaluation neither exports the whole environment nor modifies the process environment, and a matching name alone never creates a binding. Input selection and root paths evaluate immediately; service settings/environment references survive plan and evaluate per value during make. Completed manifests replay literal values; replanning a completed manifest escapes literal references to prevent reevaluation.
 
 The CLI source resolves against the invocation directory; other managed local paths resolve against final source. Template configuration files resolve against the template directory. Linux container paths have separate validation independent of the maker OS. Generated manifests express source relative to output, and output/local component inputs relative to source.
 
@@ -55,7 +55,7 @@ Release names use name[-tag]@version-architecture. Core numeric versions have 2â
 
 `PackageReader.Select` returns both a path and the descriptor already read. Preparation reuses that descriptor within the invocation and rereads it when the component package path changes. Web resource extraction still rereads the package, and delivery integrity checks still run; there is no cross-command package metadata cache.
 
-Supported Packager inputs are tar with a matching Shell launcher, deb and rpm. Readers extract identity, architecture, installation directory, service files, `runtimeconfig` and Web metadata. `Listen` comes from tar PAX, Debian control or an RPM custom tag. Directory selection checks the directory and then .packages, preferring the distribution's native format before tar in each location, with architecture and name-prefix filtering.
+Supported Packager inputs are tar with a matching Shell launcher, deb and rpm. Readers extract identity, architecture, installation directory, service files, `runtimeconfig` and Web metadata. `Listen` comes from tar PAX, Debian control or an RPM custom tag. Directory selection checks the directory and then .packages, preferring the distribution's native format before tar in each location, with architecture and name-prefix filtering; multiple remaining candidates prompt for a selection, and file dates never choose a version.
 
 Applications require one unambiguous service definition, `ExecStart` and WorkingDirectory. Entrypoints are foreground argument arrays; ambiguous Shell wrappers or complex commands must be corrected upstream. Application configuration is installed into the image with the original package rather than extracted by extension into target configuration mounts.
 
@@ -63,7 +63,7 @@ Migration inputs are explicitly selected `<prefix>(migrate)@<version>_linux-<arc
 
 ### Publication and output
 
-Temporary build files live in an independent system workspace. The output directory receives the completed manifest, delivery archive and any required .settings tag additions. A direct complete build does not first publish a draft.
+Temporary build files live in an independent system workspace. The output directory receives the completed manifest, delivery archive and any required .settings tag additions. A direct complete build does not first publish a draft. Only a successful complete build from a component list fills missing service tags into `.settings`; plan, failed builds and manifest replay neither remerge nor write that file.
 
 An output lock and `ArtifactPublisher` coordinate publication, checking the input hash to avoid overwriting edits made during a build. Internal and external completed manifests are byte-identical. Failure cleans this invocation's temporary resources while retaining existing inputs. Multiple final files cannot be committed by one filesystem operation; publication does not promise a cross-file power-loss transaction. Archives use gzip Fastest.
 
@@ -213,7 +213,7 @@ Installation state and business data start fresh each session. Inner `ImageCache
 
 TCP forwarding uses inner socat to reach actual host publications, and the outer layer reads real port mappings with bounded conflict retries. Web probes connect to local IPv4 while preserving the request hostname, Host and SNI, disable proxies/automatic redirects and use system certificate validation. HTTP 5xx fails; other responses, including 404, demonstrate an answering entry. This differs from the container's listener-liveness check. Ordinary TCP endpoints without Web semantics only test connectivity. UDP, cluster advertisement addresses and application callbacks are not rewritten.
 
-`RunContext` remains in the foreground and keeps established failure scenes until cancellation. Cleanup uses independent timeouts rather than the cancelled work token. Exit status distinguishes post-readiness exit, startup cancellation and original failure; cleanup failure cannot report success. Application locks and engine labels protect concurrent sessions and resources left after forced termination.
+`RunContext` remains in the foreground and keeps established failure scenes until cancellation. Cleanup uses independent timeouts rather than the cancelled work token. Exit status distinguishes post-readiness exit, startup cancellation and original failure: a graceful exit after readiness returns 0, cancellation during startup returns 130, and a retained failure keeps its original code. Cleanup failure cannot report success. Application locks and engine labels protect concurrent sessions and resources left after forced termination.
 
 `IProcessRunner` provides captured `RunAsync` and instance streaming StreamAsync. Engine operations, preview installation and target logs all use the injected runner. `ArgumentList` preserves argument boundaries, with separate UTF-8 stdout/stderr handling. Captured mode continuously drains both pipes while bounding diagnostic buffers; streaming forwards lines and returns the original exit code. Cancellation terminates the process tree. Maker output retains localized callbacks and colors without test-only wrappers.
 
