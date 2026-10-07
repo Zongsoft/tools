@@ -10,6 +10,7 @@ on:
         required: true
         type: choice
         options:
+          - containerizer
           - deployer
           - migrator
           - packager
@@ -54,6 +55,41 @@ jobs:
         if: always()
         run: podman rm --force --ignore zongsoft-migrator-aot-builder
 
+  native-containerizer-linux:
+    if: github.ref == 'refs/heads/main' && inputs.project == 'containerizer'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Prepare Linux executor
+        working-directory: containerizer
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes podman
+          podman run --detach --name zongsoft-containerizer-aot-builder \
+            --volume "$PWD:/workspace" --volume "$PWD/../.editorconfig:/.editorconfig:ro" \
+            --volume "$PWD/../Directory.Build.props:/Directory.Build.props:ro" \
+            --volume "$PWD/../Directory.Packages.props:/Directory.Packages.props:ro" \
+            --volume "$PWD/../.shared:/.shared:ro" \
+            --volume zongsoft-containerizer-aot-cache:/aot \
+            --workdir /workspace docker.io/rockylinux/rockylinux:9.8 sleep infinity
+          podman exec zongsoft-containerizer-aot-builder bash executor/build/setup.sh
+          podman exec zongsoft-containerizer-aot-builder bash executor/build/publish.sh linux-x64 Release
+          podman exec zongsoft-containerizer-aot-builder bash executor/build/publish.sh linux-arm64 Release
+      - uses: actions/upload-artifact@v6
+        with:
+          name: containerizer-executor-linux
+          path: |
+            containerizer/executor/src/bin/Release/net10.0/linux-x64/publish/
+            containerizer/executor/src/bin/Release/net10.0/linux-arm64/publish/
+          include-hidden-files: true
+          if-no-files-found: error
+      - name: Remove build container
+        if: always()
+        run: podman rm --force --ignore zongsoft-containerizer-aot-builder
+
   native-windows:
     if: github.ref == 'refs/heads/main' && inputs.project == 'migrator'
     runs-on: windows-latest
@@ -77,11 +113,12 @@ jobs:
           if-no-files-found: error
 
   publish:
-    needs: [native-linux, native-windows]
+    needs: [native-linux, native-containerizer-linux, native-windows]
     if: >-
       always() && github.ref == 'refs/heads/main' &&
       (inputs.project != 'migrator' ||
-      (needs.native-linux.result == 'success' && needs.native-windows.result == 'success'))
+      (needs.native-linux.result == 'success' && needs.native-windows.result == 'success')) &&
+      (inputs.project != 'containerizer' || needs.native-containerizer-linux.result == 'success')
     runs-on: ${{ inputs.project == 'regular' && 'windows-latest' || 'ubuntu-24.04' }}
     environment: release
     timeout-minutes: 120
@@ -102,6 +139,11 @@ jobs:
       - name: Restore .NET tools
         run: dotnet tool restore
       - uses: actions/download-artifact@v7
+        if: inputs.project == 'containerizer'
+        with:
+          name: containerizer-executor-linux
+          path: containerizer/executor/src/bin/Release/net10.0/
+      - uses: actions/download-artifact@v7
         if: inputs.project == 'migrator'
         with:
           name: executor-linux
@@ -116,8 +158,13 @@ jobs:
         run: |
           chmod 755 executor/src/bin/Release/net10.0/linux-*/publish/Zongsoft.Tools.Migrator.Executor
           dotnet cake --edition Release --target compile
+      - name: Build containerizer package
+        if: inputs.project == 'containerizer'
+        run: |
+          chmod 755 executor/src/bin/Release/net10.0/linux-*/publish/containerizer
+          dotnet cake --edition Release --target compile
       - name: Build tool package
-        if: inputs.project != 'migrator'
+        if: inputs.project != 'migrator' && inputs.project != 'containerizer'
         run: dotnet cake --edition Release --target build
       - name: NuGet login
         id: login

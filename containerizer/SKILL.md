@@ -51,7 +51,7 @@ README 面向使用者；implementation 解释当前契约和实现；本文件�
 从本目录执行：
 
 ```powershell
-dotnet restore Containerizer.slnx
+dotnet restore Containerizer.slnx -p:Configuration=Release
 dotnet build Containerizer.slnx -c Release --no-restore -p:ZongsoftCodeStyleStrict=true
 dotnet test test/Zongsoft.Tools.Containerizer.Tests.csproj -c Release --no-build --no-restore
 dotnet test executor/test/Zongsoft.Tools.Containerizer.Executor.Tests.csproj -c Release --no-build --no-restore

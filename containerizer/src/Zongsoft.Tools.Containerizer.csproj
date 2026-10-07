@@ -49,7 +49,7 @@
 
 	<Target Name="PackSharedContainerizationAssets" AfterTargets="PackTool">
 		<ItemGroup>
-			<TfmSpecificPackageFile Remove="$(PublishDir).containerizer/**/*;$(PublishDir)templates/**/*" />
+			<TfmSpecificPackageFile Remove="$(PublishDir).containerizer/**/*;$(PublishDir)templates/**/*;$(PublishDir)**/*.pdb;$(PublishDir)**/*.dbg" />
 		</ItemGroup>
 	</Target>
 </Project>

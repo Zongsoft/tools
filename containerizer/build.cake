@@ -2,7 +2,10 @@ var target = Argument("target", "default");
 var edition = Argument("edition", "Debug");
 const string solution = "Containerizer.slnx";
 
-Task("restore").Does(() => DotNetRestore(solution));
+Task("restore").Does(() => DotNetRestore(solution, new DotNetRestoreSettings
+{
+	MSBuildSettings = new DotNetMSBuildSettings().WithProperty("Configuration", edition),
+}));
 
 Task("test").IsDependentOn("restore").Does(() =>
 {
@@ -52,5 +55,6 @@ Task("pack").IsDependentOn("build").Does(() =>
 		Source = "nuget.org", ApiKey = EnvironmentVariable("NUGET_API_KEY"), SkipDuplicate = true,
 	});
 });
+
 Task("default").IsDependentOn("test");
 RunTarget(target);
