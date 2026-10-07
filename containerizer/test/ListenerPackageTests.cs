@@ -27,9 +27,8 @@ public sealed class ListenerPackageTests
 		{
 			var path = WritePackage(directory, listen);
 			var package = PackageReader.Read(path);
-			Assert.Equal(listen, package.Listen);
-			var source = new ServiceBuildContext { Plan = new() { Id = "example", Kind = "application" } };
-			ApplicationImageBuilder.ResolveEntry(package, source);
+			Assert.Equal(listen, package.ListenerAddresses);
+			var source = ApplicationPlanner.Create(new(new PackageReader.Candidate(path, package)), new());
 
 			if(string.IsNullOrEmpty(listen))
 			{

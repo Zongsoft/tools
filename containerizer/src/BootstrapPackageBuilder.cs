@@ -41,10 +41,10 @@ using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer;
 
-internal sealed class BootstrapPackageBuilder(ContainerEngine engine, string cacheRoot = null)
+internal sealed class BootstrapPackageBuilder(ContainerEngine engine, string cacheRoot = null, Action<string> error = null)
 {
 	#region 公共方法
-	public static string BaseImage(string distribution) => distribution switch
+	public static string GetBaseImage(string distribution) => distribution switch
 	{
 		"ubuntu@22.04" => "docker.io/library/ubuntu:22.04",
 		"debian@12" => "docker.io/library/debian:12",
@@ -60,9 +60,9 @@ internal sealed class BootstrapPackageBuilder(ContainerEngine engine, string cac
 		var distribution = manifest["distribution"];
 		var profile = $"{distribution}_{manifest["architecture"]}";
 		var imported = Path.Combine(manifest["source"], ".containerizer", "bootstrap", profile);
-		var cache = BuildStorage.BootstrapCache(manifest["source"], profile, cacheRoot);
+		var cache = BuildStorage.GetBootstrapCache(manifest["source"], profile, cacheRoot);
 
-		Files.PrivateDirectory(Path.GetDirectoryName(cache));
+		Files.CreatePrivateDirectory(Path.GetDirectoryName(cache));
 		using var cacheLock = new FileStream($"{cache}.lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
 
 		if(File.Exists(Path.Combine(imported, "bootstrap.lock.json")))
@@ -72,19 +72,19 @@ internal sealed class BootstrapPackageBuilder(ContainerEngine engine, string cac
 		if(distribution == "rhel@9")
 			throw new ContainerizationException(3, Properties.Resources.BootstrapBuilder_2_Message);
 
-		var baseline = await engine.ResolveAsync(BaseImage(distribution), null, null, manifest["architecture"], cancellation);
+		var baseline = await engine.ResolveAsync(GetBaseImage(distribution), null, null, manifest["architecture"], cancellation);
 		var directory = Path.Combine(workspace, "bootstrap");
-		Files.PrivateDirectory(directory);
+		Files.CreatePrivateDirectory(directory);
 
-		var scriptName = Distribution.IsDebian(distribution) ? "bootstrap-deb.sh" : "bootstrap-rpm.sh";
+		var scriptName = Distribution.IsDebianFamily(distribution) ? "bootstrap-deb.sh" : "bootstrap-rpm.sh";
 		File.Copy(TemplateCatalog.Find(scriptName), Path.Combine(directory, "collect.sh"));
-		Files.Write(Path.Combine(directory, "Dockerfile"), $"FROM {engine.BuildReference(baseline)}\nCOPY collect.sh /collect.sh\nRUN sh /collect.sh\n", true);
+		Files.Write(Path.Combine(directory, "Dockerfile"), $"FROM {engine.GetBuildReference(baseline)}\nCOPY collect.sh /collect.sh\nRUN sh /collect.sh\n", true);
 
-		await using var resources = new BuildResources(engine);
-		var name = resources.Image();
+		await using var resources = new BuildResources(engine, error);
+		var name = resources.RegisterImage();
 		await engine.BuildAsync(directory, baseline.Platform, name, cancellation);
 
-		var container = resources.Container();
+		var container = resources.RegisterContainer();
 		await engine.RunAsync(["create", "--name", container, name], directory, cancellation);
 		var packages = Path.Combine(delivery, "packages");
 		Directory.CreateDirectory(packages);
@@ -95,7 +95,7 @@ internal sealed class BootstrapPackageBuilder(ContainerEngine engine, string cac
 		{
 			Mode = manifest["bootstrap"],
 			Profile = $"{distribution}_{manifest["architecture"]}",
-			BaseDigest = $"{baseline.Repository}@{baseline.Digest}",
+			BaseImageReference = $"{baseline.Repository}@{baseline.Digest}",
 			Metadata = "packages/metadata.tsv"
 		};
 
@@ -106,7 +106,7 @@ internal sealed class BootstrapPackageBuilder(ContainerEngine engine, string cac
 			if(fields.Length != 6)
 				throw new ContainerizationException(4, Properties.Resources.BootstrapBuilder_3_Message);
 
-			var file = Files.Below(packages, fields[0]);
+			var file = Files.ResolveRelativePath(packages, fields[0]);
 
 			plan.Packages.Add(new()
 			{
@@ -133,7 +133,7 @@ internal sealed class BootstrapPackageBuilder(ContainerEngine engine, string cac
 
 		try
 		{
-			Files.PrivateDirectory(staging);
+			Files.CreatePrivateDirectory(staging);
 			Files.CopyTree(packages, Path.Combine(staging, "packages"));
 			Files.Save(Path.Combine(staging, "bootstrap.lock.json"), plan, ProtocolJson.Default.BootstrapPlan);
 			Directory.Move(staging, cache);
@@ -147,17 +147,17 @@ internal sealed class BootstrapPackageBuilder(ContainerEngine engine, string cac
 		if(plan.Mode == "online")
 		{
 			foreach(var package in plan.Packages)
-				File.Delete(Files.Below(delivery, package.Path));
+				File.Delete(Files.ResolveRelativePath(delivery, package.Path));
 		}
 
 		return plan;
 	}
 	#endregion
 
-	#region 内部方法
-	internal static BootstrapPlan Import(string directory, string delivery, string profile, string mode)
+	#region 私有方法
+	private static BootstrapPlan Import(string directory, string delivery, string profile, string mode)
 	{
-		Files.CheckTree(directory);
+		Files.ValidateTree(directory);
 		var plan = Files.Load(Path.Combine(directory, "bootstrap.lock.json"), ProtocolJson.Default.BootstrapPlan);
 
 		if(plan.Profile != profile || plan.Packages.Count == 0 || string.IsNullOrEmpty(plan.EngineVersion) || string.IsNullOrEmpty(plan.ComposeVersion))
@@ -173,7 +173,7 @@ internal sealed class BootstrapPackageBuilder(ContainerEngine engine, string cac
 			   !Uri.TryCreate(package.Url, UriKind.Absolute, out var uri) || uri.Scheme != "https")
 				throw new ContainerizationException(4, Properties.Resources.BootstrapBuilder_6_Message);
 
-			var path = Files.Below(directory, package.Path);
+			var path = Files.ResolveRelativePath(directory, package.Path);
 			if(!File.Exists(path) || new FileInfo(path).Length != package.Length || Files.Hash(path) != package.Hash)
 				throw new ContainerizationException(4, Properties.Resources.BootstrapBuilder_7_Message);
 
@@ -185,14 +185,14 @@ internal sealed class BootstrapPackageBuilder(ContainerEngine engine, string cac
 
 			if(mode == "offline")
 			{
-				var target = Files.Below(delivery, package.Path);
+				var target = Files.ResolveRelativePath(delivery, package.Path);
 				Directory.CreateDirectory(Path.GetDirectoryName(target));
 				File.Copy(path, target);
 			}
 		}
 
-		var metadata = Files.Below(directory, plan.Metadata);
-		var destination = Files.Below(delivery, plan.Metadata);
+		var metadata = Files.ResolveRelativePath(directory, plan.Metadata);
+		var destination = Files.ResolveRelativePath(delivery, plan.Metadata);
 
 		Directory.CreateDirectory(Path.GetDirectoryName(destination));
 		File.Copy(metadata, destination);

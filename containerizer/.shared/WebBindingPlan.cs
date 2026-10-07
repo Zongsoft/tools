@@ -38,7 +38,7 @@ internal sealed class WebBindingPlan
 	public string Scheme { get; set; }
 	public string Address { get; set; }
 	public int Port { get; set; }
-	public bool ExplicitDefault { get; set; }
+	public bool IsExplicitDefault { get; set; }
 	public bool IsDefault { get; set; }
 	public string Publication { get; set; }
 }

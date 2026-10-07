@@ -60,9 +60,9 @@ public partial class ContainerizeCommand : CommandBase<CommandContext>
 	protected override async ValueTask<object> OnExecuteAsync(CommandContext context, CancellationToken cancellation)
 	{
 		var manifest = this.CreateManifest(context);
-		context.Output.WriteLine(Output.Message("{0}@{1} ({2})", manifest["name"], manifest["version"], manifest["architecture"]));
-		context.Output.WriteLine(Output.Message("  distribution={0}  engine={1}  bootstrap={2}  imaging={3}", manifest["distribution"], manifest["engine"], manifest["bootstrap"], manifest["imaging"]));
-		var builder = new DeliveryBuilder(new ProcessRunner(), refresh: context.Options.Switch("refresh"));
+		context.Output.WriteLine(Output.FormatMessage("{0}@{1} ({2})", manifest["name"], manifest["version"], manifest["architecture"]));
+		context.Output.WriteLine(Output.FormatMessage("  distribution={0}  engine={1}  bootstrap={2}  imaging={3}", manifest["distribution"], manifest["engine"], manifest["bootstrap"], manifest["imaging"]));
+		var builder = new DeliveryBuilder(new ProcessRunner(), refresh: context.Options.Switch("refresh"), output: context.Output.WriteLine, error: context.Error.WriteLine);
 		var path = await this.BuildAsync(builder, manifest, cancellation);
 
 		context.Output.WriteLine(CommandOutletStyles.Bold, CommandOutletColor.Green, path);
@@ -72,7 +72,7 @@ public partial class ContainerizeCommand : CommandBase<CommandContext>
 	#endregion
 
 	#region 虚拟方法
-	private protected virtual ContainerManifest CreateManifest(CommandContext context) => ContainerManifest.From(context);
+	private protected virtual ContainerManifest CreateManifest(CommandContext context) => ManifestFactory.Create(context);
 	private protected virtual ValueTask<string> BuildAsync(DeliveryBuilder builder, ContainerManifest manifest, CancellationToken cancellation) => new(builder.BuildAsync(manifest, cancellation));
 	#endregion
 }

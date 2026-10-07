@@ -44,13 +44,13 @@ internal static partial class Output
 {
 	#region 公共方法
 	public static IDisposable Measure(Action<CommandOutletContent> output, string stage) => new Measurement(output, stage);
-	public static CommandOutletContent Message(string format, params string[] arguments) => Message(format, null, arguments);
-	public static CommandOutletContent Message(string format, CommandOutletColor? color, params string[] arguments)
+	public static CommandOutletContent FormatMessage(string format, params string[] arguments) => FormatMessage(format, null, arguments);
+	public static CommandOutletContent FormatMessage(string format, CommandOutletColor? color, params string[] arguments)
 	{
 		CommandOutletContent content = null;
 		var position = 0;
 
-		foreach(Match match in ParameterRegex().Matches(format))
+		foreach(Match match in GetParameterRegex().Matches(format))
 		{
 			content = Append(content, format[position..match.Index], color);
 			content = Append(content, arguments[int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture)],
@@ -61,12 +61,12 @@ internal static partial class Output
 		return Append(content, format[position..], color)?.First ?? CommandOutletContent.Create();
 	}
 
-	public static CommandOutletContent Syntax(string text)
+	public static CommandOutletContent HighlightSyntax(string text)
 	{
 		CommandOutletContent content = null;
 		var position = 0;
 
-		foreach(Match match in SyntaxRegex().Matches(text))
+		foreach(Match match in GetSyntaxRegex().Matches(text))
 		{
 			content = Append(content, text[position..match.Index]);
 			content = Append(content, match.Value, match.Value.StartsWith("--", StringComparison.Ordinal) ? CommandOutletColor.Cyan : CommandOutletColor.Green);
@@ -89,16 +89,16 @@ internal static partial class Output
 	}
 
 	[GeneratedRegex(@"\{(\d+)\}")]
-	private static partial Regex ParameterRegex();
+	private static partial Regex GetParameterRegex();
 	[GeneratedRegex(@"--[\w-]+|<[^>]+>|(?<=:)[a-z0-9|]+")]
-	private static partial Regex SyntaxRegex();
+	private static partial Regex GetSyntaxRegex();
 	#endregion
 
 	#region 嵌套类型
 	private sealed class Measurement(Action<CommandOutletContent> output, string stage) : IDisposable
 	{
 		private readonly Stopwatch _timer = Stopwatch.StartNew();
-		public void Dispose() => output(Message(Properties.Resources.Run_Elapsed, stage, _timer.Elapsed.TotalSeconds.ToString("0.0", CultureInfo.CurrentCulture)));
+		public void Dispose() => output(Output.FormatMessage(Properties.Resources.Run_Elapsed, stage, _timer.Elapsed.TotalSeconds.ToString("0.0", CultureInfo.CurrentCulture)));
 	}
 	#endregion
 }

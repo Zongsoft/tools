@@ -47,7 +47,7 @@ public sealed class ContainerManifestTests : IDisposable
 	[InlineData("65535.65535.65535.65535")]
 	public void NumericReleaseVersionsPreserveTheirInputText(string version)
 	{
-		var manifest = ContainerManifest.From(Context("redis", "--name:example", "--distribution:debian", "--source:" + _root, "--version:" + version));
+		var manifest = ManifestFactory.Create(CreateContext("redis", "--name:example", "--distribution:debian", "--source:" + _root, "--version:" + version));
 		Assert.Equal(version, manifest["version"]);
 		var path = new DeliveryBuilder(new ProcessRunner()).Plan(manifest);
 		Assert.Equal(version, ContainerManifest.Read(path)["version"]);
@@ -62,7 +62,7 @@ public sealed class ContainerManifestTests : IDisposable
 	[InlineData("1.0.0-preview")]
 	public void ReleaseVersionMustBeANonzeroCoreNumber(string version)
 	{
-		var error = Assert.Throws<ContainerizationException>(() => ContainerManifest.From(Context("redis", "--name:example", "--distribution:debian", "--source:" + _root, "--version:" + version)));
+		var error = Assert.Throws<ContainerizationException>(() => ManifestFactory.Create(CreateContext("redis", "--name:example", "--distribution:debian", "--source:" + _root, "--version:" + version)));
 		Assert.Equal(2, error.Code);
 	}
 
@@ -92,9 +92,9 @@ public sealed class ContainerManifestTests : IDisposable
 	[MemberData(nameof(ContainerEngineTests.InvalidDigests), MemberType = typeof(ContainerEngineTests))]
 	public void ManifestRejectsInvalidImageDigests(string digest)
 	{
-		var manifest = ContainerManifest.From(Context("redis", "--name:example", "--distribution:debian", "--source:" + _root, "--version:1.0"));
+		var manifest = ManifestFactory.Create(CreateContext("redis", "--name:example", "--distribution:debian", "--source:" + _root, "--version:1.0"));
 		manifest.Components[0]["digest"] = digest;
-		var exception = Assert.Throws<ContainerizationException>(() => manifest.Validate());
+		var exception = Assert.Throws<ContainerizationException>(() => manifest.Normalize());
 		Assert.Equal(2, exception.Code);
 	}
 
@@ -104,11 +104,11 @@ public sealed class ContainerManifestTests : IDisposable
 		var date = ContainerManifest.GetDateVersion(DateTime.Today);
 		this.Write("example@" + date + "-x64.container", "occupied");
 		this.Write("example@" + date + ".1-x64.tar.gz", "occupied");
-		var manifest = ContainerManifest.From(Context("redis", "--name:example", "--distribution:debian", "--source:" + _root));
+		var manifest = ManifestFactory.Create(CreateContext("redis", "--name:example", "--distribution:debian", "--source:" + _root));
 		Assert.Equal(date + ".2", manifest["version"]);
 		Assert.Equal("example@" + date + ".2-x64", manifest.ReleaseName);
-		Assert.Throws<ContainerizationException>(() => ContainerManifest.From(Context("redis", "--name:example", "--distribution:debian", "--source:" + _root, "--version:" + date)));
-		var arm = ContainerManifest.From(Context("redis", "--name:example", "--distribution:debian", "--architecture:arm64", "--source:" + _root, "--version:" + date));
+		Assert.Throws<ContainerizationException>(() => ManifestFactory.Create(CreateContext("redis", "--name:example", "--distribution:debian", "--source:" + _root, "--version:" + date)));
+		var arm = ManifestFactory.Create(CreateContext("redis", "--name:example", "--distribution:debian", "--architecture:arm64", "--source:" + _root, "--version:" + date));
 		Assert.Equal("example@" + date + "-arm64", arm.ReleaseName);
 	}
 
@@ -154,7 +154,7 @@ public sealed class ContainerManifestTests : IDisposable
 		Directory.CreateDirectory(source);
 		this.Write("source/.env", "version=99.0\narchitecture=arm64\noutput=wrong\n");
 		var input = this.Write("input.container", "name=example\nsource=source\nversion=1.0\ndistribution=debian\narchitecture=x64\noutput=out\n[redis]\n\n");
-		var result = ContainerManifest.From(Context(input, "--version:2.0"));
+		var result = ManifestFactory.Create(CreateContext(input, "--version:2.0"));
 		Assert.Equal("2.0", result["version"]);
 		Assert.Equal("x64", result["architecture"]);
 		Assert.Equal(Path.Combine(source, "out"), result["output"]);
@@ -166,10 +166,10 @@ public sealed class ContainerManifestTests : IDisposable
 	public void BuiltinWinsOverSameNamedDirectory()
 	{
 		Directory.CreateDirectory(Path.Combine(_root, "redis"));
-		var manifest = ContainerManifest.From(Context("redis", "--name:example", "--distribution:debian", "--source:" + _root));
+		var manifest = ManifestFactory.Create(CreateContext("redis", "--name:example", "--distribution:debian", "--source:" + _root));
 		Assert.Equal("redis", Assert.Single(manifest.Components).Name);
 		Assert.Equal(_root, manifest["output"]);
-		Assert.Throws<ContainerizationException>(() => ContainerManifest.From(Context("./redis", "--name:example", "--distribution:debian", "--source:" + _root)));
+		Assert.Throws<ContainerizationException>(() => ManifestFactory.Create(CreateContext("./redis", "--name:example", "--distribution:debian", "--source:" + _root)));
 	}
 
 	[Fact]
@@ -177,7 +177,7 @@ public sealed class ContainerManifestTests : IDisposable
 	{
 		var source = Path.Combine(_root, "source");
 		Directory.CreateDirectory(source);
-		var manifest = ContainerManifest.From(Context("redis", "--name:example", "--distribution:debian", "--source:" + source, "--output:../delivery", "--version:1.0"));
+		var manifest = ManifestFactory.Create(CreateContext("redis", "--name:example", "--distribution:debian", "--source:" + source, "--output:../delivery", "--version:1.0"));
 		manifest.Components[0]["digest"] = "sha256:" + new string('a', 64);
 		manifest.Components[0].Values.Remove("version");
 		this.Save(manifest);
@@ -185,7 +185,7 @@ public sealed class ContainerManifestTests : IDisposable
 		var original = File.ReadAllBytes(path);
 		Assert.Equal(Path.GetRelativePath(manifest["output"], source), ContainerManifest.Read(path)["source"]);
 		Assert.Equal(Path.GetRelativePath(source, manifest["output"]), ContainerManifest.Read(path)["output"]);
-		var restored = ContainerManifest.From(Context(path));
+		var restored = ManifestFactory.Create(CreateContext(path));
 		Assert.Equal(source, restored["source"]);
 		this.Save(restored);
 		Assert.Equal(original, File.ReadAllBytes(path));
@@ -194,7 +194,7 @@ public sealed class ContainerManifestTests : IDisposable
 	[Fact]
 	public void TarPackageUsesMetadataInsteadOfFilename()
 	{
-		var path = this.Tar("renamed.tar.gz", "example.web", "arm64");
+		var path = this.WriteTarPackage("renamed.tar.gz", "example.web", "arm64");
 		var package = PackageReader.Read(path);
 		Assert.Equal("example.web", package.Name);
 		Assert.Equal("arm64", package.Architecture);
@@ -205,10 +205,10 @@ public sealed class ContainerManifestTests : IDisposable
 	[Fact]
 	public void DirectoryLevelPrecedesFormatAndNoLatestGuessing()
 	{
-		var first = this.Tar("example@1.0.tar.gz", "example", "x64");
-		this.Tar(".packages/example@2.0.tar.gz", "example", "x64");
-		Assert.Equal(first, PackageReader.Select(_root, "example", "debian@13", "x64"));
-		this.Tar("example@3.0.tar.gz", "example", "x64");
+		var first = this.WriteTarPackage("example@1.0.tar.gz", "example", "x64");
+		this.WriteTarPackage(".packages/example@2.0.tar.gz", "example", "x64");
+		Assert.Equal(first, PackageReader.Select(_root, "example", "debian@13", "x64").Path);
+		this.WriteTarPackage("example@3.0.tar.gz", "example", "x64");
 		Assert.Throws<ContainerizationException>(() => PackageReader.Select(_root, "example", "debian@13", "x64"));
 	}
 
@@ -217,19 +217,54 @@ public sealed class ContainerManifestTests : IDisposable
 	[InlineData(false)]
 	public void ApplicationSelectionIgnoresCompanionFilesOnReplay(bool directory)
 	{
-		var package = this.Tar("app/.packages/example@1.0.tar.gz", "example", "x64");
+		var package = this.WriteTarPackage("app/.packages/example@1.0.tar.gz", "example", "x64");
 		var input = directory ? Path.Combine(_root, "app") : package;
 		this.Write((directory ? "app/" : "app/.packages/") + "container.template", "not a valid template; must never be read");
-		var manifest = ContainerManifest.From(Context(input, "--name:example", "--distribution:debian", "--source:" + _root, "--output:delivery", "--version:1.0"));
+		var manifest = ManifestFactory.Create(CreateContext(input, "--name:example", "--distribution:debian", "--source:" + _root, "--output:delivery", "--version:1.0"));
 		Assert.Null(Assert.Single(manifest.Components)["template"]);
 		this.Save(manifest);
-		var replay = ContainerManifest.From(Context(Path.Combine(_root, "delivery", "example@1.0-x64.container")));
+		var replay = ManifestFactory.Create(CreateContext(Path.Combine(_root, "delivery", "example@1.0-x64.container")));
 		var component = Assert.Single(replay.Components);
 		Assert.Null(component["template"]);
-		Assert.Null(ServiceBuildContext.FromApplication(component, replay).Plan.Template);
+		Assert.Null(ApplicationPlanner.Create(component, replay).Plan.Template);
 		component["template"] = "nonexistent.template";
-		Assert.Equal(2, Assert.Throws<ContainerizationException>(() => replay.Validate()).Code);
-		Assert.Equal(2, Assert.Throws<ContainerizationException>(() => new TemplateCatalog().Read(component, replay)).Code);
+		Assert.Equal(2, Assert.Throws<ContainerizationException>(() => replay.Normalize()).Code);
+		Assert.Equal(2, Assert.Throws<ContainerizationException>(() => TemplateCatalog.Read(component, replay)).Code);
+	}
+
+	[Fact]
+	public void SelectedPackageMetadataIsReusedWithinOnePreparation()
+	{
+		var path = this.WriteTarPackage("example.tar.gz", "example", "x64");
+		var candidate = PackageReader.Select(path, "example", "debian@13", "x64");
+		var manifest = new ContainerManifest { ["source"] = _root, ["architecture"] = "x64" };
+		manifest.Components.Add(new(candidate));
+
+		using var exclusive = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
+		manifest.Normalize();
+		var source = Assert.Single(ServicePlanner.Prepare(manifest));
+
+		Assert.Equal(["/opt/example/example"], source.Plan.Entrypoint);
+		Assert.Same(candidate.Package, source.Package);
+		Assert.Same(manifest.Components[0], source.Component);
+	}
+
+	[Fact]
+	public void ChangingTheSelectedPackagePathRefreshesItsMetadata()
+	{
+		var first = this.WriteTarPackage("first.tar.gz", "first", "x64");
+		var second = this.WriteTarPackage("second.tar.gz", "second", "x64");
+		var candidate = PackageReader.Select(first, "example", "debian@13", "x64");
+		var component = new ContainerManifest.Component(candidate) { ["package"] = second };
+		var manifest = new ContainerManifest { ["source"] = _root, ["architecture"] = "x64" };
+		manifest.Components.Add(component);
+
+		manifest.Normalize();
+		var source = Assert.Single(ServicePlanner.Prepare(manifest));
+
+		Assert.Equal("first", source.Plan.Id);
+		Assert.Equal(["/opt/second/second"], source.Plan.Entrypoint);
+		Assert.Equal("second", source.Package.Name);
 	}
 
 	[Fact]
@@ -265,10 +300,10 @@ public sealed class ContainerManifestTests : IDisposable
 			var name = Path.GetFileNameWithoutExtension(path);
 			var component = new ContainerManifest.Component { Name = name };
 			component["template"] = name;
-			var source = new TemplateCatalog().Read(component, manifest);
+			var source = TemplateCatalog.Read(component, manifest);
 			Assert.Equal(name, source.Plan.Id);
 			Assert.NotEmpty(source.Plan.Health.Test);
-			Assert.NotEmpty(source.SourceImage);
+			Assert.NotEmpty(source.ImageRepository);
 		}
 	}
 
@@ -276,10 +311,9 @@ public sealed class ContainerManifestTests : IDisposable
 	public void MysqlRootPasswordUsesSourceVariablesAndExplicitOverrides()
 	{
 		this.Write(".env", "[mysql]\nroot_password=$(test_password)\n[]\ntest_password=example-only\n");
-		var manifest = ContainerManifest.From(Context("mysql", "--name:example", "--distribution:debian", "--source:" + _root));
+		var manifest = ManifestFactory.Create(CreateContext("mysql", "--name:example", "--distribution:debian", "--source:" + _root));
 		var component = Assert.Single(manifest.Components);
-		var catalog = new TemplateCatalog();
-		var source = catalog.Read(component, manifest);
+		var source = TemplateCatalog.Read(component, manifest);
 		Assert.Equal("example-only", source.Environment["MYSQL_ROOT_PASSWORD"]);
 		var mount = Assert.Single(source.Plan.Mounts);
 		Assert.Equal("/var/lib/containerizer/data/example/mysql", mount.Source);
@@ -288,26 +322,25 @@ public sealed class ContainerManifestTests : IDisposable
 
 		manifest.Variables["mysql_root_password"] = "$(unused_missing_variable)";
 		component["settings"] = "root-password=explicit-setting";
-		source = catalog.Read(component, manifest);
+		source = TemplateCatalog.Read(component, manifest);
 		Assert.Equal("explicit-setting", source.Environment["MYSQL_ROOT_PASSWORD"]);
 
 		component["environment!MYSQL_ROOT_PASSWORD"] = "explicit-environment";
-		Assert.Throws<ContainerizationException>(() => catalog.Read(component, manifest));
+		Assert.Throws<ContainerizationException>(() => TemplateCatalog.Read(component, manifest));
 	}
 
 	[Fact]
 	public void MysqlMissingSourceVariableStillRequiresPasswordAndAllowsExplicitEnvironment()
 	{
-		var manifest = ContainerManifest.From(Context("mysql", "--name:example", "--distribution:debian", "--source:" + _root));
+		var manifest = ManifestFactory.Create(CreateContext("mysql", "--name:example", "--distribution:debian", "--source:" + _root));
 		manifest.Variables.Remove("mysql_root_password");
 		var component = Assert.Single(manifest.Components);
-		var catalog = new TemplateCatalog();
-		var source = catalog.Read(component, manifest);
+		var source = TemplateCatalog.Read(component, manifest);
 		Assert.Contains("root-password", source.MissingSettings);
 		Assert.False(source.Environment.ContainsKey("MYSQL_ROOT_PASSWORD"));
 
 		component["environment!MYSQL_ROOT_PASSWORD"] = "explicit-environment";
-		source = catalog.Read(component, manifest);
+		source = TemplateCatalog.Read(component, manifest);
 		Assert.Equal("explicit-environment", source.Environment["MYSQL_ROOT_PASSWORD"]);
 	}
 
@@ -315,18 +348,17 @@ public sealed class ContainerManifestTests : IDisposable
 	public void TemplateVariableBindingPreservesDefaultAndEmptyValues()
 	{
 		this.Write("custom.template", "version=1\nimage=docker.io/library/mysql\n[settings root-password]\nenvironment=MYSQL_ROOT_PASSWORD\nvariable=custom_password\ndefault=fallback\nrequired=true\n");
-		var manifest = ContainerManifest.From(Context("mysql", "--name:example", "--distribution:debian", "--source:" + _root));
+		var manifest = ManifestFactory.Create(CreateContext("mysql", "--name:example", "--distribution:debian", "--source:" + _root));
 		manifest.Variables.Remove("custom_password");
 		var component = Assert.Single(manifest.Components);
 		component["template"] = "custom.template";
-		var catalog = new TemplateCatalog();
-		Assert.Equal("fallback", catalog.Read(component, manifest).Environment["MYSQL_ROOT_PASSWORD"]);
+		Assert.Equal("fallback", TemplateCatalog.Read(component, manifest).Environment["MYSQL_ROOT_PASSWORD"]);
 
 		manifest.Variables["custom_password"] = "";
-		Assert.Equal("", catalog.Read(component, manifest).Environment["MYSQL_ROOT_PASSWORD"]);
+		Assert.Equal("", TemplateCatalog.Read(component, manifest).Environment["MYSQL_ROOT_PASSWORD"]);
 
 		manifest.Variables["custom_password"] = "referenced";
-		Assert.Equal("referenced", catalog.Read(component, manifest).Environment["MYSQL_ROOT_PASSWORD"]);
+		Assert.Equal("referenced", TemplateCatalog.Read(component, manifest).Environment["MYSQL_ROOT_PASSWORD"]);
 	}
 
 	[Fact]
@@ -336,10 +368,10 @@ public sealed class ContainerManifestTests : IDisposable
 		var configuration = this.Write("templates/config/redis.conf", "protected-mode yes\n");
 		this.Write("templates/redis.template", "version=1\nimage=docker.io/library/redis\nplatforms=x64\nCommand=[\"redis-server\",\"$(build_message)\",\"%build_port%\",\"$$(RUNTIME_COMMAND)\"]\nhealth=[\"CMD-SHELL\",\"echo $$TOKEN\"]\n[environment]\nTOKEN=$(build_message)\nRELEASE=$(name)@$(version)\n[ports]\ndefault=$(build_bind):%build_port%:6379\n[data]\ndata=$(data_path)\n[configuration]\n/etc/redis.conf=$(config_path)\n[settings message]\nenvironment=MESSAGE\ndefault=$(build_message)\n");
 		var input = this.Write("input.container", "name=example\nversion=1.0\ndistribution=debian\n[redis]\n\ntemplate=templates/redis.template\nenvironment!TOKEN=explicit\n");
-		var manifest = ContainerManifest.From(Context(input, "--source:" + _root));
+		var manifest = ManifestFactory.Create(CreateContext(input, "--source:" + _root));
 		manifest.Variables["data_path"] = "/cache";
 		manifest.Variables["config_path"] = "config/redis.conf";
-		var source = new TemplateCatalog().Read(Assert.Single(manifest.Components), manifest);
+		var source = TemplateCatalog.Read(Assert.Single(manifest.Components), manifest);
 		Assert.Equal(["redis-server", "two \"quotes\" C:\\tmp", "16379", "$(RUNTIME_COMMAND)"], source.Plan.Command);
 		Assert.Equal(["CMD-SHELL", "echo $TOKEN"], source.Plan.Health.Test);
 		Assert.Equal("explicit", source.Environment["TOKEN"]);
@@ -360,8 +392,8 @@ public sealed class ContainerManifestTests : IDisposable
 		this.Write(".env", "loop=$(loop)\n");
 		this.Write("custom.template", "version=1\nimage=docker.io/library/redis\n[environment]\nVALUE=" + value + "\n");
 		var input = this.Write("input.container", "name=example\ndistribution=debian\n[redis]\n\ntemplate=custom.template\n");
-		var manifest = ContainerManifest.From(Context(input, "--source:" + _root));
-		Assert.Throws<ContainerizationException>(() => new TemplateCatalog().Read(Assert.Single(manifest.Components), manifest));
+		var manifest = ManifestFactory.Create(CreateContext(input, "--source:" + _root));
+		Assert.Throws<ContainerizationException>(() => TemplateCatalog.Read(Assert.Single(manifest.Components), manifest));
 	}
 
 
@@ -385,7 +417,7 @@ public sealed class ContainerManifestTests : IDisposable
 		File.WriteAllText(path, content);
 		return path;
 	}
-	private string Tar(string relative, string name, string architecture)
+	private string WriteTarPackage(string relative, string name, string architecture)
 	{
 		var path = this.Write(relative, "");
 
@@ -401,5 +433,5 @@ public sealed class ContainerManifestTests : IDisposable
 		File.WriteAllText(path[..^7] + ".sh", "#!/bin/sh\nexit 0\n");
 		return path;
 	}
-	private static CommandContext Context(params string[] arguments) => new(new CommandExecutor(), CommandLine.Parse(Utility.FormatCommand("containerize", arguments))[0], new ContainerizeCommand(), null);
+	private static CommandContext CreateContext(params string[] arguments) => new(new CommandExecutor(), CommandLine.Parse(Utility.FormatCommand("containerize", arguments))[0], new ContainerizeCommand(), null);
 }

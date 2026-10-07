@@ -1,203 +1,232 @@
 [English](implementation.md) | [简体中文](implementation.zh-Hans.md)
 
-# Implementation and verification
+# Containerizer implementation
 
-The current baselines are [TASK#2](../TASK%232.md), [TASK#3](../TASK%233.md), [TASK#4](../TASK%234.md) and [TASK#5](../TASK%235.md), superseding conflicting earlier requirements without legacy compatibility. This document records implementation boundaries, evidence and outstanding runtime acceptance.
+This document describes current responsibilities, data contracts and lifecycle behavior. See the [README](../README.md) for usage, the [template reference](templates.md) for template fields, and [SKILL](../SKILL.md) for development procedures.
 
-## Web binding handoff
+## Architecture boundaries
 
-[TASK#5](../TASK%235.md) records the final `.bindings`/template contract, protocol 1, publication and Host/SNI probes. Strict Release builds and IDE0049 verification pass; 363 maker, 77 executor and 642 packager tests pass. Real Windows/rootful Podman acceptance uses isolated Debian x64 deliveries: Nginx 80/8080 with internal application 8069, occupied-port reassignment, retained Host, shared read-only PEM resources and disabled HTTPS publication with working internal TLS. Both global tools were replaced from the local feed and all target-framework DLLs/native payload hashes match the builds.
+Containerizer manages one host's delivery. Packager owns application packages and Migrator owns migration archives. Containerizer consumes their artifacts and launchers without referencing their executable projects or coordinating remote nodes.
 
-Loopback HTTP succeeds, but this machine's WLAN address refuses the connection despite the engine's 0.0.0.0 publication record. LAN forwarding remains an environment acceptance limit; run lists interface addresses separately without claiming reachability. IPv6 external access and ARM64 hardware execution are unverified; ARM64 evidence is cross-compilation only. Earlier counts below belong to their named changes, not the current aggregate.
-
-## make acceleration and TDengine
-
-[TASK#4](../TASK%234.md) is the authoritative record for this iteration: confirmed design, implementation, live port checks, cleanup and before/after measurements. It overrides conflicting earlier plans without compatibility layers. Public runtime caching, `--refresh`, both hosting script entries and the TDengine Explorer mapping are implemented. See [README](../README.md#publication-cache-and-replay) for operation and cleanup.
-
-## Architecture
-
-| Area | Implementation |
+| Area | Entry points and responsibilities |
 | --- | --- |
-| Maker | Core command entry, explicit CLI/root precedence, Profile/ConnectionSettings, source-relative inputs, shared variable pipeline |
-| Inputs | Independent packager tar PAX, Debian ar/gzip and RPM header/gzip-cpio readers; migration artifact selection without payload interpretation |
-| Sources | Built-in/custom templates, recorded configuration values, dependency and host-port validation |
-| Images | Native engine cache verification, tag/default/repository selection, platform manifest digests, optional creation time/size, Docker-format export and application images retaining package-selected configuration |
-| Bootstrap | Distribution-specific exact dependency collection; reusable/importable locks; online and offline use the same package hashes |
-| Publication | System temporary staging; flat manifest/archive publication with rollback; identical archive-root manifest and source hash; success-only missing-default additions |
-| Executor | Native AOT; JSON source generation; stable assets, registry and independent locks; persistent transaction phases, maintenance and migration attempts |
-| Lifecycle | Eleven commands; upgrade constraints, explicit recovery, owned-resource uninstall/purge |
-
-Maker and executor source-link [shared protocol code](../.shared/Containerization.props). Only the maker carries Core; the YAML parser and YamlDotNet dependency have been removed. Neither references another tool executable as a library.
-
-Image manifest, index and configuration digests are parsed and compared with Core `Checksum`; `.container` validation shares the same OCI SHA-256 adapter. Malformed hexadecimal input becomes a validation error, and outgoing references retain canonical lowercase formatting. File/text hashing already uses `Checksum.Compute` in the maker, and template JSON arrays now use Core `GetArray`. Profile, ConnectionSettings and the shared variable pipeline remain in use; quoting and archive/path guards retain their format-specific behavior. The executor continues to use its existing BCL-only implementation.
-
-Generated `.container` service sections no longer contain `platform` or `architecture`, and those section entries are rejected on input. The maker uses Linux and the root architecture for image identity and engine verification. Changing root architecture invalidates old digests and display metadata; changing only the Linux distribution retains infrastructure digests. Root/service tags have different meanings, and service imaging remains an explicit override. Executor JSON and Compose platform requirements are unchanged.
-
-The maker hashes effective service configuration and protects Compose assets. Packager selects application configuration using hosting/.deploy/<scheme>/; containerizer keeps it inside the application image. One final image build copies the cleaned installed filesystem, retaining application configuration while removing installation media, package script databases and host service definitions. Packaged .bindings and .conf.template drive Web planning and configuration rendering; original files remain in the application image. The Web renderer assigns `config/nginx/nginx.conf` and `config/nginx/sites/<application>.conf` to generated configurations. Configuration sources can declare a relative delivery path; the shared collector copies them and records read-only mounts without Nginx-specific rules. Other assets retain target-based isolation. Template/ingress assets are bound read-only directly from the verified release, with no mutable runtime copy, compose.env or three-way comparison. Normal completion, handled failure and cancellation clean maker workspaces and per-attempt resources.
-
-Infrastructure image resolution reuses verified source/shared cache references without creating delivery tags in the maker engine. Delivery tags are recorded in JSON/Compose and created on the target after image verification; offline archives are exported by image ID. Repeated releases do not add project/version tags to the maker cache. Temporary inspection containers are removed together with their anonymous volumes, while reusable source, runtime and toolkit images remain cached. Cleanup does not prune the global engine cache.
-
-## Source organization
-
-Following packager's responsibility-based file naming, related implementation lives under its owning type:
-
-| Family | Files and responsibility |
-| --- | --- |
-| Commands | [ContainerizeCommand](../src/ContainerizeCommand.cs) shares execution; `.Plan.cs` and `.Make.cs` define derived commands, `.Help.cs` formats help. Overrides select manifest/build behavior without command-type tests |
-| Maker models | [ContainerManifest.Component](../src/ContainerManifest.cs) and [PackageReader.Descriptor](../src/PackageReader.cs) nest models used by their owner; `PackageReader.Tar/Deb/Rpm.cs` split format readers |
-| Service preparation | [ServiceBuildContext](../src/ServiceBuildContext.cs) carries effective service settings, environment, assets and plan; [ServiceDefaults](../src/ServiceDefaults.cs) reads shared defaults; [ComponentSelector](../src/ComponentSelector.cs) selects input components |
-| Images | [ContainerEngine](../src/ContainerEngine.cs) handles engine operations; `ApplicationImageBuilder.Image.cs` separates image preparation from application metadata, and [BootstrapPackageBuilder](../src/BootstrapPackageBuilder.cs) prepares engine dependency packages |
-| Delivery | `DeliveryBuilder.Services.cs` prepares service configuration; `DeliveryBuilder.Delivery.cs` locates executors and writes delivery instructions/scripts |
-| Protocol | [DeliveryPlan](../.shared/DeliveryPlan.cs) describes the delivery; [Installation.Models](../.shared/Installation.Models.cs) nests transaction/ownership/migration state; [BootstrapPlan.Package](../.shared/BootstrapPlan.cs) nests dependency package metadata; JSON property names remain unchanged |
-| Host paths | [Installation.Paths](../.shared/Installation.cs) centralizes FHS data/state/log/cache/runtime/executor roots; `GetDataPath` is shared by maker and executor, while application package paths remain separate |
-| Executor | [DeliveryBundle](../.shared/DeliveryBundle.cs) verifies and opens delivery assets; [ExecutorArguments](../executor/src/ExecutorArguments.cs) parses commands; [IInstallationHost](../executor/src/IInstallationHost.cs) defines the installation host boundary. `DockerHost.Bootstrap/Services/Storage.cs` and `InstallationManager.Installation/Migrations/Recovery/Transaction/Uninstall.cs` separate host operations and transaction phases |
-
-Ordinary string composition uses interpolation; multiline Dockerfile generation uses `StringBuilder`. Array initializers use collection expressions with explicit target types where inference requires them.
-
-Long conditions are grouped by responsibility: named predicates describe port conflicts, image health checks and managed-directory boundaries. The shared `Files.IsLinuxPath` validates Linux paths on both sides; `Distribution.IsDebian` centralizes maker package-family selection. Resource keys and JSON property names remain stable. The delivery plan is stored as `containerizer.json`; maker and executor share `DeliveryPlan.FileName`, and the current delivery protocol is 1.
-
-The maker uses Core `Versioning.Version.Number` for release/date versions, migration ordering/uniqueness and .NET runtime selection. Each numeric part is 0–65535; equivalent forms such as `1.0` and `1.0.0` compare equally, while explicit release/migration text is preserved. Image tags remain strings. The executor retains its BCL version handling and source-generated JSON without a Core dependency.
-
-Maker messages use `CommandContext.Output`, `Terminal` and `CommandOutletContent` for colors/styles and multiline help. Terminal handles plain redirected output; diagnostics previously sent to stderr use `Terminal.Default.Error`. Shared subprocess forwarding and the BCL-only executor retain their existing streams.
-
-## FHS storage and cleanup
-
-The [README layout](../README.md) separates service data and durable installation/migration state under `/var/lib/containerizer`, attempt logs under `/var/log/containerizer`, re-creatable bootstrap assets under `/var/cache/containerizer`, and locks under `/run/containerizer`. Logs and cache use the existing ownership records and markers. Bootstrap registers ownership on the active installation object before side effects so later transaction saves retain it. Removed cache directories can be recreated without changing their recorded ownership. Ordinary uninstall preserves these assets; purge checks identity, links and mount boundaries, with registration removed last. Default service data cannot point into another application's namespace or managed state/log/cache/runtime roots. Single data mounts use the service directory directly; templates with multiple data mounts retain separate named subdirectories. MySQL therefore uses `/var/lib/containerizer/data/<name>/mysql` on the host and still mounts it at `/var/lib/mysql` inside the container. Read-only configuration mounts do not affect this count. No installed target data is automatically moved.
-
-The FHS and naming refactor passes 221 maker and 60 executor tests on Windows, plus all 60 executor tests in the isolated Linux builder, including link and mount-boundary checks. Strict Release compilation covers all maker frameworks, with separate IDE0049 verification. This is filesystem/transaction and build evidence, not target installation acceptance.
-
-## Local verification architecture and evidence
-
-`RunCommand` owns command validation and Ctrl+C registration. `RunContext` owns one session and its cleanup; its `.Environment.cs` partial prepares the clean base and invokes the original installer, and nested `Endpoint` handles port allocation and host probes. They reuse `ContainerEngine`, `BuildStorage`, `ProcessRunner`, `Files` and styled `Output`. `DeliveryBundle` moved to linked shared source so maker and executor verify the same assets without referencing each other's executable project.
-
-The executor resolves installation and recovery phase descriptions from bilingual resources while keeping persisted phase identifiers unchanged. `run` supplies the local interface culture through `LANG` for the installer process only; applications retain their packaged environment.
-
-Internal installation state and test data belong to the outer verification container. Inner Docker uses overlay2 in one labeled image-store volume per application; containerd uses a session-owned anonymous volume. The nested `RunContext.ImageCache` validates ownership, attachments, environment profile and a clean marker before reuse. Cleanup removes inner containers, data volumes, custom networks, application/obsolete images and extra tags, stops the engine and only then records the clean marker. It retains current infrastructure/ingress image IDs; application-only deliveries retain no empty store. Identity/platform validation skips imports only for matching content, independent of release versions. Failed internal cleanup uses independent cancellation budgets for outer-container and whole-cache removal. No foreign or attached volume is force-deleted, and errors identify retained resources. The application lock prevents concurrent locally managed sessions; engine labels detect a scene left by forced termination. There is no global prune and no application-configuration rewrite. This cache is separate from outer-engine images and has an additional disk cost.
-
-JSON ServicePlan.Web records application/site identity, hosts, probe identities, original bindings, explicit/effective defaults and publication references. PortPlan records physical mappings only. WebPackage validates final INI handoff; WebIngress plans routing/publication and renders semantic templates with collected resources. The shared BCL-only verifier validates the JSON relationships. No legacy port scheme/hostname fields or simple-proxy fallback remain.
-
-Real acceptance on 2026-10-05 used a synthetic Debian 13 x64 offline delivery in Windows/rootful Podman, with a real packaged executor, isolated Redis/MySQL/Nginx images and no production application settings or migrations. The original install script completed bootstrap and installer phases; Windows received HTTP 200, Redis PONG and a MySQL protocol-10 handshake. A second run reused the clean base, avoided an occupied host port 80, returned HTTP 200 from its assigned port and had no Redis key written by the first session. Both Ctrl+C exits removed their outer containers and both recorded storage volumes. A concurrent attempt for the same application was rejected.
-
-Unit tests cover Docker/Podman orchestration, retained installer failure, startup cancellation (including an interrupted create), bounded port-binding retry, independent cleanup cancellation, cleanup failure reporting, existing-scene/architecture preflight, optional versus required entries, HTTP 404 and external redirects. They complement the executor's migration-failure tests; no real SQL migration was executed for this acceptance. Script checks use isolated copies and a fake tool.
-
-Ubuntu 22.04 reached systemd startup in the initial prototype only. Other distributions, outer Docker, rootless engines, real ARM64 and named HTTPS applications have not completed end-to-end run acceptance. Both native executors are cross-built separately; compilation is not runtime acceptance. The verification base explicitly installs ICU required by the current native executor; a bare Linux deployment still needs the executor's runtime libraries. Privileged nesting shares the engine kernel and cannot establish production host compatibility.
-
-Resource keys use dot-separated names, exception keys end in .Message, and neutral/Chinese entries retain the same multiline XML layout. ResXFileCodeGenerator regenerates the strongly typed accessor. Final validation passed all 236 maker and 60 executor tests, strict Release builds with no warnings, and IDE0049 verification. The local global tool was updated and ten installed binary/resource hashes matched the build outputs.
-
-This fix resolves Redis/Valkey data-owner account names from the pinned image even when its configured user is root. Numeric ownership is written into mount records before deployment; the ownership marker is retained for purge verification. A separate Debian 13 x64 delivery using Redis 8.10.2 with persistent storage and both AOF/RDB completed the original installation flow. The directory and appendonlydir belonged to UID/GID 999; local PING and SET succeeded, and the value survived a Redis container restart. No production application or migration was run. Local engine commands use the selected executable; onsite commands share BootstrapPlan.ENGINE. Resource text receives the outer/inner engine names and option choices as arguments. Docker/Podman failure guidance follows the selection, and run does not require outer Compose. Both hosting scripts only pass engine choices and contain no engine execution commands. Release strict builds, 248 maker and 63 executor tests, and IDE0049 verification passed; both native executors were rebuilt, with ARM64 still limited to cross-compilation.
-
-## Workstation registry mirrors
-
-The maker reads an optional output-directory `.mirrors` with Core Profile. Linked `RegistryMirrors` expands exact registry mappings, retains ordered routes and handles source failures/cancellation. Image resolution binds a logical repository and verified platform/digest independently of its transport endpoint; a verified local binding remains usable after mirror rules change. `ImagePlan.SourceRepository` is transient and excluded from protocol JSON.
-
-Podman builds use the resolved local image ID with `--pull=never`. Docker creates temporary BuildKit configuration and a private builder, resolves its helper image through the same policy on the builder host architecture, and disposes the builder/cache and configuration after success or failure. `run` passes validated JSON to the installer under `/run`, outside delivery assets. The executor applies it only to online image retrieval; normal onsite installation has no workstation rules. Neither global engine configuration nor package-feed URLs are changed.
-
-The hosting `.mirrors` contains the 11 registries listed by [DaoCloud](https://github.com/DaoCloud/public-image-mirror). Existing aliases are preserved; additions use its recommended registry-prefix form. The legacy Kubernetes and experimental Ollama entries are annotated. Actual endpoint/content availability for every registry is not implied by accepting the configuration.
-
-## Evidence and remaining release gates
-
-Final checks passed strict Release builds across every maker target framework, 304 maker plus 76 executor tests, and independent IDE0049 checks for all four projects. Isolated installation verified that plan ignores even an invalid `.mirrors`; package/native/resource contents and user-authorized global installation were checked against local build hashes.
-
-### Delivery archive compression comparison (2026-10-06)
-
-The sole delivery in the hosting output directory, `zongsoft@26.10.5-x64.tar.gz` (958,123,274 bytes), was tested on Windows x64 with an Intel Core i7-8700K and .NET 10.0.12. Both gzip levels consumed the exact same 2,497,001,472-byte decompressed tar. Three trials per level alternated Optimal/Fastest in the system temporary directory, retaining normal filesystem caches and including the output flush to disk. SHA-256 checks were outside the timed intervals. The table reports medians; MB is decimal.
-
-| Level | Compression | Compressed size | Decompression to tar |
-| --- | ---: | ---: | ---: |
-| Optimal | 36.98 seconds | 958.10 MB | 5.06 seconds |
-| Fastest | 13.79 seconds | 1,196.22 MB | 6.43 seconds |
-
-Optimal compression trials were 37.106, 36.978 and 36.590 seconds; Fastest trials were 13.794, 13.903 and 13.604 seconds. Fastest saved 23.18 seconds (62.7%, about 2.68 times the compression speed), adding 238.12 MB (24.85%). Decompression did not improve. All six decoded tar streams matched the input length and SHA-256, and the original delivery hash remained unchanged.
-
-A separate check invoked the compiled tool's actual `Files.Archive` once per level on the same 86 extracted files: Optimal took 35.95 seconds and produced 958,124,266 bytes; Fastest took 14.25 seconds and produced 1,196,221,435 bytes. Actual `Files.Extract` times were 6.48 and 7.30 seconds. Both regenerated deliveries passed the existing `DeliveryBundle` inventory, length and checksum verification. Regenerated tar metadata can differ, so whole-archive byte identity with the original is not required.
-
-For the user's frequent local build-and-verify workflow, the default now uses Fastest without new options, formats or compression dependencies, accepting this sample's roughly 25% size increase. These results concern compression; this comparison did not rerun full make, run or onsite installation, and does not establish a 2.68-times improvement for an entire command. Shared application runtime caching remains a design discussion; this change does not implement that cache policy.
-
-Strict Release builds passed for every maker target framework and the executor, together with all 380 existing tests and independent IDE0049 checks for all four projects. One blank line between a declaration and a using statement was also added to satisfy ZS2003, without changing its runtime behavior. Automatic approval initially rejected deletion of this benchmark temporary directory with only blocked by policy; the operator subsequently confirmed manual removal of the test copies.
-
-### Registry mirror and proxy measurements (2026-10-06)
-
-User-authorized checks used Windows/rootful Podman, Debian 13 x64 and a 919,052,946-byte offline delivery containing the hosting Redis/MySQL/Nginx/RustFS and packaged daemon/Web. A temporary application identity/output kept the user's delivery unchanged; migrations were omitted. The outer validation base and maker infrastructure/OS images were already cached. Each run used fresh installation state/data; only the inner infrastructure image store differed between cold and repeated runs. Runtime proxy overrides were removed afterward; permanent units/scripts and registry settings were unchanged.
-
-| Operation, with `.mirrors` | VM proxy enabled | VM proxy disabled |
-| --- | ---: | ---: |
-| `make`, complete delivery | 195.9 s | 191.0 s |
-| `run`, empty inner image cache | 212.8 s | 192.6 s |
-| `run`, verified inner image cache | 163.4 s | 151.2 s |
-
-`run` timings include archive verification/extraction and end at readiness, excluding user testing and exit cleanup (about 19–22 s). These are individual observations, not a performance guarantee. The cache saves 49.3 s with the proxy and 41.5 s without it, so it is retained. Offline imports, copying and health checks are not accelerated by registry mirrors; `make` still installs application dependencies through unchanged software-package feeds.
-
-Independent manifest queries bypassed the VM's existing native registry mirrors through a temporary native-CLI configuration. With the proxy, DaoCloud/Docker Hub took 1.4/3.5 s; without it DaoCloud succeeded in 2.2 s while direct Docker Hub reached the 20 s timeout. The actual maker, without a proxy, pulled an uncached Redis fixture through DaoCloud in 13.5 s and reused its verified logical identity after switching to an unreachable mirror in 0.9 s. The expanded 11-entry hosting configuration parsed successfully. The archive contains both READMEs and neither `.mirrors` nor mirror addresses in its delivery plan.
-
-Cleanup inspection found that a maker data-owner inspection container could leave its image-declared anonymous volume. Shared build-resource removal now includes `--volumes`, preserving named/bind assets while deleting only the helper container's anonymous volumes. Success and account-resolution failure tests cover this; a real cached-Redis ownership probe verifies an unchanged volume inventory. All benchmark containers, its isolated image-store volume, fixture image, temporary infrastructure tags and the two anonymous helper volumes were removed. Existing user resources were retained. Native x64/ARM64 payloads were rebuilt; ARM64 and an outer Docker engine remain outside real runtime acceptance.
-
-The execution approval layer rejected deletion of the system temporary benchmark directory with `blocked by policy` and no further reason. Its copied archives, isolated tool and diagnostic files therefore remain for operator removal; engine benchmark resources were cleaned successfully.
-
-### Repeated-run image cache and RustFS console (2026-10-06)
-
-The RustFS template now publishes its console on loopback port 9001 by default, using the common `console-port` override. Secondary ports for EMQX, NATS, ClickHouse, OTLP HTTP and Nacos are declared but remain opt-in. Three RustFS default/disabled/custom cases and seven secondary-port cases cover the shared settings behavior.
-
-A separate 356 MB Debian 13 x64 delivery containing Redis, RustFS and an Nginx Web fixture ran twice under Windows/rootful Podman with the same application and release version. The engine reported overlay2. Web returned HTTP 200; the RustFS console at `/rustfs/console/` returned HTTP 200/HTML, while its root returned S3 403. First and second readiness times were 51.5 and 43.0 seconds including extraction/verification; these measurements do not predict production-package timings. The second run reused verified Redis/RustFS image IDs and imported the Web image again. Redis data written in the first session was absent in the second. Read-only cache inspection after each exit found exactly the two current infrastructure image IDs, no container records or data-volume directories, and a clean marker. Test containers and the fixture cache were removed; the outer volume inventory was unchanged. No production application or migration ran.
-
-Cache regressions cover changed engine profiles, dirty stores, foreign/attached volumes, interrupted creation, whole-cache discard after failure, ownership rechecks, application-only stores and changed content at an unchanged release version. A simulated image-cleanup timeout still removed the outer container with an independent token. Strict Release builds, all 271 maker/73 executor tests and IDE0049 verification passed. Both Linux executors were rebuilt; ARM64 remains cross-compilation only. The local global tool was reinstalled from the local package, and eleven installed binary/resource/template hashes matched the build outputs. The obsolete unused VFS verification base was removed after ownership/use checks. Archive verification, asset copying, bootstrap installation and health checks still run every time; acceleration does not skip those acceptance steps.
-
-This refactor adds default/plan/make entries sharing Core Profile, ConnectionSettings, the variable pipeline and ArtifactPublisher. Implemented areas include .settings, repository, draft/completed stages, digest identity, per-key defaults, explicit empty values, per-value expansion, temporary volumes, port controls and Redis/Valkey settings. Regression checks cover engine-free plan, missing-value warnings, successful completion/failure preservation, special-value replay, packaged Nginx fragments, executor --no-recreate and anonymous-volume uninstall commands. Real-engine temporary-data restart/uninstall acceptance remains pending. Both hosting defaults and scripts were migrated; 18 CMD checks used isolated directories and a fake tool without touching real services.
-
-Applications no longer use templates. Effective package `Listen` metadata determines listener checks; absent/empty metadata uses PID 1 liveness. `PackageReader` reads tar PAX, Debian control and RPM application tag `1000001`; invalid metadata fails. Startup binds application interfaces; only packages without a hoster publish Listen as Web entries. Hoster publication follows its handoff. GET `/` requires an HTTP response without following redirects; it does not infer business health from status codes. HTTPS uses package DNS identity, SNI and system trust. Curl/CA dependencies are installed for automatic checks, including self-contained hosts. Delivery and installation records use protocol 1, matching executor minimum/maximum. Infrastructure template syntax remains independently numbered 1. Other delivery schemas are rejected without compatibility handling.
-
-The suite passes 207 maker and 34 executor tests after TASK#2. All solution projects pass strict Release compilation, and all four source/test projects pass independent IDE0049 verification. Tests cover ignoring companion application templates, rejecting application template fields, package metadata, date versions, tag/default precedence, cache identity and fixed-digest replay, flat delivery publication and rollback, offline APT cache staging, and image import/retagging. Earlier packager integration checks generated temporary tar/deb/rpm fixtures and queried native metadata without installing them; loopback probe cases covered HTTP responses, TLS trust/SNI, timeout and refused connection.
-
-Decision 35 uses unique per-attempt image/container names and ID-based export. Published application images are removed; failure/cancellation also disposes registered resources with bounded uncanceled timeouts. ContainerEngine.BuildAsync is shared by application and bootstrap builds: Podman uses --layers=false and --force-rm; Docker creates a private Buildx docker-container builder, loads the final image, then removes the builder and its cache volume. The default Docker builder is not changed. Cleanup warnings preserve the original result and continue other removals. Shared infrastructure/system images and unrelated builders are retained; there is no global prune or forced image deletion. Earlier named-image checks missed Podman intermediate cache images; the corrected verification compares every image ID and includes external build containers.
-
-Local verification covers strict C# compilation across the maker target frameworks; parser/path/metadata tests; fake-host lifecycle tests including migration recovery, verified release configuration assets, pre-stop failures and resumable purge; safe archive extraction and schema rejection. Native AOT publications produced x64 and ARM64 ELF binaries. x64 executed its protocol entry inside the dedicated Rocky-based build container. ARM64 publication is cross-compilation, not hardware execution.
-
-TASK#1 local NuGet packaging and content inspection verified two shared native payloads, their Chinese resources, and 30 infrastructure/ingress templates without duplicate per-framework assets, YamlDotNet or runtime analyzer payloads. The maker help entry ran successfully. Earlier checks verified isolated tool installation, installed native hashes, rejection of the removed `--bundle` option, shell/bootstrap-import syntax, and 14 isolated hosting CMD probes for shared references, quoting, caller state and failure exit handling.
-
-The decision 35 package check also corrected NuGet directory handling for extensionless native executors. Both executors now occupy `.containerizer/linux-{x64,arm64}/containerizer`, with one `zh-Hans` directory beside each executable. The local package and the explicitly requested refreshed global installation match the maker/native/resource build hashes; the installed maker's help entry passes. This installation check does not execute a node build or target lifecycle operation.
-
-Before TASK#1, on 2026-10-04, the real hosting `containerize.cmd` completed with Redis, MySQL, daemon and Web, Ubuntu 22.04 x64, automatic engine selection, offline bootstrap/images, and the original `.migration`. The retained delivery is `zongsoft@26.10.4.3_ubuntu-22.04_x64`; the suffix preserves earlier outputs. Its manifest records absolute source/output paths and resolved infrastructure versions. All 113 locked node assets matched their lengths and hashes; migration archive/script bytes matched the inputs, and applications have no template identity/hash.
-
-The produced archive installed successfully in a dedicated Ubuntu 22.04 x64 systemd container with external networking disabled and no existing Docker installation. Bootstrap installed from 67 locked local packages; Podman-exported images were loaded and retagged by verified image ID. Nested Docker uses VFS in this verification fixture. The unchanged migration needs a local S3 endpoint in addition to the four selected services, so a separate isolated RustFS fixture shares the target network namespace. The migration succeeded in one attempt, the registry reports `Installed` without maintenance, and all four services are healthy. Redis returned PONG, the migrated database contains 33 tables, and Web `/Application` returned HTTP 200. Daemon uses PID 1 liveness; Web uses the metadata-derived loopback listener check. The archive, manifest and verification report remain under the hosting output directory for review. This proves this isolated combination, not clean-VM acceptance or other distributions/architectures.
-
-| Combination or acceptance | State |
-| --- | --- |
-| Maker unit tests and executor simulated transactions | Locally verified; test commands below reproduce evidence |
-| Decision 35 maker resource cleanup | Podman repeated build/export, failure and cancellation verified with unchanged image inventory; Docker private-builder lifecycle verified by simulation, real Docker pending |
-| Linux x64 AOT build and protocol startup in build container | Verified |
-| Linux ARM64 AOT build and ELF architecture | Verified; runtime pending |
-| Podman/Docker export → Docker load/run roundtrip | Podman export to Docker load/run verified for the four hosting services on isolated Ubuntu 22.04 x64 |
-| Clean offline Ubuntu, Debian 12/13, RHEL, Rocky, Alma; both architectures | Pending |
-| Real packager daemon/Web and Automao packages | Hosting daemon/Web build and isolated installation verified; Automao pending |
-| Built-in templates against locked upstream image versions | Selected Redis/MySQL digests verified in this isolated combination; other combinations pending |
-| Package configuration retention and installation-media exclusion | Isolated image verification required after changes |
-| Power loss, full disk, daemon/host reboot during maintenance and cleanup | Pending real fault injection; simulated transaction tests cover selected failures |
-| Real databases, migration partial SQL and cross-node procedure | Original hosting migration succeeded against isolated MySQL/S3 fixtures; partial SQL failure and cross-node procedure pending |
-
-No distribution/template/platform combination is declared release-supported until its relevant gates pass. RHEL imports must originate from entitled matching repositories and be independently tested for dependency closure; matching metadata/hashes alone is not that proof. Raw YAML input is removed under [the template contract](templates.md). Earlier hosting installation evidence describes the previous maker flow and does not establish target acceptance for TASK#1.
-
-Known engineering limits requiring release review: OS filesystem writes and Docker restart-policy changes cannot form one atomic transaction; abrupt host loss at their boundary needs real boot/recovery validation. Persisted state is atomically replaced, but directory-entry durability under power failure is not yet proven. The generated template catalogue includes checks tied to upstream utilities/default layouts and must be reviewed at each admitted image digest. Application startup cannot be inferred safely for every packager layout; ambiguous packages must be corrected upstream.
-
-The latest structure/terminal/version refactor passed 10 isolated maker CLI checks, including plain redirected output. Following the Web handoff change, the managed executor protocol entry reports minimum=maximum=1. The current local tool package and global installation include the latest maker and Linux Native AOT payloads; installed payload hashes are checked against local build outputs.
-
-Core `Version.Number` now converts explicitly to long/ulong, avoiding numeric overloads during text output. Core passes 62 Versioning tests on each of net8.0/net9.0/net10.0; the maker Debug build and 207 tests use the rebuilt local Core. Release continues to reference the configured NuGet Core package.
-
-The application configuration removal passes 214 maker tests and 34 executor tests on Windows; the executor tests also pass inside the isolated Linux builder, including read-only asset permissions. A small temporary tar package was built with the real Podman engine: JSON, plugin options, certificate and Nginx configuration retained their bytes in the final image, application mounts were absent, the Nginx copy matched its source, and installation input/logs were removed. Named image/container cleanup completed; later inspection found untagged stage images, addressed by the cache cleanup correction above. Release strict builds and independent IDE0049 checks pass. Both Native AOT executors were rebuilt; x64 protocol startup passed, while ARM64 remains cross-compilation without hardware execution. This check did not install a node delivery or operate existing services.
-
-The cache cleanup correction passes 221 maker tests and 34 executor tests, strict Release compilation for all solution projects and independent IDE0049 checks. An isolated real Podman fixture built/exported twice, failed deliberately, and canceled a build; after each attempt the complete image ID inventory was unchanged and no external build containers remained. No Docker executable is installed on this machine; Docker coverage uses simulated private-builder creation, cache ownership, failure and cancellation. Small nested Package, Paths, Component and Descriptor models now live beside their owning types; their API and JSON shape are unchanged. Both native executors are rebuilt after the shared-source organization change.
-
-## Reproduce local checks
-
-```powershell
-dotnet build Containerizer.slnx -p:ZongsoftCodeStyleStrict=true
-dotnet test Containerizer.slnx
-dotnet format style src/Zongsoft.Tools.Containerizer.csproj --no-restore --verify-no-changes --diagnostics IDE0049
-dotnet format style executor/src/Zongsoft.Tools.Containerizer.Executor.csproj --no-restore --verify-no-changes --diagnostics IDE0049
-dotnet format style test/Zongsoft.Tools.Containerizer.Tests.csproj --no-restore --verify-no-changes --diagnostics IDE0049
-dotnet format style executor/test/Zongsoft.Tools.Containerizer.Executor.Tests.csproj --no-restore --verify-no-changes --diagnostics IDE0049
+| Maker input | `ManifestFactory` handles command context, variables, paths, version conflicts and input selection; `ContainerManifest` owns data, Profile reading, dependency completion and its own validation |
+| Service planning | `ServicePlanner` prepares services for plan/make, diagnoses missing settings, invokes Web planning and validates dependencies and ports |
+| Applications and templates | `ApplicationPlanner` derives entrypoints, environment, health and build-time runtime requirements; static `TemplateCatalog` reads infrastructure/ingress templates |
+| Build coordination | `DeliveryBuilder` owns the workspace, image stages, bootstrap, migration collection, verification and publication; `ServiceBuildContext` keeps its component association read-only from creation |
+| Engine and images | `ContainerEngine` performs engine operations; `ImageReference` owns repository/tag/digest rules; `ServiceImagePreparer` adapts health checks, Redis/Valkey authentication and data accounts |
+| Application images | `ApplicationImageBuilder` installs application packages and creates final images; `RuntimeEnvironmentCache` owns reusable OS/runtime filesystems |
+| Local preview | `RunContext` owns an entire session; its private `Endpoint` and `ImageCache` types handle forwarding and inner image storage |
+| Target execution | `InstallationManager` controls transactions, `DockerHost` operates the OS and Docker, and `InstallationStore` owns state, history, assets and locks |
+| Shared source | .shared/Containerization.props directly links protocol models, file validation and process helpers; no shared DLL is produced |
+
+The maker uses Core Profile, ConnectionSettings and the repository's shared variable workflow. The executor is BCL-only and consumes JSON and generated assets, without parsing .container, Profile or YAML. Generated `compose.yaml` uses JSON syntax and is consumed by Compose.
+
+Sessions, locks, resource lifetimes and installation transactions retain their own complete coordination boundaries. Pure rules use stateless types; side effects go through the existing engine, host and process boundaries. Visibility follows production callers: tests do not widen private members or introduce test-only entry points.
+
+## Maker data flow
+
+```text
+Command context + local inputs
+  → ManifestFactory / ContainerManifest
+  → ServicePlanner
+      ├─ plan: save draft
+      └─ make: DeliveryBuilder
+          → pin images → build applications / export images → adapt service images
+          → bootstrap / configuration / migrations / Compose
+          → completed manifest / JSON / checksums → compress → publish
 ```
 
-Use `executor/build/containerizer.linux-x64.yaml` for a dedicated build Pod, then `setup.sh` and `publish.sh <RID> <configuration>`. These install compilers only inside that build environment. Each publication saves compiler and ELF dependency reports beside its output. `build/Import-Bootstrap.ps1` only converts a reviewed dependency collection into a local profile; it does not run its packages.
+Components retain declaration order, with automatically added nginx appended. Build contexts directly reference their components rather than relying on parallel list indices. Image identities are established before writing; serialization only reads the model.
 
-Publishing, real package installation, service control, migrations and destructive lifecycle acceptance are separate operations requiring an explicit target environment. Local verification must never use existing user services as fixtures.
+Plan and make share service preparation. Plan does not connect to an engine, read .mirrors or collect system dependencies. Missing required settings produce diagnostics and a saved draft; other invalid structures still fail. Runtime resolution remains at the application image build entry, rather than moving make-stage external work into plan.
 
-Additional check: ingress recreation renews temporary anonymous volumes and removes only captured volumes from replaced owned containers after they are unused; unchanged containers retain their data. See [Docker Compose up](https://docs.docker.com/reference/cli/docker/compose/up/) for flag semantics. Package inspection verified 30 templates, two native executors and single-level Chinese resources. User-authorized global installation and installed-payload hash checks passed; plan probes used both real hosting sources and isolated output directories without target installation.
+### Profiles, variables and paths
+
+A .container accepts a fixed root/component vocabulary and rejects unknown fields, duplicate components/fields and nested components. Profile imports use Core; imported files participate in declaration validation, and source resolves relative to its declaring file. Imports are disabled for .settings and templates.
+
+Shared Utility gathers variables from defaults, the system environment, .env files from the filesystem root down to source, and command context in the established precedence order. Section names join with underscores. Final root fields enter the invocation's variable view. Input selection and root paths evaluate immediately; service settings/environment references survive plan and evaluate per value during make. Completed manifests replay literal values; replanning a completed manifest escapes literal references to prevent reevaluation.
+
+The CLI source resolves against the invocation directory; other managed local paths resolve against final source. Template configuration files resolve against the template directory. Linux container paths have separate validation independent of the maker OS. Generated manifests express source relative to output, and output/local component inputs relative to source.
+
+Release names use name[-tag]@version-architecture. Core numeric versions have 2–4 parts, each at most 65535, and must be nonzero. Automatic versions use year modulo 1000, month and day, adding/incrementing a fourth part on conflicts. Explicit version conflicts fail. A build may complete its own draft in place on success, but cannot overwrite an existing archive.
+
+### Package and migration inputs
+
+`PackageReader.Select` returns both a path and the descriptor already read. Preparation reuses that descriptor within the invocation and rereads it when the component package path changes. Web resource extraction still rereads the package, and delivery integrity checks still run; there is no cross-command package metadata cache.
+
+Supported Packager inputs are tar with a matching Shell launcher, deb and rpm. Readers extract identity, architecture, installation directory, service files, `runtimeconfig` and Web metadata. `Listen` comes from tar PAX, Debian control or an RPM custom tag. Directory selection checks the directory and then .packages, preferring the distribution's native format before tar in each location, with architecture and name-prefix filtering.
+
+Applications require one unambiguous service definition, `ExecStart` and WorkingDirectory. Entrypoints are foreground argument arrays; ambiguous Shell wrappers or complex commands must be corrected upstream. Application configuration is installed into the image with the original package rather than extracted by extension into target configuration mounts.
+
+Migration inputs are explicitly selected `<prefix>(migrate)@<version>_linux-<architecture>.tar.gz` files with matching .sh launchers. CLI directory selection allows multiple candidates. Manifests read positive numeric migration# indices and validate ascending, unique versions and matching architecture. No selection means no migrations; nothing is inferred from application packages or default directories. Building does not parse business SQL or contact databases; it records the combined archive/launcher hash and ships the files unchanged. Independent `hosting/containerize.cmd` wrappers provide menus, file selection and command invocation; the tool does not depend on those scripts or their default-directory conventions.
+
+### Publication and output
+
+Temporary build files live in an independent system workspace. The output directory receives the completed manifest, delivery archive and any required .settings tag additions. A direct complete build does not first publish a draft.
+
+An output lock and `ArtifactPublisher` coordinate publication, checking the input hash to avoid overwriting edits made during a build. Internal and external completed manifests are byte-identical. Failure cleans this invocation's temporary resources while retaining existing inputs. Multiple final files cannot be committed by one filesystem operation; publication does not promise a cross-file power-loss transaction. Archives use gzip Fastest.
+
+## Image identities and caches
+
+Repository, source tag, target-platform manifest digest, multi-platform index digest and local image ID are distinct. `ImagePlan.Reference` is the full local reference used on the target. `SourceTag` and `SourceReference` describe the origin, Digest pins the target manifest, and Id supports post-import content checks. The OS is always Linux and architecture comes from the manifest root.
+
+Local images are reused when identity and platform evidence is sufficient; otherwise they are resolved or pulled. Pinned replay cannot fall back to a tag, change platforms, or substitute an index digest/image ID for the target manifest. Creation time and engine-reported size are recorded when available and omitted otherwise, without extra network work for display metadata.
+
+The manifest identity associates repository, tag, Linux and architecture. Changes invalidate previous digest, timestamp and size values. Changing only the delivery version, delivery tag or host distribution does not alter infrastructure image identity.
+
+The maker exports infrastructure images by ID without attaching release-specific tags to cached images. Application builds, account probes and auxiliary builders use unique owned resources. Cleanup removes this invocation's containers and anonymous volumes, temporary images and builders, retaining useful source/tool images without global prune.
+
+| Cache layer | Identity and contents | Validation and updates |
+| --- | --- | --- |
+| Engine images | Source images, platforms, digests and verified associations | Resolve again when content/platform evidence mismatches; infrastructure tags are outside refresh scope |
+| Shared application runtime | Grouped by engine, distribution, architecture, runtime family and major/minor; OS files, curl/CA and runtime, without applications | Signature includes base digest, platform and install recipe; archive hash/length, environment and runtime requirements are validated |
+| Bootstrap | System package sets in the user cache, isolated by normalized source hash, distribution and architecture | Explicit import takes precedence over cache; outside refresh scope |
+| Run base image | Outer-engine image with systemd and forwarding tools, identified by recipe and architecture | Ownership checked; contains no installed application state |
+| Run image storage | Per-application inner Docker storage volume | Reused only after complete cleanup, environment matching and a clean marker |
+
+The file cache root is %LOCALAPPDATA%/Zongsoft/containerizer on Windows. Linux uses absolute `XDG_CACHE_HOME`, otherwise ~/.cache, then appends Zongsoft/containerizer. Runtime environments live under `runtime/<engine>/<profile>/`.
+
+Each shared runtime entry has a lock. One invocation refreshes each required environment at most once and resolves its OS base again. A new archive is fully produced and checked before atomically replacing the `environment.json` pointer; failure preserves the previous generation. Readers copy the selected generation while holding the lock before obsolete archives are removed. There is no time-based expiry. Runtime caches contain no application configuration, business data or database initialization results.
+
+Before manual cleanup, stop builds/previews using the cache and delete only identified entries. Do not remove the locks directory while processes hold locks, or replace targeted cleanup with global image/volume prune. Delivery history and target migration state are not disposable caches.
+
+### Registry mirrors
+
+`RegistryMirrorSettings` reads Core Profile from the selected directory; shared `RegistryMirrors` handles exact registry matching, source ordering and cancellation. Sections, duplicate registry entries and empty candidate addresses are rejected. Mirrors change download paths, not logical repositories, pinned digests or platforms. Without a pinned digest, the first usable source may resolve a tag; subsequent sources must match the established identity.
+
+Podman builds use verified local images and disallow pulling. Docker uses a dedicated BuildKit builder and temporary configuration, removing the builder/cache on completion. Run passes rules to inner online pulls through temporary JSON outside delivery assets. Neither .mirrors nor actual mirror addresses enter completed manifests or delivery JSON. Global engine configuration, package sources and credentials remain outside this mechanism.
+
+## Applications, Web and service preparation
+
+### Runtime and application health
+
+`ApplicationPlanner` selects .NET/ASP.NET Core runtime requirements from the entry DLL's `runtimeconfig`; explicit runtime-* dependencies must match. Self-contained entrypoints do not add a framework runtime, but still prepare probe dependencies. Builds install an available patch in the required major/minor line, verify it is no older than the package's minimum patch and record the version actually reported by the final image. Ubuntu 22.04 uses `ppa:dotnet/backports` for .NET 9 and later runtimes; other Debian/Ubuntu paths use the corresponding Microsoft package repository, while RPM paths use the RHEL-family repository.
+
+Application packages execute their original installation flow inside the build environment, with service startup controlled by the build adapter. The final image retains runtime files and a foreground entrypoint rather than using the target executor as its application launcher.
+
+Absent or empty `Listen` uses kill -0 1 for process liveness. Nonempty `Listen` must contain semicolon-separated HTTP/HTTPS root URLs without credentials, non-root paths, queries or fragments. Loopback/wildcard/DNS listeners become all-interface container bindings; fixed non-loopback IPs are rejected.
+
+Health probes select the first HTTP listener, otherwise the first HTTPS listener, and GET / inside the container. Any HTTP response indicates listener liveness; redirects are not followed. HTTPS requires a DNS identity and uses SNI and the image trust store. Connection, timeout and TLS validation failures are unhealthy. Defaults are a 10-second interval, 5-second timeout, 12 retries and 30-second start period. This does not establish business readiness.
+
+### nginx handoff and rendering
+
+`WebPackage` accepts a single application root containing .web/nginx/ with:
+
+| File | Purpose |
+| --- | --- |
+| .bindings | Profile/INI site identities, hostnames, original bindings and explicit default relationships |
+| `<package-name>.conf` | Packager's native-host configuration |
+| `<package-name>.conf.template` | Container rendering input with semantic placeholders |
+
+Each .bindings site accepts only host, bind and default, with comma/semicolon lists. Bind uses HTTP/HTTPS IP URLs with explicit ports. Default must reference a declared binding in the same site. Host supports concrete names and forms such as *.example.com, .example.com and example.*. Containerizer does not infer bindings by reparsing arbitrary nginx configuration.
+
+`WebIngress` substitutes the application ID for {{zongsoft:application}} and replaces the UTF-8 path encoded in {{zongsoft:file:BASE64}} with a managed resource path. Unknown or unresolved markers fail. Relative packaged resources resolve against the application root and must be existing regular files. External absolute paths require explicit file! declarations on nginx. Links, invalid paths and overlapping targets are rejected; corresponding maker-side system paths are never read implicitly.
+
+The nginx main configuration includes applications in application-ID order. Delivery assets use `config/nginx/nginx.conf`, `config/nginx/sites/<application>.conf` and distinct resource paths, all mounted read-only. User output still follows component declaration order.
+
+Ingress planning validates protocol consistency, default selection, hostname conflicts and actual routing for each listener address/port. A listener uses its unique explicit default when present; otherwise it selects the first site in application-ID configuration load order and site declaration order, matching the generated includes. Published ports require IPv4 wildcard listeners; matching IPv6 wildcard bindings, when present, must have equivalent site/default relationships. Nginx port settings remap or disable original ports without rewriting listeners. Published wildcard-only sites need a matching concrete probe-host. Hostless sites must win the actual default route; a reachable port alone does not establish correct routing.
+
+`ServicePlan.Web` stores application/site identity, Hosts, ProbeHosts and Bindings. Bindings include `IsExplicitDefault`, `IsDefault` and Publication; `PortPlan` describes physical publication only. Applications without hosting assets derive Web records and loopback publication directly from Listen. Declaring nginx without complete hosting assets fails. Caddy/haproxy do not participate in this handoff.
+
+### Infrastructure services
+
+`ServiceOptions` owns environment merging, parameters, ports, storage and Redis/Valkey persistence/authentication commands. After images are pinned, `ServiceImagePreparer` requires a template or image health check, sets authentication environment values and resolves numeric UID/GID; `ContainerEngine` owns actual engine operations.
+
+Data-owner accepts numeric UID:GID or an account/group in the pinned image, including images whose root entrypoint subsequently drops privileges. Persistent directory ownership is set before startup while preserving cleanup markers. RHEL-family binds request private SELinux labels rather than disabling SELinux.
+
+Temporary data uses anonymous volumes. Infrastructure starts use no-recreate; application/ingress recreation renews their anonymous volumes. Ordinary uninstall removes this application's containers and temporary volumes; persistent directories follow separate ownership records.
+
+## Bootstrap and delivery protocol
+
+Bootstrap collects Docker, Compose and dependencies for the target distribution/architecture, recording package name, version, architecture, HTTPS source URL, dependencies, hash and length. Debian/Ubuntu and RPM families use matching collectors. RHEL requires a prepared import instead of substituting Rocky/Alma packages.
+
+Explicit collections live in `source/.containerizer/bootstrap/<distribution>_<architecture>/` with `bootstrap.lock.json` and packages. build/Import-Bootstrap.ps1 creates that structure from a collection with `metadata.tsv` using Collection, Profile, BaseImageReference and Destination. BaseImageReference must be an exact repository@sha256:... reference. Imported and cached collections are verified when consumed; a lock file's presence does not bypass file checks.
+
+Offline includes package files. Online retains the same lock/metadata, downloads recorded files on the target, verifies them and runs a local package transaction with online repositories disabled. When Docker already exists, the implementation checks the daemon, Compose and command capabilities and reuses it; it does not reinstall every locked package or automatically upgrade the existing engine.
+
+Delivery roots have this layout, including optional directories only when needed:
+
+```text
+containerizer                  Native executor
+zh-Hans/                       Localized resources
+install.sh / uninstall.sh       Thin launchers
+README.md / README.zh-Hans.md   Delivery-specific usage
+name[-tag]@version-arch.container
+containerizer.json             Execution plan
+checksums.sha256                Complete file checksums
+compose.yaml                   Generated runtime configuration, without build
+images/                        Offline image archives
+packages/                      Bootstrap metadata and offline packages
+config/                        Read-only runtime assets
+migration/                     Original migration archives and launchers
+```
+
+The current JSON protocol is 1. Model properties serialize as camelCase, unknown members are rejected, and old field aliases are not provided. Package/bootstrap full base references use `baseImageReference`; booleans such as `isInMaintenance`, `isReinstall` and `isExplicitDefault` directly reflect model semantics.
+
+The `containerizer.json` hash identifies release content; version text alone cannot replace content identity. Files lists other assets with path, length and SHA-256, while `checksums.sha256` additionally includes JSON's own hash. `SourceHash` identifies the included completed manifest. Opening a delivery validates protocol, integrity, extra files, paths, image platforms, service identities, Web dependency associations and mount constraints. Checksums detect consistency; they are not signatures or origin authentication.
+
+Compose project identity combines normalized name with a name hash, excluding tag/version. Assets fix image, platform, pull_policy=never, ownership labels, log rotation and read-only/writable mounts. Startup neither builds nor implicitly pulls. Manager controls dependency order and starts individual services without recreating dependencies.
+
+## Installation transactions and recovery
+
+Installation uses an application lock, with a short-lived host lock protecting the shared executor, registration and directory ownership. Locks live under `/run/containerizer` outside purgeable assets. Host and application lock filenames are distinct.
+
+| Stage | Behavior |
+| --- | --- |
+| Verification and registration | Validate delivery, Linux/root/distribution/architecture, disk and ports; check shared executor ownership/protocol capability, persist and reverify assets, register the transaction |
+| `PrepareBootstrap` / `PrepareImages` | Prepare the engine, import offline or fetch pinned online images, verify ID/platform and apply target references |
+| Maintenance barrier | Prepare owned directories, save `IsInMaintenance` before stopping applications/ingress |
+| `StartInfrastructure` / `CheckLocalInfrastructure` | Start infrastructure for first installation or reinstall after ordinary uninstall; verify existing infrastructure during upgrades |
+| `ApplyMigration` | Persist attempts, invoke original migration launchers and check again after success |
+| `ReadyToStart` | Stop here for no-start or pre-existing maintenance |
+| `StartApplications` / `StartIngress` / `CheckHealth` | Start applications then ingress and verify health |
+| `CommitRelease` | Restore restart policies, save success history/current release and clear pending |
+
+Prepare returns `Prepared` after image preparation. It may already have installed the shared executor and system dependencies, so it is not read-only. It does not enter stopping/migration stages. Reinstalling the same successful release checks images and health without rerunning SQL.
+
+Upgrades compare name, distribution, architecture, project and dataRoot. Infrastructure IDs, image IDs/digests, effective configuration hashes and bootstrap package name/version/hash sets must match. Effective configuration includes environment, arguments, ports, mounts, template-derived runtime fields and configuration file contents. Ordinary uninstall followed by reinstall cannot bypass these checks.
+
+### Maintenance and failure
+
+`EnterMaintenanceAsync` is the common stopping entry. Manager saves the maintenance flag first. `DockerHost` saves original restart policies before modifying containers, then sets restart=no and stops them. One stopping operation validates/materializes historical release plans once and identifies application/ingress containers by ownership labels. Stop does not shut down infrastructure. Save failure prevents crossing the persistence barrier; partial stop failure leaves persisted state for follow-up.
+
+Phase starts, successes, failures and migration attempts are persisted. Failure retains the original transaction and diagnostics without rolling back system/data changes or automatically starting old applications. Recover verifies the original assets/ID, continues that transaction and leaves ReadyToStart. It cannot substitute another delivery or erase failure history. Start requires a startable state; restart rejects maintenance or pending transactions.
+
+Migration state is retained per migration version. Successful records are reused only after the original launcher's check succeeds; a new archive with the same version cannot skip that check merely because the version matches. Started, Failed, `Interrupted` and Unknown require explicit retry-migration for the corresponding version in the current transaction. Attempts are saved before execution and become `Succeeded` only after apply and check succeed. Containerizer logs retain version, operation and exit code rather than arbitrary script output or full SQL.
+
+### Asset retention and cleanup
+
+`InstallationStore` owns `apps/<name>/installation.json`, `releases/<id>/assets`, success history and migration directories. Once copied and verified, managed assets supply stable mount/recovery paths independently of the original extraction directory. Shared executor reuse/replacement checks ownership hashes and protocol ranges; unknown existing files conflict. Application version numbers do not select executor updates.
+
+Ordinary uninstall retains registration, release assets, migration records, logs, persistent directories and images, removing this application's containers, anonymous volumes and networks. Reinstallation restores infrastructure containers and rechecks retained state without reinitializing preserved data.
+
+Purge proceeds through: save `Uninstalling` → maintenance/host resource cleanup → save resource checkpoint → delete release assets → finish directory/log cleanup → delete registration last. Failure persists `CleanupFailed` and residual reasons; retry skips the completed resource stage. Manager owns ordering/checkpoints, while Store owns history, release asset and final registration file operations.
+
+Deletion verifies actual ownership, directory markers, parent relationships, links and mount boundaries. Missing evidence cannot count as successful cleanup. Removing this application's image references preserves content still used by other containers or deployments. The shared executor, engine, other applications, original delivery media and remote databases remain outside cleanup; no reverse migrations or global prune are performed.
+
+## Preview sessions and process execution
+
+Run first validates the archive with shared `DeliveryBundle`, then creates a privileged systemd container labelled with session/application ownership, without mounting the outer engine socket. The outer native architecture must match. Inner Docker uses overlay2 and independent storage; containerd uses a session anonymous volume.
+
+Installation state and business data start fresh each session. Inner `ImageCache` cleanup removes containers, business volumes, custom networks, application/old images and extra tags, retaining only current infrastructure/ingress image IDs. The inner engine stops before writing the clean marker. Application-only deliveries do not retain empty image storage. Reuse checks ownership, mount occupancy, environment, clean marker and image identity. Failed cleanup discards the session cache; unknown or occupied volumes produce errors.
+
+TCP forwarding uses inner socat to reach actual host publications, and the outer layer reads real port mappings with bounded conflict retries. Web probes connect to local IPv4 while preserving the request hostname, Host and SNI, disable proxies/automatic redirects and use system certificate validation. HTTP 5xx fails; other responses, including 404, demonstrate an answering entry. This differs from the container's listener-liveness check. Ordinary TCP endpoints without Web semantics only test connectivity. UDP, cluster advertisement addresses and application callbacks are not rewritten.
+
+`RunContext` remains in the foreground and keeps established failure scenes until cancellation. Cleanup uses independent timeouts rather than the cancelled work token. Exit status distinguishes post-readiness exit, startup cancellation and original failure; cleanup failure cannot report success. Application locks and engine labels protect concurrent sessions and resources left after forced termination.
+
+`IProcessRunner` provides captured `RunAsync` and instance streaming StreamAsync. Engine operations, preview installation and target logs all use the injected runner. `ArgumentList` preserves argument boundaries, with separate UTF-8 stdout/stderr handling. Captured mode continuously drains both pipes while bounding diagnostic buffers; streaming forwards lines and returns the original exit code. Cancellation terminates the process tree. Maker output retains localized callbacks and colors without test-only wrappers.
+
+## Platform and verification boundaries
+
+| Level | Current evidence and scope |
+| --- | --- |
+| Implemented paths | Windows/Linux maker paths; Docker/Podman build/preview branches; Linux x64/ARM64 targets; accepted distributions listed in README |
+| Automated validation | Strict builds for all maker target frameworks, both test projects, Linux executor tests, and configuration/cache/Web/process cancellation/installation/cleanup failure coverage |
+| Native compilation | Linux x64 and ARM64 Native AOT compilation; x64 protocol entry execution; ARM64 compilation is not ARM64 runtime acceptance |
+| Isolated actual execution | Windows + rootful Podman + Debian 13 x64 build/preview paths, with Web/infrastructure access, port avoidance, session data isolation and cleanup |
+| Without complete target acceptance | Outer Docker, rootless engines, other distribution combinations, real ARM64, complete domain HTTPS applications, standalone production hosts and actual business migrations |
+
+Template architecture lists declare input capability, not compatibility of every image tag. Native AOT still requires Linux system libraries; preview bases prepare ICU and other prerequisites, while standalone targets must also meet runtime requirements. Package transactions and lifecycle validation use dedicated isolated environments. Unit tests, cross-compilation and shared-kernel previews do not establish production acceptance.
+
+Current exit categories are 0 success; 2 input; 3 platform/capability; 4 acquisition/integrity/execution; 5 bootstrap transaction; 6 health; 7 migration/recovery/executor cancellation; 8 target lock conflict; 9 uninstall cleanup; and 130 for maker/preview startup cancellation. Interpret the code together with the command's phase diagnostics and residual state.

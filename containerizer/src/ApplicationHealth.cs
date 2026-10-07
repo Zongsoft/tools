@@ -44,19 +44,19 @@ namespace Zongsoft.Tools.Containerizer;
 internal static class ApplicationHealth
 {
 	#region 内部方法
-	internal static ContainerizationException Invalid(string name, string field) => new(2,
+	internal static ContainerizationException CreateException(string name, string field) => new(2,
 		string.Format(Properties.Resources.ApplicationHealth_Invalid_Message, name, field));
 
 	internal static void Configure(PackageReader.Descriptor package, ServiceBuildContext source)
 	{
-		var listeners = ParseListeners(package.Listen, package.Name);
+		var listeners = ParseListeners(package.ListenerAddresses, package.Name);
 		if(listeners.Length == 0)
 		{
 			source.Plan.Health.Test = ["CMD-SHELL", "kill -0 1"];
 			return;
 		}
 
-		var bindings = listeners.Select(listener => Binding(listener, package.Name)).ToArray();
+		var bindings = listeners.Select(listener => GetBindingAddress(listener, package.Name)).ToArray();
 		var arguments = new List<string>(source.Plan.Entrypoint);
 		var index = arguments.IndexOf("--urls");
 
@@ -84,7 +84,7 @@ internal static class ApplicationHealth
 		}
 
 		if(source.Plan.Health.TimeoutSeconds < 1)
-			throw Invalid(package.Name, "health-timeout");
+			throw CreateException(package.Name, "health-timeout");
 
 		var listener = listeners.FirstOrDefault(listener => listener.Scheme == "http") ?? listeners[0];
 		var address = IPAddress.TryParse(listener.Host.Trim('[', ']'), out var ip) && ip.AddressFamily == AddressFamily.InterNetworkV6 ? "[::1]" : "127.0.0.1";
@@ -96,17 +96,17 @@ internal static class ApplicationHealth
 			host = Uri.CheckHostName(listener.Host) == UriHostNameType.Dns ? listener.Host : null;
 
 			if(string.IsNullOrWhiteSpace(host) || Uri.CheckHostName(host) != UriHostNameType.Dns || host.Any(char.IsWhiteSpace))
-				throw Invalid(package.Name, "Listen (HTTPS DNS name)");
+				throw CreateException(package.Name, "Listen (HTTPS DNS name)");
 
-			argumentsText += $" --resolve {ApplicationImageBuilder.Quote($"{host}:{listener.Port}:{address}")}";
+			argumentsText += $" --resolve {ShellUtility.QuoteArgument($"{host}:{listener.Port}:{address}")}";
 
 		}
 		else if(Uri.CheckHostName(listener.Host) == UriHostNameType.Dns)
-			argumentsText += $" --header {ApplicationImageBuilder.Quote($"Host: {listener.Authority}")}";
+			argumentsText += $" --header {ShellUtility.QuoteArgument($"Host: {listener.Authority}")}";
 
 		var url = $"{listener.Scheme}://{host}:{listener.Port}/";
 		var timeout = Math.Max(1, source.Plan.Health.TimeoutSeconds - 1);
-		var command = $"curl --noproxy '*' --silent --show-error --output /dev/null --max-time {timeout}{argumentsText} {ApplicationImageBuilder.Quote(url)}";
+		var command = $"curl --noproxy '*' --silent --show-error --output /dev/null --max-time {timeout}{argumentsText} {ShellUtility.QuoteArgument(url)}";
 
 		source.Plan.Health.Test = ["CMD-SHELL", command];
 	}
@@ -126,7 +126,7 @@ internal static class ApplicationHealth
 				var suffix = part[(separator + 4)..];
 
 				if(suffix.Length != 0 && suffix[0] is not (':' or '/'))
-					throw Invalid(name, "listen");
+					throw CreateException(name, "listen");
 
 				part = $"{part[..(separator + 3)]}0.0.0.0{suffix}";
 			}
@@ -134,7 +134,7 @@ internal static class ApplicationHealth
 			if(part.Any(char.IsWhiteSpace) || part.Contains('\\') || !Uri.TryCreate(part, UriKind.Absolute, out var uri) ||
 			   uri.Scheme is not ("http" or "https") || uri.Port < 1 || uri.HostNameType == UriHostNameType.Unknown || uri.UserInfo.Length != 0 ||
 			   uri.AbsolutePath != "/" || uri.Query.Length != 0 || uri.Fragment.Length != 0)
-				throw Invalid(name, "listen");
+				throw CreateException(name, "listen");
 
 			return uri;
 		}).ToArray();
@@ -142,14 +142,14 @@ internal static class ApplicationHealth
 	#endregion
 
 	#region 私有方法
-	private static string Binding(Uri listener, string name)
+	private static string GetBindingAddress(Uri listener, string name)
 	{
 		var host = "0.0.0.0";
 
 		if(IPAddress.TryParse(listener.Host.Trim('[', ']'), out var ip))
 		{
 			if(!IPAddress.IsLoopback(ip) && !ip.Equals(IPAddress.Any) && !ip.Equals(IPAddress.IPv6Any))
-				throw Invalid(name, "listen");
+				throw CreateException(name, "listen");
 
 			if(ip.AddressFamily == AddressFamily.InterNetworkV6)
 				host = "[::]";

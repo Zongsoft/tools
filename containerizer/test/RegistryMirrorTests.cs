@@ -23,9 +23,9 @@ public sealed class RegistryMirrorTests : IDisposable
 		File.WriteAllText(Path.Combine(_root, ".mirrors"), "# Sources\r\ndocker.io=first.example.com; second.example.com/docker.io\r\nmcr.microsoft.com=mirror.example.com/mcr\r\n");
 		var mirrors = RegistryMirrorSettings.Read(_root);
 
-		Assert.Equal(["first.example.com/library/redis", "second.example.com/docker.io/library/redis", "docker.io/library/redis"], mirrors.Repositories("docker.io/library/redis"));
-		Assert.Equal(["mirror.example.com/mcr/mssql/server", "mcr.microsoft.com/mssql/server"], mirrors.Repositories("mcr.microsoft.com/mssql/server"));
-		Assert.Equal(["quay.io/coreos/etcd"], mirrors.Repositories("quay.io/coreos/etcd"));
+		Assert.Equal(["first.example.com/library/redis", "second.example.com/docker.io/library/redis", "docker.io/library/redis"], mirrors.GetRepositories("docker.io/library/redis"));
+		Assert.Equal(["mirror.example.com/mcr/mssql/server", "mcr.microsoft.com/mssql/server"], mirrors.GetRepositories("mcr.microsoft.com/mssql/server"));
+		Assert.Equal(["quay.io/coreos/etcd"], mirrors.GetRepositories("quay.io/coreos/etcd"));
 	}
 
 	[Fact]
@@ -55,7 +55,7 @@ public sealed class RegistryMirrorTests : IDisposable
 	}
 
 	[Fact]
-	public async Task SourceFallbackReportsEveryFailureAndDoesNotRepeatDuplicates()
+	public async Task SourceFallbackReportsEveryFailureAndDoesNotRepeatDuplicatesAsync()
 	{
 		var mirrors = new RegistryMirrors { Registries = new() { ["docker.io"] = ["one.example.com", "one.example.com", "two.example.com", "docker.io"] } };
 		var calls = new List<string>();
@@ -74,7 +74,7 @@ public sealed class RegistryMirrorTests : IDisposable
 	}
 
 	[Fact]
-	public async Task CancellationNeverContinuesToAnotherSource()
+	public async Task CancellationNeverContinuesToAnotherSourceAsync()
 	{
 		using var cancellation = new CancellationTokenSource();
 		var mirrors = new RegistryMirrors { Registries = new() { ["docker.io"] = ["mirror.example.com"] } };

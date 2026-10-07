@@ -48,20 +48,21 @@ namespace Zongsoft.Tools.Containerizer;
 internal static partial class PackageReader
 {
 	#region 公共方法
-	public static string Select(string path, string name, string distribution, string architecture)
+	public static Candidate Select(string path, string name, string distribution, string architecture)
 	{
 		if(File.Exists(path))
 		{
-			if(Read(path).Architecture != architecture)
+			var package = Read(path);
+			if(package.Architecture != architecture)
 				throw new ContainerizationException(2, string.Format(Properties.Resources.PackageReader_1_Message, path));
 
-			return path;
+			return new(path, package);
 		}
 
 		if(!Directory.Exists(path))
 			throw new ContainerizationException(2, string.Format(Properties.Resources.PackageReader_2_Message, path));
 
-		var extension = Distribution.IsDebian(distribution) ? ".deb" : ".rpm";
+		var extension = Distribution.IsDebianFamily(distribution) ? ".deb" : ".rpm";
 		string[] directories = [path, Path.Combine(path, ".packages")];
 		string[] formats = [extension, ".tar.gz"];
 
@@ -75,10 +76,14 @@ internal static partial class PackageReader
 				var candidates = Directory.EnumerateFiles(directory, $"*{format}")
 					.Where(file => Path.GetFileName(file).StartsWith(name, StringComparison.OrdinalIgnoreCase))
 					.Where(file => format != ".tar.gz" || File.Exists($"{file[..^7]}.sh"))
-					.Where(file => Read(file).Architecture == architecture).Order(StringComparer.Ordinal).ToArray();
+					.Select(file => new Candidate(file, Read(file)))
+					.Where(candidate => candidate.Package.Architecture == architecture).OrderBy(candidate => candidate.Path, StringComparer.Ordinal).ToArray();
 
 				if(candidates.Length > 0)
-					return ComponentSelector.Choose(candidates)[0];
+				{
+					var selected = ComponentSelector.Choose(candidates.Select(candidate => candidate.Path).ToArray())[0];
+					return candidates.Single(candidate => candidate.Path == selected);
+				}
 			}
 		}
 
@@ -114,8 +119,8 @@ internal static partial class PackageReader
 		else
 			throw new ContainerizationException(2, Properties.Resources.PackageReader_6_Message);
 
-		ContainerManifest.Identity(result.Name);
-		ContainerManifest.GetVersionNumber(result.Version);
+		ContainerManifest.ValidateIdentity(result.Name);
+		ContainerManifest.ParseVersionNumber(result.Version);
 		result.Architecture = result.Architecture switch
 		{
 			"amd64" or "x86_64" or "x64" => "x64",
@@ -123,7 +128,7 @@ internal static partial class PackageReader
 			_ => throw new ContainerizationException(2, string.Format(Properties.Resources.PackageReader_7_Message, path))
 		};
 
-		ApplicationHealth.ParseListeners(result.Listen, result.Name);
+		ApplicationHealth.ParseListeners(result.ListenerAddresses, result.Name);
 		result.Web = WebPackage.Read(result);
 
 		return result;
@@ -143,20 +148,20 @@ internal static partial class PackageReader
 		var path = result.Format == "tar" && !name.StartsWith('/') ?
 			name.StartsWith(".root/", StringComparison.Ordinal) ? name[5..] : $"{result.InstallPath}/{name}" : "/" + name.TrimStart('/');
 		if(path.Contains('\\') || path.Split('/').Any(part => part is "." or ".."))
-			throw WebPackage.Invalid(result.Name, path);
+			throw WebPackage.CreateException(result.Name, path);
 		if(!result.Entries.TryAdd(path, regular) && regular)
-			throw WebPackage.Invalid(result.Name, path);
+			throw WebPackage.CreateException(result.Name, path);
 		if(linked)
 			result.Links.Add(path);
 
 		var metadata = IsMetadata(path) || name == "control";
 		if(metadata && (!regular || length > 1024 * 1024) && !path.EndsWith("/.web/nginx", StringComparison.Ordinal))
-			throw WebPackage.Invalid(result.Name, path);
+			throw WebPackage.CreateException(result.Name, path);
 
 		if(regular && result.Extraction != null && result.Extraction.TryGetValue(path, out var destination))
 		{
 			if(length > 16 * 1024 * 1024)
-				throw WebPackage.Invalid(result.Name, path);
+				throw WebPackage.CreateException(result.Name, path);
 
 			var bytes = new byte[(int)length];
 			stream.ReadExactly(bytes);
@@ -183,6 +188,12 @@ internal static partial class PackageReader
 	#endregion
 
 	#region 嵌套类型
+	internal sealed class Candidate(string path, Descriptor package)
+	{
+		public string Path { get; } = path;
+		public Descriptor Package { get; } = package;
+	}
+
 	internal sealed class Descriptor
 	{
 		#region 公共属性
@@ -191,7 +202,7 @@ internal static partial class PackageReader
 		public string Architecture { get; set; }
 		public string Format { get; set; }
 		public string InstallPath { get; set; }
-		public string Listen { get; set; }
+		public string ListenerAddresses { get; set; }
 		public WebPackage Web { get; set; }
 		public IReadOnlyDictionary<string, string> Extraction { get; init; }
 		public Dictionary<string, bool> Entries { get; } = new(StringComparer.Ordinal);

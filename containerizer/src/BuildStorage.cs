@@ -46,24 +46,23 @@ internal static class BuildStorage
 		Path.IsPathFullyQualified(Environment.GetEnvironmentVariable("XDG_CACHE_HOME") ?? "") ? Environment.GetEnvironmentVariable("XDG_CACHE_HOME") :
 		Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cache"), "Zongsoft", "containerizer");
 
-	public static string ProjectKey(string source) => Files.HashText(Normalize(source));
-	public static bool SamePath(string left, string right) => Normalize(left) == Normalize(right);
-	public static string BootstrapCache(string source, string profile, string cacheRoot = null) => Path.Combine(cacheRoot ?? CacheRoot, "bootstrap", ProjectKey(source), profile);
+	public static bool IsSamePath(string left, string right) => NormalizePath(left) == NormalizePath(right);
+	public static string GetBootstrapCache(string source, string profile, string cacheRoot = null) => Path.Combine(cacheRoot ?? CacheRoot, "bootstrap", GetProjectKey(source), profile);
 
-	public static FileStream Lock(string output, string cacheRoot = null)
+	public static FileStream AcquireLock(string output, string cacheRoot = null)
 	{
 		var directory = Path.Combine(cacheRoot ?? CacheRoot, "locks");
-		Files.PrivateDirectory(directory);
-		return new FileStream(Path.Combine(directory, $"{ProjectKey(output)}.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+		Files.CreatePrivateDirectory(directory);
+		return new FileStream(Path.Combine(directory, $"{GetProjectKey(output)}.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
 	}
 
-	public static async Task<FileStream> LockAsync(string output, string cacheRoot, CancellationToken cancellation)
+	public static async Task<FileStream> AcquireLockAsync(string output, string cacheRoot, CancellationToken cancellation)
 	{
 		while(true)
 		{
 			cancellation.ThrowIfCancellationRequested();
 
-			try { return Lock(output, cacheRoot); }
+			try { return AcquireLock(output, cacheRoot); }
 			catch(IOException exception) when((exception.HResult & 0xffff) is 11 or 32 or 33)
 			{
 				await Task.Delay(200, cancellation);
@@ -76,9 +75,9 @@ internal static class BuildStorage
 		var targetArchive = Path.Combine(manifest["output"], Path.GetFileName(archive));
 		var existing = File.Exists(manifest.ManifestPath);
 
-		if(File.Exists(targetArchive) || existing && (manifest.Input == null ||
-			!SamePath(manifest.Input, manifest.ManifestPath) || Files.Hash(manifest.ManifestPath) != manifest.InputHash ||
-			manifest.IsGenerated && Files.Hash(prepared) != manifest.InputHash))
+		if(File.Exists(targetArchive) || existing && (manifest.InputPath == null ||
+			!IsSamePath(manifest.InputPath, manifest.ManifestPath) || Files.Hash(manifest.ManifestPath) != manifest.InputHash ||
+			manifest.IsComplete && Files.Hash(prepared) != manifest.InputHash))
 			throw new ContainerizationException(2, Properties.Resources.NodeBuilder_3_Message);
 
 		string[] names = defaults == null ? [Path.GetFileName(prepared), Path.GetFileName(archive)] : [Path.GetFileName(prepared), Path.GetFileName(archive), ".settings"];
@@ -98,7 +97,9 @@ internal static class BuildStorage
 		publisher.Commit();
 	}
 
-	private static string Normalize(string path)
+	private static string GetProjectKey(string source) => Files.HashText(NormalizePath(source));
+
+	private static string NormalizePath(string path)
 	{
 		var value = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
 		return OperatingSystem.IsWindows() ? value.ToUpperInvariant() : value;

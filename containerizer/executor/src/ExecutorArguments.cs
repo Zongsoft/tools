@@ -43,14 +43,14 @@ internal sealed class ExecutorArguments
 	#region 公共属性
 	public string Command { get; private set; }
 	public string Name { get; private set; }
-	public string Input { get; private set; }
+	public string BundlePath { get; private set; }
 	public string Component { get; private set; }
-	public string From { get; private set; }
-	public string RetryMigration { get; private set; }
+	public string SourceBundlePath { get; private set; }
+	public string RetryMigrationVersion { get; private set; }
 	public bool NoStart { get; private set; }
 	public bool Purge { get; private set; }
 	public bool Follow { get; private set; }
-	public int Tail { get; private set; } = 100;
+	public int TailLines { get; private set; } = 100;
 	#endregion
 
 	#region 公共方法
@@ -81,10 +81,10 @@ internal sealed class ExecutorArguments
 			switch(argument)
 			{
 				case "--name":
-					result.Name = Value();
+					result.Name = ReadOptionValue();
 					break;
 				case "--from" when result.Command == "uninstall":
-					result.From = Value();
+					result.SourceBundlePath = ReadOptionValue();
 					break;
 				case "--no-start" when result.Command is "install" or "upgrade":
 					result.NoStart = true;
@@ -93,21 +93,21 @@ internal sealed class ExecutorArguments
 					result.Purge = true;
 					break;
 				case "--retry-migration" when result.Command == "recover":
-					result.RetryMigration = Value();
+					result.RetryMigrationVersion = ReadOptionValue();
 					break;
 				case "--follow" when result.Command == "logs":
 					result.Follow = true;
 					break;
 				case "--tail" when result.Command == "logs":
-					if(!int.TryParse(Value(), out var count) || count < 0)
+					if(!int.TryParse(ReadOptionValue(), out var count) || count < 0)
 						throw new ContainerizationException(2, Properties.Resources.Arguments_4_Message);
-					result.Tail = count;
+					result.TailLines = count;
 					break;
 				default:
 					throw new ContainerizationException(2, Properties.Resources.Arguments_5_Message);
 			}
 
-			string Value()
+			string ReadOptionValue()
 			{
 				if(++index >= arguments.Length || string.IsNullOrWhiteSpace(arguments[index]) || arguments[index].StartsWith('-'))
 					throw new ContainerizationException(2, Properties.Resources.Arguments_6_Message);
@@ -120,7 +120,7 @@ internal sealed class ExecutorArguments
 		{
 			if(positionals.Count != 1)
 				throw new ContainerizationException(2, Properties.Resources.Arguments_7_Message);
-			result.Input = positionals[0];
+			result.BundlePath = positionals[0];
 		}
 		else if(result.Command is "logs" or "restart")
 		{
@@ -133,10 +133,10 @@ internal sealed class ExecutorArguments
 
 		if(result.Command == "list" && result.Name != null)
 			throw new ContainerizationException(2, Properties.Resources.Arguments_10_Message);
-		if(result.Command is not ("list" or "install") && result.Name == null && result.From == null)
+		if(result.Command is not ("list" or "install") && result.Name == null && result.SourceBundlePath == null)
 			throw new ContainerizationException(2, Properties.Resources.Arguments_11_Message);
 		if(result.Name != null)
-			DeliveryBundle.Identity(result.Name);
+			DeliveryBundle.ValidateIdentity(result.Name);
 
 		return result;
 	}

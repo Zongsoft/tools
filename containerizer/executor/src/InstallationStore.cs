@@ -40,24 +40,24 @@ using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Execution;
 
-internal sealed class InstallationStore(string root = Installation.Paths.StateDirectory, string logs = Installation.Paths.LogDirectory, string cache = Installation.Paths.CacheDirectory, string runtime = Installation.Paths.RuntimeDirectory)
+internal sealed class InstallationStore(string stateRoot = Installation.Paths.StateDirectory, string logRoot = Installation.Paths.LogDirectory, string cacheRoot = Installation.Paths.CacheDirectory, string runtimeRoot = Installation.Paths.RuntimeDirectory)
 {
 	#region 公共属性
-	public string Root { get; } = Path.GetFullPath(root);
-	public string LogRoot { get; } = Path.GetFullPath(logs);
-	public string CacheRoot { get; } = Path.GetFullPath(cache);
-	public string RuntimeRoot { get; } = Path.GetFullPath(runtime);
+	public string StateRoot { get; } = Path.GetFullPath(stateRoot);
+	public string LogRoot { get; } = Path.GetFullPath(logRoot);
+	public string CacheRoot { get; } = Path.GetFullPath(cacheRoot);
+	public string RuntimeRoot { get; } = Path.GetFullPath(runtimeRoot);
 	#endregion
 
 	#region 公共方法
 	public string GetApplicationPath(string name)
 	{
-		DeliveryBundle.Identity(name);
-		return Files.Below(this.Root, $"apps/{name}");
+		DeliveryBundle.ValidateIdentity(name);
+		return Files.ResolveRelativePath(this.StateRoot, $"apps/{name}");
 	}
 
 	public string GetStatePath(string name) => Path.Combine(this.GetApplicationPath(name), "installation.json");
-	public string GetMigrationPath(string name, string version) => Files.Below(this.GetApplicationPath(name), $"migrations/{version}");
+	public string GetMigrationPath(string name, string version) => Files.ResolveRelativePath(this.GetApplicationPath(name), $"migrations/{version}");
 	public string GetLogPath(string name) => this.GetOwnedPath(this.LogRoot, name);
 	public string GetCachePath(string name) => this.GetOwnedPath(this.CacheRoot, name);
 	public Installation Load(string name, bool required = true)
@@ -75,32 +75,62 @@ internal sealed class InstallationStore(string root = Installation.Paths.StateDi
 
 	public void Save(Installation installation)
 	{
-		Files.PrivateDirectory(this.GetApplicationPath(installation.Name));
+		Files.CreatePrivateDirectory(this.GetApplicationPath(installation.Name));
 		Files.Save(this.GetStatePath(installation.Name), installation, ProtocolJson.Default.Installation);
 	}
 
-	public FileStream Lock(string name)
+	public void SaveHistory(Installation installation) => Files.Save(
+		Files.ResolveRelativePath(this.GetApplicationPath(installation.Name), $"releases/{installation.Current}/history.json"),
+		installation, ProtocolJson.Default.Installation);
+
+	public void DeleteAssets(string name)
 	{
-		DeliveryBundle.Identity(name);
+		var root = this.GetApplicationPath(name);
+		Files.EnsureNoLinks(root);
+
+		// Keep the registry until every asset has been removed; the lock lives outside this directory.
+		foreach(var path in Directory.EnumerateFileSystemEntries(root).Where(path => path != this.GetStatePath(name)))
+		{
+			Files.EnsureNoLinks(path);
+
+			if(Directory.Exists(path))
+			{
+				Files.ValidateTree(path);
+				Directory.Delete(path, true);
+			}
+			else
+				File.Delete(path);
+		}
+	}
+
+	public void DeleteRegistration(string name)
+	{
+		File.Delete(this.GetStatePath(name));
+		Directory.Delete(this.GetApplicationPath(name));
+	}
+
+	public FileStream AcquireApplicationLock(string name)
+	{
+		DeliveryBundle.ValidateIdentity(name);
 		return this.AcquireLock($"{name}.lock");
 	}
 
-	public FileStream HostLock() => this.AcquireLock(".host.lock");
+	public FileStream AcquireHostLock() => this.AcquireLock(".host.lock");
 	public IEnumerable<Installation> List()
 	{
-		var directory = Path.Combine(this.Root, "apps");
+		var directory = Path.Combine(this.StateRoot, "apps");
 		if(!Directory.Exists(directory))
 			yield break;
 
-		Files.NoLinks(directory);
+		Files.EnsureNoLinks(directory);
 		foreach(var app in Directory.EnumerateDirectories(directory).Order(StringComparer.Ordinal))
 			yield return this.Load(Path.GetFileName(app));
 	}
 
-	public string Stage(DeliveryBundle bundle)
+	public string StageBundle(DeliveryBundle bundle)
 	{
 		var releases = Path.Combine(this.GetApplicationPath(bundle.Plan.Name), "releases");
-		Files.PrivateDirectory(releases);
+		Files.CreatePrivateDirectory(releases);
 		var destination = Path.Combine(releases, bundle.Id);
 
 		if(Directory.Exists(destination))
@@ -109,18 +139,18 @@ internal sealed class InstallationStore(string root = Installation.Paths.StateDi
 			if(existing.Id != bundle.Id)
 				throw new ContainerizationException(4, Properties.Resources.InstallationStore_4_Message);
 
-			ReadOnlyMounts(existing);
+			SetReadOnlyMountPermissions(existing);
 			return Path.Combine(destination, "assets");
 		}
 
 		var staging = Path.Combine(releases, $".stage-{Guid.NewGuid().ToString("N")}");
-		Files.PrivateDirectory(staging);
+		Files.CreatePrivateDirectory(staging);
 
 		try
 		{
 			Files.CopyTree(bundle.Directory, Path.Combine(staging, "assets"));
 			using var verified = DeliveryBundle.Open(Path.Combine(staging, "assets"));
-			ReadOnlyMounts(verified);
+			SetReadOnlyMountPermissions(verified);
 
 			Directory.Move(staging, destination);
 			return Path.Combine(destination, "assets");
@@ -137,19 +167,19 @@ internal sealed class InstallationStore(string root = Installation.Paths.StateDi
 	#region 私有方法
 	private string GetOwnedPath(string root, string name)
 	{
-		DeliveryBundle.Identity(name);
-		return Files.Below(root, name);
+		DeliveryBundle.ValidateIdentity(name);
+		return Files.ResolveRelativePath(root, name);
 	}
 
-	private static void ReadOnlyMounts(DeliveryBundle bundle)
+	private static void SetReadOnlyMountPermissions(DeliveryBundle bundle)
 	{
 		if(OperatingSystem.IsWindows())
 			return;
 
 		foreach(var mount in bundle.Plan.Services.SelectMany(service => service.Mounts).Where(mount => mount.ReadOnly))
 		{
-			var path = Files.Below(bundle.Directory, mount.Source);
-			foreach(var file in Directory.Exists(path) ? Files.Enumerate(path) : [path])
+			var path = Files.ResolveRelativePath(bundle.Directory, mount.Source);
+			foreach(var file in Directory.Exists(path) ? Files.EnumerateFiles(path) : [path])
 				File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
 		}
 	}
@@ -157,8 +187,8 @@ internal sealed class InstallationStore(string root = Installation.Paths.StateDi
 	private FileStream AcquireLock(string filename)
 	{
 		var directory = this.RuntimeRoot;
-		Files.NoLinks(directory);
-		Files.PrivateDirectory(directory);
+		Files.EnsureNoLinks(directory);
+		Files.CreatePrivateDirectory(directory);
 
 		try
 		{

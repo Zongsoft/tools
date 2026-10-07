@@ -48,7 +48,7 @@ partial class Installation
 		public string Assets { get; set; }
 		public string Phase { get; set; } = "StageInstallation";
 		public bool Failed { get; set; }
-		public bool Reinstall { get; set; }
+		public bool IsReinstall { get; set; }
 		public List<string> Completed { get; set; } = [];
 		public List<OperationEvent> Events { get; set; } = [];
 		#endregion

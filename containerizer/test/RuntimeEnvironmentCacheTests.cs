@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
@@ -11,7 +12,6 @@ using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
-[Collection("Build cleanup")]
 public sealed class RuntimeEnvironmentCacheTests : IDisposable
 {
 	#region 成员字段
@@ -20,12 +20,21 @@ public sealed class RuntimeEnvironmentCacheTests : IDisposable
 	#endregion
 
 	#region 公共方法
+	public RuntimeEnvironmentCacheTests() => Directory.CreateDirectory(_root);
 	public void Dispose() => Directory.Delete(_root, true);
+
+	[Fact]
+	public void InstalledRuntimeSelectsACompatibleStableVersion()
+	{
+		Assert.Equal("dotnet-runtime-10.0.8", RuntimeEnvironmentCache.GetInstalledRuntime("dotnet-runtime-10.0.0",
+			"Microsoft.NETCore.App 9.0.9 [/usr/share/dotnet]\nMicrosoft.NETCore.App 10.0.8 [/usr/share/dotnet]\nMicrosoft.NETCore.App 10.0.10-preview [/usr/share/dotnet]\n"));
+		Assert.Throws<ContainerizationException>(() => RuntimeEnvironmentCache.GetInstalledRuntime("dotnet-runtime-10.0.2", "Microsoft.NETCore.App 10.0.1 [/usr/share/dotnet]\n"));
+	}
 
 	[Theory]
 	[InlineData("podman")]
 	[InlineData("docker")]
-	public async Task ReusesVerifiedEnvironmentAcrossBuildsWithoutCachingApplicationInputs(string engine)
+	public async Task ReusesVerifiedEnvironmentAcrossBuildsWithoutCachingApplicationInputsAsync(string engine)
 	{
 		await this.PrepareAsync(engine);
 		await this.PrepareAsync(engine);
@@ -44,14 +53,14 @@ public sealed class RuntimeEnvironmentCacheTests : IDisposable
 	}
 
 	[Fact]
-	public async Task RefreshReplacesOnlyTheRequiredEnvironmentOncePerInvocation()
+	public async Task RefreshReplacesOnlyTheRequiredEnvironmentOncePerInvocationAsync()
 	{
 		await this.PrepareAsync("podman");
 		await this.PrepareAsync("podman", runtime: "aspnetcore-runtime-10.0.0");
 
 		var cache = new RuntimeEnvironmentCache(new("podman", _runner), Path.Combine(_root, "cache"), true);
-		await cache.PrepareAsync("debian@13", "x64", "dotnet-runtime-10.0.0", this.NewContext(), TestContext.Current.CancellationToken);
-		await cache.PrepareAsync("debian@13", "x64", "dotnet-runtime-10.0.0", this.NewContext(), TestContext.Current.CancellationToken);
+		await cache.PrepareAsync("debian@13", "x64", "dotnet-runtime-10.0.0", this.GetNewContextPath(), TestContext.Current.CancellationToken);
+		await cache.PrepareAsync("debian@13", "x64", "dotnet-runtime-10.0.0", this.GetNewContextPath(), TestContext.Current.CancellationToken);
 
 		Assert.Equal(3, _runner.Builds);
 		Assert.Equal(2, Directory.GetFiles(Path.Combine(_root, "cache"), "*.tar", SearchOption.AllDirectories).Length);
@@ -64,7 +73,7 @@ public sealed class RuntimeEnvironmentCacheTests : IDisposable
 	[InlineData("cancel")]
 	[InlineData("platform")]
 	[InlineData("volumes")]
-	public async Task FailedRefreshPreservesOldCacheAndCleansAttemptResources(string failure)
+	public async Task FailedRefreshPreservesOldCacheAndCleansAttemptResourcesAsync(string failure)
 	{
 		await this.PrepareAsync("podman");
 		var metadata = Assert.Single(Directory.GetFiles(Path.Combine(_root, "cache"), "environment.json", SearchOption.AllDirectories));
@@ -91,7 +100,7 @@ public sealed class RuntimeEnvironmentCacheTests : IDisposable
 	[InlineData("recipe")]
 	[InlineData("minimum")]
 	[InlineData("base")]
-	public async Task InvalidOrInsufficientEnvironmentIsRebuilt(string change)
+	public async Task InvalidOrInsufficientEnvironmentIsRebuiltAsync(string change)
 	{
 		await this.PrepareAsync("podman");
 		var archive = Assert.Single(Directory.GetFiles(Path.Combine(_root, "cache"), "*.tar", SearchOption.AllDirectories));
@@ -106,16 +115,16 @@ public sealed class RuntimeEnvironmentCacheTests : IDisposable
 
 		if(change == "environment")
 		{
-			var record = Files.Load(metadata, RuntimeEnvironmentCache.CacheJson.Default.Record);
-			record.Environment = ["invalid"];
-			Files.Save(metadata, record, RuntimeEnvironmentCache.CacheJson.Default.Record);
+			var record = JsonNode.Parse(File.ReadAllText(metadata));
+			record["Environment"] = new JsonArray("invalid");
+			File.WriteAllText(metadata, record.ToJsonString());
 		}
 
 		if(change == "recipe")
 		{
-			var record = Files.Load(metadata, RuntimeEnvironmentCache.CacheJson.Default.Record);
-			record.Signature = "obsolete";
-			Files.Save(metadata, record, RuntimeEnvironmentCache.CacheJson.Default.Record);
+			var record = JsonNode.Parse(File.ReadAllText(metadata));
+			record["Signature"] = "obsolete";
+			File.WriteAllText(metadata, record.ToJsonString());
 		}
 
 		if(change == "base")
@@ -128,17 +137,17 @@ public sealed class RuntimeEnvironmentCacheTests : IDisposable
 	}
 
 	[Fact]
-	public async Task ConcurrentBuildWaitsAndCancellationDoesNotDamageCurrentCache()
+	public async Task ConcurrentBuildWaitsAndCancellationDoesNotDamageCurrentCacheAsync()
 	{
 		await this.PrepareAsync("podman");
-		var profile = RuntimeEnvironmentCache.Profile("debian@13", "x64", "dotnet-runtime-10.0.0");
 		var cacheRoot = Path.Combine(_root, "cache");
+		var cacheDirectory = Path.GetDirectoryName(Assert.Single(Directory.GetFiles(cacheRoot, "environment.json", SearchOption.AllDirectories)));
 
-		using var locked = BuildStorage.Lock(Path.Combine(cacheRoot, "runtime", "podman", profile), cacheRoot);
+		using var locked = BuildStorage.AcquireLock(cacheDirectory, cacheRoot);
 		using var cancellation = new CancellationTokenSource();
 
 		var cache = new RuntimeEnvironmentCache(new("podman", _runner), cacheRoot);
-		var waiting = cache.PrepareAsync("debian@13", "x64", "dotnet-runtime-10.0.0", this.NewContext(), cancellation.Token);
+		var waiting = cache.PrepareAsync("debian@13", "x64", "dotnet-runtime-10.0.0", this.GetNewContextPath(), cancellation.Token);
 
 		Assert.False(waiting.IsCompleted);
 		cancellation.Cancel();
@@ -150,12 +159,13 @@ public sealed class RuntimeEnvironmentCacheTests : IDisposable
 	}
 
 	[Fact]
-	public async Task ConcurrentBuildersShareTheFirstCompletedEnvironment()
+	public async Task ConcurrentBuildersShareTheFirstCompletedEnvironmentAsync()
 	{
-		Directory.CreateDirectory(_root);
+		await this.PrepareAsync("podman");
 		var cacheRoot = Path.Combine(_root, "cache");
-		var profile = RuntimeEnvironmentCache.Profile("debian@13", "x64", "dotnet-runtime-10.0.0");
-		using var locked = BuildStorage.Lock(Path.Combine(cacheRoot, "runtime", "podman", profile), cacheRoot);
+		var archive = Assert.Single(Directory.GetFiles(cacheRoot, "*.tar", SearchOption.AllDirectories));
+		File.Delete(archive);
+		using var locked = BuildStorage.AcquireLock(Path.GetDirectoryName(archive), cacheRoot);
 		var first = this.PrepareAsync("podman");
 		var second = this.PrepareAsync("podman");
 
@@ -165,13 +175,13 @@ public sealed class RuntimeEnvironmentCacheTests : IDisposable
 		locked.Dispose();
 		await Task.WhenAll(first, second);
 
-		Assert.Equal(1, _runner.Builds);
+		Assert.Equal(2, _runner.Builds);
 		Assert.Empty(_runner.Images);
 		Assert.Empty(_runner.Containers);
 	}
 
 	[Fact]
-	public async Task EngineAndRuntimeFamiliesUseSeparateCaches()
+	public async Task EngineAndRuntimeFamiliesUseSeparateCachesAsync()
 	{
 		await this.PrepareAsync("podman");
 		await this.PrepareAsync("docker");
@@ -180,15 +190,26 @@ public sealed class RuntimeEnvironmentCacheTests : IDisposable
 
 		Assert.Equal(4, _runner.Builds);
 		Assert.Equal(4, Directory.GetFiles(Path.Combine(_root, "cache"), "*.tar", SearchOption.AllDirectories).Length);
-		Assert.NotEqual(RuntimeEnvironmentCache.Profile("debian@12", "arm64", null), RuntimeEnvironmentCache.Profile("debian@13", "x64", null));
+	}
+
+	[Theory]
+	[InlineData("ubuntu@22.04", "dotnet-runtime-10.0.0", "ppa:dotnet/backports")]
+	[InlineData("debian@13", null, "apt-get install -y --no-install-recommends ca-certificates curl")]
+	[InlineData("rocky@9", null, "command -v curl >/dev/null 2>&1 || dnf install -y curl-minimal")]
+	public async Task EnvironmentRecipeInstallsRequiredRuntimeAndProbeDependenciesAsync(string distribution, string runtime, string expected)
+	{
+		await new RuntimeEnvironmentCache(new("podman", _runner), Path.Combine(_root, "cache"))
+			.PrepareAsync(distribution, "x64", runtime, this.GetNewContextPath(), TestContext.Current.CancellationToken);
+
+		Assert.Contains(expected, Assert.Single(_runner.Recipes));
 	}
 	#endregion
 
 	#region 私有方法
-	private string NewContext() => Path.Combine(_root, $"build-{Guid.NewGuid():N}");
+	private string GetNewContextPath() => Path.Combine(_root, $"build-{Guid.NewGuid():N}");
 	private Task<ImagePlan> PrepareAsync(string engine, bool refresh = false, string runtime = "dotnet-runtime-10.0.0") =>
 		new RuntimeEnvironmentCache(new(engine, _runner), Path.Combine(_root, "cache"), refresh)
-			.PrepareAsync("debian@13", "x64", runtime, this.NewContext(), TestContext.Current.CancellationToken);
+			.PrepareAsync("debian@13", "x64", runtime, this.GetNewContextPath(), TestContext.Current.CancellationToken);
 	#endregion
 
 	#region 嵌套类型
@@ -203,6 +224,8 @@ public sealed class RuntimeEnvironmentCacheTests : IDisposable
 		public HashSet<string> Images { get; } = [];
 		public HashSet<string> Containers { get; } = [];
 		public HashSet<string> Builders { get; } = [];
+
+		public Task<int> StreamAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation) => throw new NotSupportedException();
 
 		public Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation, int timeoutSeconds = 900)
 		{
@@ -220,7 +243,7 @@ public sealed class RuntimeEnvironmentCacheTests : IDisposable
 				{
 					Id = $"sha256:{new string('b', 64)}", Os = "linux",
 					Architecture = preparing && this.Failure == "platform" ? "arm64" : "amd64", Digest = this.Digest,
-					RepoDigests = new[] { $"docker.io/library/debian@{this.Digest}" },
+					RepoDigests = new[] { $"{ImageReference.GetRepository(args[^1])}@{this.Digest}" },
 					Config = new
 					{
 						Env = new[] { "PATH=/usr/bin:/bin" },

@@ -41,20 +41,20 @@ using Zongsoft.Terminals;
 
 namespace Zongsoft.Tools.Containerizer;
 
-internal sealed class BuildResources(ContainerEngine engine) : IAsyncDisposable
+internal sealed class BuildResources(ContainerEngine engine, Action<string> error = null) : IAsyncDisposable
 {
 	private readonly List<(ResourceKind Kind, string Name)> _resources = [];
 
-	public string Image() => this.Add(ResourceKind.Image);
-	public string Container() => this.Add(ResourceKind.Container);
-	public string Builder() => this.Add(ResourceKind.Builder);
+	public string RegisterImage() => this.RegisterResource(ResourceKind.Image);
+	public string RegisterContainer() => this.RegisterResource(ResourceKind.Container);
+	public string RegisterBuilder() => this.RegisterResource(ResourceKind.Builder);
 
 	public async ValueTask DisposeAsync()
 	{
 		for(int index = _resources.Count - 1; index >= 0; index--)
 		{
 			var resource = _resources[index];
-			var timeout = resource.Kind == ResourceKind.Builder ? 120 : 30;
+			var timeoutSeconds = resource.Kind == ResourceKind.Builder ? 120 : 30;
 
 			try
 			{
@@ -63,7 +63,7 @@ internal sealed class BuildResources(ContainerEngine engine) : IAsyncDisposable
 					ResourceKind.Image => ["image", "rm", resource.Name],
 					ResourceKind.Container => ["container", "rm", "--volumes", resource.Name],
 					_ => ["buildx", "rm", resource.Name],
-				}, null, CancellationToken.None, timeout);
+				}, null, CancellationToken.None, timeoutSeconds);
 			}
 			catch(Exception exception)
 			{
@@ -85,14 +85,14 @@ internal sealed class BuildResources(ContainerEngine engine) : IAsyncDisposable
 				}
 				catch(Exception) { }
 
-				Terminal.Default.Error.WriteLine(string.Format(Properties.Resources.BuildResources_Cleanup_Message, resource.Name, engine.Executable, exception.Message));
+				(error ?? Terminal.Default.Error.WriteLine)(string.Format(Properties.Resources.BuildResources_Cleanup_Message, resource.Name, engine.Executable, exception.Message));
 			}
 		}
 
 		_resources.Clear();
 	}
 
-	private string Add(ResourceKind kind)
+	private string RegisterResource(ResourceKind kind)
 	{
 		var name = $"containerizer-build-{Guid.NewGuid().ToString("N")}";
 

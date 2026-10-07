@@ -46,7 +46,7 @@ namespace Zongsoft.Tools.Containerizer;
 internal sealed partial class RunContext
 {
 	#region 常量定义
-	internal const string OWNER_LABEL = "org.zongsoft.containerizer.run";
+	private const string OWNER_LABEL = "org.zongsoft.containerizer.run";
 	private const string APPLICATION_LABEL = "org.zongsoft.containerizer.application";
 	#endregion
 
@@ -54,34 +54,31 @@ internal sealed partial class RunContext
 	private readonly ContainerEngine _engine;
 	private readonly DeliveryBundle _bundle;
 	private readonly Action<CommandOutletContent> _output;
-	private readonly Func<string, IReadOnlyList<string>, string, CancellationToken, Task<int>> _stream;
-	private readonly string _identity = Guid.NewGuid().ToString("N");
-	private readonly string _workspace = Path.Combine(Path.GetTempPath(), $"containerizer-run-{Guid.NewGuid():N}");
+	private readonly string _sessionId = Guid.NewGuid().ToString("N");
+	private readonly string _workspaceDirectory = Path.Combine(Path.GetTempPath(), $"containerizer-run-{Guid.NewGuid():N}");
 	private readonly List<Endpoint> _endpoints;
-	private bool _created;
-	private ImageCache _cache;
+	private bool _containerCreated;
+	private ImageCache _imageCache;
 	#endregion
 
 	#region 构造函数
-	internal RunContext(ContainerEngine engine, DeliveryBundle bundle, Action<CommandOutletContent> output,
-		Func<string, IReadOnlyList<string>, string, CancellationToken, Task<int>> stream = null)
+	internal RunContext(ContainerEngine engine, DeliveryBundle bundle, Action<CommandOutletContent> output)
 	{
 		_engine = engine;
 		_bundle = bundle;
 		_output = output;
-		_stream = stream ?? ProcessRunner.StreamAsync;
 		_endpoints = Endpoint.Create(bundle.Plan);
 	}
 	#endregion
 
-	#region 公共属性
-	public string Name => $"containerizer-run-{_identity}";
+	#region 私有属性
+	private string Name => $"containerizer-run-{_sessionId}";
 	#endregion
 
 	#region 公共方法
 	public async Task<int> ExecuteAsync(CancellationToken cancellation)
 	{
-		using var appLock = this.Lock();
+		using var appLock = this.AcquireSessionLock();
 
 		var existing = await _engine.RunAsync(
 		[
@@ -99,42 +96,42 @@ internal sealed partial class RunContext
 			throw new ContainerizationException(3, string.Format(Properties.Resources.Run_Existing_Message, existing.Trim(), _engine.Executable));
 
 		var code = 130;
-		Files.PrivateDirectory(_workspace);
+		Files.CreatePrivateDirectory(_workspaceDirectory);
 
 		try
 		{
-			await this.CheckArchitectureAsync(cancellation);
+			await this.ValidateArchitectureAsync(cancellation);
 			string image;
 
 			using(Output.Measure(_output, Properties.Resources.Run_StageBase))
-				image = await this.PrepareBaseAsync(cancellation);
+				image = await this.PrepareBaseImageAsync(cancellation);
 
-			_cache = new ImageCache(_engine, _bundle.Plan, _identity);
+			_imageCache = new ImageCache(_engine, _bundle.Plan, _sessionId);
 
 			using(Output.Measure(_output, Properties.Resources.Run_StageCache))
-				await _cache.PrepareAsync(image, cancellation);
+				await _imageCache.PrepareAsync(image, cancellation);
 
-			await this.StartAsync(image, cancellation);
+			await this.StartContainerAsync(image, cancellation);
 
-			_output(Output.Message(Properties.Resources.Run_Container, this.Name, _engine.Executable, BootstrapPlan.ENGINE));
+			_output(Output.FormatMessage(Properties.Resources.Run_Container, this.Name, _engine.Executable, BootstrapPlan.ENGINE));
 
 			using(Output.Measure(_output, Properties.Resources.Run_StageInstall))
-				await this.InstallAsync(cancellation);
+				await this.InstallDeliveryAsync(cancellation);
 
 			using(Output.Measure(_output, Properties.Resources.Run_StageForward))
-				await this.ForwardAsync(cancellation);
+				await this.ForwardEndpointsAsync(cancellation);
 
-			_output(Output.Message(string.Empty));
-			_output(Output.Message(Properties.Resources.Run_Ready, CommandOutletColor.Green, _bundle.Plan.Name));
-			_output(Output.Message(Properties.Resources.Run_ReadyHint, "Ctrl+C"));
+			_output(Output.FormatMessage(string.Empty));
+			_output(Output.FormatMessage(Properties.Resources.Run_Ready, CommandOutletColor.Green, _bundle.Plan.Name));
+			_output(Output.FormatMessage(Properties.Resources.Run_ReadyHint, "Ctrl+C"));
 			code = 0;
 			await Task.Delay(Timeout.Infinite, cancellation);
 		}
 		catch(OperationCanceledException) when(cancellation.IsCancellationRequested) { }
-		catch(Exception exception) when(_created)
+		catch(Exception exception) when(_containerCreated)
 		{
 			code = exception is ContainerizationException failure ? failure.Code : 4;
-			_output(Output.Message(Properties.Resources.Run_Failed, CommandOutletColor.Magenta, exception.Message, this.Name));
+			_output(Output.FormatMessage(Properties.Resources.Run_Failed, CommandOutletColor.Magenta, exception.Message, this.Name));
 
 			try
 			{
@@ -147,17 +144,17 @@ internal sealed partial class RunContext
 			try
 			{
 				await this.CleanupAsync();
-				_output(Output.Message(Properties.Resources.Run_Cleaned, this.Name));
+				_output(Output.FormatMessage(Properties.Resources.Run_Cleaned, this.Name));
 			}
 			catch(Exception exception)
 			{
-				_output(Output.Message(Properties.Resources.Run_CleanupFailed, CommandOutletColor.Magenta, this.Name, exception.Message));
+				_output(Output.FormatMessage(Properties.Resources.Run_CleanupFailed, CommandOutletColor.Magenta, this.Name, exception.Message));
 
 				if(code == 0)
 					code = 4;
 			}
 
-			Directory.Delete(_workspace, true);
+			Directory.Delete(_workspaceDirectory, true);
 		}
 
 		return code;
@@ -165,11 +162,11 @@ internal sealed partial class RunContext
 	#endregion
 
 	#region 私有方法
-	private FileStream Lock()
+	private FileStream AcquireSessionLock()
 	{
 		try
 		{
-			return BuildStorage.Lock(Path.Combine(BuildStorage.CacheRoot, "run", _bundle.Plan.Name));
+			return BuildStorage.AcquireLock(Path.Combine(BuildStorage.CacheRoot, "run", _bundle.Plan.Name));
 		}
 		catch(IOException exception)
 		{
@@ -180,17 +177,17 @@ internal sealed partial class RunContext
 	private async Task CleanupAsync()
 	{
 		// An interrupted create can leave a container even if the CLI never returned its ID.
-		if(_cache != null && _created)
+		if(_imageCache != null && _containerCreated)
 		{
 			using var imageCleanup = new CancellationTokenSource(TimeSpan.FromSeconds(60));
 
 			try
 			{
-				await _cache.CleanAsync(this.Name, imageCleanup.Token);
+				await _imageCache.CleanAsync(this.Name, imageCleanup.Token);
 			}
 			catch(Exception exception)
 			{
-				_output(Output.Message(Properties.Resources.Run_CacheDiscarded, CommandOutletColor.Magenta, _cache.Name, exception.Message));
+				_output(Output.FormatMessage(Properties.Resources.Run_CacheDiscarded, CommandOutletColor.Magenta, _imageCache.Name, exception.Message));
 			}
 		}
 
@@ -203,12 +200,12 @@ internal sealed partial class RunContext
 		}
 		catch(Exception exception) { failures.Add(exception); }
 
-		if(_cache != null)
+		if(_imageCache != null)
 		{
 			try
 			{
 				using var cacheCleanup = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-				await _cache.ReleaseAsync(cacheCleanup.Token);
+				await _imageCache.ReleaseAsync(cacheCleanup.Token);
 			}
 			catch(Exception exception) { failures.Add(exception); }
 		}
@@ -219,7 +216,7 @@ internal sealed partial class RunContext
 
 	private async Task RemoveContainersAsync(CancellationToken cancellation)
 	{
-		var owned = await _engine.RunAsync(["ps", "--all", "--filter", $"label={OWNER_LABEL}={_identity}", "--format", "{{.ID}}"], null, cancellation, 20);
+		var owned = await _engine.RunAsync(["ps", "--all", "--filter", $"label={OWNER_LABEL}={_sessionId}", "--format", "{{.ID}}"], null, cancellation, 20);
 		var failures = new List<Exception>();
 
 		foreach(var id in owned.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
@@ -234,7 +231,7 @@ internal sealed partial class RunContext
 		if(failures.Count != 0)
 			throw new AggregateException(failures);
 
-		_created = false;
+		_containerCreated = false;
 	}
 	#endregion
 }

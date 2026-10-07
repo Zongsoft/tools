@@ -11,11 +11,10 @@ using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
-[Collection("Build cleanup")]
 public sealed class ContainerEngineBuildTests
 {
 	[Fact]
-	public async Task PodmanDoesNotPersistIntermediateLayers()
+	public async Task PodmanDoesNotPersistIntermediateLayersAsync()
 	{
 		var runner = new BuildRunner();
 		await new ContainerEngine("podman", runner).BuildAsync("context", "linux/arm64", "application", CancellationToken.None, "final");
@@ -29,7 +28,7 @@ public sealed class ContainerEngineBuildTests
 	}
 
 	[Fact]
-	public async Task DockerDisposesEachPrivateBuilderAndItsCacheWithoutChangingTheDefault()
+	public async Task DockerDisposesEachPrivateBuilderAndItsCacheWithoutChangingTheDefaultAsync()
 	{
 		var runner = new BuildRunner();
 		var engine = new ContainerEngine("docker", runner);
@@ -51,7 +50,7 @@ public sealed class ContainerEngineBuildTests
 	[InlineData("create")]
 	[InlineData("build")]
 	[InlineData("cancel")]
-	public async Task DockerMirrorConfigurationAndPrivateBuilderAreRemovedAfterEveryOutcome(string failure)
+	public async Task DockerMirrorConfigurationAndPrivateBuilderAreRemovedAfterEveryOutcomeAsync(string failure)
 	{
 		using var cancellation = new CancellationTokenSource();
 		var runner = new BuildRunner { MirrorFlow = true, Failure = failure, Cancellation = cancellation };
@@ -75,12 +74,12 @@ public sealed class ContainerEngineBuildTests
 	}
 
 	[Fact]
-	public async Task PodmanMirrorBuildUsesTheVerifiedLocalBaseWithoutRegistryAccess()
+	public async Task PodmanMirrorBuildUsesTheVerifiedLocalBaseWithoutRegistryAccessAsync()
 	{
 		var runner = new BuildRunner();
 		var engine = new ContainerEngine("podman", runner) { Mirrors = new() { Registries = new() { ["docker.io"] = ["mirror.example.com"] } } };
 		var image = new ImagePlan { Id = $"sha256:{new string('a', 64)}", Repository = "docker.io/library/debian", Digest = $"sha256:{new string('b', 64)}" };
-		Assert.Equal(image.Id, engine.BuildReference(image));
+		Assert.Equal(image.Id, engine.GetBuildReference(image));
 		await engine.BuildAsync("context", "linux/amd64", "application", TestContext.Current.CancellationToken);
 		Assert.Contains("--pull=never", Assert.Single(runner.Calls));
 	}
@@ -89,7 +88,7 @@ public sealed class ContainerEngineBuildTests
 	[InlineData("create")]
 	[InlineData("build")]
 	[InlineData("cancel")]
-	public async Task DockerCleansPartialBuildersAndCachesWhenCreationOrBuildingFails(string failure)
+	public async Task DockerCleansPartialBuildersAndCachesWhenCreationOrBuildingFailsAsync(string failure)
 	{
 		using var cancellation = new CancellationTokenSource();
 		var runner = new BuildRunner { Failure = failure, Cancellation = cancellation };
@@ -117,6 +116,8 @@ public sealed class ContainerEngineBuildTests
 		public List<string[]> Calls { get; } = [];
 		public HashSet<string> Builders { get; } = [];
 		public HashSet<string> Caches { get; } = ["shared-cache"];
+
+		public Task<int> StreamAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation) => throw new NotSupportedException();
 
 		public Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation, int timeoutSeconds = 900)
 		{

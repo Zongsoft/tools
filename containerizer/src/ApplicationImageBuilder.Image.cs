@@ -49,7 +49,7 @@ partial class ApplicationImageBuilder
 	private static void PrepareImage(string path, PackageReader.Descriptor package, ServiceBuildContext source, string distribution, string directory)
 	{
 		var input = Path.Combine(directory, "input");
-		Files.PrivateDirectory(input);
+		Files.CreatePrivateDirectory(input);
 
 		var filename = Path.GetFileName(path);
 		File.Copy(path, Path.Combine(input, filename));
@@ -59,16 +59,16 @@ partial class ApplicationImageBuilder
 
 		var nativeInstall = package.Format switch
 		{
-			"deb" => $"apt-get update && apt-get install -y --no-install-recommends {Quote($"/input/{filename}")}",
-			"rpm" => $"dnf install -y {Quote($"/input/{filename}")}",
-			_ => $"sh {Quote($"/input/{filename[..^7]}.sh")}",
+			"deb" => $"apt-get update && apt-get install -y --no-install-recommends {ShellUtility.QuoteArgument($"/input/{filename}")}",
+			"rpm" => $"dnf install -y {ShellUtility.QuoteArgument($"/input/{filename}")}",
+			_ => $"sh {ShellUtility.QuoteArgument($"/input/{filename[..^7]}.sh")}",
 		};
 
-		var debian = Distribution.IsDebian(distribution);
+		var debian = Distribution.IsDebianFamily(distribution);
 		if(package.Format == "deb" && !debian || package.Format == "rpm" && debian)
 			throw new ContainerizationException(2, Properties.Resources.ApplicationBuilder_1_Message);
 
-		var root = TemplateCatalog.LinuxPath(source.Plan.WorkingDirectory);
+		var root = Files.NormalizeLinuxPath(source.Plan.WorkingDirectory);
 		var dockerfile = new StringBuilder()
 			.AppendLine("FROM scratch AS installed")
 			.AppendLine("ADD runtime.tar /")
@@ -78,7 +78,7 @@ partial class ApplicationImageBuilder
 			.AppendLine($"RUN {nativeInstall}");
 
 		dockerfile.Append("RUN rm -rf /input /tmp/* /var/tmp/* /var/log/* /var/cache/apt/* /var/lib/apt/lists/* /var/cache/dnf/* /var/lib/rpm /usr/lib/sysimage/rpm /var/lib/dpkg/info /etc/systemd/system /usr/lib/systemd/system; ")
-			.AppendLine($"find {Quote(root)} -type f \\( -name '*.log' -o -name '*.bak' -o -name '*.old' \\) -delete")
+			.AppendLine($"find {ShellUtility.QuoteArgument(root)} -type f \\( -name '*.log' -o -name '*.bak' -o -name '*.old' \\) -delete")
 			.AppendLine("FROM scratch AS final")
 			.AppendLine("COPY --from=installed / /")
 			.AppendLine($"WORKDIR {root}")

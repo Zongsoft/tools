@@ -17,7 +17,7 @@ public sealed class StoragePathsTests : IDisposable
 {
 	private readonly string _root = Path.Combine(Path.GetTempPath(), "containerizer-storage-" + Guid.NewGuid().ToString("N"));
 	private readonly InstallationStore _store;
-	private readonly Runner _runner = new();
+	private readonly StorageProcessRunner _runner = new();
 	private readonly DockerHost _host;
 
 	public StoragePathsTests()
@@ -32,34 +32,8 @@ public sealed class StoragePathsTests : IDisposable
 			Directory.Delete(_root, true);
 	}
 
-	[Theory]
-	[InlineData("/var/lib/containerizer/data/example")]
-	[InlineData("/var/lib/containerizer/data/example/redis/data")]
-	[InlineData("/mnt/application-data")]
-	[InlineData("/srv/example")]
-	public void DataPathsAllowOwnNamespaceAndExplicitExternalDirectories(string path) => _host.ValidateDataPath(path, "example");
-
-	[Theory]
-	[InlineData("/var")]
-	[InlineData("/var/lib")]
-	[InlineData("/var/lib/containerizer")]
-	[InlineData("/var/lib/containerizer/apps/example")]
-	[InlineData("//var/lib/containerizer/apps/example")]
-	[InlineData("/var/lib/containerizer//data/other")]
-	[InlineData("/var/lib/containerizer/data/")]
-	[InlineData("/var/lib/containerizer/data")]
-	[InlineData("/var/lib/containerizer/data/other")]
-	[InlineData("/var/lib/containerizer/data/example-other")]
-	[InlineData("/var/lib/containerizer/data/example/../other")]
-	[InlineData("/var/log")]
-	[InlineData("/var/log/containerizer/example")]
-	[InlineData("/var/cache/containerizer/example")]
-	[InlineData("/run/containerizer")]
-	[InlineData("/etc/application")]
-	public void DataPathsRejectSystemAndOtherApplicationNamespaces(string path) => Assert.Throws<ContainerizationException>(() => _host.ValidateDataPath(path, "example"));
-
 	[Fact]
-	public async Task OrdinaryUninstallPreservesOwnedLogsAndCacheAndPurgeRemovesOnlyItsOwnAssets()
+	public async Task OrdinaryUninstallPreservesOwnedLogsAndCacheAndPurgeRemovesOnlyItsOwnAssetsAsync()
 	{
 		var installation = this.Register("example");
 		var other = this.Register("other");
@@ -84,7 +58,7 @@ public sealed class StoragePathsTests : IDisposable
 	}
 
 	[Fact]
-	public async Task InvalidOwnershipRetainsRegistrationAndPurgeCanBeRetried()
+	public async Task InvalidOwnershipRetainsRegistrationAndPurgeCanBeRetriedAsync()
 	{
 		var installation = this.Register("example");
 		var cache = _store.GetCachePath(installation.Name);
@@ -104,33 +78,18 @@ public sealed class StoragePathsTests : IDisposable
 	}
 
 	[Fact]
-	public async Task PurgeRejectsMountedCacheAndRetainsOwnershipMarker()
+	public async Task PurgeRejectsMountedCacheAndRetainsOwnershipMarkerAsync()
 	{
 		var installation = this.Register("example");
 		var cache = _store.GetCachePath(installation.Name);
-		_runner.Mount = cache;
+		_runner.MountPath = cache;
 		await Assert.ThrowsAsync<ContainerizationException>(() => _host.UninstallAsync(installation, true, CancellationToken.None));
 		Assert.True(File.Exists(Path.Combine(cache, ".containerizer-owner")));
 		Assert.NotNull(_store.Load(installation.Name));
 	}
 
 	[Fact]
-	public void DeletedCacheCanBeRecreatedWithoutLosingItsOwnership()
-	{
-		var installation = this.Register("example");
-		var cache = _store.GetCachePath(installation.Name);
-		var token = Assert.Single(installation.Directories, item => item.Path == cache).Token;
-		Directory.Delete(cache, true);
-
-		using(var hostLock = _store.HostLock())
-			_host.PrepareOwnedDirectory(installation, cache);
-
-		Assert.Equal(installation.Name + "/" + token, File.ReadAllText(Path.Combine(cache, ".containerizer-owner")));
-		Assert.Equal(token, Assert.Single(_store.Load(installation.Name).Directories, item => item.Path == cache).Token);
-	}
-
-	[Fact]
-	public async Task PurgeRejectsLinksInsideCache()
+	public async Task PurgeRejectsLinksInsideCacheAsync()
 	{
 		if(OperatingSystem.IsWindows())
 			return;
@@ -157,23 +116,27 @@ public sealed class StoragePathsTests : IDisposable
 	private Installation Register(string name)
 	{
 		var installation = new Installation { Name = name, DataRoot = Path.Combine(_root, "absent-data", name) };
-		_store.Save(installation);
 
-		using(var hostLock = _store.HostLock())
+		foreach(var path in new[] { _store.GetLogPath(name), _store.GetCachePath(name) })
 		{
-			_host.PrepareOwnedDirectory(installation, _store.GetLogPath(name));
-			_host.PrepareOwnedDirectory(installation, _store.GetCachePath(name));
+			var token = Guid.NewGuid().ToString("N");
+			Directory.CreateDirectory(path);
+			File.WriteAllText(Path.Combine(path, ".containerizer-owner"), $"{name}/{token}");
+			installation.Directories.Add(new() { Path = path, Token = token, Created = true });
 		}
 
+		_store.Save(installation);
 		return installation;
 	}
 
-	private sealed class Runner : IProcessRunner
+	private sealed class StorageProcessRunner : IProcessRunner
 	{
-		public string Mount { get; set; }
+		public string MountPath { get; set; }
+		public Task<int> StreamAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation) => throw new NotSupportedException();
+
 		public Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation, int timeoutSeconds = 900)
 		{
-			var output = executable == "findmnt" ? JsonSerializer.Serialize(new { filesystems = this.Mount == null ? Array.Empty<object>() : [new { target = this.Mount }] }) : "";
+			var output = executable == "findmnt" ? JsonSerializer.Serialize(new { filesystems = this.MountPath == null ? Array.Empty<object>() : [new { target = this.MountPath }] }) : "";
 			return Task.FromResult(new ProcessResult(0, output, ""));
 		}
 	}

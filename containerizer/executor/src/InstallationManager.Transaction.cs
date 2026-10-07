@@ -45,12 +45,17 @@ namespace Zongsoft.Tools.Containerizer.Execution;
 
 partial class InstallationManager
 {
-	#region 内部方法
-	internal static string GetPhaseText(string phase) => Properties.Resources.ResourceManager.GetString($"Installation.Phase.{phase}", Properties.Resources.Culture) ?? phase;
-	#endregion
-
 	#region 私有方法
-	private async Task PhaseAsync(Installation installation, string phase, Func<Task> action)
+	private static string GetPhaseText(string phase) => Properties.Resources.ResourceManager.GetString($"Installation.Phase.{phase}", Properties.Resources.Culture) ?? phase;
+
+	private async Task EnterMaintenanceAsync(Installation installation, CancellationToken cancellation)
+	{
+		installation.IsInMaintenance = true;
+		store.Save(installation);
+		await host.StopApplicationsAsync(installation, cancellation);
+	}
+
+	private async Task ExecutePhaseAsync(Installation installation, string phase, Func<Task> action)
 	{
 		installation.Pending.Phase = phase;
 		installation.Pending.Events.Add(new() { Phase = phase, Result = "Started" });
@@ -66,11 +71,11 @@ partial class InstallationManager
 		store.Save(installation);
 	}
 
-	private async Task FailAsync(Installation installation, Exception exception, bool stop = true)
+	private async Task FailAsync(Installation installation, Exception exception, bool stopApplications = true)
 	{
 		installation.Status = "Failed";
-		if(stop)
-			installation.Maintenance = true;
+		if(stopApplications)
+			installation.IsInMaintenance = true;
 
 		if(installation.Pending != null)
 		{
@@ -85,12 +90,12 @@ partial class InstallationManager
 
 		store.Save(installation);
 
-		if(!stop)
+		if(!stopApplications)
 			return;
 
 		try
 		{
-			await host.StopApplicationsAsync(installation, CancellationToken.None);
+			await this.EnterMaintenanceAsync(installation, CancellationToken.None);
 		}
 		catch(Exception stopFailure)
 		{

@@ -50,17 +50,17 @@ internal sealed partial class DockerHost(InstallationStore store, IProcessRunner
 {
 	#region 常量定义
 	private const string ENGINE = BootstrapPlan.ENGINE;
-	private const string OWNER = "org.zongsoft.containerizer.name";
-	private const string SERVICE = "org.zongsoft.containerizer.service";
+	private const string OWNER_LABEL = "org.zongsoft.containerizer.name";
+	private const string SERVICE_LABEL = "org.zongsoft.containerizer.service";
 	#endregion
 
 	#region 公共方法
-	public async Task VerifyAsync(DeliveryBundle bundle, Installation installation, CancellationToken cancellation)
+	public async Task VerifyTargetAsync(DeliveryBundle bundle, Installation installation, CancellationToken cancellation)
 	{
 		if(!OperatingSystem.IsLinux())
 			throw new ContainerizationException(3, Properties.Resources.DockerHost_1_Message);
 
-		var uid = await this.RunAsync("id", ["-u"], null, cancellation);
+		var uid = await this.RunCommandAsync("id", ["-u"], null, cancellation);
 		if(uid.Trim() != "0")
 			throw new ContainerizationException(3, Properties.Resources.DockerHost_2_Message);
 
@@ -77,27 +77,27 @@ internal sealed partial class DockerHost(InstallationStore store, IProcessRunner
 			throw new ContainerizationException(3, Properties.Resources.DockerHost_4_Message);
 
 		var required = bundle.Plan.Files.Sum(file => file.Length) * 3;
-		if(new DriveInfo(Path.GetPathRoot(store.Root)).AvailableFreeSpace < required)
+		if(new DriveInfo(Path.GetPathRoot(store.StateRoot)).AvailableFreeSpace < required)
 			throw new ContainerizationException(3, Properties.Resources.DockerHost_5_Message);
 
-		Files.NoLinks(store.Root);
-		await this.CheckPortsAsync(bundle, installation, cancellation);
+		Files.EnsureNoLinks(store.StateRoot);
+		await this.CheckPortAvailabilityAsync(bundle, installation, cancellation);
 
 		foreach(var mount in bundle.Plan.Services.SelectMany(service => service.Mounts).Where(mount => !mount.ReadOnly && !mount.Temporary))
 		{
 			this.ValidateDataPath(mount.Source, bundle.Plan.Name);
-			Files.NoLinks(mount.Source);
+			Files.EnsureNoLinks(mount.Source);
 		}
 	}
 
-	public async Task<int> MigrateAsync(DeliveryBundle bundle, MigrationPlan migration, string state, string operation, string log, CancellationToken cancellation)
+	public async Task<int> RunMigrationAsync(DeliveryBundle bundle, MigrationPlan migration, string stateDirectory, string operation, string logPath, CancellationToken cancellation)
 	{
-		Files.PrivateDirectory(state);
-		var result = await runner.RunAsync("sh", [Files.Below(bundle.Directory, migration.Script), operation, state], bundle.Directory, cancellation, 3600);
+		Files.CreatePrivateDirectory(stateDirectory);
+		var result = await runner.RunAsync("sh", [Files.ResolveRelativePath(bundle.Directory, migration.Script), operation, stateDirectory], bundle.Directory, cancellation, 3600);
 
 		// Do not persist arbitrary script output, which can contain credentials or SQL.
-		if(log != null)
-			Files.Write(log, $"migration={migration.Version}\noperation={operation}\nexit={result.ExitCode}\n");
+		if(logPath != null)
+			Files.Write(logPath, $"migration={migration.Version}\noperation={operation}\nexit={result.ExitCode}\n");
 
 		return result.ExitCode;
 	}
@@ -105,7 +105,7 @@ internal sealed partial class DockerHost(InstallationStore store, IProcessRunner
 	#endregion
 
 	#region 私有方法
-	private IEnumerable<DeliveryPlan> Plans(Installation installation)
+	private IEnumerable<DeliveryPlan> ReadReleasePlans(Installation installation)
 	{
 		foreach(var release in installation.Releases)
 		{
@@ -114,7 +114,7 @@ internal sealed partial class DockerHost(InstallationStore store, IProcessRunner
 		}
 	}
 
-	private async Task<string> RunAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation)
+	private async Task<string> RunCommandAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation)
 	{
 		var result = await runner.RunAsync(executable, arguments, directory, cancellation);
 
@@ -124,6 +124,6 @@ internal sealed partial class DockerHost(InstallationStore store, IProcessRunner
 		return result.Output;
 	}
 
-	private static string[] Lines(string output) => output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+	private static string[] SplitLines(string output) => output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 	#endregion
 }

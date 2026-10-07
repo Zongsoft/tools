@@ -15,7 +15,6 @@ using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
-[Collection("Build cleanup")]
 public sealed class DeliveryBuilderTests : IDisposable
 {
 	private readonly string _root = Path.Combine(Path.GetTempPath(), "containerizer-build-tests-" + Guid.NewGuid().ToString("N"));
@@ -28,14 +27,14 @@ public sealed class DeliveryBuilderTests : IDisposable
 	[InlineData("online", null)]
 	[InlineData("offline", "online")]
 	[InlineData("online", "offline")]
-	public async Task BuildsFlatDeliveryWithIdenticalManifestAndVerifiedInventory(string mode, string serviceImaging)
+	public async Task BuildsFlatDeliveryWithIdenticalManifestAndVerifiedInventoryAsync(string mode, string serviceImaging)
 	{
 		var manifest = this.CreateManifest(mode);
 		if(serviceImaging != null)
 			manifest.Components[0]["imaging"] = serviceImaging;
 		manifest.Components[0]["tag"] = "8.10.2";
 		var runner = new BuildRunner();
-		var archive = await this.Builder(runner).BuildAsync(manifest, CancellationToken.None);
+		var archive = await this.CreateBuilder(runner).BuildAsync(manifest, CancellationToken.None);
 
 		Assert.Equal("example@1.0-x64.tar.gz", Path.GetFileName(archive));
 		Assert.Equal([".settings", "example@1.0-x64.container", "example@1.0-x64.tar.gz"], Directory.GetFiles(manifest["output"]).Select(Path.GetFileName).Order(StringComparer.Ordinal));
@@ -80,10 +79,10 @@ public sealed class DeliveryBuilderTests : IDisposable
 		Assert.Equal("linux/amd64", Assert.Single(node.Services).Image.Platform);
 		Assert.Equal(serviceImaging ?? mode, Assert.Single(node.Services).Image.Mode);
 		var image = Assert.Single(node.Services).Image;
-		Assert.StartsWith("containerizer/" + node.Project + "/redis:", image.Tag, StringComparison.Ordinal);
+		Assert.StartsWith("containerizer/" + node.Project + "/redis:", image.Reference, StringComparison.Ordinal);
 		using var compose = JsonDocument.Parse(File.ReadAllText(Path.Combine(unpacked, "compose.yaml")));
-		Assert.Equal(image.Tag, compose.RootElement.GetProperty("services").GetProperty("redis").GetProperty("image").GetString());
-		Assert.DoesNotContain(runner.Calls, arguments => arguments[0] == "tag" && arguments[^1] == image.Tag);
+		Assert.Equal(image.Reference, compose.RootElement.GetProperty("services").GetProperty("redis").GetProperty("image").GetString());
+		Assert.DoesNotContain(runner.Calls, arguments => arguments[0] == "tag" && arguments[^1] == image.Reference);
 		var exports = runner.Calls.Where(arguments => arguments[0] == "save" || arguments.Take(2).SequenceEqual(["image", "save"])).ToArray();
 
 		if(image.Mode == "offline")
@@ -98,17 +97,17 @@ public sealed class DeliveryBuilderTests : IDisposable
 		Assert.Contains(node.Files, file => file.Path == "zh-Hans/containerizer.resources.dll");
 		Assert.All(node.Files, file =>
 		{
-			Assert.Equal(file.Hash, Files.Hash(Files.Below(unpacked, file.Path)));
-			Assert.Equal(file.Length, new FileInfo(Files.Below(unpacked, file.Path)).Length);
+			Assert.Equal(file.Hash, Files.Hash(Files.ResolveRelativePath(unpacked, file.Path)));
+			Assert.Equal(file.Length, new FileInfo(Files.ResolveRelativePath(unpacked, file.Path)).Length);
 		});
 		Assert.Equal((serviceImaging ?? mode) == "offline", File.Exists(Path.Combine(unpacked, "images", "redis.tar")));
 		Assert.Equal(mode == "offline", File.Exists(Path.Combine(unpacked, "packages", "engine.deb")));
 
 		var defaults = File.ReadAllBytes(Path.Combine(manifest["output"], ".settings"));
-		var replay = ContainerManifest.From(Context(manifest.ManifestPath, "--output:replay"));
+		var replay = ManifestFactory.Create(CreateContext(manifest.ManifestPath, "--output:replay"));
 		Assert.Equal(component["environment!LITERAL"], Assert.Single(replay.Components)["environment!LITERAL"]);
 
-		var replayArchive = await this.Builder(new BuildRunner()).BuildAsync(replay, CancellationToken.None);
+		var replayArchive = await this.CreateBuilder(new BuildRunner()).BuildAsync(replay, CancellationToken.None);
 		Assert.True(File.Exists(replayArchive));
 		Assert.False(File.Exists(Path.Combine(replay["output"], ".settings")));
 		Assert.Equal(defaults, File.ReadAllBytes(Path.Combine(manifest["output"], ".settings")));
@@ -117,7 +116,7 @@ public sealed class DeliveryBuilderTests : IDisposable
 	[Theory]
 	[InlineData(false)]
 	[InlineData(true)]
-	public async Task FailureOrCancellationCleansWorkspaceAndPreservesInputs(bool cancel)
+	public async Task FailureOrCancellationCleansWorkspaceAndPreservesInputsAsync(bool cancel)
 	{
 		var manifest = this.CreateManifest("offline");
 		Directory.CreateDirectory(manifest["output"]);
@@ -126,9 +125,9 @@ public sealed class DeliveryBuilderTests : IDisposable
 		var runner = new BuildRunner { FailExport = !cancel, CancelExport = cancel };
 
 		if(cancel)
-			await Assert.ThrowsAsync<OperationCanceledException>(() => this.Builder(runner).BuildAsync(manifest, CancellationToken.None));
+			await Assert.ThrowsAsync<OperationCanceledException>(() => this.CreateBuilder(runner).BuildAsync(manifest, CancellationToken.None));
 		else
-			await Assert.ThrowsAsync<ContainerizationException>(() => this.Builder(runner).BuildAsync(manifest, CancellationToken.None));
+			await Assert.ThrowsAsync<ContainerizationException>(() => this.CreateBuilder(runner).BuildAsync(manifest, CancellationToken.None));
 
 		Assert.False(Directory.Exists(runner.Workspace));
 		Assert.Equal([".settings"], Directory.GetFiles(manifest["output"]).Select(Path.GetFileName));
@@ -138,12 +137,33 @@ public sealed class DeliveryBuilderTests : IDisposable
 	}
 
 	[Fact]
-	public async Task UnknownMetadataIsOmittedInsteadOfReusingStaleDisplayValues()
+	public async Task MixedComponentOrderKeepsApplicationAndInfrastructureImagesAssociatedAsync()
+	{
+		var manifest = this.CreateApplication("podman");
+		manifest.Components.Reverse();
+
+		var archive = await this.CreateBuilder(new BuildRunner()).BuildAsync(manifest, TestContext.Current.CancellationToken);
+		var directory = Path.Combine(_root, "mixed-order");
+		Files.Extract(archive, directory);
+		var plan = Files.Load(Path.Combine(directory, DeliveryPlan.FileName), ProtocolJson.Default.DeliveryPlan);
+		var completed = ContainerManifest.Read(manifest.ManifestPath);
+
+		Assert.Equal(["redis", "application"], plan.Services.Select(service => service.Id));
+		Assert.Equal(_digest, plan.Services[0].Image.Digest);
+		Assert.Null(plan.Services[0].Package);
+		Assert.Equal("application", plan.Services[1].Package.Name);
+		Assert.Equal("images/application.tar", plan.Services[1].Image.Archive);
+		Assert.Equal(_digest, completed.Components[0]["digest"]);
+		Assert.Null(completed.Components[1]["digest"]);
+	}
+
+	[Fact]
+	public async Task UnknownMetadataIsOmittedInsteadOfReusingStaleDisplayValuesAsync()
 	{
 		var manifest = this.CreateManifest("offline");
 		manifest.Components[0]["timestamp"] = "2025-01-01T00:00:00Z";
 		manifest.Components[0]["size"] = "999";
-		await this.Builder(new BuildRunner { OmitMetadata = true }).BuildAsync(manifest, CancellationToken.None);
+		await this.CreateBuilder(new BuildRunner { OmitMetadata = true }).BuildAsync(manifest, CancellationToken.None);
 		var component = Assert.Single(ContainerManifest.Read(manifest.ManifestPath).Components);
 
 		Assert.Null(component["timestamp"]);
@@ -152,14 +172,14 @@ public sealed class DeliveryBuilderTests : IDisposable
 	}
 
 	[Fact]
-	public async Task DefaultsPublicationFailureRollsBackOnlyThisDelivery()
+	public async Task DefaultsPublicationFailureRollsBackOnlyThisDeliveryAsync()
 	{
 		var manifest = this.CreateManifest("offline");
 		Directory.CreateDirectory(Path.Combine(manifest["output"], ".settings"));
 		var previous = Path.Combine(manifest["output"], "previous.tar.gz");
 		File.WriteAllText(previous, "preserve");
 		var runner = new BuildRunner();
-		var exception = await Record.ExceptionAsync(() => this.Builder(runner).BuildAsync(manifest, CancellationToken.None));
+		var exception = await Record.ExceptionAsync(() => this.CreateBuilder(runner).BuildAsync(manifest, CancellationToken.None));
 
 		Assert.True(exception is IOException or UnauthorizedAccessException);
 		Assert.False(File.Exists(manifest.ManifestPath));
@@ -169,56 +189,56 @@ public sealed class DeliveryBuilderTests : IDisposable
 	}
 
 	[Fact]
-	public async Task ReplayCanUseItsOwnInputPathWithoutRewritingIt()
+	public async Task ReplayCanUseItsOwnInputPathWithoutRewritingItAsync()
 	{
 		var manifest = this.CreateManifest("offline");
-		await this.Builder(new BuildRunner()).BuildAsync(manifest, CancellationToken.None);
+		await this.CreateBuilder(new BuildRunner()).BuildAsync(manifest, CancellationToken.None);
 		File.Delete(Path.Combine(manifest["output"], manifest.ReleaseName + ".tar.gz"));
 		var original = File.ReadAllBytes(manifest.ManifestPath);
-		var replay = ContainerManifest.From(Context(manifest.ManifestPath));
-		await this.Builder(new BuildRunner()).BuildAsync(replay, CancellationToken.None);
+		var replay = ManifestFactory.Create(CreateContext(manifest.ManifestPath));
+		await this.CreateBuilder(new BuildRunner()).BuildAsync(replay, CancellationToken.None);
 		Assert.Equal(original, File.ReadAllBytes(manifest.ManifestPath));
 	}
 
 	[Fact]
-	public async Task ReplayUsesRecordedValuesWithoutTheOriginalBuildVariables()
+	public async Task ReplayUsesRecordedValuesWithoutTheOriginalBuildVariablesAsync()
 	{
 		var manifest = this.CreateManifest("offline");
 		File.WriteAllText(Path.Combine(_root, "custom.template"), "version=1\nimage=docker.io/library/redis\ncommand=[\"redis-server\"]\nhealth=[\"CMD\",\"redis-cli\",\"ping\"]\n[environment]\nDYNAMIC=$(only_at_build)\n[settings note]\nargument=--note\nvariable=only_at_build\ndefault=$(missing_default)\n");
 		manifest.Components[0]["template"] = "custom.template";
 		manifest.Variables["only_at_build"] = "$$(RUNTIME_VARIABLE)";
-		await this.Builder(new BuildRunner()).BuildAsync(manifest, CancellationToken.None);
-		var replay = ContainerManifest.From(Context(manifest.ManifestPath, "--output:replay"));
+		await this.CreateBuilder(new BuildRunner()).BuildAsync(manifest, CancellationToken.None);
+		var replay = ManifestFactory.Create(CreateContext(manifest.ManifestPath, "--output:replay"));
 		Assert.False(replay.Variables.ContainsKey("only_at_build"));
 
-		var source = new TemplateCatalog().Read(Assert.Single(replay.Components), replay);
+		var source = TemplateCatalog.Read(Assert.Single(replay.Components), replay);
 		Assert.Equal("$(RUNTIME_VARIABLE)", source.Environment["DYNAMIC"]);
 		Assert.Equal(["redis-server", "--note", "$(RUNTIME_VARIABLE)"], source.Plan.Command);
-		await this.Builder(new BuildRunner()).BuildAsync(replay, CancellationToken.None);
+		await this.CreateBuilder(new BuildRunner()).BuildAsync(replay, CancellationToken.None);
 	}
 
 	[Fact]
 	public void BootstrapCacheIsOutsideOutputAndIsolatedBySourceAndPlatform()
 	{
 		var cache = Path.Combine(_root, "cache");
-		var first = BuildStorage.BootstrapCache(Path.Combine(_root, "one"), "debian@13_x64", cache);
-		Assert.NotEqual(first, BuildStorage.BootstrapCache(Path.Combine(_root, "two"), "debian@13_x64", cache));
-		Assert.NotEqual(first, BuildStorage.BootstrapCache(Path.Combine(_root, "one"), "debian@13_arm64", cache));
+		var first = BuildStorage.GetBootstrapCache(Path.Combine(_root, "one"), "debian@13_x64", cache);
+		Assert.NotEqual(first, BuildStorage.GetBootstrapCache(Path.Combine(_root, "two"), "debian@13_x64", cache));
+		Assert.NotEqual(first, BuildStorage.GetBootstrapCache(Path.Combine(_root, "one"), "debian@13_arm64", cache));
 		Assert.StartsWith(cache, first, StringComparison.Ordinal);
 	}
 
 	[Fact]
-	public async Task MakeCompletesItsDraftAndFailurePreservesEditedInput()
+	public async Task MakeCompletesItsDraftAndFailurePreservesEditedInputAsync()
 	{
 		var fixture = this.CreateManifest("offline");
-		var planning = ContainerManifest.From(Context(Path.Combine(_root, "input.container"), "--source:" + _root, "--output:delivery"), planning: true);
-		var draft = this.Builder(new BuildRunner()).Plan(planning);
+		var planning = ManifestFactory.Create(CreateContext(Path.Combine(_root, "input.container"), "--source:" + _root, "--output:delivery"), planning: true);
+		var draft = this.CreateBuilder(new BuildRunner()).Plan(planning);
 		var original = File.ReadAllBytes(draft);
-		var failed = ContainerManifest.From(Context(draft));
-		await Assert.ThrowsAsync<ContainerizationException>(() => this.Builder(new BuildRunner { FailExport = true }).BuildAsync(failed, CancellationToken.None));
+		var failed = ManifestFactory.Create(CreateContext(draft));
+		await Assert.ThrowsAsync<ContainerizationException>(() => this.CreateBuilder(new BuildRunner { FailExport = true }).BuildAsync(failed, CancellationToken.None));
 		Assert.Equal(original, File.ReadAllBytes(draft));
-		var manifest = ContainerManifest.From(Context(draft));
-		var archive = await this.Builder(new BuildRunner()).BuildAsync(manifest, CancellationToken.None);
+		var manifest = ManifestFactory.Create(CreateContext(draft));
+		var archive = await this.CreateBuilder(new BuildRunner()).BuildAsync(manifest, CancellationToken.None);
 		Assert.Equal("complete", ContainerManifest.Read(draft)["stage"]);
 		Assert.False(File.Exists(Path.Combine(manifest["output"], ".settings")));
 		var unpacked = Path.Combine(_root, "draft-delivery");
@@ -231,14 +251,14 @@ public sealed class DeliveryBuilderTests : IDisposable
 	[InlineData("podman", "online")]
 	[InlineData("docker", "offline")]
 	[InlineData("docker", "online")]
-	public async Task InfrastructureImagesReuseOneCacheAcrossReleaseVersions(string engine, string mode)
+	public async Task InfrastructureImagesReuseOneCacheAcrossReleaseVersionsAsync(string engine, string mode)
 	{
 		var manifest = this.CreateManifest(mode);
 		manifest["engine"] = engine;
 		var runner = new BuildRunner();
-		var first = await this.Builder(runner).BuildAsync(manifest, CancellationToken.None);
-		var replay = ContainerManifest.From(Context(manifest.ManifestPath, "--version:2.0", "--output:second"));
-		var second = await this.Builder(runner).BuildAsync(replay, CancellationToken.None);
+		var first = await this.CreateBuilder(runner).BuildAsync(manifest, CancellationToken.None);
+		var replay = ManifestFactory.Create(CreateContext(manifest.ManifestPath, "--version:2.0", "--output:second"));
+		var second = await this.CreateBuilder(runner).BuildAsync(replay, CancellationToken.None);
 
 		Assert.NotEqual(first, second);
 		Assert.True(File.Exists(first));
@@ -250,16 +270,16 @@ public sealed class DeliveryBuilderTests : IDisposable
 		Assert.DoesNotContain(runner.Calls, arguments => arguments.Contains("prune") || arguments.Contains("--force") || arguments.Contains("-f"));
 	}
 
-	private DeliveryBuilder Builder(BuildRunner runner) => new(runner, Path.Combine(_root, "cache"), Path.Combine(_root, "executor"));
+	private DeliveryBuilder CreateBuilder(BuildRunner runner, Action<string> error = null) => new(runner, Path.Combine(_root, "cache"), Path.Combine(_root, "executor"), output: _ => { }, error: error);
 
 	[Theory]
 	[InlineData("podman")]
 	[InlineData("docker")]
-	public async Task ApplicationImagesAreRemovedAfterPublicationWithoutDeletingSharedImages(string engine)
+	public async Task ApplicationImagesAreRemovedAfterPublicationWithoutDeletingSharedImagesAsync(string engine)
 	{
 		var manifest = this.CreateApplication(engine);
 		var runner = new BuildRunner { Published = () => File.Exists(manifest.ManifestPath) && File.Exists(Path.Combine(manifest["output"], manifest.ReleaseName + ".tar.gz")) };
-		var archive = await this.Builder(runner).BuildAsync(manifest, CancellationToken.None);
+		var archive = await this.CreateBuilder(runner).BuildAsync(manifest, CancellationToken.None);
 
 		Assert.True(runner.FinalRemovedAfterPublication);
 		Assert.Single(runner.FinalImages);
@@ -285,9 +305,9 @@ public sealed class DeliveryBuilderTests : IDisposable
 		Assert.Contains("Services: application@1.0.0, redis@latest.", File.ReadAllText(Path.Combine(unpacked, "README.md")));
 		Assert.Contains("服务：application@1.0.0、redis@latest。", File.ReadAllText(Path.Combine(unpacked, "README.zh-Hans.md")));
 		Assert.Equal(BuildRunner.ApplicationId, application.Image.Id);
-		Assert.StartsWith("containerizer/" + node.Project + "/application:", application.Image.Tag, StringComparison.Ordinal);
-		Assert.DoesNotContain(application.Image.Tag, runner.FinalImages);
-		Assert.Equal("test image archive", File.ReadAllText(Files.Below(unpacked, application.Image.Archive)));
+		Assert.StartsWith("containerizer/" + node.Project + "/application:", application.Image.Reference, StringComparison.Ordinal);
+		Assert.DoesNotContain(application.Image.Reference, runner.FinalImages);
+		Assert.Equal("test image archive", File.ReadAllText(Files.ResolveRelativePath(unpacked, application.Image.Archive)));
 		Assert.Contains(runner.Calls, arguments => arguments.Contains("--output") && arguments[^1] == application.Image.Id);
 		Assert.Contains(runner.Calls, arguments => arguments.Take(2).SequenceEqual(["image", "inspect"]) && arguments[^1] == application.Image.Id);
 	}
@@ -295,23 +315,23 @@ public sealed class DeliveryBuilderTests : IDisposable
 	[Theory]
 	[InlineData("podman")]
 	[InlineData("docker")]
-	public async Task PackagedWebTemplateBecomesProtectedIngressConfiguration(string engine)
+	public async Task PackagedWebTemplateBecomesProtectedIngressConfigurationAsync(string engine)
 	{
 		var manifest = this.CreateApplication(engine);
 		manifest.Components[0]["dependences"] = "nginx";
 		manifest.Components.Add(new() { Name = "nginx" });
 		var configuration = "server { listen 80; location / { proxy_pass http://application:8080; } }\n";
 		WebFixtures.WritePackage(manifest.Components[0]["package"], "application", "[api]\nbind=http://0.0.0.0:80\n", configuration);
-		manifest.Validate();
+		manifest.Normalize();
 		var runner = new BuildRunner();
-		var archive = await this.Builder(runner).BuildAsync(manifest, CancellationToken.None);
+		var archive = await this.CreateBuilder(runner).BuildAsync(manifest, CancellationToken.None);
 		var unpacked = Path.Combine(_root, "ingress-delivery");
 		Files.Extract(archive, unpacked);
 		var node = Files.Load(Path.Combine(unpacked, "containerizer.json"), ProtocolJson.Default.DeliveryPlan);
 		Assert.Empty(node.Services.Single(service => service.Kind == "application").Mounts);
 		var mount = Assert.Single(node.Services.Single(service => service.Id == "nginx").Mounts, item => item.Target == "/etc/nginx/containerizer/application.conf");
 		Assert.Equal("/etc/nginx/containerizer/application.conf", mount.Target);
-		Assert.Equal(configuration.ReplaceLineEndings("\r\n"), File.ReadAllText(Files.Below(unpacked, mount.Source)));
+		Assert.Equal(configuration.ReplaceLineEndings("\r\n"), File.ReadAllText(Files.ResolveRelativePath(unpacked, mount.Source)));
 		Assert.DoesNotContain(runner.Calls, arguments => arguments[0] == "cp" && !arguments[1].EndsWith("/etc/passwd", StringComparison.Ordinal));
 		Assert.Empty(runner.Images);
 		Assert.Empty(runner.Containers);
@@ -320,11 +340,11 @@ public sealed class DeliveryBuilderTests : IDisposable
 	[Theory]
 	[InlineData("podman")]
 	[InlineData("docker")]
-	public async Task FailedContainerCreationCleansThePartiallyCreatedContainerAndImage(string engine)
+	public async Task FailedContainerCreationCleansThePartiallyCreatedContainerAndImageAsync(string engine)
 	{
 		var manifest = this.CreateApplication(engine);
 		var runner = new BuildRunner { FailCreate = true };
-		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => this.Builder(runner).BuildAsync(manifest, CancellationToken.None));
+		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => this.CreateBuilder(runner).BuildAsync(manifest, CancellationToken.None));
 		Assert.Contains("create failed", exception.Message);
 		Assert.Empty(runner.Images);
 		Assert.Empty(runner.Containers);
@@ -335,12 +355,12 @@ public sealed class DeliveryBuilderTests : IDisposable
 	[Theory]
 	[InlineData("podman")]
 	[InlineData("docker")]
-	public async Task CancellationDuringApplicationExportStillCleansResources(string engine)
+	public async Task CancellationDuringApplicationExportStillCleansResourcesAsync(string engine)
 	{
 		var manifest = this.CreateApplication(engine);
 		using var cancellation = new CancellationTokenSource();
 		var runner = new BuildRunner { CancelExport = true, Cancellation = cancellation };
-		await Assert.ThrowsAsync<OperationCanceledException>(() => this.Builder(runner).BuildAsync(manifest, cancellation.Token));
+		await Assert.ThrowsAsync<OperationCanceledException>(() => this.CreateBuilder(runner).BuildAsync(manifest, cancellation.Token));
 		Assert.True(cancellation.IsCancellationRequested);
 		Assert.Empty(runner.Images);
 		Assert.Empty(runner.Containers);
@@ -351,41 +371,35 @@ public sealed class DeliveryBuilderTests : IDisposable
 	[Theory]
 	[InlineData("podman")]
 	[InlineData("docker")]
-	public async Task InUseImageCleanupWarnsWithoutInvalidatingThePublishedDelivery(string engine)
+	public async Task InUseImageCleanupWarnsWithoutInvalidatingThePublishedDeliveryAsync(string engine)
 	{
 		var manifest = this.CreateApplication(engine);
 		var runner = new BuildRunner { FailCleanup = true };
-		var originalError = Console.Error;
 		using var errors = new StringWriter();
-		Console.SetError(errors);
 
-		try
-		{
-			var archive = await this.Builder(runner).BuildAsync(manifest, CancellationToken.None);
-			Assert.True(File.Exists(archive));
-			Assert.True(File.Exists(manifest.ManifestPath));
-			Assert.Equal("[redis]\r\ntag=latest\r\n", File.ReadAllText(Path.Combine(manifest["output"], ".settings")));
-			Assert.Contains(Assert.Single(runner.FinalImages), errors.ToString());
-			Assert.Contains("image is in use", errors.ToString());
-			Assert.Contains(engine, errors.ToString());
-			Assert.Single(runner.Images);
-			Assert.Empty(runner.Containers);
-			Assert.False(Directory.Exists(runner.Workspace));
-		}
-		finally { Console.SetError(originalError); }
+		var archive = await this.CreateBuilder(runner, errors.WriteLine).BuildAsync(manifest, CancellationToken.None);
+		Assert.True(File.Exists(archive));
+		Assert.True(File.Exists(manifest.ManifestPath));
+		Assert.Equal("[redis]\r\ntag=latest\r\n", File.ReadAllText(Path.Combine(manifest["output"], ".settings")));
+		Assert.Contains(Assert.Single(runner.FinalImages), errors.ToString());
+		Assert.Contains("image is in use", errors.ToString());
+		Assert.Contains(engine, errors.ToString());
+		Assert.Single(runner.Images);
+		Assert.Empty(runner.Containers);
+		Assert.False(Directory.Exists(runner.Workspace));
 	}
 
 	[Theory]
 	[InlineData("podman")]
 	[InlineData("docker")]
-	public async Task PublicationFailureCleansApplicationImagesAndKeepsHistoricalArtifacts(string engine)
+	public async Task PublicationFailureCleansApplicationImagesAndKeepsHistoricalArtifactsAsync(string engine)
 	{
 		var manifest = this.CreateApplication(engine);
 		Directory.CreateDirectory(Path.Combine(manifest["output"], ".settings"));
 		var previous = Path.Combine(manifest["output"], "previous.tar.gz");
 		File.WriteAllText(previous, "preserve");
 		var runner = new BuildRunner();
-		var exception = await Record.ExceptionAsync(() => this.Builder(runner).BuildAsync(manifest, CancellationToken.None));
+		var exception = await Record.ExceptionAsync(() => this.CreateBuilder(runner).BuildAsync(manifest, CancellationToken.None));
 		Assert.True(exception is IOException or UnauthorizedAccessException);
 		Assert.Empty(runner.Images);
 		Assert.Empty(runner.Containers);
@@ -394,28 +408,28 @@ public sealed class DeliveryBuilderTests : IDisposable
 	}
 
 	[Fact]
-	public async Task BootstrapContainerCreationFailureCleansItsBuildResources()
+	public async Task BootstrapContainerCreationFailureCleansItsBuildResourcesAsync()
 	{
 		var manifest = this.CreateManifest("offline");
 		Directory.Delete(Path.Combine(_root, ".containerizer"), true);
 		manifest.Components[0].Values.Remove("dependences");
 		var runner = new BuildRunner { FailCreate = true };
-		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => this.Builder(runner).BuildAsync(manifest, CancellationToken.None));
+		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => this.CreateBuilder(runner).BuildAsync(manifest, CancellationToken.None));
 		Assert.Contains("create failed", exception.Message);
 		Assert.Empty(runner.Images);
 		Assert.Empty(runner.Containers);
 	}
 
 	[Fact]
-	public async Task ChangedPackageContentsWithTheSameVersionAlwaysRebuildTheApplication()
+	public async Task ChangedPackageContentsWithTheSameVersionAlwaysRebuildTheApplicationAsync()
 	{
 		var runner = new BuildRunner();
 		var first = this.CreateApplication("podman", "first payload");
 		first["output"] = Path.Combine(_root, "first");
-		await this.Builder(runner).BuildAsync(first, TestContext.Current.CancellationToken);
+		await this.CreateBuilder(runner).BuildAsync(first, TestContext.Current.CancellationToken);
 		var second = this.CreateApplication("podman", "revised payload");
 		second["output"] = Path.Combine(_root, "second");
-		await this.Builder(runner).BuildAsync(second, TestContext.Current.CancellationToken);
+		await this.CreateBuilder(runner).BuildAsync(second, TestContext.Current.CancellationToken);
 
 		Assert.Equal(first["version"], second["version"]);
 		Assert.Equal(2, runner.PackageHashes.Count);
@@ -482,15 +496,16 @@ public sealed class DeliveryBuilderTests : IDisposable
 			Packages = [new() { Name = "docker-ce", Version = "test", Architecture = "amd64", Url = "https://example.com/engine.deb", Path = "packages/engine.deb", Hash = Files.Hash(package), Length = new FileInfo(package).Length }],
 		}, ProtocolJson.Default.BootstrapPlan);
 
-		var result = ContainerManifest.From(Context(input, "--source:" + _root, "--output:delivery"));
-		result.Input = null;
+		var result = ManifestFactory.Create(CreateContext("redis", "--name:example", "--version:1.0", "--distribution:debian", "--engine:podman", "--imaging:" + mode, "--bootstrap:" + mode, "--source:" + _root, "--output:delivery"));
+		result.Components[0]["environment!LITERAL"] = "literal $$(NOT_A_VARIABLE) %%NOT_A_VARIABLE%%";
 		return result;
 	}
 
-	private static CommandContext Context(params string[] arguments) => new(new CommandExecutor(), CommandLine.Parse(Utility.FormatCommand("containerize", arguments))[0], new ContainerizeCommand(), null);
+	private static CommandContext CreateContext(params string[] arguments) => new(new CommandExecutor(), CommandLine.Parse(Utility.FormatCommand("containerize", arguments))[0], new ContainerizeCommand(), null);
 
 	private sealed class BuildRunner : IProcessRunner
 	{
+		public Task<int> StreamAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation) => throw new InvalidOperationException("Unexpected streaming process call.");
 		public static readonly string ApplicationId = "sha256:" + new string('c', 64);
 		public string Workspace { get; private set; }
 		public bool FailExport { get; set; }

@@ -50,25 +50,24 @@ namespace Zongsoft.Tools.Containerizer;
 
 internal sealed partial class RunContext
 {
-	internal sealed class Endpoint(ServicePlan service, PortPlan port, int relay)
+	private sealed class Endpoint(ServicePlan service, PortPlan port, int relayPort)
 	{
 		#region 公共属性
 		public ServicePlan Service { get; } = service;
 		public PortPlan Port { get; } = port;
-		public int Relay { get; } = relay;
-		public int Host { get; private set; }
-		public bool IsWeb => this.Probes.Any();
+		public int RelayPort { get; } = relayPort;
+		public int HostPort { get; private set; }
+		public bool IsWeb => this.ProbeTargets.Any();
 		public string BindAddress => this.IsWeb ? "0.0.0.0" : "127.0.0.1";
-		public string Address => this.Probes.Select(probe => this.Url(probe.Scheme, probe.Host)).FirstOrDefault() ?? $"127.0.0.1:{this.Host}";
-		public List<(string Application, string Site, string Address, string Redirect)> Results { get; } = [];
-		public string Target => this.Port.Address.Contains(':') ?
+		public string Address => this.ProbeTargets.Select(probe => this.GetUrl(probe.Scheme, probe.Host)).FirstOrDefault() ?? $"127.0.0.1:{this.HostPort}";
+		public List<(string Application, string Site, string Address, string Redirect)> ProbeResults { get; } = [];
+		public string ForwardTarget => this.Port.Address.Contains(':') ?
 			$"TCP6:[{(this.Port.Address == "::" ? "::1" : this.Port.Address)}]:{this.Port.Host}" :
 			$"TCP4:{(this.Port.Address == "0.0.0.0" ? "127.0.0.1" : this.Port.Address)}:{this.Port.Host}";
 		#endregion
 
 		#region 私有属性
-		private string Url(string scheme, string host) => new UriBuilder(scheme, host, this.Host).Uri.AbsoluteUri;
-		private IEnumerable<(string Application, string Site, string Scheme, string Host)> Probes =>
+		private IEnumerable<(string Application, string Site, string Scheme, string Host)> ProbeTargets =>
 			this.Service.Web.SelectMany(site => site.Bindings
 				.Where(binding => binding.Publication == this.Port.Name && binding.Address == "0.0.0.0")
 				.SelectMany(binding => site.ProbeHosts.Select(host => (site.Application, $"{site.Application}({site.Name})", binding.Scheme, host)))
@@ -80,43 +79,43 @@ internal sealed partial class RunContext
 		{
 			var reserved = plan.Services.SelectMany(service => service.Ports).Select(port => port.Host).ToHashSet();
 			var endpoints = new List<Endpoint>();
-			var relay = 45000;
+			var relayPort = 45000;
 
 			foreach(var service in plan.Services)
 			{
 				foreach(var port in service.Ports.Where(port => port.Protocol == "tcp"))
 				{
-					while(relay <= 65535 && !reserved.Add(relay))
-						relay++;
+					while(relayPort <= 65535 && !reserved.Add(relayPort))
+						relayPort++;
 
-					if(relay > 65535)
+					if(relayPort > 65535)
 						throw new ContainerizationException(2, Properties.Resources.Run_TooManyPorts_Message);
 
-					endpoints.Add(new(service, port, relay++));
+					endpoints.Add(new(service, port, relayPort++));
 				}
 			}
 
 			return endpoints;
 		}
 
-		public static int AvailablePort(int preferred, bool web = false)
+		public static int GetAvailablePort(int preferredPort, bool isWeb = false)
 		{
 			using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
 
 			try
 			{
 				socket.ExclusiveAddressUse = true;
-				socket.Bind(new IPEndPoint(web ? IPAddress.Any : IPAddress.Loopback, preferred));
+				socket.Bind(new IPEndPoint(isWeb ? IPAddress.Any : IPAddress.Loopback, preferredPort));
 
-				return preferred;
+				return preferredPort;
 			}
 			catch(SocketException) { return 0; }
 		}
 
 		public void Bind(JsonElement ports)
 		{
-			var mapping = ports.GetProperty($"{this.Relay}/tcp").EnumerateArray().Single(item => item.GetProperty("HostIp").GetString() == this.BindAddress);
-			this.Host = int.Parse(mapping.GetProperty("HostPort").GetString(), CultureInfo.InvariantCulture);
+			var mapping = ports.GetProperty($"{this.RelayPort}/tcp").EnumerateArray().Single(item => item.GetProperty("HostIp").GetString() == this.BindAddress);
+			this.HostPort = int.Parse(mapping.GetProperty("HostPort").GetString(), CultureInfo.InvariantCulture);
 		}
 
 		public string[] GetLocalAddresses()
@@ -128,7 +127,7 @@ internal sealed partial class RunContext
 					.SelectMany(network => network.GetIPProperties().UnicastAddresses)
 					.Select(unicast => unicast.Address)
 					.Where(address => address.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(address))
-					.Select(address => $"{address}:{this.Host}").Distinct().ToArray();
+					.Select(address => $"{address}:{this.HostPort}").Distinct().ToArray();
 			}
 			catch(NetworkInformationException) { return []; }
 		}
@@ -149,7 +148,7 @@ internal sealed partial class RunContext
 
 					try
 					{
-						await socket.ConnectAsync(IPAddress.Loopback, this.Host, token);
+						await socket.ConnectAsync(IPAddress.Loopback, this.HostPort, token);
 						return new NetworkStream(socket, true);
 					}
 					catch { socket.Dispose(); throw; }
@@ -165,22 +164,22 @@ internal sealed partial class RunContext
 				{
 					if(this.IsWeb)
 					{
-						this.Results.Clear();
-						foreach(var probe in this.Probes)
+						this.ProbeResults.Clear();
+						foreach(var probe in this.ProbeTargets)
 						{
-							var address = this.Url(probe.Scheme, probe.Host);
+							var address = this.GetUrl(probe.Scheme, probe.Host);
 							using var response = await client.GetAsync(address, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
 							if((int)response.StatusCode >= 500)
 								response.EnsureSuccessStatusCode();
 
 							var location = response.Headers.Location;
-							this.Results.Add((probe.Application, probe.Site, address, location == null ? null : new Uri(new Uri(address), location).AbsoluteUri));
+							this.ProbeResults.Add((probe.Application, probe.Site, address, location == null ? null : new Uri(new Uri(address), location).AbsoluteUri));
 						}
 					}
 					else
 					{
 						using var socket = new TcpClient();
-						await socket.ConnectAsync(IPAddress.Loopback, this.Host, timeout.Token);
+						await socket.ConnectAsync(IPAddress.Loopback, this.HostPort, timeout.Token);
 					}
 
 					return;
@@ -206,6 +205,10 @@ internal sealed partial class RunContext
 
 			throw new ContainerizationException(4, failure?.Message ?? Properties.Resources.Run_ProbeTimeout_Message, failure);
 		}
+		#endregion
+
+		#region 私有方法
+		private string GetUrl(string scheme, string host) => new UriBuilder(scheme, host, this.HostPort).Uri.AbsoluteUri;
 		#endregion
 	}
 }

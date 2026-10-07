@@ -47,7 +47,7 @@ internal static class Program
 	{
 		if(arguments.Length == 0 || arguments[0] is "--help" or "-h" || arguments.Length == 2 && arguments[1] is "--help" or "-h")
 		{
-			ContainerizeCommand.Help();
+			ContainerizeCommand.ShowHelp();
 
 			return arguments.Length == 0 ? 2 : 0;
 		}

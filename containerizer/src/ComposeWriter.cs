@@ -55,7 +55,7 @@ internal static class ComposeWriter
 			var service = source.Plan;
 			var value = new JsonObject
 			{
-				["image"] = service.Image.Tag,
+				["image"] = service.Image.Reference,
 				["platform"] = service.Image.Platform,
 				["pull_policy"] = "never",
 				["restart"] = "no",
@@ -66,9 +66,9 @@ internal static class ComposeWriter
 			};
 
 			if(service.Entrypoint != null)
-				value["entrypoint"] = Array(service.Entrypoint);
+				value["entrypoint"] = CreateArray(service.Entrypoint);
 			if(service.Command != null)
-				value["command"] = Array(service.Command);
+				value["command"] = CreateArray(service.Command);
 			if(service.WorkingDirectory != null)
 				value["working_dir"] = service.WorkingDirectory;
 			if(service.User != null)
@@ -135,7 +135,7 @@ internal static class ComposeWriter
 			if(service.Health.Test != null)
 				value["healthcheck"] = new JsonObject
 				{
-					["test"] = Array(service.Health.Test),
+					["test"] = CreateArray(service.Health.Test),
 					["interval"] = $"{service.Health.IntervalSeconds}s",
 					["timeout"] = $"{service.Health.TimeoutSeconds}s",
 					["retries"] = service.Health.Retries,
@@ -144,7 +144,7 @@ internal static class ComposeWriter
 
 			value["networks"] = new JsonObject
 			{
-				["default"] = new JsonObject { ["aliases"] = Array(service.Aliases) }
+				["default"] = new JsonObject { ["aliases"] = CreateArray(service.Aliases) }
 			};
 
 			services.Add(service.Id, value);
@@ -168,6 +168,6 @@ internal static class ComposeWriter
 	#endregion
 
 	#region 私有方法
-	private static JsonArray Array(IEnumerable<string> items) => new(items.Select(item => JsonValue.Create(item.Replace("$", "$$", StringComparison.Ordinal))).Cast<JsonNode>().ToArray());
+	private static JsonArray CreateArray(IEnumerable<string> items) => new(items.Select(item => JsonValue.Create(item.Replace("$", "$$", StringComparison.Ordinal))).Cast<JsonNode>().ToArray());
 	#endregion
 }

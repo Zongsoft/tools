@@ -68,10 +68,9 @@ partial class InstallationManager
 
 		Console.WriteLine(string.Format(Properties.Resources.Lifecycle_Recovery, installation.Name, transaction.Version, GetPhaseText(transaction.Phase)));
 
-		await host.VerifyAsync(bundle, installation, cancellation);
-		await host.StopApplicationsAsync(installation, cancellation);
+		await host.VerifyTargetAsync(bundle, installation, cancellation);
+		await this.EnterMaintenanceAsync(installation, cancellation);
 
-		installation.Maintenance = true;
 		transaction.Failed = false;
 		store.Save(installation);
 
@@ -89,32 +88,32 @@ partial class InstallationManager
 				throw new ContainerizationException(7, Properties.Resources.Lifecycle_13_Message);
 
 			using var bundle = DeliveryBundle.Open(installation.Pending.Assets);
-			await this.MigrationsAsync(installation, bundle, null, cancellation);
+			await this.ApplyMigrationsAsync(installation, bundle, null, cancellation);
 			await this.ActivateAsync(installation, bundle, cancellation);
 		}
 		else
 		{
-			using var bundle = this.Current(installation);
+			using var bundle = this.OpenCurrentBundle(installation);
 
 			try
 			{
-				await this.CheckInfrastructureAsync(bundle, cancellation);
+				await this.WaitForInfrastructureHealthAsync(bundle, cancellation);
 
-				foreach(var service in Ordered(bundle.Plan).Where(service => service.Kind != "infrastructure"))
+				foreach(var service in GetServicesInDependencyOrder(bundle.Plan).Where(service => service.Kind != "infrastructure"))
 				{
-					await host.StartAsync(bundle, service, cancellation);
-					await host.HealthyAsync(bundle, service, cancellation);
+					await host.StartServiceAsync(bundle, service, cancellation);
+					await host.WaitForHealthAsync(bundle, service, cancellation);
 				}
 
-				await host.RestorePoliciesAsync(bundle, cancellation);
-				installation.Maintenance = false;
+				await host.RestoreRestartPoliciesAsync(bundle, cancellation);
+				installation.IsInMaintenance = false;
 				installation.Status = "Installed";
 
 				store.Save(installation);
 			}
 			catch
 			{
-				await host.StopApplicationsAsync(installation, CancellationToken.None);
+				await this.EnterMaintenanceAsync(installation, CancellationToken.None);
 				throw;
 			}
 		}
@@ -124,39 +123,39 @@ partial class InstallationManager
 	{
 		try
 		{
-			await this.CheckInfrastructureAsync(bundle, cancellation);
+			await this.WaitForInfrastructureHealthAsync(bundle, cancellation);
 
 			string[] kinds = ["application", "ingress"];
 			foreach(var kind in kinds)
 			{
-				await this.PhaseAsync(installation, kind == "application" ? "StartApplications" : "StartIngress", async () =>
+				await this.ExecutePhaseAsync(installation, kind == "application" ? "StartApplications" : "StartIngress", async () =>
 				{
-					foreach(var service in Ordered(bundle.Plan).Where(service => service.Kind == kind))
+					foreach(var service in GetServicesInDependencyOrder(bundle.Plan).Where(service => service.Kind == kind))
 					{
-						await host.StartAsync(bundle, service, cancellation);
-						await host.HealthyAsync(bundle, service, cancellation);
+						await host.StartServiceAsync(bundle, service, cancellation);
+						await host.WaitForHealthAsync(bundle, service, cancellation);
 					}
 				});
 			}
 
-			await this.PhaseAsync(installation, "CheckHealth", async () =>
+			await this.ExecutePhaseAsync(installation, "CheckHealth", async () =>
 			{
 				foreach(var service in bundle.Plan.Services)
-					await host.HealthyAsync(bundle, service, cancellation);
+					await host.WaitForHealthAsync(bundle, service, cancellation);
 			});
 
-			await host.RestorePoliciesAsync(bundle, cancellation);
+			await host.RestoreRestartPoliciesAsync(bundle, cancellation);
 
 			installation.Current = bundle.Id;
 			installation.CurrentVersion = bundle.Plan.Version;
 			installation.Status = "Installed";
-			installation.Maintenance = false;
+			installation.IsInMaintenance = false;
 
 			var transaction = installation.Pending;
 			transaction.Phase = "CommitRelease";
 			transaction.Events.Add(new() { Phase = "CommitRelease", Result = "Succeeded" });
 
-			Files.Save(Path.Combine(Path.GetDirectoryName(bundle.Directory), "history.json"), installation, ProtocolJson.Default.Installation);
+			store.SaveHistory(installation);
 
 			installation.Pending = null;
 			installation.RestartPolicies.Clear();
@@ -170,25 +169,25 @@ partial class InstallationManager
 		}
 	}
 
-	private async Task CheckInfrastructureAsync(DeliveryBundle bundle, CancellationToken cancellation)
+	private async Task WaitForInfrastructureHealthAsync(DeliveryBundle bundle, CancellationToken cancellation)
 	{
-		foreach(var service in Ordered(bundle.Plan).Where(service => service.Kind == "infrastructure"))
-			await host.HealthyAsync(bundle, service, cancellation);
+		foreach(var service in GetServicesInDependencyOrder(bundle.Plan).Where(service => service.Kind == "infrastructure"))
+			await host.WaitForHealthAsync(bundle, service, cancellation);
 	}
 
 	private async Task RestartAsync(Installation installation, string component, CancellationToken cancellation)
 	{
-		if(installation.Maintenance || installation.Pending != null || installation.Status != "Installed")
+		if(installation.IsInMaintenance || installation.Pending != null || installation.Status != "Installed")
 			throw new ContainerizationException(7, Properties.Resources.Lifecycle_14_Message);
 
-		using var bundle = this.Current(installation);
-		var services = Ordered(bundle.Plan).Where(service => component == null ? service.Kind != "infrastructure" : service.Id == component).ToArray();
+		using var bundle = this.OpenCurrentBundle(installation);
+		var services = GetServicesInDependencyOrder(bundle.Plan).Where(service => component == null ? service.Kind != "infrastructure" : service.Id == component).ToArray();
 
 		if(services.Length == 0)
 			throw new ContainerizationException(2, Properties.Resources.Lifecycle_15_Message);
 
 		foreach(var service in services)
-			await host.RestartAsync(bundle, service, cancellation);
+			await host.RestartServiceAsync(bundle, service, cancellation);
 	}
 	#endregion
 }

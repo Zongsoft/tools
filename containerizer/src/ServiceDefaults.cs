@@ -60,7 +60,7 @@ internal sealed class ServiceDefaults
 
 		foreach(var section in profile.Sections)
 		{
-			ContainerManifest.Identity(section.Name);
+			ContainerManifest.ValidateIdentity(section.Name);
 
 			if(section.Sections.Count > 0 || defaults._components.ContainsKey(section.Name))
 				throw new ContainerizationException(2, string.Format(Properties.Resources.Settings_File_Message, path));
@@ -74,10 +74,10 @@ internal sealed class ServiceDefaults
 					switch(entry.Name.ToLowerInvariant())
 					{
 						case "tag":
-							ContainerEngine.ValidateTag(entry.Value);
+							ImageReference.ValidateTag(entry.Value);
 							break;
 						case "repository":
-							ContainerEngine.ValidateRepository(entry.Value);
+							ImageReference.ValidateRepository(entry.Value);
 							break;
 						case "settings":
 							ServiceSettings.Parse(entry.Value);
@@ -100,8 +100,8 @@ internal sealed class ServiceDefaults
 		return defaults;
 	}
 
-	public string SelectTag(ContainerManifest.Component component) => component["tag"] ?? this._components.GetValueOrDefault(component.Name)?["tag"] ?? "latest";
-	public string SelectRepository(ContainerManifest.Component component, string fallback) => component["repository"] ?? this._components.GetValueOrDefault(component.Name)?["repository"] ?? fallback;
+	public string SelectTag(ContainerManifest.Component component) => component["tag"] ?? _components.GetValueOrDefault(component.Name)?["tag"] ?? "latest";
+	public string SelectRepository(ContainerManifest.Component component, string fallback) => component["repository"] ?? _components.GetValueOrDefault(component.Name)?["repository"] ?? fallback;
 
 	public void Apply(ContainerManifest.Component component)
 	{
@@ -110,7 +110,7 @@ internal sealed class ServiceDefaults
 
 		component["tag"] = this.SelectTag(component);
 
-		if(this._components.TryGetValue(component.Name, out var defaults))
+		if(_components.TryGetValue(component.Name, out var defaults))
 		{
 			component["repository"] ??= defaults["repository"];
 			var settings = ServiceSettings.Parse(defaults["settings"]);
@@ -125,7 +125,7 @@ internal sealed class ServiceDefaults
 
 	public static string Prepare(ContainerManifest manifest, string directory)
 	{
-		if(manifest.Input != null)
+		if(manifest.InputPath != null)
 			return null;
 
 		var destination = Path.Combine(manifest["output"], ".settings");

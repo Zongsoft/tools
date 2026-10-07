@@ -17,13 +17,14 @@ public sealed class InstallationManagerTests : IDisposable
 {
 	private readonly string _root = Path.Combine(Path.GetTempPath(), "containerizer-lifecycle-" + Guid.NewGuid().ToString("N"));
 	private readonly InstallationStore _store;
-	private readonly FakeHost _host = new();
-	private readonly InstallationManager _lifecycle;
+	private readonly FakeInstallationHost _host = new();
+	private readonly InstallationManager _manager;
 	public InstallationManagerTests()
 	{
 		Directory.CreateDirectory(_root);
 		_store = new InstallationStore(Path.Combine(_root, "registry"), Path.Combine(_root, "logs"), Path.Combine(_root, "cache"), Path.Combine(_root, "run"));
-		_lifecycle = new InstallationManager(_store, _host);
+		_host.Stopping = installation => Assert.True(_store.Load(installation.Name).IsInMaintenance);
+		_manager = new InstallationManager(_store, _host);
 	}
 	public void Dispose() => Directory.Delete(_root, true);
 
@@ -35,18 +36,30 @@ public sealed class InstallationManagerTests : IDisposable
 	[InlineData("en-US", "ApplyMigration", "Apply data migrations")]
 	[InlineData("en-US", "CheckHealth", "Check service health")]
 	[InlineData("zh-CN", "UnknownPhase", "UnknownPhase")]
-	public void PhaseDisplayUsesTheInterfaceLanguage(string culture, string phase, string expected)
+	public async Task RecoveryDisplaysTheRecordedPhaseInTheInterfaceLanguageAsync(string culture, string phase, string expected)
 	{
+		await this.RunAsync("prepare", this.CreateBundle("1.0", false), "--name", "example");
+		var installation = _store.Load("example");
+		installation.Pending.Failed = true;
+		installation.Pending.Phase = phase;
+		_store.Save(installation);
+		_host.TargetVerificationFails = true;
 		var original = CultureInfo.CurrentUICulture;
+		var originalOutput = Console.Out;
+		using var output = new StringWriter();
 
 		try
 		{
 			CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo(culture);
-			Assert.Equal(expected, InstallationManager.GetPhaseText(phase));
+			Console.SetOut(output);
+			await Assert.ThrowsAsync<ContainerizationException>(() => this.RunAsync("recover", "--name", "example"));
+
+			Assert.Contains(expected, output.ToString(), StringComparison.Ordinal);
 		}
 		finally
 		{
 			CultureInfo.CurrentUICulture = original;
+			Console.SetOut(originalOutput);
 		}
 	}
 
@@ -64,14 +77,14 @@ public sealed class InstallationManagerTests : IDisposable
 	[InlineData("missing")]
 	[InlineData("no-health")]
 	[InlineData("unhealthy")]
-	public async Task HealthFailuresIdentifyTheServiceAndRetainTheHealthExitCode(string failure)
+	public async Task HealthFailuresIdentifyTheServiceAndRetainTheHealthExitCodeAsync(string failure)
 	{
 		using var bundle = DeliveryBundle.Open(this.CreateBundle("1.0", false));
 		var service = bundle.Plan.Services[0];
 		service.Health.StartSeconds = service.Health.Retries = service.Health.TimeoutSeconds = 0;
 		var host = new DockerHost(_store, new HealthRunner(failure));
 
-		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => host.HealthyAsync(bundle, service, TestContext.Current.CancellationToken));
+		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => host.WaitForHealthAsync(bundle, service, TestContext.Current.CancellationToken));
 
 		Assert.Equal(6, exception.Code);
 		Assert.Contains(service.Id, exception.Message);
@@ -80,14 +93,14 @@ public sealed class InstallationManagerTests : IDisposable
 	}
 
 	[Fact]
-	public async Task BootstrapCacheOwnershipSurvivesLaterTransactionSaves()
+	public async Task BootstrapCacheOwnershipSurvivesLaterTransactionSavesAsync()
 	{
 		using var bundle = DeliveryBundle.Open(this.CreateBundle("1.0", false));
 		var package = Path.Combine(bundle.Directory, "images", "redis.tar");
 		bundle.Plan.Bootstrap.Packages.Add(new() { Path = "images/redis.tar", Hash = Files.Hash(package), Length = new FileInfo(package).Length });
 		var installation = new Installation { Name = bundle.Plan.Name, DataRoot = bundle.Plan.DataRoot };
 		_store.Save(installation);
-		await new DockerHost(_store, new BootstrapRunner()).BootstrapAsync(bundle, installation, CancellationToken.None);
+		await new DockerHost(_store, new BootstrapRunner()).PrepareBootstrapAsync(bundle, installation, CancellationToken.None);
 		installation.Status = "Preparing";
 		_store.Save(installation);
 
@@ -98,24 +111,97 @@ public sealed class InstallationManagerTests : IDisposable
 	}
 
 	[Fact]
-	public async Task PrepareDoesNotStopMigrateOrCommit()
+	public async Task BootstrapRecreatesDeletedCacheWithoutLosingOwnershipAsync()
+	{
+		using var bundle = DeliveryBundle.Open(this.CreateBundle("1.0", false));
+		var package = Path.Combine(bundle.Directory, "images", "redis.tar");
+		bundle.Plan.Bootstrap.Packages.Add(new() { Path = "images/redis.tar", Hash = Files.Hash(package), Length = new FileInfo(package).Length });
+		var installation = new Installation { Name = bundle.Plan.Name, DataRoot = bundle.Plan.DataRoot };
+		var host = new DockerHost(_store, new BootstrapRunner());
+		await host.PrepareBootstrapAsync(bundle, installation, CancellationToken.None);
+		var cache = _store.GetCachePath(installation.Name);
+		var token = Assert.Single(installation.Directories, item => item.Path == cache).Token;
+		Directory.Delete(cache, true);
+
+		await host.PrepareBootstrapAsync(bundle, installation, CancellationToken.None);
+
+		Assert.Equal($"{installation.Name}/{token}", File.ReadAllText(Path.Combine(cache, ".containerizer-owner")));
+		Assert.Equal(token, Assert.Single(_store.Load(installation.Name).Directories, item => item.Path == cache).Token);
+	}
+
+	[Fact]
+	public async Task BootstrapAptCachePreservesBytesAndRejectsDuplicatePackageNamesAsync()
+	{
+		using var bundle = DeliveryBundle.Open(this.CreateBundle("1.0", false));
+		var package = Path.Combine(bundle.Directory, "images", "redis.tar");
+		var original = File.ReadAllBytes(package);
+		bundle.Plan.Bootstrap.Packages.Add(new() { Path = "images/redis.tar", Hash = Files.Hash(package), Length = original.Length });
+		var installation = new Installation { Name = bundle.Plan.Name, DataRoot = bundle.Plan.DataRoot };
+		var host = new DockerHost(_store, new BootstrapRunner());
+		await host.PrepareBootstrapAsync(bundle, installation, CancellationToken.None);
+		var cache = Path.Combine(_store.GetCachePath(installation.Name), bundle.Id, "bootstrap", "apt", "redis.tar");
+
+		Assert.Equal(original, File.ReadAllBytes(cache));
+
+		var collision = Path.Combine(bundle.Directory, "other", "redis.tar");
+		Directory.CreateDirectory(Path.GetDirectoryName(collision));
+		File.WriteAllText(collision, "conflicting content");
+		bundle.Plan.Bootstrap.Packages.Add(new() { Path = "other/redis.tar", Hash = Files.Hash(collision), Length = new FileInfo(collision).Length });
+
+		Assert.Equal(4, (await Assert.ThrowsAsync<ContainerizationException>(() => host.PrepareBootstrapAsync(bundle, installation, CancellationToken.None))).Code);
+		Assert.Equal(original, File.ReadAllBytes(cache));
+		Assert.Equal(original, File.ReadAllBytes(package));
+	}
+
+	[Theory]
+	[InlineData("/var")]
+	[InlineData("/var/lib")]
+	[InlineData("/var/lib/containerizer")]
+	[InlineData("/var/lib/containerizer/apps/example")]
+	[InlineData("//var/lib/containerizer/apps/example")]
+	[InlineData("/var/lib/containerizer//data/other")]
+	[InlineData("/var/lib/containerizer/data/")]
+	[InlineData("/var/lib/containerizer/data")]
+	[InlineData("/var/lib/containerizer/data/other")]
+	[InlineData("/var/lib/containerizer/data/example-other")]
+	[InlineData("/var/lib/containerizer/data/example/../other")]
+	[InlineData("/var/log")]
+	[InlineData("/var/log/containerizer/example")]
+	[InlineData("/var/cache/containerizer/example")]
+	[InlineData("/run/containerizer")]
+	[InlineData("/etc/application")]
+	public async Task DirectoryPreparationRejectsSystemAndOtherApplicationPathsAsync(string path)
+	{
+		using var bundle = DeliveryBundle.Open(this.CreateBundle("1.0", false));
+		bundle.Plan.DataRoot = path;
+		var installation = new Installation { Name = bundle.Plan.Name, DataRoot = path };
+		var host = new DockerHost(_store, new BootstrapRunner());
+
+		await Assert.ThrowsAsync<ContainerizationException>(() => host.PrepareDirectoriesAsync(bundle, installation, CancellationToken.None));
+
+		Assert.Empty(installation.Directories);
+		Assert.Null(_store.Load(installation.Name, false));
+	}
+
+	[Fact]
+	public async Task PrepareDoesNotStopMigrateOrCommitAsync()
 	{
 		var path = this.CreateBundle("1.0", true);
-		await this.Run("prepare", path, "--name", "example");
+		await this.RunAsync("prepare", path, "--name", "example");
 
 		var state = _store.Load("example");
 		Assert.Equal("Prepared", state.Status);
 		Assert.Null(state.Current);
 		Assert.DoesNotContain("stop", _host.Calls);
-		Assert.Equal(0, _host.Applies);
-		Assert.Equal(7, (await Assert.ThrowsAsync<ContainerizationException>(() => this.Run("start", "--name", "example"))).Code);
-		Assert.Equal(7, (await Assert.ThrowsAsync<ContainerizationException>(() => this.Run("recover", "--name", "example"))).Code);
+		Assert.Equal(0, _host.MigrationApplyCount);
+		Assert.Equal(7, (await Assert.ThrowsAsync<ContainerizationException>(() => this.RunAsync("start", "--name", "example"))).Code);
+		Assert.Equal(7, (await Assert.ThrowsAsync<ContainerizationException>(() => this.RunAsync("recover", "--name", "example"))).Code);
 	}
 
 	[Theory]
 	[InlineData("zh-CN")]
 	[InlineData("en-US")]
-	public async Task NoStartCommitsOnlyAfterExplicitStartAndReusesMigrationSuccess(string culture)
+	public async Task NoStartCommitsOnlyAfterExplicitStartAndReusesMigrationSuccessAsync(string culture)
 	{
 		var original = CultureInfo.CurrentUICulture;
 
@@ -123,26 +209,26 @@ public sealed class InstallationManagerTests : IDisposable
 		{
 			CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo(culture);
 			var path = this.CreateBundle("1.0", true);
-			await this.Run("install", path, "--no-start");
+			await this.RunAsync("install", path, "--no-start");
 
 			var state = _store.Load("example");
 			Assert.Equal("ReadyToStart", state.Status);
 			Assert.Equal("ReadyToStart", state.Pending.Phase);
 			Assert.Contains("PrepareBootstrap", state.Pending.Completed);
 			Assert.Contains(state.Pending.Events, item => item.Phase == "ApplyMigration" && item.Result == "Succeeded");
-			Assert.True(state.Maintenance);
+			Assert.True(state.IsInMaintenance);
 			Assert.Null(state.Current);
-			Assert.Equal(1, _host.Applies);
+			Assert.Equal(1, _host.MigrationApplyCount);
 			Assert.DoesNotContain("start:web", _host.Calls);
 
 			Directory.Delete(path, true);
-			await this.Run("start", "--name", "example");
+			await this.RunAsync("start", "--name", "example");
 
 			state = _store.Load("example");
 			Assert.Equal("Installed", state.Status);
-			Assert.False(state.Maintenance);
+			Assert.False(state.IsInMaintenance);
 			Assert.Equal("1.0", state.CurrentVersion);
-			Assert.Equal(1, _host.Applies);
+			Assert.Equal(1, _host.MigrationApplyCount);
 			Assert.Contains("start:web", _host.Calls);
 		}
 		finally
@@ -152,23 +238,23 @@ public sealed class InstallationManagerTests : IDisposable
 	}
 
 	[Fact]
-	public async Task FailedMigrationRequiresExplicitRetryAndRetainsAttempts()
+	public async Task FailedMigrationRequiresExplicitRetryAndRetainsAttemptsAsync()
 	{
-		_host.FailMigration = true;
+		_host.MigrationFails = true;
 		var path = this.CreateBundle("1.0", true);
-		await Assert.ThrowsAsync<ContainerizationException>(() => this.Run("install", path));
-		Assert.Equal(1, _host.Applies);
-		await Assert.ThrowsAsync<ContainerizationException>(() => this.Run("install", path));
-		await Assert.ThrowsAsync<ContainerizationException>(() => this.Run("recover", "--name", "example"));
-		Assert.Equal(1, _host.Applies);
-		_host.FailMigration = false;
-		await this.Run("recover", "--name", "example", "--retry-migration", "1.0");
+		await Assert.ThrowsAsync<ContainerizationException>(() => this.RunAsync("install", path));
+		Assert.Equal(1, _host.MigrationApplyCount);
+		await Assert.ThrowsAsync<ContainerizationException>(() => this.RunAsync("install", path));
+		await Assert.ThrowsAsync<ContainerizationException>(() => this.RunAsync("recover", "--name", "example"));
+		Assert.Equal(1, _host.MigrationApplyCount);
+		_host.MigrationFails = false;
+		await this.RunAsync("recover", "--name", "example", "--retry-migration", "1.0");
 		var state = _store.Load("example");
 		Assert.Equal("ReadyToStart", state.Status);
-		Assert.True(state.Maintenance);
+		Assert.True(state.IsInMaintenance);
 		Assert.Equal(2, Assert.Single(state.Migrations.Values).Attempts.Count);
 		Assert.DoesNotContain("start:web", _host.Calls);
-		Assert.Equal(2, _host.Applies);
+		Assert.Equal(2, _host.MigrationApplyCount);
 		Assert.All(_host.MigrationPaths, path => Assert.Equal(Path.Combine(_store.GetApplicationPath("example"), "migrations", "1.0"), path));
 		var attempts = Assert.Single(state.Migrations.Values).Attempts;
 		Assert.All(attempts, attempt => Assert.Equal(_store.GetLogPath("example"), Path.GetDirectoryName(attempt.Log)));
@@ -176,105 +262,153 @@ public sealed class InstallationManagerTests : IDisposable
 	}
 
 	[Fact]
-	public async Task InterruptedStartedMigrationCannotAutomaticallyRunAgain()
+	public async Task InterruptedStartedMigrationCannotAutomaticallyRunAgainAsync()
 	{
 		var path = this.CreateBundle("1.0", true);
-		await this.Run("install", path, "--no-start");
+		await this.RunAsync("install", path, "--no-start");
 		var state = _store.Load("example");
 		state.Pending.Failed = true;
 		Assert.Single(state.Migrations.Values).Status = "Started";
 		_store.Save(state);
-		await Assert.ThrowsAsync<ContainerizationException>(() => this.Run("recover", "--name", "example"));
-		Assert.Equal(1, _host.Applies);
+		await Assert.ThrowsAsync<ContainerizationException>(() => this.RunAsync("recover", "--name", "example"));
+		Assert.Equal(1, _host.MigrationApplyCount);
 	}
 
 	[Fact]
-	public async Task RestartDefaultsToApplicationButAllowsExplicitInfrastructure()
+	public async Task RestartDefaultsToApplicationButAllowsExplicitInfrastructureAsync()
 	{
-		await this.Run("install", this.CreateBundle("1.0", false));
+		await this.RunAsync("install", this.CreateBundle("1.0", false));
 		_host.Calls.Clear();
-		await this.Run("restart", "--name", "example");
+		await this.RunAsync("restart", "--name", "example");
 		Assert.Equal(["restart:web"], _host.Calls);
-		await this.Run("restart", "redis", "--name", "example");
+		await this.RunAsync("restart", "redis", "--name", "example");
 		Assert.Contains("restart:redis", _host.Calls);
-		await this.Run("stop", "--name", "example");
+		await this.RunAsync("stop", "--name", "example");
 		_host.Calls.Clear();
-		await Assert.ThrowsAsync<ContainerizationException>(() => this.Run("restart", "redis", "--name", "example"));
+		await Assert.ThrowsAsync<ContainerizationException>(() => this.RunAsync("restart", "redis", "--name", "example"));
 		Assert.Empty(_host.Calls);
 	}
 
 	[Fact]
-	public async Task UpgradeConflictDoesNotStopOldDeployment()
+	public async Task UpgradeConflictDoesNotStopOldDeploymentAsync()
 	{
-		await this.Run("install", this.CreateBundle("1.0", false));
+		await this.RunAsync("install", this.CreateBundle("1.0", false));
 		_host.Calls.Clear();
 		var next = this.CreateBundle("2.0", false, true);
-		await Assert.ThrowsAsync<ContainerizationException>(() => this.Run("upgrade", next, "--name", "example"));
+		await Assert.ThrowsAsync<ContainerizationException>(() => this.RunAsync("upgrade", next, "--name", "example"));
 		Assert.DoesNotContain("stop", _host.Calls);
 		Assert.Equal("1.0", _store.Load("example").CurrentVersion);
 	}
 
 	[Fact]
-	public async Task OrdinaryUninstallRetainsHistoryAndPurgeRemovesRegistration()
+	public async Task OrdinaryUninstallRetainsHistoryAndPurgeRemovesRegistrationAsync()
 	{
-		await this.Run("install", this.CreateBundle("1.0", true));
-		await this.Run("uninstall", "--name", "example");
+		await this.RunAsync("install", this.CreateBundle("1.0", true));
+		var installed = _store.Load("example");
+		var history = Path.Combine(_store.GetApplicationPath("example"), "releases", installed.Current, "history.json");
+		Assert.Null(installed.Pending);
+		Assert.Equal("CommitRelease", Files.Load(history, ProtocolJson.Default.Installation).Pending.Phase);
+
+		await this.RunAsync("uninstall", "--name", "example");
 		Assert.Equal("Uninstalled", _store.Load("example").Status);
 		Assert.Single(_store.Load("example").Migrations);
-		await this.Run("uninstall", "--name", "example", "--purge");
+		Assert.True(File.Exists(history));
+		await this.RunAsync("uninstall", "--name", "example", "--purge");
 		Assert.Empty(_store.List());
 		Assert.True(File.Exists(Path.Combine(_store.RuntimeRoot, "example.lock")));
 	}
 
 	[Fact]
-	public async Task ImagePreparationFailureKeepsCurrentServicesRunning()
+	public async Task ImagePreparationFailureKeepsCurrentServicesRunningAsync()
 	{
-		await this.Run("install", this.CreateBundle("1.0", false));
+		await this.RunAsync("install", this.CreateBundle("1.0", false));
 		_host.Calls.Clear();
-		_host.FailImages = true;
-		await Assert.ThrowsAsync<ContainerizationException>(() => this.Run("upgrade", this.CreateBundle("2.0", false), "--name", "example"));
+		_host.ImagePreparationFails = true;
+		await Assert.ThrowsAsync<ContainerizationException>(() => this.RunAsync("upgrade", this.CreateBundle("2.0", false), "--name", "example"));
 		var state = _store.Load("example");
 		Assert.Equal("1.0", state.CurrentVersion);
-		Assert.False(state.Maintenance);
+		Assert.False(state.IsInMaintenance);
 		Assert.True(state.Pending.Failed);
 		Assert.DoesNotContain("stop", _host.Calls);
-		_host.FailVerify = true;
-		await Assert.ThrowsAsync<ContainerizationException>(() => this.Run("recover", "--name", "example"));
+		_host.TargetVerificationFails = true;
+		await Assert.ThrowsAsync<ContainerizationException>(() => this.RunAsync("recover", "--name", "example"));
 		Assert.True(_store.Load("example").Pending.Failed);
 	}
 
 	[Fact]
-	public async Task SameCompletedBundleDoesNotStopOrRecreateServices()
+	public async Task MaintenanceSaveFailureDoesNotStopTheCurrentDeploymentAsync()
 	{
-		var input = this.CreateBundle("1.0", true);
-		await this.Run("install", input);
+		await this.RunAsync("install", this.CreateBundle("1.0", false));
 		_host.Calls.Clear();
-		await this.Run("install", input);
+		_host.PreparingDirectories = installation =>
+		{
+			var state = _store.GetStatePath(installation.Name);
+			File.Delete(state);
+			Directory.CreateDirectory(state);
+		};
+
+		await Assert.ThrowsAnyAsync<IOException>(() => this.RunAsync("upgrade", this.CreateBundle("2.0", false), "--name", "example"));
 		Assert.Empty(_host.Calls);
-		Assert.Equal(1, _host.Applies);
 	}
 
 	[Fact]
-	public async Task PurgeCanResumeAfterReleaseAssetsHaveBeenRemoved()
+	public async Task StopFailurePersistsMaintenanceAndRecoveryRetainsTheUpgradeTransactionAsync()
 	{
-		await this.Run("install", this.CreateBundle("1.0", true));
-		_host.FailFinalPurge = true;
-		await Assert.ThrowsAsync<ContainerizationException>(() => this.Run("uninstall", "--name", "example", "--purge"));
+		await this.RunAsync("install", this.CreateBundle("1.0", false));
+		_host.StopFails = true;
+		await Assert.ThrowsAsync<ContainerizationException>(() => this.RunAsync("upgrade", this.CreateBundle("2.0", false), "--name", "example"));
+
+		var failed = _store.Load("example");
+		Assert.True(failed.IsInMaintenance);
+		Assert.True(failed.Pending.Failed);
+		Assert.Equal("Failed", failed.Status);
+		Assert.Equal("1.0", failed.CurrentVersion);
+		Assert.NotEmpty(failed.Residuals);
+
+		_host.StopFails = false;
+		await this.RunAsync("recover", "--name", "example");
+		var recovered = _store.Load("example");
+		Assert.Equal(failed.Pending.Id, recovered.Pending.Id);
+		Assert.Equal(failed.Current, recovered.Current);
+		Assert.Equal("ReadyToStart", recovered.Status);
+		Assert.True(recovered.IsInMaintenance);
+		Assert.False(recovered.Pending.Failed);
+	}
+
+	[Fact]
+	public async Task SameCompletedBundleDoesNotStopOrRecreateServicesAsync()
+	{
+		var input = this.CreateBundle("1.0", true);
+		await this.RunAsync("install", input);
+		_host.Calls.Clear();
+		await this.RunAsync("install", input);
+		Assert.Empty(_host.Calls);
+		Assert.Equal(1, _host.MigrationApplyCount);
+	}
+
+	[Fact]
+	public async Task PurgeCanResumeAfterReleaseAssetsHaveBeenRemovedAsync()
+	{
+		await this.RunAsync("install", this.CreateBundle("1.0", true));
+		_host.FinalPurgeFails = true;
+		await Assert.ThrowsAsync<ContainerizationException>(() => this.RunAsync("uninstall", "--name", "example", "--purge"));
 		Assert.True(_store.Load("example").PurgeResourcesCompleted);
-		Assert.Equal(1, _host.Uninstalls);
-		_host.FailFinalPurge = false;
-		await this.Run("uninstall", "--name", "example", "--purge");
-		Assert.Equal(1, _host.Uninstalls);
+		Assert.Equal("CleanupFailed", _store.Load("example").Status);
+		Assert.False(Directory.Exists(Path.Combine(_store.GetApplicationPath("example"), "releases")));
+		Assert.Equal(1, _host.UninstallCount);
+		_host.FinalPurgeFails = false;
+		await this.RunAsync("uninstall", "--name", "example", "--purge");
+		Assert.Equal(1, _host.UninstallCount);
 		Assert.Empty(_store.List());
 	}
 
 	[Fact]
-	public async Task ConfigurationAssetsStayInTheVerifiedReleaseAndUpgradeWithoutRuntimeCopies()
+	public async Task ConfigurationAssetsStayInTheVerifiedReleaseAndUpgradeWithoutRuntimeCopiesAsync()
 	{
-		await this.Run("install", this.CreateBundle("1.0", false, configuration: "original"));
+		await this.RunAsync("install", this.CreateBundle("1.0", false, configuration: "original"));
 		var state = _store.Load("example");
 		var current = Path.Combine(_store.GetApplicationPath("example"), "releases", state.Current, "assets");
-		await this.Run("upgrade", this.CreateBundle("2.0", false, configuration: "incoming"), "--name", "example");
+		await this.RunAsync("upgrade", this.CreateBundle("2.0", false, configuration: "incoming"), "--name", "example");
 		state = _store.Load("example");
 		var next = Path.Combine(_store.GetApplicationPath("example"), "releases", state.Current, "assets");
 		Assert.Equal("2.0", state.CurrentVersion);
@@ -297,10 +431,10 @@ public sealed class InstallationManagerTests : IDisposable
 	[Fact]
 	public void ApplicationLockSurvivesRegistryRemoval()
 	{
-		using var held = _store.Lock("example");
+		using var held = _store.AcquireApplicationLock("example");
 		Directory.CreateDirectory(_store.GetApplicationPath("example"));
 		Directory.Delete(_store.GetApplicationPath("example"));
-		Assert.Equal(8, Assert.Throws<ContainerizationException>(() => _store.Lock("example")).Code);
+		Assert.Equal(8, Assert.Throws<ContainerizationException>(() => _store.AcquireApplicationLock("example")).Code);
 	}
 
 	[Fact]
@@ -312,14 +446,14 @@ public sealed class InstallationManagerTests : IDisposable
 		Assert.Empty(_store.List());
 	}
 
-	private Task Run(params string[] arguments) => _lifecycle.ExecuteAsync(ExecutorArguments.Parse(arguments), CancellationToken.None);
+	private Task RunAsync(params string[] arguments) => _manager.ExecuteAsync(ExecutorArguments.Parse(arguments), CancellationToken.None);
 
 	[Theory]
 	[InlineData(false, false)]
 	[InlineData(true, false)]
 	[InlineData(false, true)]
 	[InlineData(true, true)]
-	public async Task OfflineImportValidatesImageIdentityBeforePublishingDeliveryTags(bool wrongArchitecture, bool cached)
+	public async Task OfflineImportValidatesImageIdentityBeforePublishingDeliveryTagsAsync(bool wrongArchitecture, bool cached)
 	{
 		using var bundle = DeliveryBundle.Open(this.CreateBundle("1.0", false));
 		var runner = new ImportedImageRunner(wrongArchitecture, cached);
@@ -327,25 +461,85 @@ public sealed class InstallationManagerTests : IDisposable
 
 		if(wrongArchitecture)
 		{
-			Assert.Equal(4, (await Assert.ThrowsAsync<ContainerizationException>(() => host.ImagesAsync(bundle, CancellationToken.None))).Code);
+			Assert.Equal(4, (await Assert.ThrowsAsync<ContainerizationException>(() => host.PrepareImagesAsync(bundle, CancellationToken.None))).Code);
 			Assert.Empty(runner.PublishedTags);
 		}
 		else
 		{
-			await host.ImagesAsync(bundle, CancellationToken.None);
-			Assert.Equal(bundle.Plan.Services.Select(service => service.Image.Tag), runner.PublishedTags);
+			await host.PrepareImagesAsync(bundle, CancellationToken.None);
+			Assert.Equal(bundle.Plan.Services.Select(service => service.Image.Reference), runner.PublishedTags);
 		}
 
-		Assert.Equal(cached ? 0 : 1, runner.Loads);
+		Assert.Equal(cached ? 0 : 1, runner.ImageLoadCount);
 	}
 
 	[Fact]
-	public async Task InfrastructureRestartPreservesContainerAndUninstallRemovesAnonymousVolumes()
+	public async Task RestartPoliciesArePersistedBeforeUpdatesAndSurviveAnInterruptedStopAsync()
+	{
+		await this.RunAsync("install", this.CreateBundle("1.0", false, configuration: "original"));
+		var runner = new MaintenanceRunner(_store) { StopFails = true };
+		var manager = new InstallationManager(_store, new DockerHost(_store, runner));
+		var arguments = ExecutorArguments.Parse(["stop", "--name", "example"]);
+
+		await Assert.ThrowsAsync<ContainerizationException>(() => manager.ExecuteAsync(arguments, CancellationToken.None));
+		var interrupted = _store.Load("example");
+		Assert.True(interrupted.IsInMaintenance);
+		Assert.Equal("on-failure:3", interrupted.RestartPolicies["web"]);
+		Assert.Equal("always", interrupted.RestartPolicies["nginx"]);
+
+		runner.StopFails = false;
+		await manager.ExecuteAsync(arguments, CancellationToken.None);
+		var stopped = _store.Load("example");
+		Assert.Equal("Maintenance", stopped.Status);
+		Assert.Equal(interrupted.RestartPolicies, stopped.RestartPolicies);
+		Assert.DoesNotContain(runner.Calls, call => call[0] is "update" or "stop" && call[^1] == "redis");
+	}
+
+	[Theory]
+	[InlineData(0)]
+	[InlineData(7)]
+	public async Task LogsUseTheStreamingRunnerAndPreserveArgumentsAndExitHandlingAsync(int exitCode)
+	{
+		await this.RunAsync("install", this.CreateBundle("1.0", false));
+		var runner = new LogRunner(exitCode);
+		var manager = new InstallationManager(_store, new DockerHost(_store, runner));
+		var arguments = ExecutorArguments.Parse(["logs", "web", "--name", "example", "--tail", "12", "--follow"]);
+		using var cancellation = new CancellationTokenSource();
+
+		if(exitCode == 0)
+			await manager.ExecuteAsync(arguments, cancellation.Token);
+		else
+			Assert.Equal(4, (await Assert.ThrowsAsync<ContainerizationException>(() => manager.ExecuteAsync(arguments, cancellation.Token))).Code);
+
+		var state = _store.Load("example");
+		var assets = Path.Combine(_store.GetApplicationPath("example"), "releases", state.Current, "assets");
+		Assert.Equal(BootstrapPlan.ENGINE, runner.Executable);
+		Assert.Equal(assets, runner.Directory);
+		Assert.Equal(cancellation.Token, runner.Cancellation);
+		Assert.Equal(["logs", "--no-color", "--tail", "12", "--follow", "web"], runner.Arguments.Skip(7));
+	}
+
+	[Fact]
+	public async Task LogsForwardCancellationToTheStreamingRunnerAsync()
+	{
+		await this.RunAsync("install", this.CreateBundle("1.0", false));
+		var runner = new LogRunner(0);
+		var manager = new InstallationManager(_store, new DockerHost(_store, runner));
+		using var cancellation = new CancellationTokenSource();
+		cancellation.Cancel();
+
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => manager.ExecuteAsync(
+			ExecutorArguments.Parse(["logs", "--name", "example", "--follow"]), cancellation.Token));
+		Assert.Equal(cancellation.Token, runner.Cancellation);
+	}
+
+	[Fact]
+	public async Task InfrastructureRestartPreservesContainerAndUninstallRemovesAnonymousVolumesAsync()
 	{
 		using var bundle = DeliveryBundle.Open(this.CreateBundle("1.0", false));
 		var runner = new StorageRunner();
 		var host = new DockerHost(_store, runner);
-		await host.StartAsync(bundle, bundle.Plan.Services.Single(service => service.Id == "redis"), CancellationToken.None);
+		await host.StartServiceAsync(bundle, bundle.Plan.Services.Single(service => service.Id == "redis"), CancellationToken.None);
 		Assert.Contains("--no-recreate", Assert.Single(runner.Calls, arguments => arguments[0] == "compose"));
 		Assert.DoesNotContain("--env-file", Assert.Single(runner.Calls, arguments => arguments[0] == "compose"));
 		var installation = new Installation { Name = "example", DataRoot = Path.Combine(_root, "data") };
@@ -360,14 +554,14 @@ public sealed class InstallationManagerTests : IDisposable
 	[Theory]
 	[InlineData(true)]
 	[InlineData(false)]
-	public async Task IngressCleansTemporaryVolumesOnlyWhenRecreated(bool recreated)
+	public async Task IngressCleansTemporaryVolumesOnlyWhenRecreatedAsync(bool recreated)
 	{
 		using var bundle = DeliveryBundle.Open(this.CreateBundle("1.0", false));
 		var service = bundle.Plan.Services.Single(item => item.Id == "web");
 		service.Kind = "ingress";
 		service.Mounts.Add(new() { Temporary = true, Target = "/data" });
-		var runner = new StorageRunner { ReplaceContainer = recreated };
-		await new DockerHost(_store, runner).StartAsync(bundle, service, CancellationToken.None);
+		var runner = new StorageRunner { RecreatesContainer = recreated };
+		await new DockerHost(_store, runner).StartServiceAsync(bundle, service, CancellationToken.None);
 		var arguments = Assert.Single(runner.Calls, arguments => arguments[0] == "compose");
 		Assert.Contains("--renew-anon-volumes", arguments);
 		Assert.DoesNotContain("--no-recreate", arguments);
@@ -395,8 +589,10 @@ public sealed class InstallationManagerTests : IDisposable
 	private sealed class StorageRunner : IProcessRunner
 	{
 		private bool _started;
-		public bool ReplaceContainer { get; set; }
+		public bool RecreatesContainer { get; set; }
 		public List<string[]> Calls { get; } = [];
+		public Task<int> StreamAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation) => throw new NotSupportedException();
+
 		public Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation, int timeoutSeconds = 900)
 		{
 			this.Calls.Add(arguments.ToArray());
@@ -404,12 +600,66 @@ public sealed class InstallationManagerTests : IDisposable
 				_started = true;
 			var output = arguments[0] switch
 			{
-				"ps" => _started && this.ReplaceContainer ? "replacement-container\n" : "owned-container\n",
+				"ps" => _started && this.RecreatesContainer ? "replacement-container\n" : "owned-container\n",
 				"inspect" => "[{\"Config\":{\"Labels\":{\"org.zongsoft.containerizer.service\":\"redis\"}},\"Mounts\":[{\"Type\":\"volume\",\"Destination\":\"/data\",\"Name\":\"" + new string('a', 64) + "\"}]}]",
 				_ => "",
 			};
 			return Task.FromResult(new ProcessResult(0, output, ""));
 		}
+	}
+
+	private sealed class MaintenanceRunner(InstallationStore store) : IProcessRunner
+	{
+		private readonly Dictionary<string, string> _policies = new() { ["web"] = "on-failure", ["nginx"] = "always", ["redis"] = "unless-stopped" };
+		public bool StopFails { get; set; }
+		public List<string[]> Calls { get; } = [];
+		public Task<int> StreamAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation) => throw new NotSupportedException();
+
+		public Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation, int timeoutSeconds = 900)
+		{
+			this.Calls.Add(arguments.ToArray());
+			var service = arguments[^1];
+			if(arguments[0] == "ps")
+				return Task.FromResult(new ProcessResult(0, "web\nnginx\nredis\n", ""));
+			if(arguments[0] == "inspect")
+				return Task.FromResult(new ProcessResult(0, System.Text.Json.JsonSerializer.Serialize(new[]
+				{
+					new
+					{
+						Config = new { Labels = new Dictionary<string, string> { ["org.zongsoft.containerizer.service"] = service } },
+						HostConfig = new { RestartPolicy = new { Name = _policies[service], MaximumRetryCount = service == "web" ? 3 : 0 } },
+					},
+				}), ""));
+
+			var state = store.Load("example");
+			Assert.True(state.IsInMaintenance);
+			Assert.Equal(service == "web" ? "on-failure:3" : "always", state.RestartPolicies[service]);
+
+			if(arguments[0] == "update")
+				_policies[service] = "no";
+
+			return Task.FromResult(new ProcessResult(this.StopFails && arguments[0] == "stop" && service == "nginx" ? 1 : 0, "", ""));
+		}
+	}
+
+	private sealed class LogRunner(int exitCode) : IProcessRunner
+	{
+		public string Executable { get; private set; }
+		public IReadOnlyList<string> Arguments { get; private set; }
+		public string Directory { get; private set; }
+		public CancellationToken Cancellation { get; private set; }
+
+		public Task<int> StreamAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation)
+		{
+			this.Executable = executable;
+			this.Arguments = arguments;
+			this.Directory = directory;
+			this.Cancellation = cancellation;
+			cancellation.ThrowIfCancellationRequested();
+			return Task.FromResult(exitCode);
+		}
+
+		public Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation, int timeoutSeconds = 900) => throw new NotSupportedException();
 	}
 
 	private string CreateBundle(string version, bool migration, bool changedInfrastructure = false, string configuration = null)
@@ -432,10 +682,10 @@ public sealed class InstallationManagerTests : IDisposable
 		}
 
 		foreach(var id in new[] { "redis", "web" })
-			plan.Services.Add(new() { Id = id, Kind = id == "redis" ? "infrastructure" : "application", ConfigurationHash = id == "redis" && changedInfrastructure ? "changed" : "same", Image = new() { Id = "sha256:" + new string('a', 64), Digest = "sha256:" + new string('b', 64), Tag = "containerizer/" + plan.Project + "/" + id + ":locked", Platform = "linux/amd64", Archive = "images/" + id + ".tar" } });
+			plan.Services.Add(new() { Id = id, Kind = id == "redis" ? "infrastructure" : "application", ConfigurationHash = id == "redis" && changedInfrastructure ? "changed" : "same", Image = new() { Id = "sha256:" + new string('a', 64), Digest = "sha256:" + new string('b', 64), Reference = "containerizer/" + plan.Project + "/" + id + ":locked", Platform = "linux/amd64", Archive = "images/" + id + ".tar" } });
 
 		if(configuration != null)
-			plan.Services.Add(new() { Id = "nginx", Kind = "ingress", Image = new() { Id = plan.Services[1].Image.Id, Tag = "containerizer/" + plan.Project + "/nginx:locked", Platform = "linux/amd64", Archive = "images/web.tar" }, Mounts = [new() { Source = "config/nginx/site.conf", Target = "/etc/nginx/conf.d/site.conf", ReadOnly = true }] });
+			plan.Services.Add(new() { Id = "nginx", Kind = "ingress", Image = new() { Id = plan.Services[1].Image.Id, Reference = "containerizer/" + plan.Project + "/nginx:locked", Platform = "linux/amd64", Archive = "images/web.tar" }, Mounts = [new() { Source = "config/nginx/site.conf", Target = "/etc/nginx/conf.d/site.conf", ReadOnly = true }] });
 
 		if(migration)
 		{
@@ -455,7 +705,7 @@ public sealed class InstallationManagerTests : IDisposable
 	[InlineData(false, false)]
 	[InlineData(true, false)]
 	[InlineData(false, true)]
-	public async Task OnlineMirrorsKeepPinnedIdentityAndReuseCachedImages(bool wrongMirror, bool cached)
+	public async Task OnlineMirrorsKeepPinnedIdentityAndReuseCachedImagesAsync(bool wrongMirror, bool cached)
 	{
 		using var bundle = DeliveryBundle.Open(this.CreateBundle("1.0", false));
 		bundle.Plan.Services.RemoveAt(1);
@@ -464,10 +714,10 @@ public sealed class InstallationManagerTests : IDisposable
 		image.Repository = "docker.io/library/redis";
 		var runner = new OnlineImageRunner(image, wrongMirror, cached);
 		var sources = new RegistryMirrors { Registries = new() { ["docker.io"] = ["mirror.example.com/docker.io"] } };
-		await new DockerHost(_store, runner, sources).ImagesAsync(bundle, TestContext.Current.CancellationToken);
+		await new DockerHost(_store, runner, sources).PrepareImagesAsync(bundle, TestContext.Current.CancellationToken);
 		Assert.Equal(cached ? 0 : wrongMirror ? 2 : 1, runner.Calls.Count(arguments => arguments[0] == "pull"));
 		Assert.All(runner.Calls.Where(arguments => arguments[0] == "pull"), arguments => Assert.EndsWith($"@{image.Digest}", arguments[^1], StringComparison.Ordinal));
-		Assert.Equal(["tag", image.Id, image.Tag], Assert.Single(runner.Calls, arguments => arguments[0] == "tag"));
+		Assert.Equal(["tag", image.Id, image.Reference], Assert.Single(runner.Calls, arguments => arguments[0] == "tag"));
 		Assert.Equal("docker.io/library/redis", image.Repository);
 	}
 
@@ -475,6 +725,8 @@ public sealed class InstallationManagerTests : IDisposable
 	{
 		public List<string[]> Calls { get; } = [];
 		private bool _pulled;
+		public Task<int> StreamAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation) => throw new NotSupportedException();
+
 		public Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation, int timeoutSeconds = 900)
 		{
 			this.Calls.Add(arguments.ToArray());
@@ -497,13 +749,15 @@ public sealed class InstallationManagerTests : IDisposable
 	private sealed class ImportedImageRunner(bool wrongArchitecture, bool cached) : IProcessRunner
 	{
 		public List<string> PublishedTags { get; } = [];
-		public int Loads { get; private set; }
+		public int ImageLoadCount { get; private set; }
+		public Task<int> StreamAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation) => throw new NotSupportedException();
+
 		public Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation, int timeoutSeconds = 900)
 		{
 			var id = "sha256:" + new string('a', 64);
 
 			if(arguments[0] == "image" && arguments[1] == "load")
-				this.Loads++;
+				this.ImageLoadCount++;
 
 			if(arguments[0] == "tag")
 			{
@@ -513,7 +767,7 @@ public sealed class InstallationManagerTests : IDisposable
 
 			if(arguments[0] == "image" && arguments[1] == "inspect")
 			{
-				if(arguments[2] != id || !cached && this.Loads == 0)
+				if(arguments[2] != id || !cached && this.ImageLoadCount == 0)
 					return Task.FromResult(new ProcessResult(1, "", "Only the imported image ID and upstream localhost tag exist."));
 
 				return Task.FromResult(new ProcessResult(0, "[{\"Id\":\"" + id + "\",\"Os\":\"linux\",\"Architecture\":\"" + (wrongArchitecture ? "arm64" : "amd64") + "\"}]", ""));
@@ -525,12 +779,16 @@ public sealed class InstallationManagerTests : IDisposable
 
 	private sealed class BootstrapRunner : IProcessRunner
 	{
+		public Task<int> StreamAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation) => throw new NotSupportedException();
+
 		public Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation, int timeoutSeconds = 900) =>
 			Task.FromResult(new ProcessResult(executable == "sh" ? 1 : 0, "", ""));
 	}
 
 	private sealed class HealthRunner(string failure) : IProcessRunner
 	{
+		public Task<int> StreamAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation) => throw new NotSupportedException();
+
 		public Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation, int timeoutSeconds = 900)
 		{
 			var output = arguments[0] == "ps" ? failure == "missing" ? "" : "redis-container-id" :
@@ -539,44 +797,53 @@ public sealed class InstallationManagerTests : IDisposable
 		}
 	}
 
-	private sealed class FakeHost : IInstallationHost
+	private sealed class FakeInstallationHost : IInstallationHost
 	{
 		public List<string> Calls { get; } = [];
-		public int Applies { get; private set; }
+		public int MigrationApplyCount { get; private set; }
 		public List<string> MigrationPaths { get; } = [];
-		public bool FailMigration { get; set; }
-		public bool FailImages { get; set; }
-		public bool FailVerify { get; set; }
-		public bool FailFinalPurge { get; set; }
-		public int Uninstalls { get; private set; }
-		public Task VerifyAsync(DeliveryBundle bundle, Installation installation, CancellationToken cancellation) => this.FailVerify ? throw new ContainerizationException(3, "Simulated target failure") : Task.CompletedTask;
+		public bool MigrationFails { get; set; }
+		public bool ImagePreparationFails { get; set; }
+		public bool TargetVerificationFails { get; set; }
+		public bool StopFails { get; set; }
+		public bool FinalPurgeFails { get; set; }
+		public Action<Installation> Stopping { get; set; }
+		public Action<Installation> PreparingDirectories { get; set; }
+		public int UninstallCount { get; private set; }
+		public Task VerifyTargetAsync(DeliveryBundle bundle, Installation installation, CancellationToken cancellation) => this.TargetVerificationFails ? throw new ContainerizationException(3, "Simulated target failure") : Task.CompletedTask;
 		public Task InstallExecutorAsync(DeliveryBundle bundle, CancellationToken cancellation) => Task.CompletedTask;
-		public Task BootstrapAsync(DeliveryBundle bundle, Installation installation, CancellationToken cancellation) => Task.CompletedTask;
-		public Task ImagesAsync(DeliveryBundle bundle, CancellationToken cancellation) => this.FailImages ? throw new ContainerizationException(5, "Simulated image failure") : Task.CompletedTask;
-		public Task DirectoriesAsync(DeliveryBundle bundle, Installation installation, CancellationToken cancellation) => Task.CompletedTask;
-		public Task StartAsync(DeliveryBundle bundle, ServicePlan service, CancellationToken cancellation) { this.Calls.Add("start:" + service.Id); return Task.CompletedTask; }
-		public Task HealthyAsync(DeliveryBundle bundle, ServicePlan service, CancellationToken cancellation) => Task.CompletedTask;
-		public Task StopApplicationsAsync(Installation installation, CancellationToken cancellation)
+		public Task PrepareBootstrapAsync(DeliveryBundle bundle, Installation installation, CancellationToken cancellation) => Task.CompletedTask;
+		public Task PrepareImagesAsync(DeliveryBundle bundle, CancellationToken cancellation) => this.ImagePreparationFails ? throw new ContainerizationException(5, "Simulated image failure") : Task.CompletedTask;
+		public Task PrepareDirectoriesAsync(DeliveryBundle bundle, Installation installation, CancellationToken cancellation)
 		{
-			installation.Maintenance = true;
-			this.Calls.Add("stop");
+			this.PreparingDirectories?.Invoke(installation);
 			return Task.CompletedTask;
 		}
-		public Task RestorePoliciesAsync(DeliveryBundle bundle, CancellationToken cancellation) => Task.CompletedTask;
-		public Task RestartAsync(DeliveryBundle bundle, ServicePlan service, CancellationToken cancellation) { this.Calls.Add("restart:" + service.Id); return Task.CompletedTask; }
-		public Task<int> MigrateAsync(DeliveryBundle bundle, MigrationPlan migration, string state, string operation, string log, CancellationToken cancellation)
+		public Task StartServiceAsync(DeliveryBundle bundle, ServicePlan service, CancellationToken cancellation) { this.Calls.Add("start:" + service.Id); return Task.CompletedTask; }
+		public Task WaitForHealthAsync(DeliveryBundle bundle, ServicePlan service, CancellationToken cancellation) => Task.CompletedTask;
+		public Task StopApplicationsAsync(Installation installation, CancellationToken cancellation)
 		{
-			this.MigrationPaths.Add(state);
+			this.Stopping?.Invoke(installation);
+			this.Calls.Add("stop");
+			if(this.StopFails)
+				throw new ContainerizationException(4, "Simulated stop failure");
+			return Task.CompletedTask;
+		}
+		public Task RestoreRestartPoliciesAsync(DeliveryBundle bundle, CancellationToken cancellation) => Task.CompletedTask;
+		public Task RestartServiceAsync(DeliveryBundle bundle, ServicePlan service, CancellationToken cancellation) { this.Calls.Add("restart:" + service.Id); return Task.CompletedTask; }
+		public Task<int> RunMigrationAsync(DeliveryBundle bundle, MigrationPlan migration, string stateDirectory, string operation, string logPath, CancellationToken cancellation)
+		{
+			this.MigrationPaths.Add(stateDirectory);
 			if(operation == "apply")
 			{
-				this.Applies++;
-				return Task.FromResult(this.FailMigration ? 1 : 0);
+				this.MigrationApplyCount++;
+				return Task.FromResult(this.MigrationFails ? 1 : 0);
 			}
 
 			return Task.FromResult(0);
 		}
-		public Task UninstallAsync(Installation installation, bool purge, CancellationToken cancellation) { this.Uninstalls++; return Task.CompletedTask; }
-		public Task FinalizePurgeAsync(Installation installation, CancellationToken cancellation) => this.FailFinalPurge ? throw new ContainerizationException(9, "Simulated cleanup failure") : Task.CompletedTask;
-		public Task LogsAsync(Installation installation, ExecutorArguments arguments, CancellationToken cancellation) => Task.CompletedTask;
+		public Task UninstallAsync(Installation installation, bool purge, CancellationToken cancellation) { this.UninstallCount++; return Task.CompletedTask; }
+		public Task FinalizePurgeAsync(Installation installation, CancellationToken cancellation) => this.FinalPurgeFails ? throw new ContainerizationException(9, "Simulated cleanup failure") : Task.CompletedTask;
+		public Task StreamLogsAsync(Installation installation, ExecutorArguments arguments, CancellationToken cancellation) => Task.CompletedTask;
 	}
 }

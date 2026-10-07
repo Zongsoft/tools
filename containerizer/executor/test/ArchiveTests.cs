@@ -54,4 +54,29 @@ public sealed class ArchiveTests : IDisposable
 	{
 		Assert.Throws<JsonException>(() => JsonSerializer.Deserialize("{\"schema\":1,\"futureBehavior\":true}", ProtocolJson.Default.DeliveryPlan));
 	}
+
+	[Fact]
+	public void StatePropertiesUseTheirCurrentProtocolFieldNames()
+	{
+		var installation = new Installation { IsInMaintenance = true, Pending = new() { IsReinstall = true } };
+		var state = JsonSerializer.Serialize(installation, ProtocolJson.Default.Installation);
+		using var stateJson = JsonDocument.Parse(state);
+
+		Assert.True(stateJson.RootElement.GetProperty("isInMaintenance").GetBoolean());
+		Assert.False(stateJson.RootElement.TryGetProperty("maintenance", out _));
+		Assert.True(stateJson.RootElement.GetProperty("pending").GetProperty("isReinstall").GetBoolean());
+		Assert.False(stateJson.RootElement.GetProperty("pending").TryGetProperty("reinstall", out _));
+		var restored = JsonSerializer.Deserialize(state, ProtocolJson.Default.Installation);
+		Assert.True(restored.IsInMaintenance);
+		Assert.True(restored.Pending.IsReinstall);
+
+		var service = new ServicePlan { Web = [new() { Bindings = [new() { IsExplicitDefault = true }] }] };
+		var plan = JsonSerializer.Serialize(service, ProtocolJson.Default.ServicePlan);
+		using var planJson = JsonDocument.Parse(plan);
+		var binding = planJson.RootElement.GetProperty("web")[0].GetProperty("bindings")[0];
+
+		Assert.True(binding.GetProperty("isExplicitDefault").GetBoolean());
+		Assert.False(binding.TryGetProperty("explicitDefault", out _));
+		Assert.True(JsonSerializer.Deserialize(plan, ProtocolJson.Default.ServicePlan).Web[0].Bindings[0].IsExplicitDefault);
+	}
 }

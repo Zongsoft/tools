@@ -40,13 +40,13 @@ namespace Zongsoft.Tools.Containerizer.Protocol;
 internal sealed class BootstrapPlan
 {
 	#region 常量定义
-	public const string ENGINE = "docker";
+	internal const string ENGINE = "docker";
 	#endregion
 
 	#region 公共属性
 	public string Mode { get; set; } = "offline";
 	public string Profile { get; set; }
-	public string BaseDigest { get; set; }
+	public string BaseImageReference { get; set; }
 	public string EngineVersion { get; set; }
 	public string ComposeVersion { get; set; }
 	public string Metadata { get; set; }

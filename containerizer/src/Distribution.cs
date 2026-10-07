@@ -62,6 +62,6 @@ internal static class Distribution
 
 		throw new ContainerizationException(2, Properties.Resources.Manifest_19_Message);
 	}
-	public static bool IsDebian(string value) => value.StartsWith("ubuntu", StringComparison.Ordinal) || value.StartsWith("debian", StringComparison.Ordinal);
+	public static bool IsDebianFamily(string value) => value.StartsWith("ubuntu", StringComparison.Ordinal) || value.StartsWith("debian", StringComparison.Ordinal);
 	#endregion
 }

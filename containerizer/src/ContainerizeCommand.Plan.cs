@@ -41,7 +41,7 @@ namespace Zongsoft.Tools.Containerizer;
 public sealed class PlanCommand : ContainerizeCommand
 {
 	#region 重写方法
-	private protected override ContainerManifest CreateManifest(CommandContext context) => ContainerManifest.From(context, planning: true);
+	private protected override ContainerManifest CreateManifest(CommandContext context) => ManifestFactory.Create(context, planning: true);
 	private protected override ValueTask<string> BuildAsync(DeliveryBuilder builder, ContainerManifest manifest, CancellationToken cancellation) => ValueTask.FromResult(builder.Plan(manifest));
 	#endregion
 }

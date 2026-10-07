@@ -44,7 +44,6 @@ internal sealed class ServicePlan
 	public string Kind { get; set; } = "infrastructure";
 	public string Template { get; set; }
 	public string TemplateHash { get; set; }
-	public string SourceService { get; set; }
 	public string Hostname { get; set; }
 	public List<string> Aliases { get; set; } = [];
 	public string ConfigurationHash { get; set; }
@@ -57,7 +56,6 @@ internal sealed class ServicePlan
 	public string Restart { get; set; } = "unless-stopped";
 	public string StopSignal { get; set; } = "SIGTERM";
 	public int StopSeconds { get; set; } = 30;
-	public string EnvironmentFile { get; set; }
 	public List<string> Dependencies { get; set; } = [];
 	public List<PortPlan> Ports { get; set; } = [];
 	public List<WebSitePlan> Web { get; set; } = [];

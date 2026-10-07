@@ -86,7 +86,15 @@ internal static class Files
 		!path.Contains('\\') && !path.Contains(':') &&
 		!path.Split('/').Any(part => part is ".." or ".");
 
-	public static string Below(string root, string relative)
+	public static string NormalizeLinuxPath(string value)
+	{
+		if(!IsLinuxPath(value))
+			throw new ContainerizationException(2, Properties.Resources.ServiceSource_11_Message);
+
+		return value.TrimEnd('/');
+	}
+
+	public static string ResolveRelativePath(string root, string relative)
 	{
 		if(string.IsNullOrWhiteSpace(relative) || relative.StartsWith('/') ||
 			relative.Contains('\\') || relative.Contains(':') ||
@@ -99,11 +107,11 @@ internal static class Files
 		if(!path.StartsWith(prefix, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
 			throw new ContainerizationException(4, string.Format(Properties.Resources.Files_3_Message, relative));
 
-		NoLinks(path);
+		EnsureNoLinks(path);
 		return path;
 	}
 
-	public static void NoLinks(string path)
+	public static void EnsureNoLinks(string path)
 	{
 		for(var current = new FileInfo(Path.GetFullPath(path)); current != null; current = current.Directory == null ? null : new FileInfo(current.Directory.FullName))
 		{
@@ -136,7 +144,7 @@ internal static class Files
 			if(total > maximum)
 				throw new ContainerizationException(4, Properties.Resources.Files_6_Message);
 
-			var path = Below(destination, name);
+			var path = ResolveRelativePath(destination, name);
 
 			if(entry.EntryType == TarEntryType.Directory)
 				Directory.CreateDirectory(path);
@@ -170,9 +178,9 @@ internal static class Files
 			using var gzip = new GZipStream(output, CompressionLevel.Fastest, true);
 			using var writer = new TarWriter(gzip, TarEntryFormat.Pax, true);
 
-			foreach(var file in Enumerate(source).Order(StringComparer.Ordinal))
+			foreach(var file in EnumerateFiles(source).Order(StringComparer.Ordinal))
 			{
-				NoLinks(file);
+				EnsureNoLinks(file);
 				var relative = Path.GetRelativePath(source, file).Replace('\\', '/');
 
 				using var stream = File.OpenRead(file);
@@ -187,13 +195,13 @@ internal static class Files
 
 	public static void CopyTree(string source, string target)
 	{
-		NoLinks(source);
-		NoLinks(target);
+		EnsureNoLinks(source);
+		EnsureNoLinks(target);
 		Directory.CreateDirectory(target);
 
 		foreach(var path in Directory.EnumerateFileSystemEntries(source))
 		{
-			NoLinks(path);
+			EnsureNoLinks(path);
 			var destination = Path.Combine(target, Path.GetFileName(path));
 
 			if(Directory.Exists(path))
@@ -203,38 +211,38 @@ internal static class Files
 		}
 	}
 
-	public static void PrivateDirectory(string path)
+	public static void CreatePrivateDirectory(string path)
 	{
-		NoLinks(path);
+		EnsureNoLinks(path);
 		Directory.CreateDirectory(path);
 
 		if(!OperatingSystem.IsWindows())
 			File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
 	}
 
-	public static void CheckTree(string directory)
+	public static void ValidateTree(string directory)
 	{
-		NoLinks(directory);
+		EnsureNoLinks(directory);
 
 		foreach(var path in Directory.EnumerateFileSystemEntries(directory))
 		{
-			NoLinks(path);
+			EnsureNoLinks(path);
 
 			if(Directory.Exists(path))
-				CheckTree(path);
+				ValidateTree(path);
 		}
 	}
 
-	public static IEnumerable<string> Enumerate(string directory)
+	public static IEnumerable<string> EnumerateFiles(string directory)
 	{
-		NoLinks(directory);
+		EnsureNoLinks(directory);
 
 		foreach(var path in Directory.EnumerateFileSystemEntries(directory))
 		{
-			NoLinks(path);
+			EnsureNoLinks(path);
 			if(Directory.Exists(path))
 			{
-				foreach(var file in Enumerate(path))
+				foreach(var file in EnumerateFiles(path))
 					yield return file;
 			}
 			else

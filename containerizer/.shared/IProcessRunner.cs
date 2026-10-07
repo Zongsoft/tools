@@ -44,6 +44,7 @@ namespace Zongsoft.Tools.Containerizer.Protocol;
 internal interface IProcessRunner
 {
 	#region 公共方法
+	Task<int> StreamAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation);
 	Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation, int timeoutSeconds = 900);
 	#endregion
 }

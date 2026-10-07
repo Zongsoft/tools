@@ -54,7 +54,7 @@ internal static partial class ServiceSettings
 
 		var position = 0;
 
-		foreach(Match match in Entries().Matches(text))
+		foreach(Match match in GetEntryRegex().Matches(text))
 		{
 			if(match.Index != position)
 				throw new ContainerizationException(2, Properties.Resources.Settings_Invalid_Message);
@@ -70,7 +70,7 @@ internal static partial class ServiceSettings
 				throw new ContainerizationException(2, Properties.Resources.Settings_Invalid_Message);
 
 			var name = entry[..separator].Trim();
-			ContainerManifest.Identity(name);
+			ContainerManifest.ValidateIdentity(name);
 			var value = entry[(separator + 1)..].Trim();
 
 			if(result.ContainsKey(name))
@@ -102,5 +102,5 @@ internal static partial class ServiceSettings
 	}
 
 	[GeneratedRegex("(?<entry>[^;=\\r\\n]+=[ \\t]*(?:\"(?:[^\"]|\"\")*\"|'(?:[^']|'')*'|[^;\\r\\n]*))[ \\t]*(?:;|$)|[ \\t]*;", RegexOptions.CultureInvariant)]
-	private static partial Regex Entries();
+	private static partial Regex GetEntryRegex();
 }

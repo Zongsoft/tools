@@ -57,31 +57,31 @@ partial class InstallationManager
 		if(installation?.Pending?.Failed == true)
 			throw new ContainerizationException(7, Properties.Resources.Lifecycle_5_Message);
 
-		await host.VerifyAsync(input, installation, cancellation);
+		await host.VerifyTargetAsync(input, installation, cancellation);
 
 		if(installation?.Current != null)
 		{
-			using var current = this.Current(installation);
+			using var current = this.OpenCurrentBundle(installation);
 			ValidateUpgrade(current.Plan, input.Plan);
 
-			if(installation.Current == input.Id && installation.Pending == null && installation.Status == "Installed" && !installation.Maintenance)
+			if(installation.Current == input.Id && installation.Pending == null && installation.Status == "Installed" && !installation.IsInMaintenance)
 			{
-				await host.ImagesAsync(current, cancellation);
+				await host.PrepareImagesAsync(current, cancellation);
 
 				foreach(var service in current.Plan.Services)
-					await host.HealthyAsync(current, service, cancellation);
+					await host.WaitForHealthAsync(current, service, cancellation);
 
 				return;
 			}
 		}
 
-		var maintenance = installation?.Maintenance == true;
+		var wasInMaintenance = installation?.IsInMaintenance == true;
 		await host.InstallExecutorAsync(input, cancellation);
 
-		using(var registrationLock = store.HostLock())
+		using(var registrationLock = store.AcquireHostLock())
 		{
 			installation ??= new() { Name = input.Plan.Name, DataRoot = input.Plan.DataRoot };
-			var assets = store.Stage(input);
+			var assets = store.StageBundle(input);
 
 			if(!installation.Releases.Contains(input.Id))
 				installation.Releases.Add(input.Id);
@@ -91,7 +91,7 @@ partial class InstallationManager
 				Id = input.Id,
 				Version = input.Plan.Version,
 				Assets = assets,
-				Reinstall = installation.Status == "Uninstalled"
+				IsReinstall = installation.Status == "Uninstalled"
 			};
 
 			installation.PurgeResourcesCompleted = false;
@@ -99,59 +99,59 @@ partial class InstallationManager
 		}
 
 		using var bundle = DeliveryBundle.Open(installation.Pending.Assets);
-		await this.ContinueAsync(installation, bundle, arguments.Command == "prepare", arguments.NoStart || maintenance, null, cancellation);
+		await this.ContinueAsync(installation, bundle, arguments.Command == "prepare", arguments.NoStart || wasInMaintenance, null, cancellation);
 	}
 
-	private async Task ContinueAsync(Installation installation, DeliveryBundle bundle, bool prepare, bool hold, string retryMigration, CancellationToken cancellation)
+	private async Task ContinueAsync(Installation installation, DeliveryBundle bundle, bool prepareOnly, bool suppressStart, string retryMigrationVersion, CancellationToken cancellation)
 	{
-		var maintenanceStarted = false;
+		var requiresMaintenance = false;
 
 		try
 		{
-			await this.PhaseAsync(installation, "PrepareBootstrap", () => host.BootstrapAsync(bundle, installation, cancellation));
-			await this.PhaseAsync(installation, "PrepareImages", () => host.ImagesAsync(bundle, cancellation));
+			await this.ExecutePhaseAsync(installation, "PrepareBootstrap", () => host.PrepareBootstrapAsync(bundle, installation, cancellation));
+			await this.ExecutePhaseAsync(installation, "PrepareImages", () => host.PrepareImagesAsync(bundle, cancellation));
 
-			if(prepare)
+			if(prepareOnly)
 			{
 				installation.Status = "Prepared";
 				store.Save(installation);
 				return;
 			}
 
-			await host.DirectoriesAsync(bundle, installation, cancellation);
+			await host.PrepareDirectoriesAsync(bundle, installation, cancellation);
 
 			// The persistent maintenance barrier precedes every stop or migration.
-			maintenanceStarted = true;
+			requiresMaintenance = true;
 
-			await host.StopApplicationsAsync(installation, cancellation);
+			await this.EnterMaintenanceAsync(installation, cancellation);
 
-			await this.PhaseAsync(installation, "StartInfrastructure", async () =>
+			await this.ExecutePhaseAsync(installation, "StartInfrastructure", async () =>
 			{
-				foreach(var service in Ordered(bundle.Plan).Where(service => service.Kind == "infrastructure"))
+				foreach(var service in GetServicesInDependencyOrder(bundle.Plan).Where(service => service.Kind == "infrastructure"))
 				{
-					if(installation.Current == null || installation.Pending.Reinstall)
-						await host.StartAsync(bundle, service, cancellation);
+					if(installation.Current == null || installation.Pending.IsReinstall)
+						await host.StartServiceAsync(bundle, service, cancellation);
 				}
 			});
 
-			await this.PhaseAsync(installation, "CheckLocalInfrastructure", async () =>
+			await this.ExecutePhaseAsync(installation, "CheckLocalInfrastructure", async () =>
 			{
-				foreach(var service in Ordered(bundle.Plan).Where(service => service.Kind == "infrastructure"))
-					await host.HealthyAsync(bundle, service, cancellation);
+				foreach(var service in GetServicesInDependencyOrder(bundle.Plan).Where(service => service.Kind == "infrastructure"))
+					await host.WaitForHealthAsync(bundle, service, cancellation);
 			});
 
-			await this.PhaseAsync(installation, "ApplyMigration", () => this.MigrationsAsync(installation, bundle, retryMigration, cancellation));
-			await this.PhaseAsync(installation, "ReadyToStart", () => Task.CompletedTask);
+			await this.ExecutePhaseAsync(installation, "ApplyMigration", () => this.ApplyMigrationsAsync(installation, bundle, retryMigrationVersion, cancellation));
+			await this.ExecutePhaseAsync(installation, "ReadyToStart", () => Task.CompletedTask);
 
 			installation.Status = "ReadyToStart";
 			store.Save(installation);
 
-			if(!hold)
+			if(!suppressStart)
 				await this.ActivateAsync(installation, bundle, cancellation);
 		}
 		catch(Exception exception)
 		{
-			await this.FailAsync(installation, exception, maintenanceStarted);
+			await this.FailAsync(installation, exception, requiresMaintenance);
 			throw;
 		}
 	}

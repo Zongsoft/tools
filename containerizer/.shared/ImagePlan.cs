@@ -41,13 +41,13 @@ internal sealed class ImagePlan
 {
 	#region 公共属性
 	public string Repository { get; set; }
-	public string Selector { get; set; }
-	public string Version { get; set; }
+	public string SourceReference { get; set; }
+	public string SourceTag { get; set; }
 	public string IndexDigest { get; set; }
 	public string Digest { get; set; }
 	public string Id { get; set; }
 	public string Platform { get; set; }
-	public string Tag { get; set; }
+	public string Reference { get; set; }
 	public string Mode { get; set; } = "offline";
 	public string Archive { get; set; }
 

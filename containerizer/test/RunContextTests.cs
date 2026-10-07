@@ -16,6 +16,7 @@ using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
+[Collection("Run sessions")]
 public sealed class RunContextTests : IDisposable
 {
 	private readonly string _root = Path.Combine(Path.GetTempPath(), $"containerizer-run-test-{Guid.NewGuid():N}");
@@ -27,12 +28,12 @@ public sealed class RunContextTests : IDisposable
 	[InlineData("docker", 0, false, 0)]
 	[InlineData("podman", 17, false, 4)]
 	[InlineData("podman", 0, true, 4)]
-	public async Task SessionWaitsForCancellationAndOnlyRemovesOwnedResources(string executable, int installExit, bool cleanupFailure, int expected)
+	public async Task SessionWaitsForCancellationAndOnlyRemovesOwnedResourcesAsync(string executable, int installExit, bool cleanupFailure, int expected)
 	{
-		using var bundle = this.Bundle();
+		using var bundle = this.CreateBundle();
 		using var stopping = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
-		var runner = new Runner { CleanupFailure = cleanupFailure };
+		var runner = new Runner { CleanupFailure = cleanupFailure, InstallExit = installExit };
 		var messages = new List<string>();
 		var retained = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 		var run = new RunContext(new(executable, runner), bundle, content =>
@@ -44,7 +45,7 @@ public sealed class RunContextTests : IDisposable
 			messages.Add(message.ToString());
 			if(HasColor(content, CommandOutletColor.Green) || HasColor(content, CommandOutletColor.Magenta))
 				retained.TrySetResult();
-		}, (_, _, _, _) => Task.FromResult(installExit));
+		});
 
 		var original = Files.Hash(Path.Combine(bundle.Directory, DeliveryPlan.FileName));
 		var task = run.ExecuteAsync(stopping.Token);
@@ -53,11 +54,12 @@ public sealed class RunContextTests : IDisposable
 		Assert.False(task.IsCompleted);
 		Assert.True(runner.Owned);
 		var instructions = Assert.Single(messages, message => message.Contains("docker ps -a", StringComparison.Ordinal));
-		Assert.Contains($"\n  {executable} exec {run.Name} docker ps -a", instructions);
-		Assert.Contains($"\n  {executable} exec {run.Name} docker logs <", instructions);
+		Assert.Contains($"\n  {executable} exec {runner.SessionName} docker ps -a", instructions);
+		Assert.Contains($"\n  {executable} exec {runner.SessionName} docker logs <", instructions);
 
 		stopping.Cancel();
 		Assert.Equal(expected, await task);
+		Assert.Equal(executable, Assert.Single(runner.Streams).Executable);
 		Assert.Equal(cleanupFailure, runner.Owned);
 		Assert.Equal(original, Files.Hash(Path.Combine(bundle.Directory, DeliveryPlan.FileName)));
 		Assert.False(Directory.Exists(runner.Workspace));
@@ -66,9 +68,9 @@ public sealed class RunContextTests : IDisposable
 	}
 
 	[Fact]
-	public async Task ImageCleanupTimeoutDoesNotCancelOuterContainerCleanup()
+	public async Task ImageCleanupTimeoutDoesNotCancelOuterContainerCleanupAsync()
 	{
-		using var bundle = this.Bundle();
+		using var bundle = this.CreateBundle();
 		using var stopping = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
 		var runner = new Runner { ImageCleanupTimeout = true };
@@ -76,7 +78,7 @@ public sealed class RunContextTests : IDisposable
 		{
 			if(HasColor(content, CommandOutletColor.Green))
 				stopping.Cancel();
-		}, (_, _, _, _) => Task.FromResult(0));
+		});
 
 		Assert.Equal(0, await run.ExecuteAsync(stopping.Token));
 		Assert.False(runner.Owned);
@@ -87,30 +89,25 @@ public sealed class RunContextTests : IDisposable
 	[InlineData("zh-CN", "zh_CN.UTF-8")]
 	[InlineData("en-US", "en_US.UTF-8")]
 	[InlineData("", "C.UTF-8")]
-	public async Task InstallerUsesTheLocalInterfaceLanguage(string culture, string locale)
+	public async Task InstallerUsesTheLocalInterfaceLanguageAsync(string culture, string locale)
 	{
 		var original = CultureInfo.CurrentUICulture;
 
 		try
 		{
 			CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo(culture);
-			using var bundle = this.Bundle();
+			using var bundle = this.CreateBundle();
 			using var stopping = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-			string[] arguments = null;
 			var runner = new Runner();
 
 			var run = new RunContext(new("podman", runner), bundle, content =>
 			{
 				if(HasColor(content, CommandOutletColor.Green))
 					stopping.Cancel();
-			}, (_, input, _, _) =>
-			{
-				arguments = input.ToArray();
-				return Task.FromResult(0);
 			});
 
 			Assert.Equal(0, await run.ExecuteAsync(stopping.Token));
-			Assert.Equal(["exec", "--env", $"LANG={locale}", "--workdir", "/delivery", run.Name, "sh", "/delivery/install.sh"], arguments);
+			Assert.Equal(["exec", "--env", $"LANG={locale}", "--workdir", "/delivery", runner.SessionName, "sh", "/delivery/install.sh"], Assert.Single(runner.Streams).Arguments);
 			Assert.DoesNotContain(runner.Calls, call => call[0] == "create" && call.Contains("--env"));
 		}
 		finally
@@ -120,29 +117,33 @@ public sealed class RunContextTests : IDisposable
 	}
 
 	[Fact]
-	public async Task RunPassesTemporaryMirrorRulesWithoutChangingDeliveryAssets()
+	public async Task RunPassesTemporaryMirrorRulesWithoutChangingDeliveryAssetsAsync()
 	{
-		using var bundle = this.Bundle();
+		using var bundle = this.CreateBundle();
 		using var stopping = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
-		var runner = new Runner { CachedBase = true };
+		var runner = new Runner();
+		using var preparing = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+		var preparation = new RunContext(new("podman", runner), bundle, content =>
+		{
+			if(HasColor(content, CommandOutletColor.Green))
+				preparing.Cancel();
+		});
+		Assert.Equal(0, await preparation.ExecuteAsync(preparing.Token));
+		runner.Calls.Clear();
+		runner.Streams.Clear();
 		var mirrors = new RegistryMirrors { Registries = new() { ["docker.io"] = ["mirror.example.com/docker.io"] } };
 		var engine = new ContainerEngine("podman", runner) { Mirrors = mirrors };
 		var hash = Files.Hash(Path.Combine(bundle.Directory, DeliveryPlan.FileName));
-		string[] arguments = null;
 
 		var run = new RunContext(engine, bundle, content =>
 		{
 			if(HasColor(content, CommandOutletColor.Green))
 				stopping.Cancel();
-		}, (_, input, _, _) =>
-		{
-			arguments = input.ToArray();
-			return Task.FromResult(0);
 		});
 
 		Assert.Equal(0, await run.ExecuteAsync(stopping.Token));
-		Assert.Contains($"{RegistryMirrors.ENVIRONMENT}=/run/containerizer-mirrors.json", arguments);
+		Assert.Contains($"{RegistryMirrors.ENVIRONMENT_VARIABLE}=/run/containerizer-mirrors.json", Assert.Single(runner.Streams).Arguments);
 
 		var copy = Assert.Single(runner.Calls, call => call[0] == "cp" && call[^1].EndsWith("/run/containerizer-mirrors.json", StringComparison.Ordinal));
 		Assert.False(File.Exists(copy[1]));
@@ -153,19 +154,14 @@ public sealed class RunContextTests : IDisposable
 	[Theory]
 	[InlineData(false)]
 	[InlineData(true)]
-	public async Task CancellationDuringCreateOrInstallUsesAnIndependentCleanupToken(bool duringCreate)
+	public async Task CancellationDuringCreateOrInstallUsesAnIndependentCleanupTokenAsync(bool duringCreate)
 	{
-		using var bundle = this.Bundle();
+		using var bundle = this.CreateBundle();
 		using var stopping = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
-		var runner = new Runner { CancelCreate = duringCreate ? stopping : null };
 		var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-		var run = new RunContext(new("podman", runner), bundle, _ => { }, async (_, _, _, token) =>
-		{
-			started.SetResult();
-			await Task.Delay(Timeout.Infinite, token);
-			return 0;
-		});
+		var runner = new Runner { CancelCreate = duringCreate ? stopping : null, InstallStarted = started, WaitForInstallCancellation = true };
+		var run = new RunContext(new("podman", runner), bundle, _ => { });
 		var task = run.ExecuteAsync(stopping.Token);
 
 		if(!duringCreate)
@@ -182,9 +178,9 @@ public sealed class RunContextTests : IDisposable
 	[Theory]
 	[InlineData("existing")]
 	[InlineData("architecture")]
-	public async Task PreflightFailuresCannotDeleteAnotherSession(string failure)
+	public async Task PreflightFailuresCannotDeleteAnotherSessionAsync(string failure)
 	{
-		using var bundle = this.Bundle();
+		using var bundle = this.CreateBundle();
 		var runner = new Runner { Existing = failure == "existing", Architecture = failure == "architecture" ? "linux/arm64" : "linux/amd64" };
 		var run = new RunContext(new("podman", runner), bundle, _ => { });
 
@@ -193,39 +189,39 @@ public sealed class RunContextTests : IDisposable
 	}
 
 	[Fact]
-	public async Task EnginePortRaceRetriesOnceWithoutReinstalling()
+	public async Task EnginePortRaceRetriesOnceWithoutReinstallingAsync()
 	{
-		using var bundle = this.Bundle();
+		using var bundle = this.CreateBundle();
 		using var stopping = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
 		var runner = new Runner { PortConflict = true };
-		var installs = 0;
 		var run = new RunContext(new("docker", runner), bundle, content =>
 		{
 			if(HasColor(content, CommandOutletColor.Green))
 				stopping.Cancel();
-		}, (_, _, _, _) => { installs++; return Task.FromResult(0); });
+		});
 
 		Assert.Equal(0, await run.ExecuteAsync(stopping.Token));
 		Assert.Equal(2, runner.Calls.Count(call => call[0] == "create"));
-		Assert.Equal(1, installs);
+		Assert.Single(runner.Streams);
 		Assert.False(runner.Owned);
 	}
 
 	[Theory]
 	[InlineData(false)]
 	[InlineData(true)]
-	public async Task LocalHttpProbePinsSocketAndAccepts404AndExternalRedirects(bool redirect)
+	public async Task LocalHttpProbePinsSocketAndAccepts404AndExternalRedirectsAsync(bool redirect)
 	{
 		using var listener = new TcpListener(IPAddress.Loopback, 0);
 		listener.Start();
 
 		var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-		Assert.Equal(0, RunContext.Endpoint.AvailablePort(port));
-
-		var endpoint = new RunContext.Endpoint(new() { Id = "web", Web = [WebSite()] }, new() { Name = "web", Host = port }, 45000);
-		using var ports = JsonDocument.Parse($$"""{"45000/tcp":[{"HostIp":"0.0.0.0","HostPort":"{{port}}"}]}""");
-		endpoint.Bind(ports.RootElement);
+		using var bundle = this.CreateBundle();
+		bundle.Plan.Services[0].Id = "web";
+		bundle.Plan.Services[0].Web.Add(CreateWebSite());
+		bundle.Plan.Services[0].Ports.Add(new() { Name = "web", Host = port, Container = 80 });
+		var runner = new Runner { PublishedHostPort = port };
+		var messages = new List<string>();
 
 		var serving = Task.Run(async () =>
 		{
@@ -242,23 +238,29 @@ public sealed class RunContextTests : IDisposable
 		}, TestContext.Current.CancellationToken);
 
 		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-
-		await endpoint.ProbeAsync(timeout.Token);
-		Assert.Equal(redirect ? "https://example.invalid/" : null, Assert.Single(endpoint.Results).Redirect);
+		var run = new RunContext(new("podman", runner), bundle, content =>
+		{
+			messages.Add(GetText(content));
+			if(HasColor(content, CommandOutletColor.Green))
+				timeout.Cancel();
+		});
+		Assert.Equal(0, await run.ExecuteAsync(timeout.Token));
+		Assert.Contains(messages, message => message.Contains($"http://example.invalid:{port}/", StringComparison.Ordinal));
+		Assert.Equal(redirect, messages.Any(message => message.Contains("https://example.invalid/", StringComparison.Ordinal)));
+		Assert.Contains("0.0.0.0::45000/tcp", Assert.Single(runner.Calls, call => call[0] == "create"));
 
 		await serving;
-		Assert.Equal($"http://example.invalid:{port}/", endpoint.Address);
 	}
 
 	[Theory]
 	[InlineData(false, 0)]
 	[InlineData(true, 4)]
-	public async Task MissingLocalMappingIsOptionalForInfrastructureButRequiredForWeb(bool web, int expected)
+	public async Task MissingLocalMappingIsOptionalForInfrastructureButRequiredForWebAsync(bool web, int expected)
 	{
-		using var bundle = this.Bundle();
+		using var bundle = this.CreateBundle();
 		bundle.Plan.Services[0].Ports.Add(new() { Name = "web", Host = 8080, Container = 80 });
 		if(web)
-			bundle.Plan.Services[0].Web.Add(WebSite());
+			bundle.Plan.Services[0].Web.Add(CreateWebSite());
 		using var stopping = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 		var warnings = 0;
 
@@ -268,25 +270,33 @@ public sealed class RunContextTests : IDisposable
 				warnings++;
 			if(HasColor(content, CommandOutletColor.Green) || web && warnings != 0)
 				stopping.Cancel();
-		}, (_, _, _, _) => Task.FromResult(0));
+		});
 
 		Assert.Equal(expected, await run.ExecuteAsync(stopping.Token));
 		Assert.Equal(1, warnings);
 	}
 
 	[Fact]
-	public void ForwardingRelaysAvoidDeclaredPortsAndNeverAddUnpublishedServices()
+	public async Task ForwardingRelaysAvoidDeclaredPortsAndNeverAddUnpublishedServicesAsync()
 	{
-		var plan = new DeliveryPlan { Services = [new() { Id = "redis" }, new() { Id = "web", Ports = [new() { Host = 45000, Container = 80 }, new() { Host = 45001, Container = 53, Protocol = "udp" }] }] };
-		var endpoint = Assert.Single(RunContext.Endpoint.Create(plan));
+		using var bundle = this.CreateBundle();
+		bundle.Plan.Services.Add(new() { Id = "web", Image = bundle.Plan.Services[0].Image, Ports = [new() { Host = 45000, Container = 80 }, new() { Host = 45001, Container = 53, Protocol = "udp" }] });
+		using var stopping = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+		var runner = new Runner();
+		var run = new RunContext(new("podman", runner), bundle, content =>
+		{
+			if(HasColor(content, CommandOutletColor.Green))
+				stopping.Cancel();
+		});
 
-		Assert.Equal(45002, endpoint.Relay);
-		Assert.Equal("web", endpoint.Service.Id);
-		Assert.Equal("TCP4:127.0.0.1:45000", endpoint.Target);
+		Assert.Equal(0, await run.ExecuteAsync(stopping.Token));
+		var creation = Assert.Single(runner.Calls, call => call[0] == "create");
+		Assert.Single(creation, argument => argument == "--publish");
+		Assert.EndsWith(":45002/tcp", creation[Array.IndexOf(creation, "--publish") + 1]);
 	}
 
 	[Fact]
-	public async Task HttpsProbePinsTheSocketPreservesSniAndRejectsUntrustedCertificates()
+	public async Task HttpsProbePinsTheSocketPreservesSniAndRejectsUntrustedCertificatesAsync()
 	{
 		using var key = System.Security.Cryptography.RSA.Create(2048);
 		var request = new System.Security.Cryptography.X509Certificates.CertificateRequest("CN=example.invalid", key, System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.RSASignaturePadding.Pkcs1);
@@ -295,12 +305,21 @@ public sealed class RunContextTests : IDisposable
 		listener.Start();
 
 		var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-		var site = WebSite();
+		var site = CreateWebSite();
 		site.Bindings[0].Scheme = "https";
-		var endpoint = new RunContext.Endpoint(new() { Id = "web", Web = [site] }, new() { Name = "web", Host = port }, 45000);
-		using var ports = JsonDocument.Parse($$"""{"45000/tcp":[{"HostIp":"0.0.0.0","HostPort":"{{port}}"}]}""");
-		endpoint.Bind(ports.RootElement);
+		using var bundle = this.CreateBundle();
+		bundle.Plan.Services[0].Id = "web";
+		bundle.Plan.Services[0].Web.Add(site);
+		bundle.Plan.Services[0].Ports.Add(new() { Name = "web", Host = port, Container = 80 });
+		var runner = new Runner { PublishedHostPort = port };
 		using var stopping = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+		var ready = false;
+		var run = new RunContext(new("podman", runner), bundle, content =>
+		{
+			ready |= HasColor(content, CommandOutletColor.Green);
+			if(HasColor(content, CommandOutletColor.Magenta))
+				stopping.Cancel();
+		});
 		var names = new System.Collections.Concurrent.ConcurrentBag<string>();
 		var serving = Task.Run(async () =>
 		{
@@ -326,12 +345,10 @@ public sealed class RunContextTests : IDisposable
 
 		try
 		{
-			var failure = await Assert.ThrowsAsync<ContainerizationException>(() => endpoint.ProbeAsync(stopping.Token));
-			Assert.Equal(4, failure.Code);
-			Assert.IsType<System.Net.Http.HttpRequestException>(failure.InnerException);
+			Assert.Equal(4, await run.ExecuteAsync(stopping.Token));
 			Assert.NotEmpty(names);
 			Assert.All(names, name => Assert.Equal("example.invalid", name));
-			Assert.Empty(endpoint.Results);
+			Assert.False(ready);
 		}
 		finally
 		{
@@ -340,7 +357,15 @@ public sealed class RunContextTests : IDisposable
 		}
 	}
 
-	private static WebSitePlan WebSite() => new() { Application = "web", Name = "api", ProbeHosts = ["example.invalid"], Bindings = [new() { Scheme = "http", Address = "0.0.0.0", Port = 80, Publication = "web" }] };
+	private static WebSitePlan CreateWebSite() => new() { Application = "web", Name = "api", ProbeHosts = ["example.invalid"], Bindings = [new() { Scheme = "http", Address = "0.0.0.0", Port = 80, Publication = "web" }] };
+
+	private static string GetText(CommandOutletContent content)
+	{
+		var text = new StringBuilder();
+		for(var item = content.First; item != null; item = item.Next)
+			text.Append(item.Text);
+		return text.ToString();
+	}
 
 	private static bool HasColor(CommandOutletContent content, CommandOutletColor color)
 	{
@@ -353,7 +378,7 @@ public sealed class RunContextTests : IDisposable
 		return false;
 	}
 
-	private DeliveryBundle Bundle()
+	private DeliveryBundle CreateBundle()
 	{
 		var name = $"run-test-{Guid.NewGuid():N}";
 		var plan = new DeliveryPlan
@@ -365,7 +390,7 @@ public sealed class RunContextTests : IDisposable
 			DataRoot = Installation.Paths.GetDataPath(name),
 		};
 
-		plan.Services.Add(new() { Id = "redis", Image = new() { Id = $"sha256:{new string('a', 64)}", Platform = "linux/amd64", Mode = "online", Tag = $"containerizer/{plan.Project}/redis:fixture" } });
+		plan.Services.Add(new() { Id = "redis", Image = new() { Id = $"sha256:{new string('a', 64)}", Platform = "linux/amd64", Mode = "online", Reference = $"containerizer/{plan.Project}/redis:fixture" } });
 		string[] files = ["containerizer", "compose.yaml", "install.sh", "uninstall.sh"];
 
 		foreach(var file in files)
@@ -383,15 +408,30 @@ public sealed class RunContextTests : IDisposable
 	private sealed class Runner : IProcessRunner
 	{
 		public List<string[]> Calls { get; } = [];
+		public List<(string Executable, string[] Arguments)> Streams { get; } = [];
+		public int InstallExit { get; init; }
+		public TaskCompletionSource InstallStarted { get; init; }
+		public bool WaitForInstallCancellation { get; init; }
 		public bool Owned { get; private set; }
 		public bool CleanupFailure { get; init; }
 		public bool ImageCleanupTimeout { get; init; }
 		public bool Existing { get; init; }
 		public bool PortConflict { get; set; }
-		public bool CachedBase { get; init; }
+		public Dictionary<string, string> BaseImageLabels { get; } = [];
+		public int PublishedHostPort { get; init; }
 		public string Architecture { get; init; } = "linux/amd64";
 		public string Workspace { get; private set; }
+		public string SessionName { get; private set; }
 		public CancellationTokenSource CancelCreate { get; init; }
+
+		public async Task<int> StreamAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation)
+		{
+			this.Streams.Add((executable, arguments.ToArray()));
+			this.InstallStarted?.TrySetResult();
+			if(this.WaitForInstallCancellation)
+				await Task.Delay(Timeout.Infinite, cancellation);
+			return this.InstallExit;
+		}
 
 		public Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation, int timeoutSeconds = 900)
 		{
@@ -400,21 +440,30 @@ public sealed class RunContextTests : IDisposable
 			if(this.ImageCleanupTimeout && arguments.Count > 3 && arguments[0] == "exec" && arguments[2] == "docker" && arguments[3] == "ps")
 				throw new OperationCanceledException(cancellation);
 
-
 			if(arguments[0] == "info")
 				output = this.Architecture;
-			if(this.CachedBase && arguments.Take(2).SequenceEqual(["image", "ls"]))
+			if(this.BaseImageLabels.Count > 0 && arguments.Take(2).SequenceEqual(["image", "ls"]))
 				output = "base-image-id";
-			if(this.CachedBase && arguments.Take(2).SequenceEqual(["image", "inspect"]))
-				output = JsonSerializer.Serialize(new[] { new { Config = new { Labels = new Dictionary<string, string> { [RunContext.OWNER_LABEL] = Files.HashText($"{RunContext.Recipe("debian@13")}\nx64") } } } });
+			if(this.BaseImageLabels.Count > 0 && arguments.Take(2).SequenceEqual(["image", "inspect"]))
+				output = JsonSerializer.Serialize(new[] { new { Config = new { Labels = this.BaseImageLabels } } });
 			if(arguments[0] == "ps")
 				output = arguments[^1] == "{{.Names}}" ? this.Existing ? "other-session" : "" : this.Owned ? "owned-id" : "";
+
 			if(arguments[0] == "build" || arguments.Take(2).SequenceEqual(["buildx", "build"]))
+			{
 				this.Workspace = directory;
+
+				foreach(var label in File.ReadLines(Path.Combine(directory, "Dockerfile")).Where(line => line.StartsWith("LABEL ", StringComparison.Ordinal)))
+				{
+					var pair = label[6..].Split('=', 2);
+					this.BaseImageLabels[pair[0]] = pair[1];
+				}
+			}
 
 			if(arguments[0] == "create")
 			{
 				this.Owned = true;
+				this.SessionName = arguments[2];
 
 				if(this.CancelCreate != null)
 				{
@@ -440,7 +489,8 @@ public sealed class RunContextTests : IDisposable
 			}
 
 			if(arguments[0] == "inspect")
-				output = """[{"NetworkSettings":{"Ports":{}}}]""";
+				output = this.PublishedHostPort == 0 ? """[{"NetworkSettings":{"Ports":{}}}]""" :
+					JsonSerializer.Serialize(new[] { new { NetworkSettings = new { Ports = new Dictionary<string, object> { ["45000/tcp"] = new[] { new { HostIp = "0.0.0.0", HostPort = this.PublishedHostPort.ToString(CultureInfo.InvariantCulture) } } } } } });
 
 			return Task.FromResult(new ProcessResult(0, output, ""));
 		}

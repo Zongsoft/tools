@@ -46,20 +46,20 @@ namespace Zongsoft.Tools.Containerizer.Execution;
 partial class InstallationManager
 {
 	#region 私有方法
-	private async Task MigrationsAsync(Installation installation, DeliveryBundle bundle, string retry, CancellationToken cancellation)
+	private async Task ApplyMigrationsAsync(Installation installation, DeliveryBundle bundle, string retryVersion, CancellationToken cancellation)
 	{
 		foreach(var migration in bundle.Plan.Migrations)
 		{
 			var directory = store.GetMigrationPath(installation.Name, migration.Version);
 			var result = installation.Migrations.GetValueOrDefault(migration.Identity);
-			var unresolved = result?.Status is "Started" or "Failed" or "Interrupted" or "Unknown";
+			var requiresRetry = result?.Status is "Started" or "Failed" or "Interrupted" or "Unknown";
 
-			if(unresolved && retry != migration.Version)
+			if(requiresRetry && retryVersion != migration.Version)
 				throw new ContainerizationException(7, string.Format(Properties.Resources.Lifecycle_6_Message, migration.Version));
 
 			if(result?.Status == "Succeeded" || result == null && installation.Migrations.Values.Any(item => item.Version == migration.Version && item.Status == "Succeeded"))
 			{
-				if(await host.MigrateAsync(bundle, migration, directory, "check", null, cancellation) != 0)
+				if(await host.RunMigrationAsync(bundle, migration, directory, "check", null, cancellation) != 0)
 					throw new ContainerizationException(7, Properties.Resources.Lifecycle_7_Message);
 
 				if(result == null)
@@ -87,10 +87,10 @@ partial class InstallationManager
 
 			try
 			{
-				var code = await host.MigrateAsync(bundle, migration, directory, "apply", attempt.Log, cancellation);
+				var code = await host.RunMigrationAsync(bundle, migration, directory, "apply", attempt.Log, cancellation);
 				attempt.ExitCode = code;
 
-				if(code != 0 || await host.MigrateAsync(bundle, migration, directory, "check", null, cancellation) != 0)
+				if(code != 0 || await host.RunMigrationAsync(bundle, migration, directory, "check", null, cancellation) != 0)
 					throw new ContainerizationException(7, string.Format(Properties.Resources.Lifecycle_8_Message, migration.Version));
 
 				result.Status = "Succeeded";

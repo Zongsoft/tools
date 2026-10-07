@@ -43,7 +43,7 @@ using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer;
 
-internal sealed class TemplateCatalog
+internal static class TemplateCatalog
 {
 	#region 静态字段
 	private static readonly HashSet<string> _names = new(StringComparer.OrdinalIgnoreCase)
@@ -56,7 +56,7 @@ internal sealed class TemplateCatalog
 
 	#region 公共方法
 	public static bool Contains(string name) => _names.Contains(name);
-	public ServiceBuildContext Read(ContainerManifest.Component component, ContainerManifest manifest)
+	public static ServiceBuildContext Read(ContainerManifest.Component component, ContainerManifest manifest)
 	{
 		if(component.IsApplication)
 			throw new ContainerizationException(2, string.Format(Properties.Resources.Manifest_8_Message, component.Name, "template"));
@@ -64,7 +64,7 @@ internal sealed class TemplateCatalog
 		var template = component["template"] ?? component.Name;
 		if(Contains(template))
 			template = template.ToLowerInvariant();
-		var path = Contains(template) ? Find($"{template.ToLowerInvariant()}.template") : manifest.Resolve(template);
+		var path = Contains(template) ? Find($"{template.ToLowerInvariant()}.template") : manifest.ResolvePath(template);
 
 		if(!File.Exists(path))
 			throw new ContainerizationException(2, string.Format(Properties.Resources.ServiceSource_1_Message, component.Name, path));
@@ -106,9 +106,9 @@ internal sealed class TemplateCatalog
 		if(!(root.GetValueOrDefault("platforms") ?? "x64;arm64").Split(';').Contains(manifest["architecture"]))
 			throw new ContainerizationException(3, string.Format(Properties.Resources.ServiceSource_3_Message, component.Name));
 
-		var source = new ServiceBuildContext
+		var source = new ServiceBuildContext(component)
 		{
-			SourceImage = manifest.Defaults.SelectRepository(component, root.GetValueOrDefault("image")),
+			ImageRepository = manifest.Defaults.SelectRepository(component, root.GetValueOrDefault("image")),
 
 			Plan = new()
 			{
@@ -132,7 +132,7 @@ internal sealed class TemplateCatalog
 			},
 		};
 
-		ContainerEngine.ValidateRepository(source.SourceImage);
+		ImageReference.ValidateRepository(source.ImageRepository);
 		var settings = component.Settings;
 		var declared = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -228,12 +228,12 @@ internal sealed class TemplateCatalog
 
 				foreach(var entry in section.Entries)
 				{
-					ContainerManifest.Identity(entry.Name);
+					ContainerManifest.ValidateIdentity(entry.Name);
 
 					source.Plan.Mounts.Add(new()
 					{
 						Source = section.Entries.Count == 1 ? directory : $"{directory}/{entry.Name}",
-						Target = LinuxPath(Resolve(entry.Value)),
+						Target = Files.NormalizeLinuxPath(Resolve(entry.Value)),
 						Owned = true,
 						User = root.GetValueOrDefault("data-owner")
 					});
@@ -248,7 +248,7 @@ internal sealed class TemplateCatalog
 					if(!File.Exists(input))
 						throw new ContainerizationException(2, string.Format(Properties.Resources.ServiceSource_6_Message, input));
 
-					source.Configuration.Add(LinuxPath(entry.Name), (input, null));
+					source.Configuration.Add(Files.NormalizeLinuxPath(entry.Name), (input, null));
 				}
 			}
 			else
@@ -263,29 +263,11 @@ internal sealed class TemplateCatalog
 				throw new ContainerizationException(2, string.Format(Properties.Resources.ServiceSource_8_Message, component.Name, key));
 		}
 
-		ApplyEnvironment(component, source, manifest);
+		ServiceOptions.ApplyEnvironment(component, source, manifest);
 		return source;
 
 		string Resolve(string value) => value == null || manifest.IsPlanning ? value : ContainerManifest.Evaluate(value, manifest.Variables, allowEscapes: true);
-		string[] ParseArguments(string value) => Array(value)?.Select(Resolve).ToArray();
-	}
-
-	public static void ApplyEnvironment(ContainerManifest.Component component, ServiceBuildContext source, ContainerManifest manifest = null)
-	{
-		foreach(var pair in component.Values.Where(pair => pair.Key.StartsWith("environment!", StringComparison.OrdinalIgnoreCase)))
-		{
-			var name = pair.Key[12..];
-			var value = manifest == null ? pair.Value ?? "" : manifest.ResolveValue(pair.Value);
-
-			if(source.ManagedEnvironment.Contains(name) && source.Environment.TryGetValue(name, out var mapped) && mapped != value)
-			{
-				var deferred = manifest?.IsPlanning == true && (ContainerManifest.HasVariables(mapped) || ContainerManifest.HasVariables(value));
-				if(!deferred)
-					throw new ContainerizationException(2, string.Format(Properties.Resources.Settings_Conflict_Message, component.Name, pair.Key));
-			}
-
-			source.Environment[name] = value;
-		}
+		string[] ParseArguments(string value) => ParseArray(value)?.Select(Resolve).ToArray();
 	}
 
 	public static string Find(string name)
@@ -300,7 +282,7 @@ internal sealed class TemplateCatalog
 		throw new ContainerizationException(3, string.Format(Properties.Resources.ServiceSource_9_Message, name));
 	}
 
-	public static string[] Array(string value)
+	private static string[] ParseArray(string value)
 	{
 		if(string.IsNullOrEmpty(value))
 			return null;
@@ -310,15 +292,7 @@ internal sealed class TemplateCatalog
 			throw new ContainerizationException(2, Properties.Resources.ServiceSource_10_Message);
 	}
 
-	public static string LinuxPath(string value)
-	{
-		if(!Files.IsLinuxPath(value))
-			throw new ContainerizationException(2, Properties.Resources.ServiceSource_11_Message);
-
-		return value.TrimEnd('/');
-	}
-
-	public static PortPlan ParsePort(string value)
+	private static PortPlan ParsePort(string value)
 	{
 		var protocol = value.Split('/', 2);
 		var parts = protocol[0].Split(':');

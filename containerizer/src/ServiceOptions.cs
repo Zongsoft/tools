@@ -43,6 +43,24 @@ namespace Zongsoft.Tools.Containerizer;
 
 internal static class ServiceOptions
 {
+	public static void ApplyEnvironment(ContainerManifest.Component component, ServiceBuildContext source, ContainerManifest manifest = null)
+	{
+		foreach(var pair in component.Values.Where(pair => pair.Key.StartsWith("environment!", StringComparison.OrdinalIgnoreCase)))
+		{
+			var name = pair.Key[12..];
+			var value = manifest == null ? pair.Value ?? "" : manifest.ResolveValue(pair.Value);
+
+			if(source.ManagedEnvironment.Contains(name) && source.Environment.TryGetValue(name, out var mapped) && mapped != value)
+			{
+				var deferred = manifest?.IsPlanning == true && (ContainerManifest.HasVariables(mapped) || ContainerManifest.HasVariables(value));
+				if(!deferred)
+					throw new ContainerizationException(2, string.Format(Properties.Resources.Settings_Conflict_Message, component.Name, pair.Key));
+			}
+
+			source.Environment[name] = value;
+		}
+	}
+
 	public static void Apply(ContainerManifest.Component component, ContainerManifest manifest, ServiceBuildContext source, HashSet<string> declared)
 	{
 		var settings = component.Settings;

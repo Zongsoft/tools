@@ -46,16 +46,16 @@ partial class WebIngress
 {
 	private static void ValidateFiles(ContainerManifest manifest, ServiceBuildContext ingress, IEnumerable<ServiceBuildContext> applications)
 	{
-		var component = manifest.Components.Single(component => component.Name.Equals(ingress.Plan.Id, StringComparison.OrdinalIgnoreCase));
+		var component = ingress.Component;
 
 		foreach(var pair in component.Values.Where(pair => pair.Key.StartsWith("file!", StringComparison.OrdinalIgnoreCase)))
 		{
-			var target = Target(pair.Key[5..], component.Name);
-			var input = manifest.Resolve(pair.Value);
-			Files.NoLinks(input);
+			var target = NormalizeTarget(pair.Key[5..], component.Name);
+			var input = manifest.ResolvePath(pair.Value);
+			Files.EnsureNoLinks(input);
 
 			if(!File.Exists(input))
-				throw WebPackage.Invalid(component.Name, pair.Key);
+				throw WebPackage.CreateException(component.Name, pair.Key);
 
 			AddFile(ingress, target, input);
 		}
@@ -64,22 +64,22 @@ partial class WebIngress
 		{
 			RenderTemplate(application, path =>
 			{
-				var owned = OwnedFile(application, path);
+				var owned = FindOwnedFile(application, path);
 
-				if(owned == null && !ingress.Configuration.ContainsKey(Target(path, application.Plan.Id)))
-					throw WebPackage.Invalid(application.Plan.Id, path);
+				if(owned == null && !ingress.Configuration.ContainsKey(NormalizeTarget(path, application.Plan.Id)))
+					throw WebPackage.CreateException(application.Plan.Id, path);
 
-				return owned == null ? path : ResourceTarget(application, owned);
+				return owned == null ? path : GetResourceTarget(application, owned);
 			});
 		}
 	}
 
-	internal static void Render(ContainerManifest manifest, IReadOnlyList<ServiceBuildContext> sources, string workspace)
+	internal static void Render(IReadOnlyList<ServiceBuildContext> sources, string workspace)
 	{
 		foreach(var ingress in sources.Where(source => source.Plan.Template == "nginx" && source.Plan.Web.Count > 0))
 		{
 			var directory = Path.Combine(workspace, "web", ingress.Plan.Id);
-			Files.PrivateDirectory(directory);
+			Files.CreatePrivateDirectory(directory);
 			var main = new StringBuilder("events {}\nhttp {\n\tinclude /etc/nginx/mime.types;\n");
 
 			foreach(var application in sources.Where(source => source.Package?.Web?.Hoster == ingress.Plan.Id).OrderBy(source => source.Plan.Id, StringComparer.Ordinal))
@@ -87,7 +87,7 @@ partial class WebIngress
 				var extraction = new Dictionary<string, string>(StringComparer.Ordinal);
 				var text = RenderTemplate(application, path =>
 				{
-					var owned = OwnedFile(application, path);
+					var owned = FindOwnedFile(application, path);
 					if(owned == null)
 						return path;
 
@@ -95,19 +95,19 @@ partial class WebIngress
 					{
 						local = Path.Combine(directory, Files.HashText(application.Plan.Id + "/" + owned));
 						extraction.Add(owned, local);
-						AddFile(ingress, ResourceTarget(application, owned), local);
+						AddFile(ingress, GetResourceTarget(application, owned), local);
 					}
 
-					return ResourceTarget(application, owned);
+					return GetResourceTarget(application, owned);
 				});
 
-				var component = manifest.Components.Single(component => component.Name.Equals(application.Plan.Id, StringComparison.OrdinalIgnoreCase));
+				var component = application.Component;
 
 				if(extraction.Count > 0)
 				{
 					PackageReader.Read(component["package"], extraction);
 					if(extraction.Values.Any(path => !File.Exists(path)))
-						throw WebPackage.Invalid(application.Plan.Id, "file");
+						throw WebPackage.CreateException(application.Plan.Id, "file");
 				}
 
 				var target = $"/etc/nginx/containerizer/{application.Plan.Id}.conf";
@@ -124,30 +124,30 @@ partial class WebIngress
 		}
 	}
 
-	private static string OwnedFile(ServiceBuildContext application, string path)
+	private static string FindOwnedFile(ServiceBuildContext application, string path)
 	{
 		var target = path.StartsWith("./", StringComparison.Ordinal) ? application.Package.Web.Root + "/" + path[2..] : path;
-		Target(target, application.Plan.Id);
+		NormalizeTarget(target, application.Plan.Id);
 
 		if(application.Package.Entries.TryGetValue(target, out var regular))
 		{
 			if(!regular || application.Package.Links.Any(link => target.StartsWith(link + "/", StringComparison.Ordinal)))
-				throw WebPackage.Invalid(application.Plan.Id, path);
+				throw WebPackage.CreateException(application.Plan.Id, path);
 
 			return target;
 		}
 
 		if(path.StartsWith("./", StringComparison.Ordinal))
-			throw WebPackage.Invalid(application.Plan.Id, path);
+			throw WebPackage.CreateException(application.Plan.Id, path);
 
 		return null;
 	}
 
-	private static string ResourceTarget(ServiceBuildContext application, string path) => $"/etc/nginx/containerizer-files/{application.Plan.Id}/{Files.HashText(path)}/{path[(path.LastIndexOf('/') + 1)..]}";
+	private static string GetResourceTarget(ServiceBuildContext application, string path) => $"/etc/nginx/containerizer-files/{application.Plan.Id}/{Files.HashText(path)}/{path[(path.LastIndexOf('/') + 1)..]}";
 
 	private static string RenderTemplate(ServiceBuildContext application, Func<string, string> file)
 	{
-		var result = Markers().Replace(application.Package.Web.Template, match =>
+		var result = GetMarkerRegex().Replace(application.Package.Web.Template, match =>
 		{
 			if(match.Groups[1].Value == "application")
 				return application.Plan.Id;
@@ -157,21 +157,21 @@ partial class WebIngress
 			try { path = new UTF8Encoding(false, true).GetString(Convert.FromBase64String(match.Groups[2].Value)); }
 			catch(Exception exception) when(exception is FormatException or DecoderFallbackException)
 			{
-				throw WebPackage.Invalid(application.Plan.Id, "template/file");
+				throw WebPackage.CreateException(application.Plan.Id, "template/file");
 			}
 
 			return file(path).Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
 		});
 		if(result.Contains("{{zongsoft:", StringComparison.Ordinal))
-			throw WebPackage.Invalid(application.Plan.Id, "template");
+			throw WebPackage.CreateException(application.Plan.Id, "template");
 
 		return result;
 	}
 
-	private static string Target(string path, string source)
+	private static string NormalizeTarget(string path, string source)
 	{
 		if(!Files.IsLinuxPath(path) || path.Contains("//", StringComparison.Ordinal) || path.EndsWith('/') || path.Any(character => char.IsControl(character) || character is '$' or '"' or '*' or '?' or '[' or ']'))
-			throw WebPackage.Invalid(source, path);
+			throw WebPackage.CreateException(source, path);
 
 		return path;
 	}
@@ -179,11 +179,11 @@ partial class WebIngress
 	private static void AddFile(ServiceBuildContext source, string target, string file, string relativePath = null)
 	{
 		if(source.Configuration.Keys.Concat(source.Plan.Mounts.Select(mount => mount.Target)).Any(existing => existing == target || existing.StartsWith(target + "/", StringComparison.Ordinal) || target.StartsWith(existing + "/", StringComparison.Ordinal)))
-			throw WebPackage.Invalid(source.Plan.Id, target);
+			throw WebPackage.CreateException(source.Plan.Id, target);
 
 		source.Configuration.Add(target, (file, relativePath));
 	}
 
 	[GeneratedRegex(@"\{\{zongsoft:(application|file:([^}]+))\}\}")]
-	private static partial Regex Markers();
+	private static partial Regex GetMarkerRegex();
 }

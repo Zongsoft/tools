@@ -67,7 +67,7 @@ internal sealed partial class DeliveryBundle : IDisposable
 	public static DeliveryBundle Open(string path)
 	{
 		path = Path.GetFullPath(path);
-		Files.NoLinks(path);
+		Files.EnsureNoLinks(path);
 
 		if(System.IO.Directory.Exists(path))
 			return new(path, false);
@@ -76,7 +76,7 @@ internal sealed partial class DeliveryBundle : IDisposable
 			throw new ContainerizationException(2, Properties.Resources.Bundle_1_Message);
 
 		var directory = Path.Combine(Path.GetTempPath(), $"containerizer-{Guid.NewGuid().ToString("N")}");
-		Files.PrivateDirectory(directory);
+		Files.CreatePrivateDirectory(directory);
 
 		try
 		{
@@ -86,12 +86,26 @@ internal sealed partial class DeliveryBundle : IDisposable
 		catch { System.IO.Directory.Delete(directory, true); throw; }
 	}
 
-	public void Verify()
+	public static void ValidateIdentity(string name)
+	{
+		if(!GetIdentityRegex().IsMatch(name ?? "") || name.Contains("..", StringComparison.Ordinal))
+			throw new ContainerizationException(2, Properties.Resources.Bundle_16_Message);
+	}
+
+	public static void ValidateLinuxPath(string path)
+	{
+		if(!Files.IsLinuxPath(path))
+			throw new ContainerizationException(4, Properties.Resources.Bundle_17_Message);
+	}
+	#endregion
+
+	#region 私有方法
+	private void Verify()
 	{
 		if(this.Plan.Schema != DeliveryPlan.ProtocolVersion)
 			throw new ContainerizationException(3, Properties.Resources.Bundle_2_Message);
 
-		Identity(this.Plan.Name);
+		ValidateIdentity(this.Plan.Name);
 
 		if(this.Plan.Project != $"containerizer-{this.Plan.Name.ToLowerInvariant().Replace('.', '-').Replace('_', '-')}-{Files.HashText(this.Plan.Name)[..8]}")
 			throw new ContainerizationException(4, Properties.Resources.Bundle_3_Message);
@@ -99,16 +113,16 @@ internal sealed partial class DeliveryBundle : IDisposable
 		if(this.Plan.Architecture is not ("x64" or "arm64") ||
 		   this.Plan.Services.Count == 0 ||
 		   this.Plan.DataRoot != Installation.Paths.GetDataPath(this.Plan.Name) ||
-		   string.IsNullOrEmpty(this.Plan.Project) || !ProjectRegex().IsMatch(this.Plan.Project))
+		   string.IsNullOrEmpty(this.Plan.Project) || !GetProjectRegex().IsMatch(this.Plan.Project))
 			throw new ContainerizationException(4, Properties.Resources.Bundle_3_Message);
 
 		var records = new Dictionary<string, FileRecord>(StringComparer.OrdinalIgnoreCase);
 		foreach(var file in this.Plan.Files)
 		{
-			if(!records.TryAdd(file.Path, file) || !HashRegex().IsMatch(file.Hash ?? ""))
+			if(!records.TryAdd(file.Path, file) || !GetHashRegex().IsMatch(file.Hash ?? ""))
 				throw new ContainerizationException(4, Properties.Resources.Bundle_4_Message);
 
-			var path = Files.Below(this.Directory, file.Path);
+			var path = Files.ResolveRelativePath(this.Directory, file.Path);
 			if(!File.Exists(path) || new FileInfo(path).Length != file.Length || Files.Hash(path) != file.Hash)
 				throw new ContainerizationException(4, string.Format(Properties.Resources.Bundle_5_Message, file.Path));
 		}
@@ -132,7 +146,7 @@ internal sealed partial class DeliveryBundle : IDisposable
 			records.Any(pair => checksums.GetValueOrDefault(pair.Key) != pair.Value.Hash))
 			throw new ContainerizationException(4, Properties.Resources.Bundle_8_Message);
 
-		foreach(var file in Files.Enumerate(this.Directory))
+		foreach(var file in Files.EnumerateFiles(this.Directory))
 		{
 			var relative = Path.GetRelativePath(this.Directory, file).Replace('\\', '/');
 			if(relative is not (DeliveryPlan.FileName or "checksums.sha256") && !records.ContainsKey(relative))
@@ -142,14 +156,14 @@ internal sealed partial class DeliveryBundle : IDisposable
 		var services = new HashSet<string>(StringComparer.Ordinal);
 		foreach(var service in this.Plan.Services)
 		{
-			Identity(service.Id);
+			ValidateIdentity(service.Id);
 
 			if(!services.Add(service.Id) || service.Kind is not ("application" or "infrastructure" or "ingress"))
 				throw new ContainerizationException(4, Properties.Resources.Bundle_10_Message);
 			if(service.Image.Platform != (this.Plan.Architecture == "arm64" ? "linux/arm64" : "linux/amd64") ||
-				!DigestRegex().IsMatch(service.Image.Id ?? "") || service.Image.Mode is not ("online" or "offline"))
+				!GetDigestRegex().IsMatch(service.Image.Id ?? "") || service.Image.Mode is not ("online" or "offline"))
 				throw new ContainerizationException(4, Properties.Resources.Bundle_11_Message);
-			if(!service.Image.Tag.StartsWith($"containerizer/{this.Plan.Project}/{service.Id}:", StringComparison.Ordinal))
+			if(!service.Image.Reference.StartsWith($"containerizer/{this.Plan.Project}/{service.Id}:", StringComparison.Ordinal))
 				throw new ContainerizationException(4, Properties.Resources.Bundle_11_Message);
 			if(service.Image.Mode == "offline" && !records.ContainsKey(service.Image.Archive ?? ""))
 				throw new ContainerizationException(4, Properties.Resources.Bundle_12_Message);
@@ -167,12 +181,12 @@ internal sealed partial class DeliveryBundle : IDisposable
 
 			foreach(var mount in service.Mounts)
 			{
-				LinuxPath(mount.Target);
+				ValidateLinuxPath(mount.Target);
 
 				if(mount.ReadOnly)
-					Files.Below(this.Directory, mount.Source);
+					Files.ResolveRelativePath(this.Directory, mount.Source);
 				else
-					LinuxPath(mount.Source);
+					ValidateLinuxPath(mount.Source);
 			}
 		}
 
@@ -188,21 +202,7 @@ internal sealed partial class DeliveryBundle : IDisposable
 		}
 	}
 
-	public static void Identity(string name)
-	{
-		if(!IdentityRegex().IsMatch(name ?? "") || name.Contains("..", StringComparison.Ordinal))
-			throw new ContainerizationException(2, Properties.Resources.Bundle_16_Message);
-	}
-
-	public static void LinuxPath(string path)
-	{
-		if(!Files.IsLinuxPath(path))
-			throw new ContainerizationException(4, Properties.Resources.Bundle_17_Message);
-	}
-	#endregion
-
-	#region 私有方法
-	internal static void ValidateWeb(ServicePlan service, IReadOnlyList<ServicePlan> services)
+	private static void ValidateWeb(ServicePlan service, IReadOnlyList<ServicePlan> services)
 	{
 		var sites = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 		if(service.Ports.Where(port => port.Name != null).GroupBy(port => port.Name, StringComparer.Ordinal).Any(group => group.Count() > 1))
@@ -233,7 +233,7 @@ internal sealed partial class DeliveryBundle : IDisposable
 					throw new ContainerizationException(4, Properties.Resources.Bundle_3_Message);
 				if(binding.Address == "::" && !site.Bindings.Any(ipv4 =>
 					ipv4.Address == "0.0.0.0" && ipv4.Port == binding.Port && ipv4.Scheme == binding.Scheme &&
-					ipv4.Publication == binding.Publication && ipv4.IsDefault == binding.IsDefault && ipv4.ExplicitDefault == binding.ExplicitDefault))
+					ipv4.Publication == binding.Publication && ipv4.IsDefault == binding.IsDefault && ipv4.IsExplicitDefault == binding.IsExplicitDefault))
 					throw new ContainerizationException(4, Properties.Resources.Bundle_3_Message);
 			}
 		}
@@ -242,8 +242,8 @@ internal sealed partial class DeliveryBundle : IDisposable
 		{
 			foreach(var group in service.Web.SelectMany(site => site.Bindings).GroupBy(binding => (binding.Address, binding.Port)))
 			{
-				if(group.Count(binding => binding.IsDefault) != 1 || group.Count(binding => binding.ExplicitDefault) > 1 ||
-					group.Any(binding => binding.ExplicitDefault && !binding.IsDefault) ||
+				if(group.Count(binding => binding.IsDefault) != 1 || group.Count(binding => binding.IsExplicitDefault) > 1 ||
+					group.Any(binding => binding.IsExplicitDefault && !binding.IsDefault) ||
 					group.Select(binding => binding.Scheme).Distinct().Count() != 1 || group.Select(binding => binding.Publication).Distinct().Count() != 1)
 					throw new ContainerizationException(4, Properties.Resources.Bundle_3_Message);
 			}
@@ -251,16 +251,16 @@ internal sealed partial class DeliveryBundle : IDisposable
 	}
 
 	[GeneratedRegex(@"^[a-z0-9][a-z0-9_-]*$")]
-	private static partial Regex ProjectRegex();
+	private static partial Regex GetProjectRegex();
 
 	[GeneratedRegex(@"^[a-f0-9]{64}$")]
-	private static partial Regex HashRegex();
+	private static partial Regex GetHashRegex();
 
 	[GeneratedRegex(@"^sha256:[a-f0-9]{64}$")]
-	private static partial Regex DigestRegex();
+	private static partial Regex GetDigestRegex();
 
 	[GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9_.-]*$")]
-	private static partial Regex IdentityRegex();
+	private static partial Regex GetIdentityRegex();
 	#endregion
 
 	#region 释放资源

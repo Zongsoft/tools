@@ -58,7 +58,8 @@ public sealed class ServiceDefaultsTests : IDisposable
 		manifest.Components.AddRange([redis, rustfs]);
 		Assert.Equal(original.Replace("[rustfs]\r\n", "[rustfs]\r\ntag=latest\r\n", StringComparison.Ordinal), File.ReadAllText(ServiceDefaults.Prepare(manifest, _root)));
 		Assert.Equal(original, File.ReadAllText(path));
-		manifest.Input = "draft.container";
-		Assert.Null(ServiceDefaults.Prepare(manifest, _root));
+		var draft = Path.Combine(_root, "draft.container");
+		File.WriteAllText(draft, "[redis]\ntag=9.0\n");
+		Assert.Null(ServiceDefaults.Prepare(ContainerManifest.Read(draft), _root));
 	}
 }

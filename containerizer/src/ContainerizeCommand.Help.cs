@@ -39,12 +39,12 @@ namespace Zongsoft.Tools.Containerizer;
 partial class ContainerizeCommand
 {
 	#region 内部方法
-	internal static void Help()
+	internal static void ShowHelp()
 	{
-		Syntax("dotnet containerize", " <components...> [options]");
-		Syntax("dotnet containerize run", $" <archive.tar.gz> [--engine:{ContainerEngine.OPTIONS}]");
-		Syntax("dotnet containerize plan", " <components... | file.container> [options]");
-		Syntax("dotnet containerize [make]", $" <file.container> [--version:<version>] [--source:<directory>] [--output:<directory>] [--engine:{ContainerEngine.OPTIONS}] [--refresh]");
+		WriteSyntax("dotnet containerize", " <components...> [options]");
+		WriteSyntax("dotnet containerize run", $" <archive.tar.gz> [--engine:{ContainerEngine.OPTIONS}]");
+		WriteSyntax("dotnet containerize plan", " <components... | file.container> [options]");
+		WriteSyntax("dotnet containerize [make]", $" <file.container> [--version:<version>] [--source:<directory>] [--output:<directory>] [--engine:{ContainerEngine.OPTIONS}] [--refresh]");
 
 		Terminal.WriteLine();
 		Terminal.WriteLine(CommandOutletStyles.Bold, "Component-list options:");
@@ -67,14 +67,14 @@ partial class ContainerizeCommand
 		];
 
 		foreach(var option in options)
-			Terminal.WriteLine(Output.Syntax($"\t{option}"));
+			Terminal.WriteLine(Output.HighlightSyntax($"\t{option}"));
 
 		Terminal.WriteLine();
 		Terminal.WriteLine(Properties.Resources.Run_Help);
 		Terminal.WriteLine(Properties.Resources.RuntimeCache_Help);
 
-		static void Syntax(string command, string arguments) => Terminal.WriteLine(
-			CommandOutletContent.Create(CommandOutletStyles.Bold, CommandOutletColor.Cyan, command).Append(Output.Syntax(arguments)));
+		static void WriteSyntax(string command, string arguments) => Terminal.WriteLine(
+			CommandOutletContent.Create(CommandOutletStyles.Bold, CommandOutletColor.Cyan, command).Append(Output.HighlightSyntax(arguments)));
 	}
 	#endregion
 }

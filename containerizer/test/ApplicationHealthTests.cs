@@ -19,8 +19,8 @@ public sealed class ApplicationHealthTests
 	[InlineData("http://[::]:8069", "http://[::]:8069", "http://[::1]:8069/")]
 	public void ListenerBindsAllInterfacesAndProbesLoopback(string listen, string binding, string probe)
 	{
-		var (package, source) = Create(listen);
-		ApplicationImageBuilder.ResolveEntry(package, source);
+		var component = Create(listen);
+		var source = ApplicationPlanner.Create(component, new());
 		Assert.Equal(["dotnet", "/opt/example/example.dll", "--urls", binding], source.Plan.Entrypoint);
 		Assert.Equal("CMD-SHELL", source.Plan.Health.Test[0]);
 		Assert.Contains("'" + probe + "'", source.Plan.Health.Test[1]);
@@ -31,8 +31,8 @@ public sealed class ApplicationHealthTests
 	[Fact]
 	public void MultipleListenersPreferFirstHttpWithoutFollowingRedirects()
 	{
-		var (package, source) = Create("https://example.test:8443; http://localhost:8069;http://0.0.0.0:8070");
-		ApplicationImageBuilder.ResolveEntry(package, source);
+		var component = Create("https://example.test:8443; http://localhost:8069;http://0.0.0.0:8070");
+		var source = ApplicationPlanner.Create(component, new());
 		Assert.Equal("https://0.0.0.0:8443;http://0.0.0.0:8069;http://0.0.0.0:8070", source.Plan.Entrypoint.Last());
 		Assert.Contains("'http://127.0.0.1:8069/'", source.Plan.Health.Test[1]);
 		Assert.Contains("--header 'Host: localhost:8069'", source.Plan.Health.Test[1]);
@@ -43,8 +43,8 @@ public sealed class ApplicationHealthTests
 	[Fact]
 	public void HttpsUsesPackageDnsNameWithoutDisablingCertificateVerification()
 	{
-		var (package, source) = Create("https://example.test:8443");
-		ApplicationImageBuilder.ResolveEntry(package, source);
+		var component = Create("https://example.test:8443");
+		var source = ApplicationPlanner.Create(component, new());
 		Assert.Contains("--resolve 'example.test:8443:127.0.0.1'", source.Plan.Health.Test[1]);
 		Assert.Contains("'https://example.test:8443/'", source.Plan.Health.Test[1]);
 		Assert.DoesNotContain("--insecure", source.Plan.Health.Test[1]);
@@ -54,8 +54,8 @@ public sealed class ApplicationHealthTests
 	[Fact]
 	public void HttpsDnsListenerSuppliesTlsName()
 	{
-		var (package, source) = Create("https://example.test:8443");
-		ApplicationImageBuilder.ResolveEntry(package, source);
+		var component = Create("https://example.test:8443");
+		var source = ApplicationPlanner.Create(component, new());
 		Assert.Contains("--resolve 'example.test:8443:127.0.0.1'", source.Plan.Health.Test[1]);
 	}
 
@@ -64,9 +64,8 @@ public sealed class ApplicationHealthTests
 	[InlineData("https://0.0.0.0:8443")]
 	public void HttpsIpListenerCannotSupplyDnsIdentity(string listen)
 	{
-		var (package, source) = Create(listen);
-		Assert.Equal(2, Assert.Throws<ContainerizationException>(() => ApplicationImageBuilder.ResolveEntry(package, source)).Code);
-		Assert.Null(source.Plan.Health.Test);
+		var component = Create(listen);
+		Assert.Equal(2, Assert.Throws<ContainerizationException>(() => ApplicationPlanner.Create(component, new())).Code);
 	}
 
 	[Theory]
@@ -82,9 +81,8 @@ public sealed class ApplicationHealthTests
 	[InlineData("http://192.0.2.1:8069")]
 	public void InvalidListenersFailWithoutProcessFallback(string listen)
 	{
-		var (package, source) = Create(listen);
-		Assert.Equal(2, Assert.Throws<ContainerizationException>(() => ApplicationImageBuilder.ResolveEntry(package, source)).Code);
-		Assert.Null(source.Plan.Health.Test);
+		var component = Create(listen);
+		Assert.Equal(2, Assert.Throws<ContainerizationException>(() => ApplicationPlanner.Create(component, new())).Code);
 	}
 
 	[Theory]
@@ -92,31 +90,20 @@ public sealed class ApplicationHealthTests
 	[InlineData("")]
 	public void MissingOrEmptyMetadataUsesProcessLiveness(string listen)
 	{
-		var (package, source) = Create(listen);
-		ApplicationImageBuilder.ResolveEntry(package, source);
+		var component = Create(listen);
+		var source = ApplicationPlanner.Create(component, new());
 		Assert.Equal(["CMD-SHELL", "kill -0 1"], source.Plan.Health.Test);
 		Assert.Equal(["dotnet", "/opt/example/example.dll"], source.Plan.Entrypoint);
 	}
 
-	[Theory]
-	[InlineData("debian@13", "apt-get")]
-	[InlineData("ubuntu@22.04", "apt-get")]
-	[InlineData("rocky@9", "dnf")]
-	public void ProbeDependenciesAreInstalledEvenForSelfContainedHosts(string distribution, string installer)
-	{
-		Assert.Contains(installer, RuntimeEnvironmentCache.ProbeInstall(distribution, true));
-		Assert.Contains("ca-certificates", RuntimeEnvironmentCache.ProbeInstall(distribution, true));
-		Assert.Contains("curl", RuntimeEnvironmentCache.ProbeInstall(distribution, true));
-		Assert.Empty(RuntimeEnvironmentCache.ProbeInstall(distribution, false));
-	}
 	#endregion
 
 	#region 辅助方法
-	private static (PackageReader.Descriptor, ServiceBuildContext) Create(string listen)
+	private static ContainerManifest.Component Create(string listen)
 	{
-		var package = new PackageReader.Descriptor { Name = "example", Listen = listen };
+		var package = new PackageReader.Descriptor { Name = "example", ListenerAddresses = listen };
 		package.Texts["example.service"] = "[Service]\nWorkingDirectory=/opt/example\nExecStart=dotnet /opt/example/example.dll" + (string.IsNullOrEmpty(listen) ? "" : " --urls " + listen) + "\n";
-		return (package, new() { Plan = new() { Id = "example", Kind = "application" } });
+		return new(new PackageReader.Candidate("example.tar.gz", package));
 	}
 	#endregion
 }

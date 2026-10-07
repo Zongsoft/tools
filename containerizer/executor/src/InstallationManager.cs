@@ -57,7 +57,7 @@ internal sealed partial class InstallationManager(InstallationStore store, IInst
 					item.CurrentVersion ?? "-",
 					item.Status,
 					item.Pending?.Version ?? "-",
-					item.Maintenance ? "maintenance" : string.Empty));
+					item.IsInMaintenance ? "maintenance" : string.Empty));
 			}
 
 			return;
@@ -65,19 +65,19 @@ internal sealed partial class InstallationManager(InstallationStore store, IInst
 
 		if(arguments.Command is "install" or "prepare" or "upgrade")
 		{
-			using var bundle = DeliveryBundle.Open(arguments.Input);
+			using var bundle = DeliveryBundle.Open(arguments.BundlePath);
 			if(arguments.Name != null && arguments.Name != bundle.Plan.Name)
 				throw new ContainerizationException(2, Properties.Resources.Lifecycle_1_Message);
 
-			using var operationLock = store.Lock(bundle.Plan.Name);
+			using var operationLock = store.AcquireApplicationLock(bundle.Plan.Name);
 			await this.InstallAsync(bundle, arguments, cancellation);
 			return;
 		}
 
 		var name = arguments.Name;
-		if(arguments.From != null)
+		if(arguments.SourceBundlePath != null)
 		{
-			using var source = DeliveryBundle.Open(arguments.From);
+			using var source = DeliveryBundle.Open(arguments.SourceBundlePath);
 			if(name != null && name != source.Plan.Name)
 				throw new ContainerizationException(2, Properties.Resources.Lifecycle_2_Message);
 
@@ -93,17 +93,17 @@ internal sealed partial class InstallationManager(InstallationStore store, IInst
 
 		if(arguments.Command == "logs")
 		{
-			await host.LogsAsync(store.Load(name), arguments, cancellation);
+			await host.StreamLogsAsync(store.Load(name), arguments, cancellation);
 			return;
 		}
 
-		using var held = store.Lock(name);
+		using var held = store.AcquireApplicationLock(name);
 		var installation = store.Load(name);
 
 		switch(arguments.Command)
 		{
 			case "stop":
-				await host.StopApplicationsAsync(installation, cancellation);
+				await this.EnterMaintenanceAsync(installation, cancellation);
 				installation.Status = "Maintenance";
 				store.Save(installation);
 				break;
@@ -111,7 +111,7 @@ internal sealed partial class InstallationManager(InstallationStore store, IInst
 				await this.StartAsync(installation, cancellation);
 				break;
 			case "recover":
-				await this.RecoverAsync(installation, arguments.RetryMigration, cancellation);
+				await this.RecoverAsync(installation, arguments.RetryMigrationVersion, cancellation);
 				break;
 			case "restart":
 				await this.RestartAsync(installation, arguments.Component, cancellation);
@@ -123,8 +123,8 @@ internal sealed partial class InstallationManager(InstallationStore store, IInst
 	}
 	#endregion
 
-	#region 内部方法
-	internal static void ValidateUpgrade(DeliveryPlan previous, DeliveryPlan next)
+	#region 私有方法
+	private static void ValidateUpgrade(DeliveryPlan previous, DeliveryPlan next)
 	{
 		if(previous.Name != next.Name ||
 		   previous.Distribution != next.Distribution ||
@@ -162,7 +162,7 @@ internal sealed partial class InstallationManager(InstallationStore store, IInst
 			throw new ContainerizationException(3, Properties.Resources.Lifecycle_20_Message);
 	}
 
-	internal static IEnumerable<ServicePlan> Ordered(DeliveryPlan plan)
+	private static IEnumerable<ServicePlan> GetServicesInDependencyOrder(DeliveryPlan plan)
 	{
 		var result = new List<ServicePlan>();
 		var visiting = new HashSet<string>(StringComparer.Ordinal);
@@ -189,10 +189,7 @@ internal sealed partial class InstallationManager(InstallationStore store, IInst
 			result.Add(service);
 		}
 	}
-	#endregion
-
-	#region 私有方法
-	private DeliveryBundle Current(Installation installation) => installation.Current == null ?
+	private DeliveryBundle OpenCurrentBundle(Installation installation) => installation.Current == null ?
 		throw new ContainerizationException(7, Properties.Resources.Lifecycle_17_Message) :
 		DeliveryBundle.Open(Path.Combine(store.GetApplicationPath(installation.Name), "releases", installation.Current, "assets"));
 	#endregion

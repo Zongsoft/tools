@@ -45,8 +45,7 @@ internal sealed class PackagePlan
 	public string Architecture { get; set; }
 	public string Format { get; set; }
 	public string Hash { get; set; }
-	public string InstallPath { get; set; }
 	public string Runtime { get; set; }
-	public string BaseDigest { get; set; }
+	public string BaseImageReference { get; set; }
 	#endregion
 }

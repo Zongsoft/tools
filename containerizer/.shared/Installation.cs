@@ -46,7 +46,7 @@ internal sealed partial class Installation
 	public string Current { get; set; }
 	public string CurrentVersion { get; set; }
 	public string Status { get; set; } = "Preparing";
-	public bool Maintenance { get; set; }
+	public bool IsInMaintenance { get; set; }
 	public bool PurgeResourcesCompleted { get; set; }
 	public Transaction Pending { get; set; }
 	public List<string> Releases { get; set; } = [];
@@ -65,7 +65,7 @@ internal sealed partial class Installation
 		public const string LogDirectory = "/var/log/containerizer";
 		public const string CacheDirectory = "/var/cache/containerizer";
 		public const string RuntimeDirectory = "/run/containerizer";
-		public const string Executor = "/usr/local/bin/containerizer";
+		public const string ExecutorPath = "/usr/local/bin/containerizer";
 
 		public static string GetDataPath(string name) => $"{DataDirectory}/{name}";
 	}

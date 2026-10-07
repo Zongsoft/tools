@@ -38,36 +38,17 @@ using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer;
 
-internal sealed class ServiceBuildContext
+internal sealed class ServiceBuildContext(ContainerManifest.Component component)
 {
 	#region 公共属性
-	public ServicePlan Plan { get; set; } = new();
+	public ContainerManifest.Component Component { get; } = component ?? throw new ArgumentNullException(nameof(component));
+	public ServicePlan Plan { get; init; } = new();
 	public Dictionary<string, string> Environment { get; } = new(StringComparer.Ordinal);
 	public Dictionary<string, string> Settings { get; } = new(StringComparer.OrdinalIgnoreCase);
 	public Dictionary<string, (string Source, string RelativePath)> Configuration { get; } = new(StringComparer.Ordinal);
-	public PackageReader.Descriptor Package { get; set; }
-	public List<string> RequiredEnvironment { get; } = [];
+	public PackageReader.Descriptor Package => this.Component.Package;
 	public HashSet<string> ManagedEnvironment { get; } = new(StringComparer.Ordinal);
 	public List<string> MissingSettings { get; } = [];
-	public string SourceImage { get; set; }
-	#endregion
-
-	#region 公共方法
-	public static ServiceBuildContext FromApplication(ContainerManifest.Component component, ContainerManifest manifest)
-	{
-		if(component["template"] != null || component["settings"] != null)
-			throw new ContainerizationException(2, string.Format(Properties.Resources.Manifest_8_Message, component.Name, component["template"] != null ? "template" : "settings"));
-
-		var source = new ServiceBuildContext
-		{
-			Package = component.Package ?? PackageReader.Read(component["package"]),
-			Plan = new() { Id = component.Name.ToLowerInvariant(), Kind = "application", Restart = "unless-stopped", StopSignal = "SIGTERM", Health = new() },
-		};
-
-		TemplateCatalog.ApplyEnvironment(component, source, manifest);
-		ApplicationImageBuilder.ResolveEntry(source.Package, source);
-
-		return source;
-	}
+	public string ImageRepository { get; init; }
 	#endregion
 }

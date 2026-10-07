@@ -51,17 +51,17 @@ partial class DockerHost
 	#region 公共方法
 	public async Task InstallExecutorAsync(DeliveryBundle bundle, CancellationToken cancellation)
 	{
-		using var hostLock = store.HostLock();
-		var target = Installation.Paths.Executor;
-		var marker = Path.Combine(store.Root, "executor.identity");
-		Files.NoLinks(target);
+		using var hostLock = store.AcquireHostLock();
+		var target = Installation.Paths.ExecutorPath;
+		var marker = Path.Combine(store.StateRoot, "executor.identity");
+		Files.EnsureNoLinks(target);
 
 		if(File.Exists(target))
 		{
 			if(!File.Exists(marker) || File.ReadAllText(marker).Trim() != Files.Hash(target))
 				throw new ContainerizationException(3, Properties.Resources.DockerHost_6_Message);
 
-			var metadata = await this.RunAsync(target, ["--protocol"], null, cancellation);
+			var metadata = await this.RunCommandAsync(target, ["--protocol"], null, cancellation);
 			using var json = JsonDocument.Parse(metadata);
 
 			if(json.RootElement.GetProperty("minimum").GetInt32() <= bundle.Plan.Schema && json.RootElement.GetProperty("maximum").GetInt32() >= bundle.Plan.Schema)
@@ -74,8 +74,8 @@ partial class DockerHost
 				throw new ContainerizationException(3, Properties.Resources.DockerHost_7_Message);
 		}
 
-		var candidate = Files.Below(bundle.Directory, "containerizer");
-		var protocol = await this.RunAsync(candidate, ["--protocol"], null, cancellation);
+		var candidate = Files.ResolveRelativePath(bundle.Directory, "containerizer");
+		var protocol = await this.RunCommandAsync(candidate, ["--protocol"], null, cancellation);
 
 		using(var json = JsonDocument.Parse(protocol))
 		{
@@ -95,7 +95,7 @@ partial class DockerHost
 			{
 				var resourceTarget = Path.Combine(Path.GetDirectoryName(target), "zh-Hans", "containerizer.resources.dll");
 				var resourceMarker = $"{marker}.zh-Hans";
-				Files.NoLinks(resourceTarget);
+				Files.EnsureNoLinks(resourceTarget);
 
 				if(File.Exists(resourceTarget) && (!File.Exists(resourceMarker) || File.ReadAllText(resourceMarker).Trim() != Files.Hash(resourceTarget)))
 					throw new ContainerizationException(3, Properties.Resources.DockerHost_6_Message);
@@ -120,14 +120,14 @@ partial class DockerHost
 		finally { if(File.Exists(staging)) File.Delete(staging); }
 	}
 
-	public async Task BootstrapAsync(DeliveryBundle bundle, Installation installation, CancellationToken cancellation)
+	public async Task PrepareBootstrapAsync(DeliveryBundle bundle, Installation installation, CancellationToken cancellation)
 	{
-		var version = await runner.RunAsync("sh", ["-c", "command -v docker"], null, cancellation, 30);
-		if(version.ExitCode == 0)
+		var engineProbe = await runner.RunAsync("sh", ["-c", "command -v docker"], null, cancellation, 30);
+		if(engineProbe.ExitCode == 0)
 		{
-			await this.RunAsync(ENGINE, ["version", "--format", "{{.Server.Version}}"], null, cancellation);
-			await this.RunAsync(ENGINE, ["compose", "version"], null, cancellation);
-			await this.RunAsync(ENGINE, ["compose", "up", "--help"], null, cancellation);
+			await this.RunCommandAsync(ENGINE, ["version", "--format", "{{.Server.Version}}"], null, cancellation);
+			await this.RunCommandAsync(ENGINE, ["compose", "version"], null, cancellation);
+			await this.RunCommandAsync(ENGINE, ["compose", "up", "--help"], null, cancellation);
 
 			return;
 		}
@@ -138,19 +138,19 @@ partial class DockerHost
 
 		var cacheRoot = store.GetCachePath(bundle.Plan.Name);
 
-		using(var ownershipLock = store.HostLock())
+		using(var ownershipLock = store.AcquireHostLock())
 			this.PrepareOwnedDirectory(installation, cacheRoot);
 
-		Files.PrivateDirectory(cacheRoot);
+		Files.CreatePrivateDirectory(cacheRoot);
 		var cache = Path.Combine(cacheRoot, bundle.Id, "bootstrap");
-		Files.PrivateDirectory(cache);
+		Files.CreatePrivateDirectory(cache);
 
 		var paths = new List<string>();
 		using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(30) };
 
 		foreach(var package in plan.Packages)
 		{
-			var path = plan.Mode == "offline" ? Files.Below(bundle.Directory, package.Path) : Path.Combine(cache, Path.GetFileName(package.Path));
+			var path = plan.Mode == "offline" ? Files.ResolveRelativePath(bundle.Directory, package.Path) : Path.Combine(cache, Path.GetFileName(package.Path));
 
 			if(!File.Exists(path))
 			{
@@ -184,8 +184,8 @@ partial class DockerHost
 			paths.Add(path);
 		}
 
-		var debian = bundle.Plan.Distribution.StartsWith("debian", StringComparison.Ordinal) || bundle.Plan.Distribution.StartsWith("ubuntu", StringComparison.Ordinal);
-		var arguments = debian ? new List<string>
+		var usesDebianPackages = bundle.Plan.Distribution.StartsWith("debian", StringComparison.Ordinal) || bundle.Plan.Distribution.StartsWith("ubuntu", StringComparison.Ordinal);
+		var arguments = usesDebianPackages ? new List<string>
 		{
 			"-y",
 			"--no-download",
@@ -201,18 +201,18 @@ partial class DockerHost
 		} : ["-y", "--disablerepo=*", "--setopt=install_weak_deps=False", "install"];
 
 		arguments.AddRange(paths);
-		var result = await runner.RunAsync(debian ? "apt-get" : "dnf", arguments, null, cancellation, 1800);
+		var result = await runner.RunAsync(usesDebianPackages ? "apt-get" : "dnf", arguments, null, cancellation, 1800);
 
 		if(result.ExitCode != 0)
 			throw new ContainerizationException(5, string.Format(Properties.Resources.DockerHost_13_Message, result.ExitCode));
 
-		await this.RunAsync("systemctl", ["enable", "--now", ENGINE], null, cancellation);
-		await this.RunAsync(ENGINE, ["compose", "version"], null, cancellation);
+		await this.RunCommandAsync("systemctl", ["enable", "--now", ENGINE], null, cancellation);
+		await this.RunCommandAsync(ENGINE, ["compose", "version"], null, cancellation);
 	}
 	#endregion
 
-	#region 内部方法
-	internal static string PrepareAptCache(IReadOnlyList<string> packages, string directory)
+	#region 私有方法
+	private static string PrepareAptCache(IReadOnlyList<string> packages, string directory)
 	{
 		var names = new HashSet<string>(StringComparer.Ordinal);
 		foreach(var package in packages)
@@ -221,11 +221,11 @@ partial class DockerHost
 				throw new ContainerizationException(4, Properties.Resources.DockerHost_12_Message);
 		}
 
-		Files.PrivateDirectory(directory);
+		Files.CreatePrivateDirectory(directory);
 		foreach(var package in packages)
 		{
-			var target = Files.Below(directory, Path.GetFileName(package));
-			Files.NoLinks(target);
+			var target = Files.ResolveRelativePath(directory, Path.GetFileName(package));
+			Files.EnsureNoLinks(target);
 			File.Copy(package, target, true);
 		}
 

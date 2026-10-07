@@ -12,7 +12,7 @@ description: 在 Zongsoft tools 仓库中修改、审查或排障时用于判断
 - `.deploy` 解析、变量/过滤条件、文件复制删除、NuGet 下载及最接近目标框架选择：进入 `deployer`，使用其专项技能。
 - tar/deb/rpm 格式、打包项、Unix 权限、systemd、安装卸载生命周期脚本：进入 `packager`，使用其专项技能。
 - 升迁输入、SQL 分段、S3 初始化、执行归档和 Native AOT：进入 `migrator`，使用其专项技能。
-- `.container`、容器镜像制作、bootstrap、节点交付及现场生命周期：进入 `containerizer`，阅读其 AGENTS、PLAN 和双语实现记录；只运行隔离构建/测试，不操作现有容器服务。
+- `.container`、容器镜像制作、bootstrap、节点交付及现场生命周期：进入 `containerizer`，阅读其 AGENTS、[专项开发指南](containerizer/SKILL.md) 和双语实现说明；只运行隔离构建/测试，不操作现有容器服务。
 - 正则匹配 UI、捕获结果树、文件打开保存、WinForms 布局或 `dotnet-regular` 工具包：进入 `regular`。
 - Framework 的部署清单格式、插件/映射产物或升级协议本身不归本仓库拥有；先确认应否改动相邻 Framework 或业务仓库。
 

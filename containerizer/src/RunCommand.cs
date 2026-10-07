@@ -63,7 +63,7 @@ public sealed class RunCommand : CommandBase<CommandContext>
 
 		try
 		{
-			context.Output.WriteLine(Output.Message(Properties.Resources.Run_Verify, Path.GetFullPath(arguments[0])));
+			context.Output.WriteLine(Output.FormatMessage(Properties.Resources.Run_Verify, Path.GetFullPath(arguments[0])));
 
 			DeliveryBundle bundle;
 
@@ -71,7 +71,7 @@ public sealed class RunCommand : CommandBase<CommandContext>
 				bundle = DeliveryBundle.Open(arguments[0]);
 
 			using var verified = bundle;
-			var engine = await ContainerEngine.ConnectAsync(choice, new ProcessRunner(), stopping.Token, compose: false);
+			var engine = await ContainerEngine.ConnectAsync(choice, new ProcessRunner(), stopping.Token, requireCompose: false, error: content => context.Error.WriteLine(content));
 			engine.Mirrors = RegistryMirrorSettings.Read(Path.GetDirectoryName(Path.GetFullPath(arguments[0])));
 
 			var run = new RunContext(engine, bundle, content => context.Output.WriteLine(content));

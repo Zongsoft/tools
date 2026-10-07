@@ -26,7 +26,7 @@ public sealed class PlanningTests : IDisposable
 		var draft = ContainerManifest.Read(path);
 
 		Assert.Equal("plan", draft["stage"]);
-		Assert.False(draft.IsGenerated);
+		Assert.False(draft.IsComplete);
 		Assert.Equal("$(cache_password)", draft.Components[0].Settings["password"]);
 		Assert.Equal("temporary", draft.Components[0].Settings["storage"]);
 		Assert.Equal("$(rustfs_access_key)", draft.Components[1].Settings["access-key"]);
@@ -45,9 +45,9 @@ public sealed class PlanningTests : IDisposable
 		if(option != null)
 			arguments.Add("--imaging:" + option);
 
-		var manifest = ContainerManifest.From(Context([.. arguments]), planning: true);
+		var manifest = ManifestFactory.Create(CreateContext([.. arguments]), planning: true);
 		var path = new DeliveryBuilder(new RejectRunner()).Plan(manifest);
-		var make = ContainerManifest.From(Context(path), make: true);
+		var make = ManifestFactory.Create(CreateContext(path), make: true);
 
 		Assert.Equal(expected, make["imaging"]);
 		Assert.Equal("offline", make["bootstrap"]);
@@ -59,12 +59,12 @@ public sealed class PlanningTests : IDisposable
 	{
 		var manifest = this.Create("redis", "--refresh");
 		var path = new DeliveryBuilder(new RejectRunner(), refresh: true).Plan(manifest);
-		var context = Context(path, "--refresh");
+		var context = CreateContext(path, "--refresh");
 
 		Assert.True(context.Options.Switch("refresh"));
-		Assert.False(Context(path).Options.Switch("refresh"));
-		Assert.False(Context(path, "--refresh:false").Options.Switch("refresh"));
-		Assert.False(ContainerManifest.From(context, make: true).Root.ContainsKey("refresh"));
+		Assert.False(CreateContext(path).Options.Switch("refresh"));
+		Assert.False(CreateContext(path, "--refresh:false").Options.Switch("refresh"));
+		Assert.False(ManifestFactory.Create(context, make: true).Root.ContainsKey("refresh"));
 		Assert.DoesNotContain("refresh", File.ReadAllText(path));
 	}
 
@@ -100,9 +100,9 @@ public sealed class PlanningTests : IDisposable
 		Assert.False(component.Values.ContainsKey("platform"));
 		Assert.False(component.Values.ContainsKey("architecture"));
 
-		var make = ContainerManifest.From(Context(path), make: true);
+		var make = ManifestFactory.Create(CreateContext(path), make: true);
 		Assert.Equal(architecture, make["architecture"]);
-		Assert.Single(DeliveryBuilder.PrepareSources(make));
+		Assert.Single(ServicePlanner.Prepare(make));
 	}
 
 	[Theory]
@@ -112,7 +112,7 @@ public sealed class PlanningTests : IDisposable
 	public void ImageIdentityUsesTheRootTarget(bool planning, string key, string value, bool invalidated)
 	{
 		var manifest = this.Create("redis");
-		DeliveryBuilder.PrepareSources(manifest);
+		ServicePlanner.Prepare(manifest);
 		var component = manifest.Components[0];
 		component["digest"] = "sha256:" + new string('a', 64);
 		component["timestamp"] = "2026-09-15T05:30:05Z";
@@ -121,14 +121,14 @@ public sealed class PlanningTests : IDisposable
 		Assert.Equal(component["digest"], Assert.Single(ContainerManifest.Read(path).Components)["digest"]);
 
 		File.WriteAllText(path, File.ReadAllText(path).Replace(key + "=" + manifest[key], key + "=" + value, StringComparison.Ordinal));
-		var make = ContainerManifest.From(Context(path), make: true);
+		var make = ManifestFactory.Create(CreateContext(path), make: true);
 		Assert.Equal(value, make[key]);
 		var replay = Assert.Single(make.Components);
 
 		foreach(var field in new[] { "digest", "timestamp", "size", "identity" })
 			Assert.Equal(invalidated ? null : component[field], replay[field]);
 
-		Assert.Single(DeliveryBuilder.PrepareSources(make));
+		Assert.Single(ServicePlanner.Prepare(make));
 		Assert.False(replay.Values.ContainsKey("platform"));
 		Assert.False(replay.Values.ContainsKey("architecture"));
 	}
@@ -142,10 +142,10 @@ public sealed class PlanningTests : IDisposable
 		text = text.Replace("password=shared", "password=$(test_password)", StringComparison.Ordinal);
 		File.WriteAllText(path, text);
 		this.Write(".settings", "intentionally invalid and must not be read");
-		var manifest = ContainerManifest.From(Context(path));
+		var manifest = ManifestFactory.Create(CreateContext(path));
 		manifest.Variables["test_password"] = "a;b=c\"d$(literal)";
 		manifest.Variables["literal"] = "value";
-		var source = Assert.Single(DeliveryBuilder.PrepareSources(manifest));
+		var source = Assert.Single(ServicePlanner.Prepare(manifest));
 
 		Assert.Contains("a;b=c\"dvalue", source.Plan.Command);
 		Assert.Contains("a;b=c\"dvalue", source.Plan.Health.Test);
@@ -157,8 +157,8 @@ public sealed class PlanningTests : IDisposable
 	{
 		var path = this.Write("draft.container", "name=example\nversion=1.0\ndistribution=debian\nstage=plan\n[redis]\nsettings=\n");
 		this.Write(".settings", "[redis]\nsettings=password=shared;storage=temporary\n");
-		var manifest = ContainerManifest.From(Context(path));
-		var source = Assert.Single(DeliveryBuilder.PrepareSources(manifest));
+		var manifest = ManifestFactory.Create(CreateContext(path));
+		var source = Assert.Single(ServicePlanner.Prepare(manifest));
 		Assert.Equal("persistent", source.Settings["storage"]);
 		Assert.Equal("both", source.Settings["persistence"]);
 		Assert.Equal("", source.Settings["password"]);
@@ -167,7 +167,7 @@ public sealed class PlanningTests : IDisposable
 		var mysql = this.Create("mysql");
 		mysql.Components[0]["settings"] = "root-password=";
 		mysql.Variables["mysql_root_password"] = "must-not-be-used";
-		Assert.Contains("root-password", new TemplateCatalog().Read(mysql.Components[0], mysql).MissingSettings);
+		Assert.Contains("root-password", TemplateCatalog.Read(mysql.Components[0], mysql).MissingSettings);
 	}
 
 	[Theory]
@@ -176,7 +176,7 @@ public sealed class PlanningTests : IDisposable
 	public void CacheTemplatesDeclareTheDataAccountIndependentlyOfTheEntrypointUser(string name)
 	{
 		var manifest = this.Create(name);
-		var source = new TemplateCatalog().Read(manifest.Components[0], manifest);
+		var source = TemplateCatalog.Read(manifest.Components[0], manifest);
 		Assert.Equal(name, Assert.Single(source.Plan.Mounts).User);
 		Assert.Null(source.Plan.User);
 	}
@@ -191,7 +191,7 @@ public sealed class PlanningTests : IDisposable
 		if(value != null)
 			manifest.Components[0]["settings"] = $"console-port={value}";
 
-		var source = new TemplateCatalog().Read(manifest.Components[0], manifest);
+		var source = TemplateCatalog.Read(manifest.Components[0], manifest);
 		var console = Assert.Single(source.Plan.Ports, port => port.Name == "console-port");
 
 		Assert.Equal(9001, console.Container);
@@ -211,11 +211,11 @@ public sealed class PlanningTests : IDisposable
 	public void SecondaryTemplatePortsAreOptionalAndUseTheCommonPortSettings(string name, string setting, int target)
 	{
 		var manifest = this.Create(name);
-		var source = new TemplateCatalog().Read(manifest.Components[0], manifest);
+		var source = TemplateCatalog.Read(manifest.Components[0], manifest);
 		Assert.Equal(0, Assert.Single(source.Plan.Ports, port => port.Name == setting).Host);
 
 		manifest.Components[0]["settings"] = $"{setting}=127.0.0.1:19001";
-		source = new TemplateCatalog().Read(manifest.Components[0], manifest);
+		source = TemplateCatalog.Read(manifest.Components[0], manifest);
 		var port = Assert.Single(source.Plan.Ports, port => port.Name == setting);
 
 		Assert.Equal(19001, port.Host);
@@ -232,7 +232,7 @@ public sealed class PlanningTests : IDisposable
 		if(value != null)
 			manifest.Components[0]["settings"] = $"console-port={value}";
 
-		var source = new TemplateCatalog().Read(manifest.Components[0], manifest);
+		var source = TemplateCatalog.Read(manifest.Components[0], manifest);
 		Assert.Equal(2, source.Plan.Ports.Count);
 		var adapter = Assert.Single(source.Plan.Ports, port => port.Container == 6041);
 		Assert.Equal(6041, adapter.Host);
@@ -250,7 +250,7 @@ public sealed class PlanningTests : IDisposable
 	{
 		var manifest = this.Create("redis");
 		manifest.Components[0]["settings"] = $"persistence={persistence};storage={storage};port=none";
-		var source = Assert.Single(DeliveryBuilder.PrepareSources(manifest));
+		var source = Assert.Single(ServicePlanner.Prepare(manifest));
 		var command = source.Plan.Command;
 
 		Assert.Equal(snapshot, command[Array.IndexOf(command, "--save") + 1]);
@@ -258,7 +258,7 @@ public sealed class PlanningTests : IDisposable
 		Assert.Equal(storage == "temporary", Assert.Single(source.Plan.Mounts).Temporary);
 		Assert.Equal(6379, Assert.Single(source.Plan.Ports).Container);
 
-		source.Plan.Image.Tag = "example";
+		source.Plan.Image.Reference = "example";
 		source.Plan.Image.Platform = "linux/amd64";
 		ComposeWriter.Write(new DeliveryPlan { Project = "example" }, [source], _root);
 		using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(_root, "compose.yaml")));
@@ -283,7 +283,7 @@ public sealed class PlanningTests : IDisposable
 		this.Write("custom.template", $"version=1\nimage=docker.io/library/redis\n[data]\n{data}");
 		var manifest = this.Create("redis");
 		manifest.Components[0]["template"] = "custom.template";
-		var source = new TemplateCatalog().Read(manifest.Components[0], manifest);
+		var source = TemplateCatalog.Read(manifest.Components[0], manifest);
 
 		if(multiple)
 		{
@@ -303,16 +303,16 @@ public sealed class PlanningTests : IDisposable
 	public void ReplanningCompleteManifestKeepsDigestAndEscapesLiteralVariableShapes()
 	{
 		var manifest = this.Create("redis");
-		DeliveryBuilder.PrepareSources(manifest);
+		ServicePlanner.Prepare(manifest);
 		manifest.Components[0]["settings"] = ServiceSettings.Format(new Dictionary<string, string> { ["password"] = "$(absent);%absent%" });
 		manifest.Components[0]["digest"] = "sha256:" + new string('a', 64);
 		manifest.Prepare(_root);
 
 		var original = File.ReadAllBytes(manifest.ManifestPath);
-		var clone = ContainerManifest.From(Context(manifest.ManifestPath, "--version:2.0"), planning: true);
+		var clone = ManifestFactory.Create(CreateContext(manifest.ManifestPath, "--version:2.0"), planning: true);
 		var path = new DeliveryBuilder(new RejectRunner()).Plan(clone);
-		var remake = ContainerManifest.From(Context(path));
-		var source = Assert.Single(DeliveryBuilder.PrepareSources(remake));
+		var remake = ManifestFactory.Create(CreateContext(path));
+		var source = Assert.Single(ServicePlanner.Prepare(remake));
 
 		Assert.Contains("$(absent);%absent%", source.Plan.Command);
 		Assert.Equal(manifest.Components[0]["digest"], remake.Components[0]["digest"]);
@@ -361,7 +361,7 @@ public sealed class PlanningTests : IDisposable
 	{
 		var manifest = this.Create("redis");
 		manifest.Components[0]["settings"] = "port=" + value;
-		var mapped = Assert.Single(Assert.Single(DeliveryBuilder.PrepareSources(manifest)).Plan.Ports);
+		var mapped = Assert.Single(Assert.Single(ServicePlanner.Prepare(manifest)).Plan.Ports);
 
 		Assert.Equal(address, mapped.Address);
 		Assert.Equal(port, mapped.Host);
@@ -384,15 +384,15 @@ public sealed class PlanningTests : IDisposable
 	{
 		var manifest = this.Create("mysql");
 		manifest.Variables["mysql_root_password"] = "";
-		Assert.Contains("root-password", new TemplateCatalog().Read(manifest.Components[0], manifest).MissingSettings);
+		Assert.Contains("root-password", TemplateCatalog.Read(manifest.Components[0], manifest).MissingSettings);
 
 		manifest.Components[0]["environment!MYSQL_ROOT_PASSWORD"] = "explicit";
-		var source = new TemplateCatalog().Read(manifest.Components[0], manifest);
+		var source = TemplateCatalog.Read(manifest.Components[0], manifest);
 		Assert.Empty(source.MissingSettings);
 		Assert.Equal("explicit", source.Settings["root-password"]);
 
 		manifest.Components[0]["settings"] = "root-password=different";
-		Assert.Throws<ContainerizationException>(() => new TemplateCatalog().Read(manifest.Components[0], manifest));
+		Assert.Throws<ContainerizationException>(() => TemplateCatalog.Read(manifest.Components[0], manifest));
 	}
 
 	[Fact]
@@ -406,19 +406,19 @@ public sealed class PlanningTests : IDisposable
 	[Fact]
 	public void EnvironmentOverridesUnmanagedDefaultsAndTemplateNamesAreCaseInsensitive()
 	{
-		var source = new ServiceBuildContext();
+		var source = new ServiceBuildContext(new() { Name = "example" });
 		source.Environment["LANG"] = "old";
-		TemplateCatalog.ApplyEnvironment(new ContainerManifest.Component { ["environment!LANG"] = "new" }, source);
+		ServiceOptions.ApplyEnvironment(new ContainerManifest.Component { ["environment!LANG"] = "new" }, source);
 		Assert.Equal("new", source.Environment["LANG"]);
 
 		var manifest = this.Create("Redis");
-		var cache = new TemplateCatalog().Read(manifest.Components[0], manifest);
+		var cache = TemplateCatalog.Read(manifest.Components[0], manifest);
 		Assert.Equal("both", cache.Settings["persistence"]);
 		Assert.Contains("--appendonly", cache.Plan.Command);
 	}
 
-	private ContainerManifest Create(params string[] components) => ContainerManifest.From(Context([.. components, "--source:" + _root, "--name:example", "--version:1.0", "--distribution:debian"]), planning: true);
-	private static CommandContext Context(params string[] arguments) => new(new CommandExecutor(), CommandLine.Parse(Utility.FormatCommand("containerize", arguments))[0], new ContainerizeCommand(), null);
+	private ContainerManifest Create(params string[] components) => ManifestFactory.Create(CreateContext([.. components, "--source:" + _root, "--name:example", "--version:1.0", "--distribution:debian"]), planning: true);
+	private static CommandContext CreateContext(params string[] arguments) => new(new CommandExecutor(), CommandLine.Parse(Utility.FormatCommand("containerize", arguments))[0], new ContainerizeCommand(), null);
 	private string Write(string name, string content)
 	{
 		var path = Path.Combine(_root, name);
@@ -427,6 +427,7 @@ public sealed class PlanningTests : IDisposable
 	}
 	private sealed class RejectRunner : IProcessRunner
 	{
+		public Task<int> StreamAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation) => throw new InvalidOperationException("Plan must not start a streaming process.");
 		public Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation, int timeoutSeconds = 900) => throw new InvalidOperationException("plan must not invoke an engine");
 	}
 }

@@ -38,6 +38,6 @@ namespace Zongsoft.Tools.Containerizer;
 public sealed class MakeCommand : ContainerizeCommand
 {
 	#region 重写方法
-	private protected override ContainerManifest CreateManifest(CommandContext context) => ContainerManifest.From(context, make: true);
+	private protected override ContainerManifest CreateManifest(CommandContext context) => ManifestFactory.Create(context, make: true);
 	#endregion
 }

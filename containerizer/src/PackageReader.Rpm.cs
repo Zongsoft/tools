@@ -63,7 +63,7 @@ partial class PackageReader
 		result.Name = fields.GetValueOrDefault(1000);
 		result.Version = fields.GetValueOrDefault(1001);
 		result.Architecture = fields.GetValueOrDefault(1022);
-		result.Listen = fields.GetValueOrDefault(1000001);
+		result.ListenerAddresses = fields.GetValueOrDefault(1000001);
 
 		if(fields.GetValueOrDefault(1125) is not (null or "gzip"))
 			throw new ContainerizationException(2, Properties.Resources.PackageReader_13_Message);
@@ -128,7 +128,7 @@ partial class PackageReader
 			var offset = BinaryPrimitives.ReadInt32BigEndian(item[8..]);
 
 			if(tag == 1000001 && (type != 6 || BinaryPrimitives.ReadInt32BigEndian(item[12..]) != 1 || result.ContainsKey(tag)))
-				throw ApplicationHealth.Invalid("RPM", "Listen");
+				throw ApplicationHealth.CreateException("RPM", "Listen");
 
 			if(type != 6)
 				continue;

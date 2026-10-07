@@ -32,39 +32,10 @@
  */
 
 using System;
-using System.IO;
 
-using Xunit;
+namespace Zongsoft.Tools.Containerizer;
 
-using Zongsoft.Tools.Containerizer.Execution;
-using Zongsoft.Tools.Containerizer.Protocol;
-
-namespace Zongsoft.Tools.Containerizer.Executor.Tests;
-
-public sealed class BootstrapTests
+internal static class ShellUtility
 {
-	[Fact]
-	public void AptCachePreservesOriginalBytesAndRejectsCollidingPackageNames()
-	{
-		var root = Path.Combine(Path.GetTempPath(), "containerizer-bootstrap-" + Guid.NewGuid().ToString("N"));
-		Directory.CreateDirectory(root);
-
-		try
-		{
-			var package = Path.Combine(root, "dependency.deb");
-			File.WriteAllBytes(package, [0, 1, 2, 255]);
-
-			var cache = DockerHost.PrepareAptCache([package], Path.Combine(root, "cache"));
-			Assert.Equal(File.ReadAllBytes(package), File.ReadAllBytes(Path.Combine(cache, "dependency.deb")));
-
-			Directory.CreateDirectory(Path.Combine(root, "other"));
-			var collision = Path.Combine(root, "other", "dependency.deb");
-			File.WriteAllText(collision, "conflicting content");
-
-			Assert.Equal(4, Assert.Throws<ContainerizationException>(() => DockerHost.PrepareAptCache([package, collision], cache)).Code);
-			Assert.Equal([0, 1, 2, 255], File.ReadAllBytes(Path.Combine(cache, "dependency.deb")));
-			Assert.Equal([0, 1, 2, 255], File.ReadAllBytes(package));
-		}
-		finally { Directory.Delete(root, true); }
-	}
+	public static string QuoteArgument(string text) => $"'{text.Replace("'", "'\"'\"'", StringComparison.Ordinal)}'";
 }

@@ -46,7 +46,7 @@ internal sealed partial class RegistryMirrors
 {
 	#region 常量定义
 	internal const string FILE_NAME = ".mirrors";
-	internal const string ENVIRONMENT = "CONTAINERIZER_MIRRORS";
+	internal const string ENVIRONMENT_VARIABLE = "CONTAINERIZER_MIRRORS";
 	#endregion
 
 	#region 公共属性
@@ -56,7 +56,7 @@ internal sealed partial class RegistryMirrors
 	#endregion
 
 	#region 公共方法
-	public IEnumerable<string> Repositories(string repository)
+	public IEnumerable<string> GetRepositories(string repository)
 	{
 		var slash = repository.IndexOf('/');
 
@@ -76,7 +76,7 @@ internal sealed partial class RegistryMirrors
 
 	public async Task<T> ExecuteAsync<T>(string repository, Func<string, Task<T>> operation, CancellationToken cancellation, Action<string, Exception> warning = null)
 	{
-		var candidates = this.Repositories(repository).ToArray();
+		var candidates = this.GetRepositories(repository).ToArray();
 		if(candidates.Length == 1)
 			return await operation(repository);
 
@@ -112,7 +112,7 @@ internal sealed partial class RegistryMirrors
 	public static bool IsRegistry(string value) => IsLocation(value) && !value.Contains('/');
 	public static bool IsLocation(string value)
 	{
-		if(value == null || !LocationRegex().IsMatch(value))
+		if(value == null || !GetLocationRegex().IsMatch(value))
 			return false;
 
 		var host = value.Split('/')[0];
@@ -125,6 +125,6 @@ internal sealed partial class RegistryMirrors
 
 	#region 私有方法
 	[GeneratedRegex(@"^[a-z0-9][a-z0-9.-]*(?::[0-9]+)?(?:/[a-z0-9]+(?:[._-]+[a-z0-9]+)*)*$")]
-	private static partial Regex LocationRegex();
+	private static partial Regex GetLocationRegex();
 	#endregion
 }

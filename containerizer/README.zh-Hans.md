@@ -2,261 +2,307 @@
 
 # Containerizer
 
-`dotnet containerize` 从 packager 安装包和基础设施模板制作一个 Linux 节点交付物。归档包含 Native AOT `containerizer` 执行器、脚本、交付计划 `containerizer.json`、Compose/配置资产、选定的 migrator 文件及生成的 `.container` 副本；现场执行器从 `containerizer.json` 读取执行计划、固定镜像身份及资产清单，`checksums.sha256` 校验该文件和交付资产。
+将应用安装包和基础服务制作成可在**单台 Linux 主机**上安装、升级、恢复与卸载的容器交付包。制作端使用 Docker 或 Podman；交付包携带原生执行器，现场使用 Docker 与 Compose，无须安装 .NET SDK。
 
-当前实现处于验收阶段，选择部署组合前请阅读[实现与验证记录](docs/implementation.zh-Hans.md)。编译和单元测试通过不等于完成纯净环境、断网安装验收。
+[快速开始](#快速开始) · [制作命令](#制作命令) · [配置清单](#配置清单) · [服务参数](#内置服务) · [本机预演](#本机预演) · [现场操作](#现场操作)
 
-## 构建与本地制包
+## 基础概念
 
-制作端目标框架见[项目文件](src/Zongsoft.Tools.Containerizer.csproj)。执行器使用独立[项目](executor/src/Zongsoft.Tools.Containerizer.Executor.csproj)、Native AOT 工具链及 Linux x64/ARM64 发布流程。Debug 引用相邻 Framework 的 Core 构建输出；Release 还原集中管理版本的 Core 包。
-
-```powershell
-dotnet build Containerizer.slnx -p:ZongsoftCodeStyleStrict=true
-dotnet test Containerizer.slnx
-dotnet cake --target build --edition Release
-$toolVersion = dotnet msbuild src/Zongsoft.Tools.Containerizer.csproj -getProperty:Version -nologo
-dotnet tool install Zongsoft.Tools.Containerizer --tool-path ./.cache/tool --version "$toolVersion" --source ./src/bin/Release --no-http-cache
-```
-
-Cake `build` 使用 containerizer 专属 AOT Pod 构建两个执行器并制作本地 NuGet 包；原生文件已备齐时可用 `--target compile`。`--target pack` 会推送 NuGet，不用于验证。直接 `dotnet build` 不准备原生产物。工具包中的模板与两个执行器各保留一份。
-
-## 命令与使用流程
-
-制作端参考 packager 的 Core 命令设计，在默认命令之外注册 `plan`、`make`。选项使用 `--选项:值`，支持带引号的值和路径。`--help` / `-h`（包括 `plan --help`、`make --help`）显示语法。不读取旧 `.version`、`[repositories]` 或组件 `path`、`name`、`image`、`version` 别名。
-
-| 命令 | 位置参数 | 结果 |
-| --- | --- | --- |
-| `dotnet containerize` | 一个或多个内置 `ID[@TAG]`、安装包文件或目录 | 完成的 `.container` 和 `.tar.gz` |
-| `dotnet containerize plan` | 同上，或单独一个 `.container` | 只生成可编辑清单；不调用引擎、拉取/构建镜像、收集执行器或 bootstrap |
-| `dotnet containerize make` | 单独一个 `.container` | 按清单制作最终清单和归档 |
-| `dotnet containerize FILE.container` | 单独一个清单 | make 的简写 |
-
-清单与其它组件混用会报错。安装包使用 packager `.deb`、`.rpm` 或 `.tar.gz` 及配套 `.sh`；选择目录时检查该目录和 `.packages`，根据包元数据、发行版与架构定位安装包。应用不使用模板或基础服务 settings。
-
-| 命名选项 / 根条目 | 类型、默认值与约束 |
+| 名称 | 用途 |
 | --- | --- |
-| `name` | 必填应用标识；字母/数字开头，可含点、下划线、连字符，不含 `..` |
-| `tag` | 可选交付标签；同样遵守标识约束，不改变已安装应用身份 |
-| `version` | 由 Core `Versioning.Version.Number` 解析的非零数字版本号，2–4 段整数，每段 0–65535；新输入省略时按年份模 1000、月、日及冲突后缀生成 |
-| `distribution` | 必填；ubuntu[@22.04]、debian[@13]（也支持 @12）、rhel/rocky/almalinux[@9]；redhat 归一为 rhel |
-| `architecture` | `x64`（默认）或 `arm64`；声明不代表完成目标运行验收 |
-| `engine` | `auto`（默认）、`docker`、`podman`；make 需要可用引擎/Compose provider，plan 只记录选择 |
-| `imaging` | `offline`（默认）嵌入基础服务镜像；`online` 在现场拉取已固定摘要的镜像 |
-| `bootstrap` | `offline`（默认）或 `online`，控制引擎依赖，与镜像 imaging 独立 |
-| `source` | 源目录；新输入默认调用目录，已有清单默认采用其 source |
-| `output` | 输出目录；新输入默认 source；hosting 脚本固定使用 `.containerized` |
-| `migration` | 可选目录，选择已有升迁归档/脚本；制作时只复制、不执行 |
-| `title`、`description` | 可选文本 |
+| 应用包 | [Packager](../packager/README.zh-Hans.md) 生成的 Linux 应用安装包；提供程序、配置及启动信息 |
+| 基础服务 | Redis、MySQL 等镜像服务，通过内置或自定义模板配置 |
+| 入口服务 | 接收 Web 请求的代理；带 nginx 托管信息的应用会自动补齐 nginx |
+| `name` | 目标主机上的安装身份；同名交付包用于同一部署 |
+| `tag` / `version` | 交付物的可选标签 / 发行版本；标签不改变安装身份，发行版本独立于各应用和镜像版本 |
+| `.settings` | 输出目录中的服务默认配置，供按组件列表制作或规划时使用 |
+| `.container` | 可编辑的制作清单；`plan` 生成草稿，完整制作后记录实际使用的配置和镜像身份 |
+| `.tar.gz` | 包含执行器、安装脚本、运行描述和所需资产的交付包 |
 
-组件列表制作或 plan 使用 `--imaging:online` / `--imaging:offline`。根部 `imaging` 默认 offline，服务段落可通过自己的 `imaging` 覆盖；旧 `--mode` 选项不再生效（未知命令选项仍忽略）；根部/服务段落不再支持 `mode` 条目。Nacos 的 `settings=mode=standalone` 是独立的服务运行参数，保持不变。
+典型流程为：**打包应用 → 生成并编辑清单 → 制作交付包 → 本机预演 → 目标主机安装**。也可以只交付基础服务，或按组件列表一次完成制作。
 
-组件列表输入的 plan/默认命令支持以上全部选项。已有清单输入只允许覆盖 `version`、`source`、`output`、`engine`；其它选择应编辑草稿。`--source` 自身相对于调用目录，其它制作端本地输入/输出路径相对于最终 source。清单记录的 source 相对于清单所在目录，output 与模板选择路径相对于 source。模板内部资产路径仍相对于模板文件。命令不会逐项询问基础服务设置。
+## 使用条件
 
-```cmd
-dotnet containerize plan redis mysql --name:example --distribution:debian --version:1.0 --output:.containerized
-REM 编辑 .containerized/example@1.0-x64.container 后：
-dotnet containerize make .containerized/example@1.0-x64.container
-REM 沿用配置制作另一个发行版本：
-dotnet containerize make .containerized/example@1.0-x64.container --version:1.1
+- 制作端安装本工具及其目标框架对应的 .NET 运行时，命令为 `dotnet containerize` 或 `dotnet-containerize`。从源码构建及安装本地工具包见 [开发指南](SKILL.md#构建与验证)。
+- `plan` 只需要本地输入。`make` 和直接制作需要可用的 Docker/Podman 与 Compose 提供程序；首次准备镜像和系统依赖通常需要联网。
+- 目标主机须为与交付包匹配的 Linux 发行版和架构，使用 root 执行现场命令。系统引擎及依赖由 bootstrap 准备。
+- 可选发行版为 Ubuntu 22.04、Debian 12/13、RHEL/Rocky/AlmaLinux 9；架构为 x64 或 ARM64。RHEL 需要预先导入适用于该系统的 bootstrap 依赖集合。
+
+这些是实现接受的目标配置；实际运行验证范围见 [平台与验证边界](docs/implementation.zh-Hans.md#平台与验证边界)。模板声明、ARM64 编译成功都不等同于目标环境验收。
+
+## 快速开始
+
+以下命令在同一个工作目录执行。先用 Redis 完成最小流程：
+
+```console
+dotnet containerize plan redis --name:example --distribution:debian --version:1.0 --output:.containerized
 ```
 
-也可先执行 `plan OLD.container --version:1.1` 另存新草稿；两种方式按需要选择，已存在的归档不覆盖。只改变发行版本不会清除仍有效的基础服务摘要/tag。plan 缺少必填设置时以紫红色告警，保存草稿并返回 0；格式错误、未知字段或写入失败返回非零。make 在镜像操作前严格校验；失败或取消保留用户编辑后的草稿。
-
-显式发行版本的原始文本保留在文件名及清单中，例如 `1.0` 仍写作 `1.0`。升迁版本按同样的数字规则排序和去重：`1.0` 与 `1.0.0` 视为相同数字版本，不能同时选入；选定的升迁记录保留原始版本文本。基础服务镜像 tag 是字符串，不按数字版本解析。
-
-制作端通过 Core 终端分段输出颜色和样式：说明文字使用默认样式，参数值和服务名使用青色加粗，选项名使用青色，帮助中的值和结果路径使用绿色，选择提示使用黄色，缺值告警使用紫红色并以黄色强调必填项。标准输出重定向时使用纯文本；清理诊断仍写入错误流。
-
-## 公共 .settings 与单次 .container
-
-`.settings` 位于最终输出目录，只向新组件列表输入提供默认配置。根部不放条目，每个服务一个段落；文件中有服务段落不代表本次自动选择该服务。建议条目顺序不强制。三个条目均可省略：tag 回退到字面标签 `latest`，repository 回退到模板仓库，settings 回退到模板参数默认值/绑定。
+打开生成的 `.containerized/example@1.0-x64.container`，按需调整 Redis 设置，例如：
 
 ```ini
 [redis]
-tag=1.2.3
-repository=registry.example.com/team/redis
-settings=storage=persistent;persistence=both;password=$(redis_password)
+tag=latest
+repository=docker.io/library/redis
+settings=port=16379;storage=temporary;persistence=none
+```
+
+制作并预演：
+
+```console
+dotnet containerize make .containerized/example@1.0-x64.container
+dotnet containerize run .containerized/example@1.0-x64.tar.gz
+```
+
+`run` 显示实际访问地址并保持前台运行；按 **Ctrl+C** 结束并清理这次预演。上例的临时存储适合试用；正式数据服务应选择合适的存储、认证和持久化设置。
+
+加入应用时，把 Packager 产物路径或候选目录放入组件列表，例如：
+
+```console
+dotnet containerize plan ./packages redis --name:example --distribution:debian --output:.containerized
+```
+
+显式文件按指定文件读取；目录先查直属文件，再查 `.packages` 子目录，每层先选择发行版对应的 `.deb` 或 `.rpm`，再选择有同名 `.sh` 的 `.tar.gz`。候选按名称前缀和目标架构筛选，多项时交互选择；不会凭文件日期自动选择版本。
+
+## 制作命令
+
+| 命令 | 输入与结果 |
+| --- | --- |
+| `dotnet containerize COMPONENT...` | 应用包、包目录或 `服务[@镜像标签]`；直接生成完成清单与交付包 |
+| `dotnet containerize plan COMPONENT...` | 生成可编辑清单；不连接引擎、不下载或制作镜像 |
+| `dotnet containerize plan FILE.container` | 从已有清单生成新草稿，可用 `--version` 指定新发行版本 |
+| `dotnet containerize make FILE.container` | 按一个清单制作交付包 |
+| `dotnet containerize FILE.container` | `make` 的简写 |
+| `dotnet containerize run FILE.tar.gz` | 预演一个已制作的交付包；仅接受额外的 `--engine` 选项 |
+
+制作端命名选项使用 `--选项:值`。组件列表入口可用以下选项：
+
+| 选项 | 含义与默认值 |
+| --- | --- |
+| `--name` | 必填安装身份；以 ASCII 字母或数字开头，后续可含 ASCII 字母、数字、点、下划线、连字符，不含连续两点 |
+| `--tag` | 可选交付标签，命名规则同 name；与服务镜像 tag 独立 |
+| `--version` | 非零的 2–4 段数字版本；省略时采用日期版本，并在输出冲突时递增第四段 |
+| `--distribution` | 必填；`ubuntu` 默认 `ubuntu@22.04`，`debian` 默认 `debian@13`；另可指定 `debian@12`、`rhel@9`、`rocky@9`、`almalinux@9`；`redhat` 解析为 `rhel` |
+| `--architecture` | `x64`（默认）或 `arm64` |
+| `--source` | 工作源目录，默认调用目录 |
+| `--output` | 输出目录，默认最终 source |
+| `--engine` | `auto`（默认）、`docker` 或 `podman` |
+| `--imaging` | 基础服务镜像 `offline`（默认，随包携带）或 `online`（现场按固定摘要获取）；应用镜像始终随包携带 |
+| `--bootstrap` | 系统依赖 `offline`（默认）或 `online`；两者均按制作时记录的版本、来源和校验值安装 |
+| `--migration` | 从指定目录选择 Migrator 归档及配套脚本；省略则不添加升迁 |
+| `--refresh` | 重建本次需要的应用公共运行环境，重新解析其系统底图；默认关闭，可写 `--refresh:false` |
+| `--title` / `--description` | 清单中的描述信息 |
+
+输入为 `.container` 时，仅允许覆盖 `version`、`source`、`output`、`engine` 和 `refresh`；其余内容直接编辑清单。`refresh` 不刷新基础服务 tag、bootstrap 或预演缓存，`plan` 不执行刷新。
+
+`--source` 自身相对于调用目录解析；受其管理的本地相对输入和输出均相对于**最终 source**，包括 `./` 与 `../`。绝对路径保持原义。清单内的 `source` 相对于声明它的文件；模板配套文件相对于模板目录。`run` 没有 source 选项，归档相对于调用目录。
+
+输出命名为 `name[-tag]@version-architecture.container` 与同名 `.tar.gz`。已有交付包不覆盖；可用 `make FILE.container --version:1.1` 制作下一版。失败保留输入草稿；成功时归档内外的完成清单一致。
+
+## 配置清单
+
+### 默认配置与变量
+
+`output/.settings` 按组件名称分段，只接受 `tag`、`repository`、`settings`。存在某个段落不会自动选中该服务。
+
+```ini
+[redis]
+tag=latest
+settings=port=16379;storage=persistent;persistence=both;password=$(redis_password)
 
 [mysql]
-settings=root-password=$(mysql_root_password)
-
-[rustfs]
-settings=access-key=$(rustfs_access_key);secret-key=$(rustfs_secret_key)
+tag=latest
+settings=root-password=$(mysql_root_password);database=example
 ```
 
-示例 tag 仅表示语法。选定标签必须存在；不进行“最新版/稳定版”搜索。repository 是完整 registry/namespace/repository，不带 URL 协议、tag 或 digest，允许仓库端口。认证使用引擎已有登录状态。`.settings` 不新增 template 选择入口。
+显式组件配置优先于 `.settings`，再使用模板默认值；`settings` 按参数逐项合并。镜像 tag 缺省为字面 `latest`，不搜索“最新稳定版本”；`repository` 是不含协议、tag 或 digest 的完整镜像仓库地址。
 
-显式选择优先于公共默认值，然后才采用模板默认值/绑定；settings 按键合并。只有直接按组件列表完整制作成功，才给 `.settings` 补充缺失 tag，必要时创建段落/文件；已有 tag、注释与值保持不变，repository/settings 不写回。plan 以及所有基于清单的命令均不修改公共默认文件；其中组件列表 plan 会读取默认文件，已有清单输入则完全不读它。
+依据任何 `.container` 制作或规划时，都不重新合并 `.settings`。**只有组件列表完整制作成功后**，才补充缺失的服务 tag；已有值、repository 和 settings 不自动改写。plan、失败制作和清单回放不补写默认文件。
 
-`.container` 根条目采用上面的字段，其中 `migration` 转为有序 `migration#1`、`migration#2` 等。`stage=plan` 保留服务变量表达式，待 make 展开；省略 stage 也表示可编辑输入。`stage=complete` 表示已解析的字面值。对完成清单再 plan 时，会转义类似变量的字面值，保证重新使用一致。导入使用 Core Profile 指令并拒绝重复声明。段落名就是组件标识。
+变量来自共享 `.env` 流程及命令上下文，支持 `$(name)` 和 `%name%`；`$$(name)`、`%%name%%` 保留字面引用。不整份导出环境，也不因为变量和参数同名就自动绑定。内置绑定只有 MySQL 的 `mysql_root_password` 及 RustFS 的 `rustfs_access_key`、`rustfs_secret_key`。
 
-生成清单首行为 `# Generated by Zongsoft.Tools.Containerizer@<工具版本>`，其后留一个空行。工具名称和版本直接读取程序集信息，第四段为零时省略。根条目依次输出 `name`、有值时的 `tag`、`version`、`engine`、`stage`、`distribution`、`architecture`、`bootstrap`、`imaging`、`source`、`output`；可选的 `title`、`description` 随后输出，最后是按序编号的 `migration#1`、`migration#2` 等。未填写的可选条目省略。这是生成时的排版顺序，读取清单时不限制条目顺序。
+`settings` 使用单行连接字符串：
 
-| 组件条目 | 范围与含义 |
+```ini
+settings=port=16379;password="a;b=""c"""
+```
+
+先拆分参数，再对每个值求值，密码变量中的分号不会产生新参数。单项 `password=` 表示显式空值并阻止回退；`false`、`0` 均为有效值。清单中的整条 `settings=` 表示没有显式参数，继续采用模板默认值或变量绑定。
+
+plan 会保留服务设置和环境值中的变量引用；缺少必填服务参数时提示待填项并正常保存草稿，make 会在镜像操作前拒绝缺值。完成清单记录展开后的值，可能含凭据，应按实际内容管理访问权限和版本控制。
+
+### 清单字段
+
+```ini
+name=example
+version=1.0
+distribution=debian@13
+architecture=x64
+source=.
+output=.containerized
+bootstrap=offline
+imaging=offline
+
+[redis]
+tag=latest
+settings=port=16379;storage=persistent;persistence=both
+```
+
+根字段为 `name`、`tag`、`version`、`engine`、`distribution`、`architecture`、`bootstrap`、`imaging`、`source`、`output`、`title`、`description`；另外支持 `stage=plan|complete` 和按顺序声明的 `migration#1`、`migration#2` 等归档路径。`stage` 由工具维护；手写清单可省略。
+
+| 组件字段 | 使用场景 |
 | --- | --- |
-| `package` | 仅应用；本地安装包路径，启动/运行时信息取自包元数据 |
-| `dependences` | 仅应用；分号分隔的 nginx[@TAG] 或 runtime-* 依赖 |
-| `tag` | 基础服务镜像标签；独立手写清单省略时采用 latest |
-| `repository` | 基础服务镜像仓库；省略时采用模板 |
-| `settings` | 基础服务参数集合，详见下表 |
-| `imaging` | 基础服务 online/offline 覆盖值，默认沿用根部 imaging |
-| `template` | 保留的基础服务模板入口，默认段落标识；自定义模板重新设计延期 |
-| `environment!NAME` | 显式容器环境项；验证环境变量名称，草稿中可使用变量引用 |
-| `digest` | 固定平台 manifest 的 `sha256:…`，由 make 补充；摘要解析失败不回退 tag |
-| `timestamp`、`size` | 可选创建时间（UTC，精确到秒）和引擎报告的非负整数字节数；不可用则省略 |
-| `identity` | 工具维护的 repository/tag、固定 Linux 和根部 architecture 与 digest 的关联值；修改镜像身份会使旧摘要及展示元信息失效，不应手工修改该字段 |
+| `package` | 应用包路径；有此字段的段落表示应用 |
+| `tag`、`repository`、`imaging` | 基础服务镜像选择，以及可选的局部交付方式覆盖 |
+| `settings` | 基础服务参数，见下表 |
+| `template` | 基础服务的内置模板名称或自定义模板路径；省略时使用组件名 |
+| `environment!NAME` | 显式容器环境值；应用可覆盖包内服务环境，基础服务不得与参数映射的环境值冲突 |
+| `dependences` | 应用的 `nginx[@tag]` 或 `runtime-*` 声明；运行时须与包内元数据一致，不是通用服务依赖列表 |
+| `probe-host!站点名` | 应用 Web 站点的具体探测主机名，用于仅声明通配域名的站点 |
+| `file!/容器绝对路径` | nginx 组件使用的显式资源文件；值为制作端文件路径 |
+| `digest`、`identity`、`timestamp`、`size` | 工具记录的镜像身份及可选展示信息；详细含义见 [实现说明](docs/implementation.zh-Hans.md#镜像身份与缓存) |
 
-所有服务统一使用根部 `architecture`，操作系统固定为 Linux；服务段落不再支持 `platform`、`architecture`。修改根架构会清除旧镜像摘要及展示元信息，由 make 重新定位对应架构的镜像并核对平台；只修改宿主 Linux 发行版不会使基础服务镜像摘要失效。根部 `tag` 是交付物标签，服务 `tag` 是镜像标签；服务 `imaging` 是可选的局部覆盖，这些字段各有独立用途。生成的阶段/镜像元信息是记录字段，不额外提供 CLI 选项。服务设置应修改草稿中的 settings。参数映射出的环境项重新生成；同时显式提供互相冲突的环境项与参数会报错。模板中不由参数管理的环境项会保存用于回放。
+应用不使用 `template`、`settings` 或服务镜像选择字段；程序入口、工作目录、运行时及基础健康检查由安装包提供或推导。需要改变应用配置时，在 Packager 的 scheme 中修改后重新打包。
 
-普通 settings 条目使用 Core ConnectionSettings，带引号的值使用 .NET 标准连接字符串解析器。先拆分键，再对每个值求值，所以密码变量中的分号不会变成新参数。语法为 `key=value;key2=value2`。生成时普通值（包括变量引用、空值、值中的等号）不加引号；含分号、引号或首尾空白时才加引号，内部同类引号写两次，例如 `password="a;b=""c"""`。不支持多行值。空的 `settings=` 采用模板默认值/绑定；`settings=password=` 表示单项显式空值并阻止回退。false 和 0 都是有效的值；必填空值在 make 报错，可选空值保留并由镜像约束其含义。
+### Web 应用与升迁
 
-共享 `.env` 流程支持显式 `$(name)` / `%name%` 引用和模板声明的变量绑定，不整份导出环境。`$$(name)` / `%%name%%` 保留字面引用。模板已绑定 MySQL root-password 和 RustFS access-key/secret-key；其它设置须显式引用。完成清单包含展开的值，可能含密码，由操作者管理访问与版本控制。
+带完整 `.web/nginx` 交接资产的应用自动加入 nginx；多个应用共用该入口。没有托管资产时，应用有效的 `Listen` 端口直接发布到宿主回环地址。nginx 端口来自包内绑定，默认同端口发布；用 `容器端口:宿主端口` 列表调整或关闭：
 
-## 内置基础服务参数参考
+```ini
+[example-web]
+package=./packages/example-web.deb
+probe-host!tenant=demo.example.com
 
-全部 30 个模板都提供 `port`；声明数据挂载的模板提供 `storage`，其它模板拒绝该参数。下表是配置声明清单，不是已验收镜像版本/平台支持矩阵。
+[nginx]
+settings=port=80:18080,443:none
+file!/etc/ssl/example/fullchain.pem=./certs/fullchain.pem
+file!/etc/ssl/example/key.pem=./certs/key.pem
+```
 
-| 服务 | 默认仓库 | 声明架构 | 默认宿主地址:端口:容器端口 | 存储 |
-| --- | --- | --- | --- | --- |
-| `caddy` | `docker.io/library/caddy` | x64;arm64 | 127.0.0.1:80:80 | 持久 / 临时 |
-| `clickhouse` | `docker.io/clickhouse/clickhouse-server` | x64;arm64 | 127.0.0.1:8123:8123 | 持久 / 临时 |
-| `consul` | `docker.io/hashicorp/consul` | x64;arm64 | 127.0.0.1:8500:8500 | 持久 / 临时 |
-| `elasticsearch` | `docker.elastic.co/elasticsearch/elasticsearch` | x64;arm64 | 127.0.0.1:9200:9200 | 持久 / 临时 |
-| `emqx` | `docker.io/emqx/emqx` | x64;arm64 | 127.0.0.1:1883:1883 | 持久 / 临时 |
-| `etcd` | `quay.io/coreos/etcd` | x64;arm64 | 127.0.0.1:2379:2379 | 持久 / 临时 |
-| `grafana` | `docker.io/grafana/grafana` | x64;arm64 | 127.0.0.1:3000:3000 | 持久 / 临时 |
-| `haproxy` | `docker.io/library/haproxy` | x64;arm64 | 127.0.0.1:80:80 | 不适用 |
-| `influxdb` | `docker.io/library/influxdb` | x64;arm64 | 127.0.0.1:8086:8086 | 持久 / 临时 |
-| `kafka` | `docker.io/apache/kafka` | x64;arm64 | 127.0.0.1:9092:9092 | 持久 / 临时 |
-| `loki` | `docker.io/grafana/loki` | x64;arm64 | 127.0.0.1:3100:3100 | 持久 / 临时 |
-| `mariadb` | `docker.io/library/mariadb` | x64;arm64 | 127.0.0.1:3306:3306 | 持久 / 临时 |
-| `memcached` | `docker.io/library/memcached` | x64;arm64 | 127.0.0.1:11211:11211 | 不适用 |
-| `mongodb` | `docker.io/library/mongo` | x64;arm64 | 127.0.0.1:27017:27017 | 持久 / 临时 |
-| `mosquitto` | `docker.io/library/eclipse-mosquitto` | x64;arm64 | 127.0.0.1:1883:1883 | 持久 / 临时 |
-| `mysql` | `docker.io/library/mysql` | x64;arm64 | 127.0.0.1:3306:3306 | 持久 / 临时 |
-| `nacos` | `docker.io/nacos/nacos-server` | x64;arm64 | 127.0.0.1:8848:8848 | 持久 / 临时 |
-| `nats` | `docker.io/library/nats` | x64;arm64 | 127.0.0.1:4222:4222 | 持久 / 临时 |
-| `nginx` | `docker.io/library/nginx` | x64;arm64 | 127.0.0.1:80:80 | 不适用 |
-| `opensearch` | `docker.io/opensearchproject/opensearch` | x64;arm64 | 127.0.0.1:9200:9200 | 持久 / 临时 |
-| `otel` | `docker.io/otel/opentelemetry-collector-contrib` | x64;arm64 | 127.0.0.1:4317:4317 | 不适用 |
-| `postgresql` | `docker.io/library/postgres` | x64;arm64 | 127.0.0.1:5432:5432 | 持久 / 临时 |
-| `prometheus` | `docker.io/prom/prometheus` | x64;arm64 | 127.0.0.1:9090:9090 | 持久 / 临时 |
-| `rabbitmq` | `docker.io/library/rabbitmq` | x64;arm64 | 127.0.0.1:5672:5672 | 持久 / 临时 |
-| `redis` | `docker.io/library/redis` | x64;arm64 | 127.0.0.1:6379:6379 | 持久 / 临时 |
-| `rustfs` | `docker.io/rustfs/rustfs` | x64;arm64 | 127.0.0.1:9000:9000 | 持久 / 临时 |
-| `sqlserver` | `mcr.microsoft.com/mssql/server` | x64 | 127.0.0.1:1433:1433 | 持久 / 临时 |
-| `tdengine` | `docker.io/tdengine/tsdb` | x64;arm64 | 127.0.0.1:6041:6041 | 持久 / 临时 |
-| `valkey` | `docker.io/valkey/valkey` | x64;arm64 | 127.0.0.1:6379:6379 | 持久 / 临时 |
-| `zookeeper` | `docker.io/library/zookeeper` | x64;arm64 | 127.0.0.1:2181:2181 | 持久 / 临时 |
+示例中的 `tenant` 和证书路径必须与实际包内容相符。具体探测名必须匹配站点域名；外部文件声明属于使用它的 nginx 组件。工具不猜测站点、不代签证书，也不修改应用的登录回调或重定向地址。
 
-| 通用/专用参数 | 默认值与行为 |
-| --- | --- |
-| `port` | 默认上述回环映射；整数 1–65535 使用 127.0.0.1；IPv4:port 或 [IPv6]:port 指定地址；`none` 关闭宿主发布，保留内部端点元信息 |
-| `storage` | `persistent`（默认）或 `temporary`，作用于该服务全部数据挂载。持久目录在普通卸载后保留；`containerizer uninstall --name NAME --purge` 或 `./uninstall.sh --purge` 删除经归属校验的资产 |
-| Redis/Valkey `persistence` | `both`（默认）、`none`、`rdb`、`aof`。AOF 使用 everysec；RDB 周期为 `3600 1 300 100 60 10000`。none 关闭自动快照/AOF，不删除旧文件或禁止手工保存 |
-| Redis/Valkey `password` | 可选，默认空/无认证；非空时设置 requirepass 并同步带认证的健康检查，显式空值关闭该简单密码机制。不新增 ACL 文件/多用户配置 |
-| RabbitMQ `management-port` | 默认 `none`；语法同 port，内部 TCP 15672。需要启用管理功能的镜像/服务；端口映射不会自动开启插件 |
+升迁来自 [Migrator](../migrator/README.zh-Hans.md) 的 `(migrate)@版本_linux-架构.tar.gz` 与同名 `.sh`，按版本升序执行，选中版本不得重复。制作只收集文件，不执行 SQL；现场安装及本机预演都会执行选中的升迁。修改升迁连接设置后应重新制作升迁包。
 
-临时存储使用随容器管理的匿名卷，可能占磁盘，同一个容器停止/重启时保留，工具卸载容器时一起清理。基础设施启动不会隐式重建已有容器；显式卸载/重新安装会创建新的临时卷。切换 storage 不自动转换或删除原有持久目录；在工具之外手工删除容器可能需要自行清理卷。storage 与 persistence 独立：本地测试可用 `storage=temporary;persistence=none`，生产可用 persistent/both。AOF everysec 不保证零数据丢失；应用升级不能隐式接受基础设施配置变化。
+## 内置服务
 
-以下列出**全部额外声明参数**。除表中约束外均为字符串；镜像自行校验密码策略、组合和单位。可选项未设置则不输出，沿用镜像行为；显式空值保留。参数同名不代表自动绑定 `.env`。
+全部服务提供 `port`；有数据挂载的服务另提供 `storage=persistent|temporary`，默认 `persistent`。下表端口均默认绑定 `127.0.0.1`；星号表示必填参数，其余未注明默认值的参数可省略。
 
-| 服务 | 参数 | 运行时映射 | 模板默认值 | 显式变量绑定 | 必填与约束 |
-| --- | --- | --- | --- | --- | --- |
-| `elasticsearch` | `password` | `ELASTIC_PASSWORD` | 未设置 | — | 必填；make 拒绝空值；字符串内容由镜像校验 |
-| `grafana` | `admin-password` | `GF_SECURITY_ADMIN_PASSWORD` | 未设置 | — | 必填；make 拒绝空值；字符串内容由镜像校验 |
-| `mariadb` | `root-password` | `MARIADB_ROOT_PASSWORD` | 未设置 | — | 必填；make 拒绝空值；字符串内容由镜像校验 |
-| `mariadb` | `database` | `MARIADB_DATABASE` | 未设置 | — | 可选；保留显式空值；字符串内容由镜像校验 |
-| `mariadb` | `user` | `MARIADB_USER` | 未设置 | — | 可选；保留显式空值；字符串内容由镜像校验 |
-| `mariadb` | `password` | `MARIADB_PASSWORD` | 未设置 | — | 可选；保留显式空值；字符串内容由镜像校验 |
-| `mongodb` | `root-user` | `MONGO_INITDB_ROOT_USERNAME` | 未设置 | — | 必填；make 拒绝空值；字符串内容由镜像校验 |
-| `mongodb` | `root-password` | `MONGO_INITDB_ROOT_PASSWORD` | 未设置 | — | 必填；make 拒绝空值；字符串内容由镜像校验 |
-| `mysql` | `root-password` | `MYSQL_ROOT_PASSWORD` | 未设置 | mysql_root_password | 必填；make 拒绝空值；字符串内容由镜像校验 |
-| `mysql` | `database` | `MYSQL_DATABASE` | 未设置 | — | 可选；保留显式空值；字符串内容由镜像校验 |
-| `mysql` | `user` | `MYSQL_USER` | 未设置 | — | 可选；保留显式空值；字符串内容由镜像校验 |
-| `mysql` | `password` | `MYSQL_PASSWORD` | 未设置 | — | 可选；保留显式空值；字符串内容由镜像校验 |
-| `nacos` | `mode` | `MODE` | standalone | — | 可选；保留显式空值；字符串内容由镜像校验 |
-| `nacos` | `auth-token` | `NACOS_AUTH_TOKEN` | 未设置 | — | 必填；make 拒绝空值；字符串内容由镜像校验 |
-| `nacos` | `identity-key` | `NACOS_AUTH_IDENTITY_KEY` | 未设置 | — | 必填；make 拒绝空值；字符串内容由镜像校验 |
-| `nacos` | `identity-value` | `NACOS_AUTH_IDENTITY_VALUE` | 未设置 | — | 必填；make 拒绝空值；字符串内容由镜像校验 |
-| `opensearch` | `password` | `OPENSEARCH_INITIAL_ADMIN_PASSWORD` | 未设置 | — | 必填；make 拒绝空值；字符串内容由镜像校验 |
-| `postgresql` | `password` | `POSTGRES_PASSWORD` | 未设置 | — | 必填；make 拒绝空值；字符串内容由镜像校验 |
-| `postgresql` | `user` | `POSTGRES_USER` | postgres | — | 可选；保留显式空值；字符串内容由镜像校验 |
-| `postgresql` | `database` | `POSTGRES_DB` | postgres | — | 可选；保留显式空值；字符串内容由镜像校验 |
-| `rabbitmq` | `user` | `RABBITMQ_DEFAULT_USER` | 未设置 | — | 必填；make 拒绝空值；字符串内容由镜像校验 |
-| `rabbitmq` | `password` | `RABBITMQ_DEFAULT_PASS` | 未设置 | — | 必填；make 拒绝空值；字符串内容由镜像校验 |
-| `redis` | `maxmemory` | `--maxmemory` | 未设置 | — | 可选；保留显式空值；字符串内容由镜像校验 |
-| `redis` | `maxmemory-policy` | `--maxmemory-policy` | 未设置 | — | 可选；保留显式空值；字符串内容由镜像校验 |
-| `rustfs` | `access-key` | `RUSTFS_ACCESS_KEY` | 未设置 | rustfs_access_key | 必填；make 拒绝空值；字符串内容由镜像校验 |
-| `rustfs` | `secret-key` | `RUSTFS_SECRET_KEY` | 未设置 | rustfs_secret_key | 必填；make 拒绝空值；字符串内容由镜像校验 |
-| `sqlserver` | `password` | `MSSQL_SA_PASSWORD` | 未设置 | — | 必填；make 拒绝空值；字符串内容由镜像校验 |
-| `sqlserver` | `accept-eula` | `ACCEPT_EULA` | 未设置 | — | 必填；make 拒绝空值；字符串内容由镜像校验 |
-| `valkey` | `maxmemory` | `--maxmemory` | 未设置 | — | 可选；保留显式空值；字符串内容由镜像校验 |
-| `valkey` | `maxmemory-policy` | `--maxmemory-policy` | 未设置 | — | 可选；保留显式空值；字符串内容由镜像校验 |
+| 服务 | 默认宿主端口 | 专属设置 |
+| --- | --- | --- |
+| caddy | 80 | — |
+| clickhouse | 8123 | `native-port` |
+| consul | 8500 | — |
+| elasticsearch | 9200 | `password*` |
+| emqx | 1883 | `dashboard-port`、`websocket-port` |
+| etcd | 2379 | — |
+| grafana | 3000 | `admin-password*` |
+| haproxy | 80 | — |
+| influxdb | 8086 | — |
+| kafka | 9092 | — |
+| loki | 3100 | — |
+| mariadb | 3306 | `root-password*`、`database`、`user`、`password` |
+| memcached | 11211 | — |
+| mongodb | 27017 | `root-user*`、`root-password*` |
+| mosquitto | 1883 | — |
+| mysql | 3306 | `root-password*`、`database`、`user`、`password` |
+| nacos | 8848 | `mode=standalone`、`auth-token*`、`identity-key*`、`identity-value*`、`console-port`、`grpc-port` |
+| nats | 4222 | `monitoring-port` |
+| nginx | 取自 Web 绑定 | `port=80:18080,443:none` 等映射列表 |
+| opensearch | 9200 | `password*` |
+| otel | 4317 | `http-port` |
+| postgresql | 5432 | `password*`、`user=postgres`、`database=postgres` |
+| prometheus | 9090 | — |
+| rabbitmq | 5672 | `user*`、`password*`、`management-port` |
+| redis | 6379 | `persistence=both`、`password`、`maxmemory`、`maxmemory-policy` |
+| rustfs | 9000、9001 | `access-key*`、`secret-key*`、`console-port=127.0.0.1:9001` |
+| sqlserver | 1433 | `password*`、`accept-eula*`；仅声明 x64 |
+| tdengine | 6041、6060 | `console-port=127.0.0.1:6060` |
+| valkey | 6379 | 同 Redis |
+| zookeeper | 2181 | — |
 
-`maxmemory` 使用镜像的字节大小语法，例如 `512mb`；maxmemory-policy 为上游淘汰策略名。数据库/用户参数通常只影响首次初始化，修改清单密码不会迁移已存在数据库中的凭据。SQL Server accept-eula 应反映操作者已接受许可（通常为 `Y`），工具不代替操作者接受许可。不新增通用原生配置文件输入、模板继承或资源限制入口。
+除 nginx 映射列表外，端口参数接受 `16379`（回环地址）、`192.0.2.10:16379`、`[::1]:16379` 或 `none`。只修改宿主映射，不改变容器监听；`none` 仅保留内部访问。辅助端口默认不发布，RustFS、TDengine 控制台除外。nginx、haproxy、memcached、otel 没有数据挂载，不接受 storage。
 
-## 发布、缓存与回放
+`temporary` 使用匿名卷：同一容器停止、启动、重启时保留，工具删除容器时清理。基础设施启动不会隐式重建已有容器。持久目录在普通卸载后保留，显式 purge 才清理；切换设置不自动迁移旧数据。
 
-输出保持平铺：`.settings`、`name[-tag]@version-architecture.container` 和同名 `.tar.gz`。make 成功补全自身草稿，归档内外清单字节相同。已有归档或其它清单不覆盖；发布时检查制作期间的清单修改。中间工作使用系统临时目录；最终原子发布会短暂在目标旁暂存，完成后删除。归档含英文/中文 README，服务列表写基础服务 `service@tag`、应用 `name@package-version`，中文资源目录只有一层 zh-Hans。
+Redis/Valkey 的 `persistence` 可为 `both`、`rdb`、`aof`、`none`；AOF 每秒同步，RDB 使用默认快照周期。`password` 默认空，非空时同步配置认证和健康检查；`maxmemory`、`maxmemory-policy` 使用镜像接受的语法。storage 与 persistence 独立。
 
-Docker/Podman 镜像和层缓存经平台/摘要核验后复用，不设置 .images/.imaging 或另一套镜像归档缓存。直接完整制作成功只补缺失 tag；清单回放使用记录的摘要，不重读 .settings。需要保存交付历史时保留实际归档。
+服务参数不会自动启用镜像中缺失的管理功能，也不负责修改已有数据库凭据。SQL Server 的 `accept-eula` 由操作者按许可填写。caddy、haproxy 是独立入口模板，不接收应用的 nginx 托管资产；其配置需要由所选镜像或自定义模板提供。
 
-应用镜像和辅助容器使用每次尝试独有的标识；成功、失败、取消后只清理本次资源，不强制删除镜像或全局 prune。应用和 bootstrap 共用构建策略：Podman 关闭中间层缓存（`--layers=false`）并删除构建容器；Docker 使用临时 Buildx `docker-container` 构建器，将成品载入引擎后删除构建器及其缓存卷。因此 Docker 需要 Buildx，可能下载 BuildKit 镜像并向独立构建器下载底图层；不改变用户选中的构建器。基础服务/系统底图及其它项目的缓存保留。清理失败只告警，不使已发布产物失效；强制结束进程可能留下待人工清理的资源。
+完整仓库、辅助端口和环境映射见 [模板参考](docs/templates.zh-Hans.md)。
 
-packager 按各项目、产品指定的 scheme，从 hosting/.deploy/<scheme>/ 选定配置并写入安装包。containerizer 将这些文件保留在应用镜像中，不扫描、外置或挂载应用配置。配置变更时，按所需 scheme 重新打包并制作新的交付物。应用声明 nginx 依赖时，包中 `.web/nginx/*.conf` 片段原样复制给 nginx conf.d，同时保留应用镜像内的原文件，后端地址需使用容器网络服务名。没有现成片段时，仍生成已有的单应用简单反向代理，模板和入口配置从已校验的发行资产中只读挂载，不创建可编辑的运行配置副本，也不比较现场修改。不新增 Nginx 解析器或原生配置入口。包 Listen 元信息继续驱动进程/监听健康检查；监听成功不代表业务就绪。
+## 本机预演
 
-交付 JSON、安装记录及模板声明统一使用协议 1。执行器声明的最小/最大协议均为 1，拒绝其它 schema 值；这不增加对早期记录布局的兼容。替换全局执行器前检查已登记安装，拒绝以新执行器接管不兼容记录。
+`run` 校验交付包后，在隔离的 Linux 容器内执行包中原有 `install.sh`，包括 bootstrap、镜像导入、升迁、应用启动和健康检查。外层使用所选 Docker/Podman，内部使用独立 Docker；只接受与外层引擎原生架构一致的包，外层无须 Compose。
 
-## Bootstrap 配置档
+- 每次创建新安装状态和测试数据；干净的底图及经过校验的基础设施/入口镜像可以复用。
+- 优先使用交付端口，被占用时分配空闲端口并显示最终地址。Web 发布到所有 IPv4 接口，普通 TCP 服务发布到回环地址；局域网可达性仍取决于防火墙和虚拟机网络。
+- 必需的 Web 入口探测失败会使预演失败；基础服务仅本机转发失败时告警，服务安装或自身健康失败仍会阻止就绪。
+- 域名探测直接连接本机端口并保留 Host/SNI，HTTPS 验证证书；不修改 hosts、DNS 或信任库。浏览器访问域名仍需自行准备解析。重定向只报告目标，不跟随。
+- 就绪后 Ctrl+C 并成功清理返回 0；启动期间取消返回 130。安装或探测失败会保留已建立的现场，等待 Ctrl+C 清理，仍返回失败。
+- 同名应用已有预演现场时拒绝启动另一个；强制结束进程可能留下资源，按错误输出检查归属后处理。
 
-匹配发行版的解析环境收集精确包版本、依赖、URL 和哈希。成功集合在当前用户缓存中校验复用，按源目录、发行版和架构隔离。Windows 使用 `%LOCALAPPDATA%/Zongsoft/containerizer`，Linux 使用 `$XDG_CACHE_HOME/Zongsoft/containerizer` 或 `~/.cache/Zongsoft/containerizer`；发布锁也位于输出目录外。在线模式在现场下载相同锁定字节。Debian/Ubuntu 离线安装先将已校验包放入受保护的 APT 缓存，再禁用下载和推荐包执行安装。
+预演会实际执行包内应用和升迁，应使用适合测试的配置。隔离容器共享宿主内核，不能代替真实目标主机验收。
 
-显式放置在 `<source>/.containerizer/bootstrap/<distribution>_<architecture>/` 的集合优先使用，包含 `bootstrap.lock.json`、`packages/metadata.tsv` 和锁中记录的全部包文件。[Import-Bootstrap.ps1](build/Import-Bootstrap.ps1) 可从已审阅的收集结果生成此布局。RHEL 必须提供有授权且匹配 RHEL BaseOS/AppStream 的集合，不替换为 Rocky/Alma 包。导入校验身份、架构和哈希，不等于核实订阅授权或纯净目标上的依赖完整性。
+## 现场操作
 
-## 现场生命周期
-
-解压节点归档后，以 root 执行 `./install.sh`，或调用已安装的全局命令。现场不需要制作端。执行器选项的值使用独立参数：
+将交付包复制到匹配的 Linux 主机，解压到独立目录。以下命令在 root 会话中执行：
 
 ```sh
-containerizer install ./example.tar.gz --name example --no-start
-containerizer list
+mkdir example-delivery
+tar -xzf example@1.0-x64.tar.gz -C example-delivery
+cd example-delivery
+./install.sh
 containerizer status --name example
-containerizer start --name example
-containerizer logs redis --name example --follow --tail 100
 ```
 
-| 命令 | 行为 |
+安装器把所需资产保存到受管目录，并安装或复用 `/usr/local/bin/containerizer`。此后状态、启停、恢复和卸载不依赖最初的解压目录。
+
+现场选项使用空格分隔；`BUNDLE` 表示交付归档或已解压目录：
+
+| 命令 | 作用 |
 | --- | --- |
-| `install <目录或归档>` | 安装；已有同 name 部署时遵循升级规则 |
-| `upgrade <目录或归档> --name NAME` | 更新应用/入口，拒绝基础设施和 bootstrap 变更 |
-| `prepare <目录或归档> --name NAME` | 校验、保存交付资产、准备镜像，不停机、不升迁 |
-| `stop --name NAME` | 持久化维护状态并停止应用/入口，保留基础设施运行 |
-| `start --name NAME` | 恢复当前部署，或检查后启动已就绪的待发布事务 |
-| `restart [组件] --name NAME` | 仅重启所选组件；默认应用/入口，维护期间拒绝 |
-| `recover --name NAME` | 继续原失败/中断事务，保持维护状态 |
-| `recover --name NAME --retry-migration VERSION` | 实施人员处理部分结果后，显式重试一个失败/中断升迁 |
-| `uninstall --name NAME` | 移除自有容器和网络，保留数据、配置、历史 |
-| `uninstall --name NAME --purge` | 进一步清理已核实归属的本地持久资产，最后删除注册记录 |
-| `list`、`status --name NAME`、`logs [组件] --name NAME` | 查询登记、保存状态和服务输出 |
+| `containerizer install BUNDLE [--name NAME] [--no-start]` | 安装归档或已解压交付目录；同 name 已有部署时执行升级检查 |
+| `containerizer prepare BUNDLE --name NAME` | 保存资产、准备引擎及镜像，停在 Prepared；不停止应用、不执行升迁 |
+| `containerizer upgrade BUNDLE --name NAME [--no-start]` | 升级已有部署 |
+| `containerizer list` | 列出安装记录 |
+| `containerizer status --name NAME` | 输出安装状态 JSON |
+| `containerizer logs [COMPONENT] --name NAME [--tail 100] [--follow]` | 查看或跟随容器日志 |
+| `containerizer stop --name NAME` | 进入维护，停止应用和入口；基础设施继续运行 |
+| `containerizer start --name NAME` | 启动已准备完成的应用和入口，健康通过后解除维护 |
+| `containerizer restart [COMPONENT] --name NAME` | 默认重启应用和入口；指定组件可重启该组件，维护或未完成事务时拒绝 |
+| `containerizer recover --name NAME [--retry-migration VERSION]` | 继续原失败/中断事务，恢复后保持待启动 |
+| `containerizer uninstall --name NAME [--purge]` | 卸载；`./uninstall.sh [--purge]` 可从交付目录定位同一安装身份 |
 
-`upgrade` 和 `prepare` 只接受一个必填交付物位置参数，没有 `--bundle`。`install.sh` 传入自身目录；`uninstall.sh` 从交付物识别应用后处理已登记部署，旧脚本也不会仅清理旧版本列出的资源。
+`--no-start` 仍会启动基础设施并执行升迁，只让应用和入口停在 ReadyToStart。进入命令前已处于维护状态，也会保持待启动。
 
-`--no-start` 停在 `ReadyToStart`；仅完成 prepare 不能 start。成功升迁校验指纹，未解决的执行尝试不自动重跑。只有健康发行版才成为 current。跨节点顺序由制作人员提供实施方案，不从本节点输入推断。
+升级允许应用、应用配置及入口更新，拒绝改变基础设施镜像、有效配置或 bootstrap 包集合。失败保留维护状态和诊断，不自动启动旧版本，也不自动重跑失败 SQL。排查后执行 recover；只有确认可重试时才指定当前事务的失败升迁版本，随后显式 start。
 
-宿主机路径与应用镜像内的路径承担不同职责：
+多主机维护由操作者协调：分别 prepare、stop，在指定主机升级并使用 `--no-start`，全部必要升迁成功后再逐机 start。
 
-| 位置 | 用途 |
+| 现场位置 | 内容 |
 | --- | --- |
-| 宿主机 `/var/lib/containerizer/apps/<name>/` | 安装登记、已校验的发行资产及持久升迁状态（`migrations/<version>/`） |
-| 宿主机 `/var/lib/containerizer/data/<name>/<service>/` | 服务持久数据；多个数据挂载分别使用 `<mount>/` 子目录 |
-| 宿主机 `/var/log/containerizer/<name>/` | 各次升迁尝试的日志 |
-| 宿主机 `/var/cache/containerizer/<name>/<release-id>/bootstrap/` | 可重新获取的 bootstrap 下载及包管理器暂存 |
-| 宿主机 `/run/containerizer/` | 应用锁及独立的主机锁；重启后重新创建 |
-| 宿主机 `/usr/local/bin/containerizer` | 共享执行器 |
-| 各应用镜像内部 | 沿用安装包自己的安装目录，例如 `/opt/<company>/<product>`，以及声明的工作目录 |
+| `/var/lib/containerizer/apps/NAME/` | 安装记录、发行资产、升迁状态 |
+| `/var/lib/containerizer/data/NAME/` | 服务持久数据 |
+| `/var/log/containerizer/NAME/` | 升迁尝试结果日志 |
+| `/var/cache/containerizer/NAME/` | bootstrap 下载与暂存 |
 
-宿主机根路径是固定约定，集中定义于 [Installation.Paths](.shared/Installation.cs)，通过 `GetDataPath(name)` 获取统一数据根。布局遵循 FHS 对[持久状态](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/ch05s08.html)、[日志](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/ch05s10.html)、[缓存](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/ch05s05.html)和[运行期文件](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/ch03s15.html)的分类。`containerizer` 子目录标识管理这些文件的工具，这些子目录名称不是 FHS 强制规定的。镜像内应用安装包的安装路径保持不变。
+普通卸载删除本应用的容器、匿名卷及网络，保留数据、发行资产、升迁记录和镜像，供排查、重装或后续 purge。purge 进一步删除核实归属的本地资产及独占镜像，最后删除安装记录；中断后可重复执行。全局执行器、Docker/Compose、原始交付介质及远端数据不属于 purge 范围。
 
-新制作的交付物使用此布局，不自动迁移已安装的现场数据和记录；早期交付物需重新制作。普通卸载保留所属数据、日志、缓存及安装历史；`--purge` 校验归属、链接和挂载边界后删除，注册记录最后删除。应用锁位于可删除资产之外。暂存完成后，恢复及日常操作不依赖原交付目录。全局工具、引擎包、原始介质、共享资源和远端数据库/桶内容保留。
+## 镜像源与缓存
 
-退出类别：2 输入、3 环境、4 完整性/进程、5 获取/bootstrap、6 健康、7 事务/升迁、8 锁冲突、9 清理未完成；取消返回 130。失败后保留受管资产用于诊断，不通过删除失败标记绕过恢复流程。
+可在最终输出目录放置 `.mirrors`；run 则读取归档所在目录中的该文件，plan 不读取。示例：
+
+```ini
+docker.io=mirror.example.com/docker.io
+mcr.microsoft.com=mirror.example.com/mcr
+```
+
+值为自选可信的 `主机[:端口][/路径前缀]`，多个地址用分号分隔，不带协议、tag、digest、凭据或末尾斜线。工具先复用校验通过的缓存，再依次尝试镜像源及原仓库；已固定的摘要和平台不能因回退而改变。配置不写入交付物，普通现场安装使用目标引擎自己的配置。
+
+应用公共运行环境缓存在 Windows 的 `%LOCALAPPDATA%/Zongsoft/containerizer` 或 Linux 的 `~/.cache/Zongsoft/containerizer` 下（绝对路径 `XDG_CACHE_HOME` 可替代 Linux 缓存基目录），与应用包、应用数据分开。需要更新系统底图或运行时补丁时使用 make 的 `--refresh`；具体缓存分层与手动清理边界见 [实现说明](docs/implementation.zh-Hans.md#镜像身份与缓存)。
+
+## 深入阅读
+
+- [实现说明](docs/implementation.zh-Hans.md)：制作数据流、Web 交接、协议、安装状态和资源边界。
+- [模板参考](docs/templates.zh-Hans.md)：内置服务映射及自定义模板格式。
+- [开发指南](SKILL.md)：代码维护、构建、测试及隔离验证。

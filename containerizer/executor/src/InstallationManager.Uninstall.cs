@@ -55,6 +55,7 @@ partial class InstallationManager
 		{
 			if(!purge || !installation.PurgeResourcesCompleted)
 			{
+				await this.EnterMaintenanceAsync(installation, cancellation);
 				await host.UninstallAsync(installation, purge, cancellation);
 				installation.PurgeResourcesCompleted = purge;
 				store.Save(installation);
@@ -64,27 +65,10 @@ partial class InstallationManager
 
 			if(purge)
 			{
-				using var registrationLock = store.HostLock();
-				var root = store.GetApplicationPath(installation.Name);
-				Files.NoLinks(root);
-
-				// Keep the registry until every asset has been removed; the lock lives outside this directory.
-				foreach(var path in Directory.EnumerateFileSystemEntries(root).Where(path => path != store.GetStatePath(installation.Name)))
-				{
-					Files.NoLinks(path);
-
-					if(Directory.Exists(path))
-					{
-						Files.CheckTree(path);
-						Directory.Delete(path, true);
-					}
-					else
-						File.Delete(path);
-				}
-
+				using var registrationLock = store.AcquireHostLock();
+				store.DeleteAssets(installation.Name);
 				await host.FinalizePurgeAsync(installation, cancellation);
-				File.Delete(store.GetStatePath(installation.Name));
-				Directory.Delete(root);
+				store.DeleteRegistration(installation.Name);
 			}
 			else
 				store.Save(installation);

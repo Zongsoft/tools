@@ -47,7 +47,7 @@ namespace Zongsoft.Tools.Containerizer;
 internal sealed partial class RunContext
 {
 	#region 私有方法
-	private async Task CheckArchitectureAsync(CancellationToken cancellation)
+	private async Task ValidateArchitectureAsync(CancellationToken cancellation)
 	{
 		var format = _engine.Executable == ContainerEngine.PODMAN ? "{{.Host.OS}}/{{.Host.Arch}}" : "{{.OSType}}/{{.Architecture}}";
 		var platform = (await _engine.RunAsync(["info", "--format", format], null, cancellation, 30)).Trim();
@@ -57,13 +57,13 @@ internal sealed partial class RunContext
 			throw new ContainerizationException(3, string.Format(Properties.Resources.Run_Architecture_Message, expected, platform));
 	}
 
-	private async Task<string> PrepareBaseAsync(CancellationToken cancellation)
+	private async Task<string> PrepareBaseImageAsync(CancellationToken cancellation)
 	{
-		var recipe = Recipe(_bundle.Plan.Distribution);
+		var recipe = GetBaseImageRecipe(_bundle.Plan.Distribution);
 		var key = Files.HashText($"{recipe}\n{_bundle.Plan.Architecture}");
 		var image = $"localhost/containerizer-run-base:{key[..24]}";
 
-		using var imageLock = BuildStorage.Lock(Path.Combine(BuildStorage.CacheRoot, "run-base", key));
+		using var imageLock = BuildStorage.AcquireLock(Path.Combine(BuildStorage.CacheRoot, "run-base", key));
 		var cached = await _engine.RunAsync(["image", "ls", "--filter", $"reference={image}", "--format", "{{.ID}}"], null, cancellation);
 
 		if(!string.IsNullOrWhiteSpace(cached))
@@ -75,21 +75,21 @@ internal sealed partial class RunContext
 			throw new ContainerizationException(4, string.Format(Properties.Resources.Run_BaseConflict_Message, image));
 		}
 
-		_output(Output.Message(Properties.Resources.Run_Prepare, _bundle.Plan.Distribution, _bundle.Plan.Architecture));
+		_output(Output.FormatMessage(Properties.Resources.Run_Prepare, _bundle.Plan.Distribution, _bundle.Plan.Architecture));
 
 		if(!_engine.Mirrors.IsEmpty)
 		{
-			var baseline = await _engine.ResolveAsync(BootstrapPackageBuilder.BaseImage(_bundle.Plan.Distribution), null, null, _bundle.Plan.Architecture, cancellation);
-			recipe = Recipe(_bundle.Plan.Distribution, _engine.BuildReference(baseline));
+			var baseline = await _engine.ResolveAsync(BootstrapPackageBuilder.GetBaseImage(_bundle.Plan.Distribution), null, null, _bundle.Plan.Architecture, cancellation);
+			recipe = GetBaseImageRecipe(_bundle.Plan.Distribution, _engine.GetBuildReference(baseline));
 		}
 
-		Files.Write(Path.Combine(_workspace, "Dockerfile"), $"{recipe}\nLABEL {OWNER_LABEL}={key}\n", true);
-		await _engine.BuildAsync(_workspace, _bundle.Plan.Architecture == "arm64" ? "linux/arm64" : "linux/amd64", image, cancellation);
+		Files.Write(Path.Combine(_workspaceDirectory, "Dockerfile"), $"{recipe}\nLABEL {OWNER_LABEL}={key}\n", true);
+		await _engine.BuildAsync(_workspaceDirectory, _bundle.Plan.Architecture == "arm64" ? "linux/arm64" : "linux/amd64", image, cancellation);
 
 		return image;
 	}
 
-	internal static string Recipe(string distribution, string baseline = null)
+	private static string GetBaseImageRecipe(string distribution, string baseline = null)
 	{
 		var packages = distribution switch
 		{
@@ -99,12 +99,12 @@ internal sealed partial class RunContext
 			_ => "libicu",
 		};
 
-		var install = Distribution.IsDebian(distribution) ?
+		var install = Distribution.IsDebianFamily(distribution) ?
 			$"apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends systemd systemd-sysv dbus iproute2 procps socat ca-certificates curl {packages} && apt-get clean && rm -rf /var/lib/apt/lists/*" :
 			$"dnf install -y systemd dbus iproute procps-ng socat ca-certificates curl-minimal {packages} && dnf clean all";
 
 		return $$$"""
-			FROM {{{baseline ?? BootstrapPackageBuilder.BaseImage(distribution)}}}
+			FROM {{{baseline ?? BootstrapPackageBuilder.GetBaseImage(distribution)}}}
 			ENV container=docker
 			RUN {{{install}}}
 			RUN mkdir -p /etc/docker && printf '%s\n' '{"storage-driver":"overlay2","features":{"containerd-snapshotter":false}}' > /etc/docker/daemon.json
@@ -113,31 +113,31 @@ internal sealed partial class RunContext
 			""";
 	}
 
-	private async Task StartAsync(string image, CancellationToken cancellation)
+	private async Task StartContainerAsync(string image, CancellationToken cancellation)
 	{
 		for(var attempt = 0; attempt < 2; attempt++)
 		{
 			List<string> arguments =
 			[
-				"create", "--name", this.Name, "--label", $"{OWNER_LABEL}={_identity}", "--label", $"{APPLICATION_LABEL}={_bundle.Plan.Name}",
+				"create", "--name", this.Name, "--label", $"{OWNER_LABEL}={_sessionId}", "--label", $"{APPLICATION_LABEL}={_bundle.Plan.Name}",
 				"--privileged", "--cgroupns=private", "--tmpfs", "/run", "--tmpfs", "/run/lock", "--tmpfs", "/tmp",
-				"--volume", $"{_cache.Name}:/var/lib/docker", "--volume", "/var/lib/containerd",
+				"--volume", $"{_imageCache.Name}:/var/lib/docker", "--volume", "/var/lib/containerd",
 			];
 
 			foreach(var endpoint in _endpoints)
 			{
-				var port = attempt == 0 ? Endpoint.AvailablePort(endpoint.Port.Host, endpoint.IsWeb) : 0;
-				arguments.AddRange(["--publish", $"{endpoint.BindAddress}:{(port == 0 ? "" : port.ToString(System.Globalization.CultureInfo.InvariantCulture))}:{endpoint.Relay}/tcp"]);
+				var port = attempt == 0 ? Endpoint.GetAvailablePort(endpoint.Port.Host, endpoint.IsWeb) : 0;
+				arguments.AddRange(["--publish", $"{endpoint.BindAddress}:{(port == 0 ? "" : port.ToString(System.Globalization.CultureInfo.InvariantCulture))}:{endpoint.RelayPort}/tcp"]);
 			}
 
 			arguments.Add(image);
 			await _engine.RunAsync(arguments, null, cancellation);
-			_created = true;
+			_containerCreated = true;
 
 			try
 			{
 				await _engine.RunAsync(["start", this.Name], null, cancellation);
-				await _engine.RunAsync(["exec", this.Name, "rm", "-f", ImageCache.MARKER], null, cancellation);
+				await _engine.RunAsync(["exec", this.Name, "rm", "-f", ImageCache.CLEAN_MARKER_PATH], null, cancellation);
 				return;
 			}
 			catch(ContainerizationException exception) when(attempt == 0 && IsPortConflict(exception.Message))
@@ -148,12 +148,12 @@ internal sealed partial class RunContext
 		}
 	}
 
-	internal static bool IsPortConflict(string message) =>
+	private static bool IsPortConflict(string message) =>
 		message.Contains("address already in use", StringComparison.OrdinalIgnoreCase) ||
 		message.Contains("port is already allocated", StringComparison.OrdinalIgnoreCase) ||
 		message.Contains("ports are not available", StringComparison.OrdinalIgnoreCase);
 
-	private async Task InstallAsync(CancellationToken cancellation)
+	private async Task InstallDeliveryAsync(CancellationToken cancellation)
 	{
 		using(Output.Measure(_output, Properties.Resources.Run_StageCopy))
 		{
@@ -161,7 +161,7 @@ internal sealed partial class RunContext
 
 			if(!_engine.Mirrors.IsEmpty)
 			{
-				var path = Path.Combine(_workspace, "mirrors.json");
+				var path = Path.Combine(_workspaceDirectory, "mirrors.json");
 				Files.Save(path, _engine.Mirrors, ProtocolJson.Default.RegistryMirrors);
 				await _engine.RunAsync(["cp", path, $"{this.Name}:/run/containerizer-mirrors.json"], null, cancellation);
 			}
@@ -169,22 +169,22 @@ internal sealed partial class RunContext
 
 		await _engine.RunAsync(["exec", this.Name, "chmod", "+x", "/delivery/containerizer"], null, cancellation);
 
-		_output(Output.Message(Properties.Resources.Run_Install, _bundle.Plan.Name));
+		_output(Output.FormatMessage(Properties.Resources.Run_Install, _bundle.Plan.Name));
 		var culture = CultureInfo.CurrentUICulture.Name;
 		var locale = string.IsNullOrEmpty(culture) ? "C.UTF-8" : $"{culture.Replace('-', '_')}.UTF-8";
 		List<string> arguments = ["exec", "--env", $"LANG={locale}"];
 
 		if(!_engine.Mirrors.IsEmpty)
-			arguments.AddRange(["--env", $"{RegistryMirrors.ENVIRONMENT}=/run/containerizer-mirrors.json"]);
+			arguments.AddRange(["--env", $"{RegistryMirrors.ENVIRONMENT_VARIABLE}=/run/containerizer-mirrors.json"]);
 
 		arguments.AddRange(["--workdir", "/delivery", this.Name, "sh", "/delivery/install.sh"]);
-		var result = await _stream(_engine.Executable, arguments, null, cancellation);
+		var result = await _engine.StreamAsync(arguments, null, cancellation);
 
 		if(result != 0)
 			throw new ContainerizationException(4, string.Format(Properties.Resources.Run_InstallFailed_Message, result));
 	}
 
-	private async Task ForwardAsync(CancellationToken cancellation)
+	private async Task ForwardEndpointsAsync(CancellationToken cancellation)
 	{
 		using var json = JsonDocument.Parse(await _engine.RunAsync(["inspect", this.Name], null, cancellation));
 		var ports = json.RootElement[0].GetProperty("NetworkSettings").GetProperty("Ports");
@@ -192,7 +192,7 @@ internal sealed partial class RunContext
 		var hosts = _bundle.Plan.Services.Where(service => service.Kind != "infrastructure").ToArray();
 		var forwarded = new HashSet<Endpoint>();
 
-		_output(Output.Message(string.Empty));
+		_output(Output.FormatMessage(string.Empty));
 
 		foreach(var endpoint in infrastructure)
 		{
@@ -201,7 +201,7 @@ internal sealed partial class RunContext
 		}
 
 		if(infrastructure.Length > 0 && hosts.Length > 0)
-			_output(Output.Message(string.Empty));
+			_output(Output.FormatMessage(string.Empty));
 
 		foreach(var service in hosts)
 		{
@@ -216,7 +216,7 @@ internal sealed partial class RunContext
 			}
 
 			if(service.Kind == "application" && service.Ports.Count == 0 && !_bundle.Plan.Services.Any(ingress => ingress.Web.Any(site => site.Application == service.Id)))
-				_output(Output.Message(Properties.Resources.Run_Daemon, service.Id));
+				_output(Output.FormatMessage(Properties.Resources.Run_Daemon, service.Id));
 		}
 
 		var unknown = _bundle.Plan.Services.Where(service => service.Kind == "application" && service.Ports.Count > 0 && service.Web.Count == 0).ToArray();
@@ -231,8 +231,8 @@ internal sealed partial class RunContext
 		{
 			endpoint.Bind(ports);
 
-			await _engine.RunAsync(["exec", this.Name, "systemd-run", "--unit", $"containerizer-forward-{endpoint.Relay}",
-				"--property", "Restart=on-failure", "/usr/bin/socat", $"TCP4-LISTEN:{endpoint.Relay},fork,reuseaddr", endpoint.Target], null, cancellation);
+			await _engine.RunAsync(["exec", this.Name, "systemd-run", "--unit", $"containerizer-forward-{endpoint.RelayPort}",
+				"--property", "Restart=on-failure", "/usr/bin/socat", $"TCP4-LISTEN:{endpoint.RelayPort},fork,reuseaddr", endpoint.ForwardTarget], null, cancellation);
 
 			await endpoint.ProbeAsync(cancellation);
 
@@ -243,7 +243,7 @@ internal sealed partial class RunContext
 			if(endpoint.IsWeb)
 				throw new ContainerizationException(4, string.Format(Properties.Resources.Run_WebFailed_Message, endpoint.Address, exception.Message), exception);
 
-			_output(Output.Message(Properties.Resources.Run_ForwardFailed, Zongsoft.Components.CommandOutletColor.Magenta, endpoint.Service.Id, exception.Message));
+			_output(Output.FormatMessage(Properties.Resources.Run_ForwardFailed, Zongsoft.Components.CommandOutletColor.Magenta, endpoint.Service.Id, exception.Message));
 			return false;
 		}
 	}
@@ -252,23 +252,23 @@ internal sealed partial class RunContext
 	{
 		if(endpoint.IsWeb)
 		{
-			foreach(var result in endpoint.Results.Where(result => result.Application == application))
+			foreach(var result in endpoint.ProbeResults.Where(result => result.Application == application))
 			{
-				_output(Output.Message("  {0}: {1}", result.Site, result.Address));
+				_output(Output.FormatMessage("  {0}: {1}", result.Site, result.Address));
 				if(result.Redirect != null)
-					_output(Output.Message(Properties.Resources.Run_Redirect_Message, result.Redirect));
+					_output(Output.FormatMessage(Properties.Resources.Run_Redirect_Message, result.Redirect));
 			}
 
-			_output(Output.Message(Properties.Resources.Run_WebBrowser, endpoint.Host.ToString(CultureInfo.InvariantCulture)));
+			_output(Output.FormatMessage(Properties.Resources.Run_WebBrowser, endpoint.HostPort.ToString(CultureInfo.InvariantCulture)));
 			var addresses = endpoint.GetLocalAddresses();
 			if(addresses.Length > 0)
-				_output(Output.Message(Properties.Resources.Run_WebInterfaces, string.Join(", ", addresses)));
+				_output(Output.FormatMessage(Properties.Resources.Run_WebInterfaces, string.Join(", ", addresses)));
 		}
 		else
-			_output(Output.Message("  {0}: {1}", endpoint.Service.Id, endpoint.Address));
+			_output(Output.FormatMessage("  {0}: {1}", endpoint.Service.Id, endpoint.Address));
 
 		if(endpoint.Service.Kind == "ingress" && !endpoint.IsWeb)
-			_output(Output.Message($"  {Properties.Resources.Run_UnknownEntry}", Zongsoft.Components.CommandOutletColor.Magenta, endpoint.Service.Id));
+			_output(Output.FormatMessage($"  {Properties.Resources.Run_UnknownEntry}", Zongsoft.Components.CommandOutletColor.Magenta, endpoint.Service.Id));
 	}
 	#endregion
 }

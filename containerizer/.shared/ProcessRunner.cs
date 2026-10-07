@@ -44,9 +44,9 @@ namespace Zongsoft.Tools.Containerizer.Protocol;
 internal sealed class ProcessRunner : IProcessRunner
 {
 	#region 公共方法
-	public static async Task<int> StreamAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation)
+	public async Task<int> StreamAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation)
 	{
-		var start = new ProcessStartInfo(executable)
+		var startInfo = new ProcessStartInfo(executable)
 		{
 			UseShellExecute = false,
 			RedirectStandardOutput = true,
@@ -58,15 +58,15 @@ internal sealed class ProcessRunner : IProcessRunner
 		};
 
 		foreach(var argument in arguments)
-			start.ArgumentList.Add(argument);
+			startInfo.ArgumentList.Add(argument);
 
-		using var process = new Process { StartInfo = start };
+		using var process = new Process { StartInfo = startInfo };
 		process.Start();
 
 		try
 		{
-			var output = CopyAsync(process.StandardOutput, Console.Out);
-			var error = CopyAsync(process.StandardError, Console.Error);
+			var output = ForwardLinesAsync(process.StandardOutput, Console.Out);
+			var error = ForwardLinesAsync(process.StandardError, Console.Error);
 
 			await process.WaitForExitAsync(cancellation);
 			await Task.WhenAll(output, error);
@@ -79,7 +79,7 @@ internal sealed class ProcessRunner : IProcessRunner
 				process.Kill(true);
 		}
 
-		async Task CopyAsync(StreamReader input, TextWriter output)
+		async Task ForwardLinesAsync(StreamReader input, TextWriter output)
 		{
 			while(await input.ReadLineAsync(cancellation) is { } line)
 				await output.WriteLineAsync(line.AsMemory(), cancellation);
@@ -91,7 +91,7 @@ internal sealed class ProcessRunner : IProcessRunner
 		using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
 		timeout.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
 
-		var start = new ProcessStartInfo(executable)
+		var startInfo = new ProcessStartInfo(executable)
 		{
 			UseShellExecute = false,
 			RedirectStandardOutput = true,
@@ -103,16 +103,16 @@ internal sealed class ProcessRunner : IProcessRunner
 		};
 
 		foreach(var argument in arguments)
-			start.ArgumentList.Add(argument);
+			startInfo.ArgumentList.Add(argument);
 
-		using var process = new Process { StartInfo = start };
+		using var process = new Process { StartInfo = startInfo };
 
 		try
 		{
 			process.Start();
 
-			var output = ReadAsync(process.StandardOutput, timeout.Token);
-			var error = ReadAsync(process.StandardError, timeout.Token);
+			var output = ReadOutputAsync(process.StandardOutput, timeout.Token);
+			var error = ReadOutputAsync(process.StandardError, timeout.Token);
 			await process.WaitForExitAsync(timeout.Token);
 
 			return new(process.ExitCode, await output, await error);
@@ -136,7 +136,7 @@ internal sealed class ProcessRunner : IProcessRunner
 	#endregion
 
 	#region 私有方法
-	private static async Task<string> ReadAsync(StreamReader reader, CancellationToken cancellation)
+	private static async Task<string> ReadOutputAsync(StreamReader reader, CancellationToken cancellation)
 	{
 		var text = new StringBuilder();
 		var buffer = new char[8192];

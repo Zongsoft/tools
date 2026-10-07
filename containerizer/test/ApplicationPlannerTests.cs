@@ -8,30 +8,14 @@ using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
-public sealed class ApplicationImageBuilderTests
+public sealed class ApplicationPlannerTests
 {
-	[Fact]
-	public void UbuntuBackportsSuppliesTheCompatibleRuntimeLine()
-	{
-		var command = RuntimeEnvironmentCache.RuntimeInstall("ubuntu@22.04", "dotnet-runtime-10.0.0");
-
-		Assert.Contains("ppa:dotnet/backports", command);
-		Assert.Contains("dotnet-runtime-10.0 &&", command);
-		Assert.DoesNotContain("packages.microsoft.com", command);
-		Assert.Equal("dotnet-runtime-10.0.8", RuntimeEnvironmentCache.InstalledRuntime(
-			"dotnet-runtime-10.0.0",
-			"Microsoft.NETCore.App 9.0.9 [/usr/share/dotnet]\nMicrosoft.NETCore.App 10.0.8 [/usr/share/dotnet]\nMicrosoft.NETCore.App 10.0.10-preview [/usr/share/dotnet]\n"));
-
-		Assert.Throws<ContainerizationException>(() => RuntimeEnvironmentCache.InstalledRuntime("dotnet-runtime-10.0.2", "Microsoft.NETCore.App 10.0.1 [/usr/share/dotnet]\n"));
-	}
-
 	[Fact]
 	public void InferredApplicationEntryUsesProcessHealthInCompose()
 	{
-		var package = new PackageReader.Descriptor();
+		var package = new PackageReader.Descriptor { Name = "example" };
 		package.Texts["example.service"] = "[Service]\nType=simple\nWorkingDirectory=/opt/example\nExecStart=dotnet /opt/example/example.dll\n";
-		var source = new ServiceBuildContext { Plan = new() { Id = "example", Kind = "application" } };
-		ApplicationImageBuilder.ResolveEntry(package, source);
+		var source = ApplicationPlanner.Create(new(new PackageReader.Candidate("example.tar.gz", package)), new());
 		Assert.Equal(["dotnet", "/opt/example/example.dll"], source.Plan.Entrypoint);
 
 		var directory = Path.Combine(Path.GetTempPath(), "containerizer-health-" + Guid.NewGuid().ToString("N"));
@@ -52,8 +36,8 @@ public sealed class ApplicationImageBuilderTests
 	[Fact]
 	public void ProcessHealthDoesNotSupplyAnUnknownStartupCommand()
 	{
-		var source = new ServiceBuildContext { Plan = new() { Kind = "application" } };
-		Assert.Equal(2, Assert.Throws<ContainerizationException>(() => ApplicationImageBuilder.ResolveEntry(new(), source)).Code);
+		var component = new ContainerManifest.Component(new PackageReader.Candidate("example.tar.gz", new() { Name = "example" }));
+		Assert.Equal(2, Assert.Throws<ContainerizationException>(() => ApplicationPlanner.Create(component, new())).Code);
 	}
 
 	[Fact]
@@ -64,7 +48,7 @@ public sealed class ApplicationImageBuilderTests
 
 		try
 		{
-			var source = new ServiceBuildContext { Plan = new() { Id = "nginx" } };
+			var source = new ServiceBuildContext(new() { Name = "nginx" }) { Plan = new() { Id = "nginx" } };
 			source.Plan.Mounts.Add(new() { Source = "config/nginx/$site.conf", Target = "/etc/nginx/conf.d/site.conf", ReadOnly = true });
 			ComposeWriter.Write(new() { Project = "example", Name = "example" }, [source], directory);
 			using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(directory, "compose.yaml")));

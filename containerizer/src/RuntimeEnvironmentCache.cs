@@ -41,61 +41,64 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
+using Zongsoft.Components;
 using Zongsoft.Terminals;
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer;
 
 /// <summary>Shares verified public runtime files, never application build layers or inputs.</summary>
-internal sealed partial class RuntimeEnvironmentCache(ContainerEngine engine, string cacheRoot = null, bool refresh = false)
+internal sealed partial class RuntimeEnvironmentCache(ContainerEngine engine, string cacheRoot = null, bool refresh = false,
+	Action<CommandOutletContent> output = null, Action<string> error = null)
 {
 	#region 成员字段
-	private readonly HashSet<string> _refreshed = [];
-	private readonly Dictionary<string, ImagePlan> _baselines = [];
+	private readonly Action<CommandOutletContent> _output = output ?? Terminal.WriteLine;
+	private readonly HashSet<string> _refreshedProfiles = [];
+	private readonly Dictionary<string, ImagePlan> _baseImages = [];
 	#endregion
 
 	#region 公共方法
 	public async Task<ImagePlan> PrepareAsync(string distribution, string architecture, string runtime, string directory, CancellationToken cancellation)
 	{
-		var recipe = Recipe(distribution, runtime);
-		var profile = Profile(distribution, architecture, runtime);
+		var recipe = GetRecipe(distribution, runtime);
+		var profile = GetProfile(distribution, architecture, runtime);
 		var root = Path.Combine(cacheRoot ?? BuildStorage.CacheRoot, "runtime", engine.Executable, profile);
 
-		Files.NoLinks(root);
-		Files.PrivateDirectory(root);
+		Files.EnsureNoLinks(root);
+		Files.CreatePrivateDirectory(root);
 
-		using var cacheLock = await BuildStorage.LockAsync(root, cacheRoot, cancellation);
-		using var timing = Output.Measure(Terminal.WriteLine, profile);
+		using var cacheLock = await BuildStorage.AcquireLockAsync(root, cacheRoot, cancellation);
+		using var timing = Output.Measure(_output, profile);
 		var baselineKey = $"{distribution}/{architecture}";
 
-		if(!_baselines.TryGetValue(baselineKey, out var baseline))
+		if(!_baseImages.TryGetValue(baselineKey, out var baseline))
 		{
-			baseline = await engine.ResolveAsync(BootstrapPackageBuilder.BaseImage(distribution), null, null, architecture, cancellation, refresh);
-			_baselines.Add(baselineKey, baseline);
+			baseline = await engine.ResolveAsync(BootstrapPackageBuilder.GetBaseImage(distribution), null, null, architecture, cancellation, refresh);
+			_baseImages.Add(baselineKey, baseline);
 		}
 
 		var signature = Files.HashText($"{baseline.Repository}@{baseline.Digest}\n{baseline.Platform}\n{recipe}");
 		var metadata = Path.Combine(root, "environment.json");
 
-		Files.NoLinks(metadata);
+		Files.EnsureNoLinks(metadata);
 
-		var cached = Read(metadata, root, signature, runtime);
-		var rebuild = refresh && !_refreshed.Contains(profile);
+		var cached = ReadRecord(metadata, root, signature, runtime);
+		var rebuild = refresh && !_refreshedProfiles.Contains(profile);
 
 		if(cached != null && !rebuild)
-			Terminal.WriteLine(Output.Message(Properties.Resources.RuntimeCache_Hit, profile));
+			_output(Output.FormatMessage(Properties.Resources.RuntimeCache_Hit, profile));
 		else
 		{
-			Terminal.WriteLine(Output.Message(rebuild ? Properties.Resources.RuntimeCache_Refresh : Properties.Resources.RuntimeCache_Prepare, profile));
-			cached = await this.CreateAsync(root, baseline, recipe, signature, runtime, cancellation);
-			_refreshed.Add(profile);
+			_output(Output.FormatMessage(rebuild ? Properties.Resources.RuntimeCache_Refresh : Properties.Resources.RuntimeCache_Prepare, profile));
+			cached = await this.CreateEnvironmentAsync(root, baseline, recipe, signature, runtime, cancellation);
+			_refreshedProfiles.Add(profile);
 		}
 
 		// Copy while holding the lock: another build may replace this generation afterwards.
-		Files.PrivateDirectory(directory);
-		File.Copy(Files.Below(root, cached.Archive), Path.Combine(directory, "runtime.tar"));
+		Files.CreatePrivateDirectory(directory);
+		File.Copy(Files.ResolveRelativePath(root, cached.Archive), Path.Combine(directory, "runtime.tar"));
 		Files.Write(Path.Combine(directory, "runtime.env"), string.Join('\n', cached.Environment.Select(value => value.Split('=', 2)).Select(pair => $"ENV {pair[0]}={JsonSerializer.Serialize(pair[1])}")), true);
-		Clean(root, cached.Archive);
+		CleanUnusedArchives(root, cached.Archive);
 
 		return baseline;
 	}
@@ -103,18 +106,9 @@ internal sealed partial class RuntimeEnvironmentCache(ContainerEngine engine, st
 	#endregion
 
 	#region 内部方法
-	internal static string Profile(string distribution, string architecture, string runtime)
+	internal static string GetInstalledRuntime(string required, string output)
 	{
-		var line = runtime == null ? "native" : runtime[..runtime.LastIndexOf('.')];
-		return $"{distribution}-{architecture}-{line}";
-	}
-
-	internal static string Recipe(string distribution, string runtime) =>
-		$"{ProbeInstall(distribution, runtime == null || !Distribution.IsDebian(distribution))}{RuntimeInstall(distribution, runtime)}rm -rf /tmp/* /var/tmp/* /var/log/* /var/cache/apt/* /var/cache/dnf/*";
-
-	internal static string InstalledRuntime(string required, string output)
-	{
-		var match = RuntimeRegex().Match(required);
+		var match = GetRuntimeRegex().Match(required);
 		var minimum = Versioning.Version.Number.Parse(match.Groups[2].Value);
 		var framework = match.Groups[1].Value == "aspnetcore-runtime" ? "Microsoft.AspNetCore.App" : "Microsoft.NETCore.App";
 		var versions = output.Split('\n')
@@ -131,23 +125,35 @@ internal sealed partial class RuntimeEnvironmentCache(ContainerEngine engine, st
 		return $"{match.Groups[1].Value}-{versions[0]}";
 	}
 
-	internal static string ProbeInstall(string distribution, bool required)
+	#endregion
+
+	#region 私有方法
+	private static string GetProfile(string distribution, string architecture, string runtime)
+	{
+		var line = runtime == null ? "native" : runtime[..runtime.LastIndexOf('.')];
+		return $"{distribution}-{architecture}-{line}";
+	}
+
+	private static string GetRecipe(string distribution, string runtime) =>
+		$"{GetProbeInstallCommand(distribution, runtime == null || !Distribution.IsDebianFamily(distribution))}{GetRuntimeInstallCommand(distribution, runtime)}rm -rf /tmp/* /var/tmp/* /var/log/* /var/cache/apt/* /var/cache/dnf/*";
+
+	private static string GetProbeInstallCommand(string distribution, bool required)
 	{
 		if(!required)
 			return string.Empty;
 
-		if(Distribution.IsDebian(distribution))
+		if(Distribution.IsDebianFamily(distribution))
 			return "apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && ";
 
 		return "dnf install -y ca-certificates && (command -v curl >/dev/null 2>&1 || dnf install -y curl-minimal) && ";
 	}
 
-	internal static string RuntimeInstall(string distribution, string runtime)
+	private static string GetRuntimeInstallCommand(string distribution, string runtime)
 	{
 		if(runtime == null)
 			return string.Empty;
 
-		var match = RuntimeRegex().Match(runtime);
+		var match = GetRuntimeRegex().Match(runtime);
 		if(!match.Success)
 			throw new ContainerizationException(2, Properties.Resources.ApplicationBuilder_11_Message);
 
@@ -163,38 +169,36 @@ internal sealed partial class RuntimeEnvironmentCache(ContainerEngine engine, st
 
 		return $"rpm --import https://packages.microsoft.com/keys/microsoft.asc && rpm -U https://packages.microsoft.com/config/rhel/9/packages-microsoft-prod.rpm && dnf install -y {name} && ";
 	}
-	#endregion
 
-	#region 私有方法
-	private async Task<Record> CreateAsync(string root, ImagePlan baseline, string recipe, string signature, string runtime, CancellationToken cancellation)
+	private async Task<Record> CreateEnvironmentAsync(string root, ImagePlan baseline, string recipe, string signature, string runtime, CancellationToken cancellation)
 	{
 		var workspace = Path.Combine(Path.GetTempPath(), $"containerizer-runtime-{Guid.NewGuid():N}");
 		var archive = $"runtime-{Guid.NewGuid():N}.tar";
-		var path = Files.Below(root, archive);
+		var path = Files.ResolveRelativePath(root, archive);
 		var published = false;
 
 		try
 		{
-			Files.PrivateDirectory(workspace);
-			await using var resources = new BuildResources(engine);
+			Files.CreatePrivateDirectory(workspace);
+			await using var resources = new BuildResources(engine, error);
 
-			var image = resources.Image();
-			Files.Write(Path.Combine(workspace, "Dockerfile"), $"FROM {engine.BuildReference(baseline)}\nRUN {recipe}\n", true);
+			var image = resources.RegisterImage();
+			Files.Write(Path.Combine(workspace, "Dockerfile"), $"FROM {engine.GetBuildReference(baseline)}\nRUN {recipe}\n", true);
 			await engine.BuildAsync(workspace, baseline.Platform, image, cancellation);
-			var runtimes = runtime == null ? string.Empty : await engine.RunAsync(["run", "--name", resources.Container(), "--rm", "--network", "none", "--entrypoint", "dotnet", image, "--list-runtimes"], workspace, cancellation);
+			var runtimes = runtime == null ? string.Empty : await engine.RunAsync(["run", "--name", resources.RegisterContainer(), "--rm", "--network", "none", "--entrypoint", "dotnet", image, "--list-runtimes"], workspace, cancellation);
 
 			if(runtime != null)
-				InstalledRuntime(runtime, runtimes);
+				GetInstalledRuntime(runtime, runtimes);
 
 			using var inspected = JsonDocument.Parse(await engine.InspectAsync(image, cancellation));
-			if(!ContainerEngine.Matches(inspected.RootElement[0], baseline.Platform))
+			if(!ContainerEngine.MatchesPlatform(inspected.RootElement[0], baseline.Platform))
 				throw new ContainerizationException(4, Properties.Resources.Engine_4_Message);
 
 			var config = inspected.RootElement[0].GetProperty("Config");
 			if(config.TryGetProperty("Volumes", out var volumes) && volumes.ValueKind == JsonValueKind.Object && volumes.EnumerateObject().Any())
 				throw new ContainerizationException(4, Properties.Resources.RuntimeCache_Volumes);
 
-			var container = resources.Container();
+			var container = resources.RegisterContainer();
 			await engine.RunAsync(["create", "--name", container, "--entrypoint", "/bin/true", image], workspace, cancellation);
 			await engine.RunAsync(["export", "--output", path, container], workspace, cancellation);
 
@@ -225,7 +229,7 @@ internal sealed partial class RuntimeEnvironmentCache(ContainerEngine engine, st
 		}
 	}
 
-	private static Record Read(string metadata, string root, string signature, string runtime)
+	private static Record ReadRecord(string metadata, string root, string signature, string runtime)
 	{
 		if(!File.Exists(metadata))
 			return null;
@@ -233,16 +237,16 @@ internal sealed partial class RuntimeEnvironmentCache(ContainerEngine engine, st
 		try
 		{
 			var record = JsonSerializer.Deserialize(File.ReadAllText(metadata), CacheJson.Default.Record);
-			if(record == null || record.Signature != signature || !IsArchive(record.Archive) || record.Environment == null || record.Runtimes == null)
+			if(record == null || record.Signature != signature || !IsCacheArchiveName(record.Archive) || record.Environment == null || record.Runtimes == null)
 				return null;
 			if(record.Environment.Any(value => string.IsNullOrEmpty(value) || value.IndexOf('=') < 1))
 				return null;
 
-			var path = Files.Below(root, record.Archive);
+			var path = Files.ResolveRelativePath(root, record.Archive);
 			if(!File.Exists(path) || new FileInfo(path).Length != record.Length || Files.Hash(path) != record.Hash)
 				return null;
 			if(runtime != null)
-				InstalledRuntime(runtime, record.Runtimes);
+				GetInstalledRuntime(runtime, record.Runtimes);
 
 			return record;
 		}
@@ -250,12 +254,12 @@ internal sealed partial class RuntimeEnvironmentCache(ContainerEngine engine, st
 		catch(ContainerizationException exception) when(exception.Code == 2) { return null; }
 	}
 
-	private static bool IsArchive(string name) => name?.Length == 44 && name.StartsWith("runtime-", StringComparison.Ordinal) && name.EndsWith(".tar", StringComparison.Ordinal) && Guid.TryParseExact(name[8..^4], "N", out _);
-	private static void Clean(string root, string current)
+	private static bool IsCacheArchiveName(string name) => name?.Length == 44 && name.StartsWith("runtime-", StringComparison.Ordinal) && name.EndsWith(".tar", StringComparison.Ordinal) && Guid.TryParseExact(name[8..^4], "N", out _);
+	private static void CleanUnusedArchives(string root, string current)
 	{
-		foreach(var path in Directory.EnumerateFiles(root, "runtime-*.tar").Where(path => IsArchive(Path.GetFileName(path)) && Path.GetFileName(path) != current))
+		foreach(var path in Directory.EnumerateFiles(root, "runtime-*.tar").Where(path => IsCacheArchiveName(Path.GetFileName(path)) && Path.GetFileName(path) != current))
 		{
-			Files.NoLinks(path);
+			Files.EnsureNoLinks(path);
 			File.Delete(path);
 		}
 	}
@@ -263,7 +267,7 @@ internal sealed partial class RuntimeEnvironmentCache(ContainerEngine engine, st
 	#endregion
 
 	#region 嵌套类型
-	internal sealed class Record
+	private sealed class Record
 	{
 		public string Signature { get; set; }
 		public string Archive { get; set; }
@@ -274,9 +278,9 @@ internal sealed partial class RuntimeEnvironmentCache(ContainerEngine engine, st
 	}
 
 	[JsonSerializable(typeof(Record))]
-	internal partial class CacheJson : JsonSerializerContext;
+	private partial class CacheJson : JsonSerializerContext;
 
 	[GeneratedRegex(@"^(dotnet-runtime|aspnetcore-runtime)-(\d+\.\d+\.\d+)$")]
-	private static partial Regex RuntimeRegex();
+	private static partial Regex GetRuntimeRegex();
 	#endregion
 }

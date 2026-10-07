@@ -49,13 +49,13 @@ internal static partial class MigrationInput
 	#region 公共方法
 	public static Entry Parse(string path)
 	{
-		var match = MigrationArchiveRegex().Match(Path.GetFileName(path));
+		var match = GetArchiveRegex().Match(Path.GetFileName(path));
 
 		if(!match.Success)
 			throw new ContainerizationException(2, string.Format(Properties.Resources.MigrationInput_1_Message, Path.GetFileName(path)));
 
 		var version = match.Groups["version"].Value;
-		return new(ContainerManifest.GetVersionNumber(version), version, match.Groups["rid"].Value, $"{path[..^7]}.sh");
+		return new(ContainerManifest.ParseVersionNumber(version), version, match.Groups["rid"].Value, $"{path[..^7]}.sh");
 	}
 
 	public static void Validate(IReadOnlyList<string> paths, string architecture)
@@ -67,7 +67,7 @@ internal static partial class MigrationInput
 		{
 			var info = Parse(path);
 
-			if(info.Runtime != $"linux-{architecture}" || !versions.Add(info.Version) || previous != null && info.Version < previous.Value)
+			if(info.RuntimeIdentifier != $"linux-{architecture}" || !versions.Add(info.Version) || previous != null && info.Version < previous.Value)
 				throw new ContainerizationException(2, Properties.Resources.MigrationInput_2_Message);
 
 			if(!File.Exists(path) || !File.Exists(info.Script))
@@ -99,10 +99,10 @@ internal static partial class MigrationInput
 
 	#region 私有方法
 	[GeneratedRegex(@"^.+\(migrate\)@(?<version>\d+(?:\.\d+){1,3})_(?<rid>linux-(?:x64|arm64))\.tar\.gz$", RegexOptions.CultureInvariant)]
-	private static partial Regex MigrationArchiveRegex();
+	private static partial Regex GetArchiveRegex();
 	#endregion
 
 	#region 嵌套类型
-	internal readonly record struct Entry(Versioning.Version.Number Version, string VersionText, string Runtime, string Script);
+	internal readonly record struct Entry(Versioning.Version.Number Version, string VersionText, string RuntimeIdentifier, string Script);
 	#endregion
 }

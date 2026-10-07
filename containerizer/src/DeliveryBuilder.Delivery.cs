@@ -73,13 +73,13 @@ partial class DeliveryBuilder
 		throw new ContainerizationException(3, Properties.Resources.NodeBuilder_5_Message);
 	}
 
-	private static string Tag(DeliveryPlan node, string service) => $"containerizer/{node.Project}/{service}:{Files.HashText($"{node.Version}/{node.Tag}")[..16]}";
+	private static string CreateImageReference(DeliveryPlan node, string service) => $"containerizer/{node.Project}/{service}:{Files.HashText($"{node.Version}/{node.Tag}")[..16]}";
 
-	private static string Launcher(string command) => $"#!/bin/sh\nset -eu\nbase=$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd -P)\nif [ \"$(id -u)\" -ne 0 ]; then printf 'Run as root.\\n' >&2; exit 3; fi\nexec \"$base/containerizer\" {command}{(command == "install" ? " \"$base\"" : " --from \"$base\"")} \"$@\"\n";
+	private static string CreateLauncher(string command) => $"#!/bin/sh\nset -eu\nbase=$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd -P)\nif [ \"$(id -u)\" -ne 0 ]; then printf 'Run as root.\\n' >&2; exit 3; fi\nexec \"$base/containerizer\" {command}{(command == "install" ? " \"$base\"" : " --from \"$base\"")} \"$@\"\n";
 
-	private static string Instructions(DeliveryPlan node, string release) => FormatInstructions(node, release, CultureInfo.InvariantCulture);
+	private static string CreateInstructions(DeliveryPlan node, string release) => FormatInstructions(node, release, CultureInfo.InvariantCulture);
 
-	private static string InstructionsZhHans(DeliveryPlan node, string release) => FormatInstructions(node, release, CultureInfo.GetCultureInfo("zh-Hans"));
+	private static string CreateInstructionsZhHans(DeliveryPlan node, string release) => FormatInstructions(node, release, CultureInfo.GetCultureInfo("zh-Hans"));
 
 	private static string FormatInstructions(DeliveryPlan node, string release, CultureInfo culture)
 	{
@@ -94,7 +94,7 @@ partial class DeliveryBuilder
 				node.Version,
 				node.Distribution,
 				node.Architecture,
-				string.Join(culture.Name == "zh-Hans" ? "、" : ", ", node.Services.Select(service => $"{service.Id}@{(service.Package?.Version ?? service.Image.Version)}")),
+				string.Join(culture.Name == "zh-Hans" ? "、" : ", ", node.Services.Select(service => $"{service.Id}@{(service.Package?.Version ?? service.Image.SourceTag)}")),
 				string.Join(culture.Name == "zh-Hans" ? "、" : ", ", node.Migrations.Select(migration => migration.Version)),
 				release);
 		}

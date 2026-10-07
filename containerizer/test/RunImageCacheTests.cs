@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
@@ -6,131 +7,113 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 
 using Xunit;
+using Zongsoft.Components;
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
-public sealed class RunImageCacheTests
+[Collection("Run sessions")]
+public sealed class RunImageCacheTests : IDisposable
 {
 	private const string INFRASTRUCTURE = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 	private const string APPLICATION = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 	private const string OBSOLETE = "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+	private readonly string _root = Path.Combine(Path.GetTempPath(), $"containerizer-image-cache-test-{Guid.NewGuid():N}");
+
+	public void Dispose() => Directory.Delete(_root, true);
 
 	[Fact]
-	public async Task RepeatedSessionsKeepOnlyCurrentInfrastructureAndNeverKeepTestDataOrApplicationImages()
+	public async Task RepeatedSessionsKeepOnlyCurrentInfrastructureAndNeverKeepTestDataOrApplicationImagesAsync()
 	{
 		var runner = new Runner();
-		var plan = Plan();
-		var engine = new ContainerEngine("podman", runner);
-		var first = new RunContext.ImageCache(engine, plan, "first");
-
-		await first.PrepareAsync("base", TestContext.Current.CancellationToken);
-		await first.CleanAsync("session", TestContext.Current.CancellationToken);
-		await first.ReleaseAsync(TestContext.Current.CancellationToken);
+		using var bundle = this.CreateBundle();
+		Assert.Equal(0, await ExecuteSessionAsync("podman", runner, bundle));
+		var volume = runner.Volume;
 
 		Assert.Equal([INFRASTRUCTURE], runner.Images);
-		Assert.Contains(runner.Calls, call => call.SequenceEqual(["exec", "session", "docker", "rm", "--force", "--volumes", "test-container"]));
-		Assert.Contains(runner.Calls, call => call.SequenceEqual(["exec", "session", "docker", "volume", "rm", "test-data"]));
-		Assert.Contains(runner.Calls, call => call.SequenceEqual(["exec", "session", "docker", "network", "rm", "test-network"]));
-		Assert.Contains(runner.Calls, call => call.SequenceEqual(["exec", "session", "docker", "image", "rm", "old-release-tag"]));
+		Assert.Contains(runner.Calls, call => call[0] == "exec" && call.Skip(2).SequenceEqual(["docker", "rm", "--force", "--volumes", "test-container"]));
+		Assert.Contains(runner.Calls, call => call[0] == "exec" && call.Skip(2).SequenceEqual(["docker", "volume", "rm", "test-data"]));
+		Assert.Contains(runner.Calls, call => call[0] == "exec" && call.Skip(2).SequenceEqual(["docker", "network", "rm", "test-network"]));
+		Assert.Contains(runner.Calls, call => call[0] == "exec" && call.Skip(2).SequenceEqual(["docker", "image", "rm", "old-release-tag"]));
 		Assert.DoesNotContain(runner.Calls, call => call.Contains("prune") || call.Take(2).SequenceEqual(["volume", "rm"]));
 
-		var next = new RunContext.ImageCache(engine, plan, "second");
-		await next.PrepareAsync("base", TestContext.Current.CancellationToken);
-		Assert.Equal(first.Name, next.Name);
+		Assert.Equal(0, await ExecuteSessionAsync("podman", runner, bundle));
+		Assert.Equal(volume, runner.Volume);
 		Assert.Single(runner.Calls, call => call.Take(2).SequenceEqual(["volume", "create"]));
-		Assert.Contains(runner.Calls, call => call[0] == "run" && call.Contains($"{first.Name}:/cache:ro"));
+		Assert.Contains(runner.Calls, call => call[0] == "run" && call.Contains($"{volume}:/cache:ro"));
 	}
 
 	[Theory]
 	[InlineData(false)]
 	[InlineData(true)]
-	public async Task DirtyOrChangedEngineCachesAreReplacedBeforeInstallation(bool changedEngine)
+	public async Task DirtyOrChangedEngineCachesAreReplacedBeforeInstallationAsync(bool changedEngine)
 	{
 		var runner = new Runner();
-		var engine = new ContainerEngine("docker", runner);
-		var plan = Plan();
-		var first = new RunContext.ImageCache(engine, plan, "first");
-
-		await first.PrepareAsync("base", TestContext.Current.CancellationToken);
-		await first.CleanAsync("session", TestContext.Current.CancellationToken);
+		using var bundle = this.CreateBundle();
+		Assert.Equal(0, await ExecuteSessionAsync("docker", runner, bundle));
 
 		if(changedEngine)
-			plan.Bootstrap.EngineVersion = "different";
+			bundle.Plan.Bootstrap.EngineVersion = "different";
 		else
 			runner.Clean = false;
 
-		await new RunContext.ImageCache(engine, plan, "second").PrepareAsync("base", TestContext.Current.CancellationToken);
+		Assert.Equal(0, await ExecuteSessionAsync("docker", runner, bundle));
 		Assert.Equal(2, runner.Calls.Count(call => call.Take(2).SequenceEqual(["volume", "create"])));
-		Assert.Single(runner.Calls, call => call.SequenceEqual(["volume", "rm", first.Name]));
-		Assert.False(runner.Clean);
+		Assert.Single(runner.Calls, call => call.SequenceEqual(["volume", "rm", runner.Volume]));
+		Assert.True(runner.Clean);
 	}
 
 	[Theory]
 	[InlineData(false)]
 	[InlineData(true)]
-	public async Task ForeignOrAttachedCachesCannotBeDeleted(bool attached)
+	public async Task ForeignOrAttachedCachesCannotBeDeletedAsync(bool attached)
 	{
 		var runner = new Runner();
-		var engine = new ContainerEngine("podman", runner);
-		var first = new RunContext.ImageCache(engine, Plan(), "first");
-		await first.PrepareAsync("base", TestContext.Current.CancellationToken);
+		using var bundle = this.CreateBundle();
+		Assert.Equal(0, await ExecuteSessionAsync("podman", runner, bundle));
 		runner.Attached = attached;
 
 		if(!attached)
-			runner.Labels[RunContext.ImageCache.LABEL] = "another-owner";
+			runner.Labels["org.zongsoft.containerizer.run-cache"] = "another-owner";
 
-		var next = new RunContext.ImageCache(engine, Plan(), "second");
-		await Assert.ThrowsAsync<ContainerizationException>(() => next.PrepareAsync("base", TestContext.Current.CancellationToken));
-		await next.ReleaseAsync(TestContext.Current.CancellationToken);
+		await Assert.ThrowsAsync<ContainerizationException>(() => ExecuteSessionAsync("podman", runner, bundle));
 		Assert.DoesNotContain(runner.Calls, call => call.Take(2).SequenceEqual(["volume", "rm"]));
 		Assert.True(runner.Exists);
 	}
 
 	[Fact]
-	public async Task CleanupFailureDiscardsTheWholeCacheAndInterruptedCreatesAreAlsoRemoved()
+	public async Task CleanupFailureDiscardsTheWholeCacheAndInterruptedCreatesAreAlsoRemovedAsync()
 	{
 		var runner = new Runner { FailInner = true };
-		var cache = new RunContext.ImageCache(new("podman", runner), Plan(), "session");
-		await cache.PrepareAsync("base", TestContext.Current.CancellationToken);
-		await Assert.ThrowsAsync<ContainerizationException>(() => cache.CleanAsync("session", TestContext.Current.CancellationToken));
-		await cache.ReleaseAsync(TestContext.Current.CancellationToken);
+		using var bundle = this.CreateBundle();
+		Assert.Equal(0, await ExecuteSessionAsync("podman", runner, bundle));
 		Assert.False(runner.Exists);
 		Assert.False(runner.Clean);
 
 		runner = new Runner { CancelCreate = true };
-		cache = new RunContext.ImageCache(new("docker", runner), Plan(), "session");
-		await Assert.ThrowsAsync<OperationCanceledException>(() => cache.PrepareAsync("base", TestContext.Current.CancellationToken));
-		await cache.ReleaseAsync(TestContext.Current.CancellationToken);
+		await Assert.ThrowsAsync<OperationCanceledException>(() => ExecuteSessionAsync("docker", runner, bundle));
 		Assert.False(runner.Exists);
 	}
 
 	[Fact]
-	public async Task UnchangedReleaseVersionDoesNotPreserveOldInfrastructureContent()
+	public async Task UnchangedReleaseVersionDoesNotPreserveOldInfrastructureContentAsync()
 	{
-		var plan = Plan();
+		using var bundle = this.CreateBundle();
 		var runner = new Runner();
-		plan.Services[0].Image.Id = OBSOLETE;
-		var cache = new RunContext.ImageCache(new("docker", runner), plan, "session");
-
-		await cache.PrepareAsync("base", TestContext.Current.CancellationToken);
-		await cache.CleanAsync("session", TestContext.Current.CancellationToken);
+		bundle.Plan.Services[0].Image.Id = OBSOLETE;
+		Assert.Equal(0, await ExecuteSessionAsync("docker", runner, bundle));
 
 		Assert.Equal([OBSOLETE], runner.Images);
-		Assert.Contains(runner.Calls, call => call.SequenceEqual(["exec", "session", "docker", "image", "rm", "--force", INFRASTRUCTURE]));
+		Assert.Contains(runner.Calls, call => call[0] == "exec" && call.Skip(2).SequenceEqual(["docker", "image", "rm", "--force", INFRASTRUCTURE]));
 	}
 
 	[Fact]
-	public async Task ApplicationOnlySessionsDoNotKeepAnEmptyImageStore()
+	public async Task ApplicationOnlySessionsDoNotKeepAnEmptyImageStoreAsync()
 	{
-		var plan = Plan();
+		using var bundle = this.CreateBundle();
 		var runner = new Runner();
-		plan.Services.RemoveAt(0);
-		var cache = new RunContext.ImageCache(new("podman", runner), plan, "session");
-
-		await cache.PrepareAsync("base", TestContext.Current.CancellationToken);
-		await cache.CleanAsync("session", TestContext.Current.CancellationToken);
-		await cache.ReleaseAsync(TestContext.Current.CancellationToken);
+		bundle.Plan.Services.RemoveAt(0);
+		Assert.Equal(0, await ExecuteSessionAsync("podman", runner, bundle));
 
 		Assert.Empty(runner.Images);
 		Assert.False(runner.Exists);
@@ -138,26 +121,58 @@ public sealed class RunImageCacheTests
 	}
 
 	[Fact]
-	public async Task ReleaseRechecksOwnershipBeforeDeletingADirtyCache()
+	public async Task ReleaseRechecksOwnershipBeforeDeletingADirtyCacheAsync()
 	{
-		var runner = new Runner();
-		var cache = new RunContext.ImageCache(new("podman", runner), Plan(), "session");
-		await cache.PrepareAsync("base", TestContext.Current.CancellationToken);
-		runner.Labels[RunContext.ImageCache.LABEL] = "another-owner";
-
-		await Assert.ThrowsAsync<ContainerizationException>(() => cache.ReleaseAsync(TestContext.Current.CancellationToken));
+		var runner = new Runner { FailInner = true };
+		using var bundle = this.CreateBundle();
+		Assert.Equal(4, await ExecuteSessionAsync("podman", runner, bundle, () => runner.Labels["org.zongsoft.containerizer.run-cache"] = "another-owner"));
 		Assert.True(runner.Exists);
 		Assert.DoesNotContain(runner.Calls, call => call.Take(2).SequenceEqual(["volume", "rm"]));
 	}
 
-	private static DeliveryPlan Plan() => new()
+	private static async Task<int> ExecuteSessionAsync(string executable, Runner runner, DeliveryBundle bundle, Action onReady = null)
 	{
-		Name = "cache-test",
-		Version = "1.0",
-		Architecture = "x64",
-		Distribution = "debian@13",
-		Services = [new() { Id = "redis", Kind = "infrastructure", Image = new() { Id = INFRASTRUCTURE } }, new() { Id = "web", Kind = "application", Image = new() { Id = APPLICATION } }],
-	};
+		using var stopping = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+		var run = new RunContext(new(executable, runner), bundle, content =>
+		{
+			for(var item = content.First; item != null; item = item.Next)
+			{
+				if(item.ForegroundColor == CommandOutletColor.Green)
+				{
+					onReady?.Invoke();
+					stopping.Cancel();
+					break;
+				}
+			}
+		});
+		return await run.ExecuteAsync(stopping.Token);
+	}
+
+	private DeliveryBundle CreateBundle()
+	{
+		var name = $"cache-test-{Guid.NewGuid():N}";
+		var plan = new DeliveryPlan
+		{
+			Name = name,
+			Architecture = "x64",
+			Distribution = "debian@13",
+			Project = $"containerizer-{name}-{Files.HashText(name)[..8]}",
+			DataRoot = Installation.Paths.GetDataPath(name),
+		};
+		plan.Services.Add(new() { Id = "redis", Image = new() { Id = INFRASTRUCTURE, Platform = "linux/amd64", Mode = "online", Reference = $"containerizer/{plan.Project}/redis:fixture" } });
+		plan.Services.Add(new() { Id = "web", Kind = "application", Image = new() { Id = APPLICATION, Platform = "linux/amd64", Mode = "offline", Archive = "images/web.tar", Reference = $"containerizer/{plan.Project}/web:fixture" } });
+
+		foreach(var file in new[] { "containerizer", "compose.yaml", "install.sh", "uninstall.sh", "images/web.tar" })
+		{
+			var path = Path.Combine(_root, file);
+			Files.Write(path, "fixture");
+			plan.Files.Add(new() { Path = file, Length = new FileInfo(path).Length, Hash = Files.Hash(path) });
+		}
+
+		Files.Save(Path.Combine(_root, DeliveryPlan.FileName), plan, ProtocolJson.Default.DeliveryPlan);
+		Files.Write(Path.Combine(_root, "checksums.sha256"), $"{Files.Hash(Path.Combine(_root, DeliveryPlan.FileName))}  {DeliveryPlan.FileName}\n{string.Join('\n', plan.Files.Select(file => $"{file.Hash}  {file.Path}"))}\n");
+		return DeliveryBundle.Open(_root);
+	}
 
 	private sealed class Runner : IProcessRunner
 	{
@@ -170,6 +185,9 @@ public sealed class RunImageCacheTests
 		public bool Attached { get; set; }
 		public bool FailInner { get; init; }
 		public bool CancelCreate { get; init; }
+		public bool ContainerCreated { get; private set; }
+
+		public Task<int> StreamAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation) => Task.FromResult(0);
 
 		public Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation, int timeoutSeconds = 900)
 		{
@@ -211,7 +229,15 @@ public sealed class RunImageCacheTests
 				}
 			}
 			else if(arguments[0] == "ps")
-				output = this.Attached ? "attached-container" : "";
+				output = arguments.Any(argument => argument.StartsWith("volume=", StringComparison.Ordinal)) ? this.Attached ? "attached-container" : "" : arguments[^1] == "{{.ID}}" && this.ContainerCreated ? "session-container" : "";
+			else if(arguments[0] == "info")
+				output = "linux/amd64";
+			else if(arguments[0] == "create")
+				this.ContainerCreated = true;
+			else if(arguments[0] == "rm")
+				this.ContainerCreated = false;
+			else if(arguments[0] == "inspect")
+				output = """[{"NetworkSettings":{"Ports":{}}}]""";
 			else if(arguments[0] == "run")
 				output = this.Clean ? this.Labels["org.zongsoft.containerizer.run-profile"] : "";
 			else if(arguments[0] == "exec" && arguments[2] == "sh")
