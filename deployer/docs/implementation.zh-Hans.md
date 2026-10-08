@@ -150,7 +150,7 @@ deployer 只订阅 `Importing`；哈希按路径另行读取，并非解析字�
 
 Core 将逐行解析、导入路径和递归保护集中在内部 ProfileReader，私有 Context 记录当前 Profile、章节和行号。Profile.Load 保留转发入口；子文件解析成功后由父 Profile.Import 合并有效引用及登记关系，然后通知 Imported，最后清理活动状态。
 
-ProfileOptions 的 Importing/Imported 均为 Action<ProfileContext>。上下文的 FilePath 是导入绝对路径，Depth 是层数，Referer 是直接引用者；Profile 在导入前为 null，导入后为子文件，前后使用不同的只读上下文。Reader 浅复制包含 MaximumDepth 的选项和委托引用，没有导入开关；业务回调通过异常终止整个加载，不支持静默跳过。deployer 在 Importing 中使用 context.FilePath 记录哈希，不需要注册 Imported。
+ProfileOptions 的 Importing/Imported 均为 Action<ProfileContext>。上下文的 FilePath 是导入绝对路径，Depth 是层数，Referer 是直接引用者；Profile 在导入前为 null，导入后为子文件，前后使用不同的只读上下文。Reader 浅复制包含 MaximumDepth、ImportBehavior 的选项和委托引用。Core 的 ImportBehavior 使用通用指令策略 None（采用指令内置默认行为）、Strict（按具体指令的规则严格处理）、Ignore（作为普通注释）和 Suppress（拒绝指令）。deployer 当前使用 None，导入指令的内置默认行为允许缺失文件；Strict 则要求全部直接和递归导入文件存在。业务回调可通过异常终止整个加载，但不提供逐文件静默跳过的返回值。deployer 在 Importing 中使用 context.FilePath 记录哈希，不需要注册 Imported。
 
 ## Core Profile 声明与保存
 
@@ -160,7 +160,7 @@ Core 的无显式目标 Save() 仅将自身及导入子树中修改的声明写�
 
 ## hosting 调用边界
 
-hosting 脚本将构建、插件部署和可选安装包制作分为不同命令。Cake 从脚本传入的进程变量 `framework` 取得目标框架；deployer 按自身加载顺序从 Variables 取得框架，`appsettings.json` 参与最终合并。框架用于 destination 表达式时须在目标目录预解析阶段可用，不能靠随后加载的目标配置反推 destination。部署器不负责同步 Cake 的进程环境，也不调用 packager 或 migrator。操作示例见 [README](../README.zh-Hans.md#hosting-脚本中的框架与变量)。
+hosting 脚本将构建、插件部署和可选安装包制作分为不同命令。当前脚本没有向 Cake 传入 `--framework`，各宿主 `build.cake` 使用 `Argument("framework", "net10.0")` 的默认值，不读取 `.env` 或进程变量 `framework`；deployer 按自身加载顺序从 Variables 取得框架，`appsettings.json` 参与最终合并。构建值须与部署、打包值一致。框架用于 destination 表达式时须在目标目录预解析阶段可用，不能靠随后加载的目标配置反推 destination。部署器不负责同步 Cake 参数，也不调用 packager 或 migrator。操作示例见 [README](../README.zh-Hans.md#hosting-脚本中的框架与变量)。
 
 ## 本地搜索与源链接
 

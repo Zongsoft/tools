@@ -109,7 +109,7 @@ internal sealed class WebPackage
 		}
 
 		using var reader = new StringReader(text);
-		var profile = Profile.Load(reader, new ProfileOptions { ImportBehavior = ProfileDirectiveBehavior.Suppressed });
+		var profile = Profile.Load(reader, new ProfileOptions { ImportBehavior = ProfileDirectiveBehavior.Suppress });
 		var sites = new List<WebSitePlan>();
 
 		if(profile.Entries.Count > 0 || profile.Sections.Count == 0)

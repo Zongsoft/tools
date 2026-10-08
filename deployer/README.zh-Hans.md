@@ -180,7 +180,7 @@ hosting 的 `deploy.cmd` 已省略部署命令的 `--framework`，可以在 host
 dotnet deploy --verbosity:quiet --overwrite:newest --prerelease:true --host:daemon --site:daemon --scheme:default --environment:development --debug:off --edition:Release --platform:linux --architecture:x64 --destination:bin/$(edition)/$(framework) .deploy ../.deploy/default/$(host).deploy ../.deploy/default/$(site).deploy
 ```
 
-`--edition:Release` 在这个部署流程中用于定位构建配置目录；安装包的 Edition 是另外的身份参数，不应混用。这里仅执行插件部署，不编译宿主、不制作安装包或升迁包。运行 hosting 的完整 `deploy.cmd` 时，还应将同值的进程变量 `framework` 传给脚本中的 Cake 构建；加载 `.env` 不会设置进程环境。脚本参数和独立打包流程见 [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.zh-Hans.md#安装包与升迁包)。
+`--edition:Release` 在这个部署流程中用于定位构建配置目录；安装包的 Edition 是另外的身份参数，不应混用。这里仅执行插件部署，不编译宿主、不制作安装包或升迁包。当前 hosting 的 `deploy.cmd` 调用 Cake 时也省略 `--framework`，构建使用各宿主 `build.cake` 的 `Argument("framework", "net10.0")` 默认值；Cake 脚本不读取 `.env` 或进程变量 `framework`。应保持该构建值与部署、打包变量一致；需要改变构建框架时，显式向 Cake 传入 `--framework` 或调整其默认值。脚本参数和独立打包流程见 [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.zh-Hans.md#安装包与升迁包)。
 
 ## 安装
 

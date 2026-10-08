@@ -80,7 +80,7 @@ internal sealed partial class ContainerManifest(bool planning = false)
 		var migrations = new SortedDictionary<int, string>();
 		var profile = Profile.Load(path, new ProfileOptions
 		{
-			ImportBehavior = ProfileDirectiveBehavior.Existed,
+			ImportBehavior = ProfileDirectiveBehavior.Strict,
 			Importing = context => ValidateLines(context.FilePath, declarations),
 		});
 

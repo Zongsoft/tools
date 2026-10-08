@@ -69,7 +69,7 @@ internal static class TemplateCatalog
 		if(!File.Exists(path))
 			throw new ContainerizationException(2, string.Format(Properties.Resources.ServiceSource_1_Message, component.Name, path));
 
-		var profile = Profile.Load(path, new ProfileOptions { ImportBehavior = ProfileDirectiveBehavior.Suppressed });
+		var profile = Profile.Load(path, new ProfileOptions { ImportBehavior = ProfileDirectiveBehavior.Suppress });
 		var root = profile.Entries.ToDictionary(
 			entry => entry.Name,
 			entry => entry.Name.ToLowerInvariant() is "entrypoint" or "command" or "health" ? entry.Value : Resolve(entry.Value), StringComparer.OrdinalIgnoreCase);
