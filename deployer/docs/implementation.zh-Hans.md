@@ -39,7 +39,7 @@ Release 引用 Zongsoft.Core NuGet 包，Debug 配置引用本地 Core 程序集
 | TFM | NuGetFramework 表达框架身份，其框架/平台版本使用 System.Version；NuGetVersion 和 VersionRange 表达包版本与约束。包括 ^ 在内的显式框架过滤规则与资产的最近兼容组选择分别处理。 |
 | RID | NuGet `JsonRuntimeFormat.ReadRuntimeGraph` 加载图谱，`RuntimeGraph.ExpandRuntime` 提供回退候选。 |
 
-Core 在 ProfileReader 中处理指令并提供循环和深度检查。ProfileOptions 提供按名称索引的 Directives、文件回调 Loading/Loaded 和指令回调 DirectiveProcessing/DirectiveProcessed。deployer 在 Loading 的 Referer 非 null 时登记导入文件哈希，根描述文件单独登记。appsettings 点号键、目标边界、链接拒绝和文件所有权由部署工具处理。
+Core 通过 Profile.Directives 全局登记指令实现，ProfileReader 解析单个来源，ProfileReadSession 调度指令并提供循环和深度检查。ProfileOptions 提供按名称索引的 Directives 及文件回调 Loading/Loaded；集合提供 Processing/Processed 和指回所属 ProfileOptions 的 Options。deployer 在 Loading 的 Referer 非 null 时登记导入文件哈希，根描述文件单独登记。appsettings 点号键、目标边界、链接拒绝和文件所有权由部署工具处理。
 
 ## 从清单到执行
 
@@ -144,17 +144,17 @@ Designer 的属性和注释由生成器维护；仅清理生成空白行中的�
 
 ## Profile 导入回调
 
-Reader 从 ProfileOptions.Directives 获取导入选项。ProfileDirectiveOptions.Import() 的 MaximumDepth=0 使用默认上限 64，正数指定上限，负数拒绝；根文件计一层。Loading 在打开和递归检查后、解析前触发；Loaded 在解析和合并后触发，根文件也通知。deployer 过滤根通知，因为根哈希单独登记。可选缺失导入跳过，其它失败传播；递归读取共享本次设置快照。
+ImportDirective 从本次设置快照获取导入选项。ProfileDirectiveOptions.Import() 的 MaximumDepth=0 使用默认上限 64，正数指定上限，负数拒绝；根文件计一层。Loading 在打开和递归检查后、解析前触发；Loaded 在解析和合并后触发，根文件也通知。deployer 过滤根通知，因为根哈希单独登记。可选缺失导入跳过，其它失败传播；递归读取共享本次设置快照。
 
 deployer 只订阅 `Loading`；哈希按路径另行读取，并非解析字节的严格快照。
 
-Core 将逐行解析、导入路径和递归保护集中在内部 ProfileReader，私有 Context 记录当前 Profile、章节和行号。Profile.Load 保留转发入口；子文件解析成功后由父 Profile.Import 合并有效引用及登记关系，然后通知 Loaded，最后清理活动状态。
+Core 由 ProfileReader 逐行解析，ImportDirective 解释路径和可选/严格打开失败，ProfileReadSession 管理活动链、流及文件通知。Profile.Load 保留转发入口；子文件解析成功后由父 Profile.Import 合并有效引用及登记关系，然后通知 Loaded，最后清理活动状态。
 
-Loading/Loaded 使用 Action<ProfileContext>：FilePath 是来源绝对路径，Depth 是活动深度，Referer 是直接引用者（根配置为 null），Profile 在解析前为 null、完成后为解析结果。文件前后通知分别创建上下文。Reader 在根入口复制指令集合及各选项。DirectiveProcessing/DirectiveProcessed 围绕每条指令，可改写 Argument 或通过 Handled 接管，保存保留原始注释。导入的 None 采用允许缺失文件的内置行为，Strict 要求文件存在，Ignore 仅保留注释，Suppress 在指令回调前拒绝。deployer 采用导入默认设置，只订阅 Loading 记录子文件哈希。回调异常终止整个加载。
+Loading/Loaded 使用 Action<ProfileContext>：FilePath 是来源绝对路径，Depth 是活动深度，Referer 是直接引用者（根配置为 null），Profile 在解析前为 null、完成后为解析结果。文件前后通知分别创建上下文。会话在根入口先固定全局注册表，再复制加载选项；复制后的集合指向复制后的 ProfileOptions。ProfileDirectiveContext 继承 ProfileContext，其中 Profile 为声明配置，Referer 为其直接引用者。Directives.Processing/Directives.Processed 围绕每条指令，可改写 Argument 或通过 Handled 接管，保存保留原始注释。导入的 None 采用允许缺失文件的内置行为，Strict 要求文件存在，Ignore 仅保留注释，Suppress 在指令回调前拒绝。deployer 采用导入默认设置，只订阅 Loading 记录子文件哈希。回调异常终止整个加载。
 
 ## Core Profile 声明与保存
 
-Core 将本地有序声明与合并后的有效视图区分，导入覆盖替换引用，条目来源指向实际声明文件；同文件重复键仍报错，本地与导入按读取顺序覆盖。ProfileReader 管理读取，ProfileWriter 管理保存。
+Core 将本地有序声明与合并后的有效视图区分，导入覆盖替换引用，条目来源指向实际声明文件；同文件重复键仍报错，本地与导入按读取顺序覆盖。ProfileReadSession 管理读取过程，ProfileReader 解析声明，ProfileWriter 管理保存。
 
 Core 的无显式目标 Save() 仅将自身及导入子树中修改的声明写回各自来源；显式路径、Stream、TextWriter 只输出当前文件声明。未修改文件不重写。多文件输出先全部准备、再逐个提交，不是跨文件事务。deployer 只读取描述文件并使用 Loading 记录哈希，不调用这些保存入口。
 

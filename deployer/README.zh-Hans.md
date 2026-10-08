@@ -369,7 +369,7 @@ RID 回退通过 NuGet.RuntimeModel 使用仓库内固定的 dotnet/runtime v10.
 dotnet test test/Zongsoft.Tools.Deployer.Tests.csproj -f net10.0 -p:GeneratePackageOnBuild=false
 ```
 
-Profile 导入复用 Core：Reader 内置导入及递归保护，通过 ProfileOptions.Loading 登记导入文件哈希。详见[实现细节](docs/implementation.zh-Hans.md#profile-导入回调)。
+Profile 导入复用 Core：ImportDirective 通过共享 ProfileReadSession 执行导入及递归保护，通过 ProfileOptions.Loading 登记导入文件哈希。详见[实现细节](docs/implementation.zh-Hans.md#profile-导入回调)。
 
 Core Profile 的来源与覆盖规则，以及读取和保存职责，见[实现说明](docs/implementation.zh-Hans.md#core-profile-声明与保存)。
 
