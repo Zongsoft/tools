@@ -53,7 +53,7 @@ internal sealed class ServiceDefaults
 			return defaults;
 
 		ContainerManifest.ValidateLines(path, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
-		var profile = Profile.Load(path, new ProfileOptions { ImportBehavior = ProfileDirectiveBehavior.Suppress });
+		var profile = Profile.Load(path, new ProfileOptions { Directives = { ProfileDirectiveOptions.Import(ProfileDirectiveBehavior.Suppress) } });
 
 		if(profile.Entries.Count > 0)
 			throw new ContainerizationException(2, string.Format(Properties.Resources.Settings_File_Message, path));

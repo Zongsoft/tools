@@ -195,7 +195,11 @@ public partial class Deployer
 	{
 		var options = new ProfileOptions
 		{
-			Importing = context => this.Plan.Manifests[context.FilePath] = DeploymentSession.Hash(context.FilePath),
+			Loading = context =>
+			{
+				if(context.Referer != null)
+					this.Plan.Manifests[context.FilePath] = DeploymentSession.Hash(context.FilePath);
+			},
 		};
 
 		return new(this, Profile.Load(path, options), destination);

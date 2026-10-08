@@ -39,7 +39,7 @@ Release references the Zongsoft.Core NuGet package; Debug references the local C
 | TFM | NuGetFramework represents framework identity and uses System.Version for framework/platform versions. NuGetVersion and VersionRange represent package versions and constraints. Explicit framework-filter rules, including ^, are handled separately from nearest-compatible asset selection. |
 | RID | NuGet `JsonRuntimeFormat.ReadRuntimeGraph` loads the graph; `RuntimeGraph.ExpandRuntime` supplies fallback candidates. |
 
-Core handles imports directly in ProfileReader with cycle/depth checks. ProfileOptions supplies two Action<ProfileContext> import callbacks. Deployer hashes imported files in Importing and records roots separately. Appsettings dotted keys, target containment, link rejection and ownership remain deployment responsibilities.
+Core processes directives in ProfileReader with cycle/depth checks. ProfileOptions exposes keyed Directives settings, Loading/Loaded file callbacks and DirectiveProcessing/DirectiveProcessed callbacks. Deployer hashes imported files in Loading when Referer is non-null and records roots separately. Appsettings dotted keys, target containment, link rejection and ownership remain deployment responsibilities.
 
 ## From manifests to execution
 
@@ -142,19 +142,19 @@ The generator owns Designer properties and comments. Only normalize CRLF and rem
 
 ## Profile import callbacks
 
-Reader uses ProfileOptions.MaximumDepth (default 64, positive integers only), counting the root as level one. Deployer uses the default. Importing runs after opening and recursion checks, before parsing; Imported runs after child loading and merging. Roots do not notify. Missing optional imports are skipped; other failures propagate. Child files share the captured blank-line and import settings.
+Reader resolves the import options from ProfileOptions.Directives. ProfileDirectiveOptions.Import() uses MaximumDepth=0 for the built-in limit of 64; positive values specify a limit and negative values are rejected. The root counts as level one. Loading runs after opening and recursion checks, before parsing; Loaded runs after parsing and merging, including root files. Deployer filters out root notifications because it records root hashes separately. Optional missing imports are skipped; other failures propagate. Recursive reads share the captured settings.
 
-Deployer only subscribes to `Importing`. Hashing reopens the input path and is not a strict snapshot of parsed bytes.
+Deployer only subscribes to `Loading`. Hashing reopens the input path and is not a strict snapshot of parsed bytes.
 
-Core centralizes parsing, import paths and recursion guards in internal ProfileReader, with a private Context for the current Profile, section and line. Profile.Load remains a facade. After parsing a child, parent Profile.Import merges effective references and records relationships, then Imported notifies before activity cleanup.
+Core centralizes parsing, import paths and recursion guards in internal ProfileReader, with a private Context for the current Profile, section and line. Profile.Load remains a facade. After parsing a child, parent Profile.Import merges effective references and records relationships, then Loaded notifies before activity cleanup.
 
-ProfileOptions exposes Importing/Imported as Action<ProfileContext>. FilePath is the absolute import path, Depth is the loading depth and Referer identifies the direct referring profile. Profile is null before parsing and identifies the child after merging; each notification receives a separate get-only context. Reader shallow-copies options and delegate references, including MaximumDepth and ImportBehavior. Core's ImportBehavior uses the general directive policies None (use the directive's built-in default), Strict (apply directive-specific strict rules), Ignore (treat directives as comments), and Suppress (reject directives). Deployer currently uses None; the import directive's built-in default allows missing files, while Strict requires all direct and recursive imports to exist. Callbacks can throw to abort the whole load but have no return value for silently skipping individual files. Deployer hashes context.FilePath in Importing without registering Imported.
+Loading/Loaded use Action<ProfileContext>: FilePath is the absolute source path, Depth is the active depth, Referer is the direct referring profile or null for a root, and Profile is null before parsing and identifies the parsed source afterward. Each file notification has a separate context. Reader clones the directive collection and its option values at root entry. DirectiveProcessing/DirectiveProcessed surround each directive, permit Argument rewriting and Handled takeover, and preserve the original comment. Import options use None for the built-in optional-file behavior, Strict for required files, Ignore for comment-only handling, and Suppress for rejection before directive callbacks. Deployer uses the import defaults and subscribes only to Loading for child hashes. Callback exceptions abort the entire load.
 
 ## Core Profile declarations and saving
 
 Core separates ordered local statements from the merged effective view. Imports replace effective references and entries identify their actual source declarations. Duplicate local keys still fail; local/import precedence follows reading order. ProfileReader owns loading and ProfileWriter owns saving.
 
-Core Save() without an explicit destination writes changed declarations in the receiver and import subtree back to their respective sources. Explicit paths, streams and text writers output only the receiver's statements. Unchanged files are not rewritten. Multiple outputs are all prepared before individual commits; this is not a cross-file transaction. Deployer only reads manifests and records hashes through Importing; it does not invoke these save entry points.
+Core Save() without an explicit destination writes changed declarations in the receiver and import subtree back to their respective sources. Explicit paths, streams and text writers output only the receiver's statements. Unchanged files are not rewritten. Multiple outputs are all prepared before individual commits; this is not a cross-file transaction. Deployer only reads manifests and records hashes through Loading; it does not invoke these save entry points.
 
 ## Hosting invocation boundaries
 

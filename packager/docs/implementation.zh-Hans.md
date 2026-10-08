@@ -112,7 +112,7 @@ protected override Package.Deb CreatePackage(CommandContext context, Variables v
 
 `EntryCollection.Load` 排除源直属 `.edition`（含显式别名），指向安装根 `.edition` 的文件项也排除；其他子目录文件沿用普通选择规则。`SetVersion` 写入唯一的安装根 `.version` 内存项，权限 `0644`，替换同目标普通及根别名项，不受排除规则影响。全部编码器及 RPM 摘要通过 `Entry.OpenRead()` 读取；子目录中的 `.version` 保持普通载荷行为。
 
-Debug 引用本地 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 构建，Release 引用集中配置的 NuGet 包，两者须提供 `ApplicationManifest`、`Editions.Current` 和 `ProfileOptions.ImportBehavior`；Web 加载通过 `ProfileDirectiveBehavior.Strict` 要求导入文件存在。
+Debug 引用本地 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 构建，Release 引用集中配置的 NuGet 包，两者须提供 `ApplicationManifest`、`Editions.Current` 和 `ProfileOptions.Directives`；Web 加载通过 `ProfileDirectiveBehavior.Strict` 要求导入文件存在。
 
 ## 命令选项模型
 
@@ -500,7 +500,7 @@ http://127.0.0.1:<port>
 
 Definition.cs 提供 Load/Resolve 入口；Definition.Loader.cs 收集声明、组织段落并校验结构；Definition.Resolver.cs 集中合并声明、求值和生成有效模型，按绑定与资源、后端策略、健康检查、请求头、原始指令及基础值解析分区。字段值转换属于 Resolver，不单独拆分 Values 文件；Definition.Model.cs 保存模型类型。
 
-加载通过 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Profile.Load（ImportBehavior=ProfileDirectiveBehavior.Strict），用 Importing/Imported 收集尚未被覆盖的声明及 Profile 实例身份。同一层级的后端池按输入实例整组替换，不能直接枚举最终合并条目。公共字段及层级先校验，随后确定所选托管器覆盖关系，最后仅展开实际消费的值。共享 VariableEvaluator 的 allowEscapes 由 Web 显式启用；其他调用保留原模式。
+加载通过 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Profile.Load（Directives = { ProfileDirectiveOptions.Import(ProfileDirectiveBehavior.Strict) }），用 Loading 收集合并前的引用者声明，Loaded 收集各完成来源（包括根配置），保留 Profile 实例身份。同一层级的后端池按输入实例整组替换，不能直接枚举最终合并条目。公共字段及层级先校验，随后确定所选托管器覆盖关系，最后仅展开实际消费的值。共享 VariableEvaluator 的 allowEscapes 由 Web 显式启用；其他调用保留原模式。
 
 Resolver 生成不可变站点、路径及策略记录；Nginx 生成器建立指令树，校验原始叶指令上下文/基数、静态监听冲突和正则 proxy_pass，再序列化为 UTF-8、Tab、CRLF。安装根是有类型的 ContentPart，不是可被用户文本碰撞的占位符。公共字面值不被当作 Nginx 运行时表达式；不能安全表示的值明确报错。
 

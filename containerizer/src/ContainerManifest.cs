@@ -75,13 +75,12 @@ internal sealed partial class ContainerManifest(bool planning = false)
 	{
 		var result = new ContainerManifest(planning) { InputPath = Path.GetFullPath(path), InputHash = Files.Hash(path) };
 		var declarations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-		ValidateLines(path, declarations);
 
 		var migrations = new SortedDictionary<int, string>();
 		var profile = Profile.Load(path, new ProfileOptions
 		{
-			ImportBehavior = ProfileDirectiveBehavior.Strict,
-			Importing = context => ValidateLines(context.FilePath, declarations),
+			Directives = { ProfileDirectiveOptions.Import(ProfileDirectiveBehavior.Strict) },
+			Loading = context => ValidateLines(context.FilePath, declarations),
 		});
 
 		foreach(var entry in profile.Entries)

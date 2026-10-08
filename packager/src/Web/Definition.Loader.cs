@@ -42,7 +42,7 @@ namespace Zongsoft.Tools.Packager.Web;
 
 partial class Definition
 {
-	/// <summary>通过 Profile 导入回调收集声明及来源，保留覆盖和段落顺序。</summary>
+	/// <summary>通过 Profile 读取回调收集声明及来源，保留覆盖和段落顺序。</summary>
 	private sealed class Loader
 	{
 		#region 成员字段
@@ -62,9 +62,13 @@ partial class Definition
 			{
 				profile = Profile.Load(filePath, new ProfileOptions(false)
 				{
-					ImportBehavior = ProfileDirectiveBehavior.Strict,
-					Importing = context => this.Collect(context.Referer),
-					Imported = context => this.Collect(context.Profile),
+					Directives = { ProfileDirectiveOptions.Import(ProfileDirectiveBehavior.Strict) },
+					Loading = context =>
+					{
+						if(context.Referer != null)
+							this.Collect(context.Referer);
+					},
+					Loaded = context => this.Collect(context.Profile),
 				});
 			}
 			catch(DefinitionException) { throw; }
@@ -72,8 +76,6 @@ partial class Definition
 			{
 				throw DefinitionException.Create("Load", new(filePath), filePath, exception);
 			}
-
-			this.Collect(profile);
 
 			//以 Core 的章节首次出现顺序建立层级，覆盖声明不会改变路由的优先顺序。
 			var root = _scopes[string.Empty];

@@ -52,25 +52,21 @@ internal static class MigrationProfile
 
 		try
 		{
-			Validate(path, migration);
-
 			var options = new ProfileOptions
 			{
-				Importing = context =>
+				Loading = context =>
 				{
 					paths.Push(context.FilePath);
 					Validate(context.FilePath, migration);
 				},
-				Imported = context =>
+				Loaded = context =>
 				{
 					validate?.Invoke(context.Profile);
 					paths.Pop();
 				},
 			};
 
-			var profile = Profile.Load(path, options);
-			validate?.Invoke(profile);
-			return profile;
+			return Profile.Load(path, options);
 		}
 		catch(Exception ex) when(ex is ArgumentException or ProfileException)
 		{

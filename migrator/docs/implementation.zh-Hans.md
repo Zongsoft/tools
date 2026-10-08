@@ -54,3 +54,5 @@ MigrationPlan 使用 Name 保存规范升迁名称，状态文件对应 name；�
 生成端回归覆盖输入、SQL 批次、命名、覆盖恢复和进程交接；执行器回归覆盖计划校验、数据库执行、状态、Amazon S3 pending 及 TDengine 会话。命令见 [README](../README.zh-Hans.md#build-and-test)。
 
 MigrationPrivileges 将 20 项统一能力规范化，并在指纹之前将 Permission 展开为计划中的有效权限数组。驱动合并原生权限并补齐连接、schema、序列依赖，新增授权限定目标数据库。MySQL 检查角色 SHOW GRANTS；PostgreSQL 通过 pg_shdepend 验证角色范围，并检查 DDL 对象所有权；SQL Server 直接授予数据库、schema、对象权限。执行器仅对内部构造的 MigrationPrivilegeException 输出安全的能力上下文，服务端异常仍只输出类型。未来对象和原生粒度限制见[数据库配置参考](../README.zh-Hans.md#database-configuration)。
+
+`MigrationProfile` 使用 `ProfileOptions.Loading` 校验根文件和每个实际导入的文件，使用 `Loaded` 校验解析结果；两类回调都包含根文件。来源栈在读取前入栈、成功完成后出栈，使失败诊断保留实际来源。导入使用内置默认行为，缺失文件跳过，最大深度为 64（包含根文件）。

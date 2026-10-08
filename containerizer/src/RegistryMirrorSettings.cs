@@ -50,7 +50,7 @@ internal static class RegistryMirrorSettings
 			return mirrors;
 
 		ContainerManifest.ValidateLines(path, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
-		var profile = Profile.Load(path, new ProfileOptions { ImportBehavior = ProfileDirectiveBehavior.Suppress });
+		var profile = Profile.Load(path, new ProfileOptions { Directives = { ProfileDirectiveOptions.Import(ProfileDirectiveBehavior.Suppress) } });
 		if(profile.Sections.Count != 0)
 			throw new ContainerizationException(2, string.Format(Properties.Resources.Mirrors_File_Message, path));
 

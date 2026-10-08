@@ -56,7 +56,7 @@ dry-run/offline/explain/report、lockFile/locked、previous/prune 的行为见�
 
 类型的 XML 注释说明主要功能与职责边界；流程注释重点解释回溯、状态隔离、执行顺序和所有权等不直观约定。访问级别遵循最小可见性，类内实现保持 private，跨类型生产协作才使用相应入口，不为测试扩大访问范围。
 
-实现细节见 [中文](docs/implementation.zh-Hans.md) / [English](docs/implementation.md)。优先复用已引用的 Zongsoft.Core 和 NuGet API：CommandLine、Profile/集合、DictionaryExtension，以及 NuspecReader.GetContentFiles、NuGet.Frameworks、JsonRuntimeFormat/RuntimeGraph。Core 的 ProfileReader 内置导入，递归共享读取器并保护循环及 ProfileOptions.MaximumDepth 指定的层数上限（默认 64，正整数，根文件计一层）。ProfileOptions.Importing/Imported 均为 Action<ProfileContext>，上下文提供 FilePath、Depth、Referer、Profile；前置 Profile 为 null，后置为合并后的子文件，前后分别构造。deployer 通过 Importing 的 context.FilePath 记录导入文件哈希，根文件单独记录。Core 的 ImportBehavior 使用通用指令策略 None、Strict、Ignore、Suppress；deployer 当前使用 None，沿用导入指令允许缺失文件的内置默认行为。回调抛异常终止整个加载，不提供逐文件跳过的返回值。合并按读取顺序替换有效引用并保留本地声明；ProfileWriter 按来源保存，deployer 不调用保存入口。
+实现细节见 [中文](docs/implementation.zh-Hans.md) / [English](docs/implementation.md)。优先复用 Core 与 NuGet API。Core ProfileReader 内置 import，ProfileOptions.Directives 按名称配置 ProfileDirectiveOptions；ImportOptions.MaximumDepth=0 使用默认 64，根文件计一层，循环检查独立。Loading/Loaded 文件回调覆盖根及子文件；DirectiveProcessing/DirectiveProcessed 指令回调支持 Argument 改写及 Handled 接管，原始注释仍用于保存。deployer 在 Loading 中仅对 Referer 非 null 的来源记录哈希，根描述文件单独记录，不订阅其他回调；采用默认导入行为允许缺失文件。根读取固定集合、选项及委托快照，异常终止并清理。合并按读取顺序替换有效引用并保留声明，deployer 不调用保存入口。
 
 RID 资源使用 src/Resources/ 中固定的 dotnet/runtime v10.0.0 图谱，禁止从 MSBuildToolsPath 或运行机器 SDK 目录取图谱。图谱及许可证等第三方文件保留上游原始字节，不转换换行、编码或缩进；.gitattributes 的 -text 防止 Git 自动转换。更新快照时同步双语实现文档的版本/哈希及上游许可证，核对上游原件哈希并验证竞争候选顺序。通用包版本在仓库根 Directory.Packages.props 维护，NuGet.* 专用依赖在本项目通过 VersionOverride 维护。
 
