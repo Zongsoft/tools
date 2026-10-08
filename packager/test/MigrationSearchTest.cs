@@ -9,7 +9,7 @@ using Xunit;
 
 namespace Zongsoft.Tools.Packager.Tests;
 
-public sealed partial class MigratorPackageTest
+public sealed partial class MigrationPackageTest
 {
 	#region 父目录查找
 	[Theory]
@@ -28,9 +28,9 @@ public sealed partial class MigratorPackageTest
 			Pair(directory, "bootstrap", null, "2.7.1", "linux-x64");
 
 		Assert.NotEqual(Environment.CurrentDirectory, source);
-		var migrator = Migrator.Load(package, input);
-		Assert.Equal(selected.Archive, migrator.Archive);
-		Assert.Equal(selected.Script, migrator.Script);
+		var migration = Migration.Load(package, input);
+		Assert.Equal(selected.Archive, migration.Archive);
+		Assert.Equal(selected.Script, migration.Script);
 	}
 
 	[Fact]
@@ -45,19 +45,19 @@ public sealed partial class MigratorPackageTest
 		var localMigration = Pair(directory, "hosting/web/default/.migration/zongsoft", null, "2.7.1", "linux-x64");
 		var local = Pair(directory, "hosting/web/default/zongsoft", null, "2.7.1", "linux-x64");
 
-		Assert.Equal(local.Archive, Migrator.Load(package, "zongsoft").Archive);
+		Assert.Equal(local.Archive, Migration.Load(package, "zongsoft").Archive);
 		File.Delete(local.Archive);
 		File.Delete(local.Script);
-		Assert.Equal(localMigration.Archive, Migrator.Load(package, "zongsoft").Archive);
+		Assert.Equal(localMigration.Archive, Migration.Load(package, "zongsoft").Archive);
 		File.Delete(localMigration.Archive);
 		File.Delete(localMigration.Script);
-		Assert.Equal(hosting.Archive, Migrator.Load(package, "zongsoft").Archive);
+		Assert.Equal(hosting.Archive, Migration.Load(package, "zongsoft").Archive);
 		File.Delete(hosting.Archive);
 		File.Delete(hosting.Script);
-		Assert.Equal(hostingMigration.Archive, Migrator.Load(package, "zongsoft").Archive);
+		Assert.Equal(hostingMigration.Archive, Migration.Load(package, "zongsoft").Archive);
 		File.Delete(hostingMigration.Archive);
 		File.Delete(hostingMigration.Script);
-		Assert.Equal(rootMigration.Archive, Migrator.Load(package, "zongsoft").Archive);
+		Assert.Equal(rootMigration.Archive, Migration.Load(package, "zongsoft").Archive);
 	}
 
 	[Theory]
@@ -73,7 +73,7 @@ public sealed partial class MigratorPackageTest
 		Pair(directory, "hosting/.migration/zongsoft", null, "2.7.1", "linux-x64");
 		File.Delete(partial.Script);
 
-		var error = Assert.Throws<FileNotFoundException>(() => Migrator.Load(package, "zongsoft"));
+		var error = Assert.Throws<FileNotFoundException>(() => Migration.Load(package, "zongsoft"));
 		Assert.Equal(partial.Script, error.FileName);
 	}
 
@@ -84,7 +84,7 @@ public sealed partial class MigratorPackageTest
 		var package = Create("tar", directory);
 		Pair(directory, ".migration/zongsoft", null, "2.7.1", "linux-x64");
 
-		Assert.Throws<FileNotFoundException>(() => Migrator.Load(package, "./zongsoft"));
+		Assert.Throws<FileNotFoundException>(() => Migration.Load(package, "./zongsoft"));
 	}
 
 	[Fact]
@@ -100,7 +100,7 @@ public sealed partial class MigratorPackageTest
 		Pair(directory, "hosting/web/nested/" + name, "Enterprise", "2.7.1", "linux-x64");
 		var prefix = name + "-Enterprise(migrate)@2.7.1_linux-x64";
 
-		var error = Assert.Throws<FileNotFoundException>(() => Migrator.Load(package, name));
+		var error = Assert.Throws<FileNotFoundException>(() => Migration.Load(package, name));
 		Assert.Equal(Path.Combine(source, prefix + ".tar.gz"), error.FileName);
 		Assert.Contains(prefix + ".tar.gz", error.Message);
 		Assert.Contains(prefix + ".sh", error.Message);
@@ -130,7 +130,7 @@ public sealed partial class MigratorPackageTest
 		var missingPath = missing == "archive" ? near.Archive : near.Script;
 		File.Delete(missingPath);
 
-		var error = Assert.Throws<FileNotFoundException>(() => Migrator.Load(package, "bootstrap"));
+		var error = Assert.Throws<FileNotFoundException>(() => Migration.Load(package, "bootstrap"));
 		Assert.Equal(missingPath, error.FileName);
 		Assert.Contains(missingPath, error.Message);
 		Assert.Empty(package.Entries);
@@ -152,7 +152,7 @@ public sealed partial class MigratorPackageTest
 		if(failure == "malformed-gzip")
 			File.WriteAllText(near.Archive, "invalid gzip archive");
 
-		var error = Assert.Throws<InvalidDataException>(() => Migrator.Load(package, "bootstrap"));
+		var error = Assert.Throws<InvalidDataException>(() => Migration.Load(package, "bootstrap"));
 		if(failure != "malformed-gzip")
 			Assert.Contains(near.Archive, error.Message);
 		Assert.Empty(package.Entries);
@@ -177,17 +177,17 @@ public sealed partial class MigratorPackageTest
 
 		if(!OperatingSystem.IsWindows() && input.Contains('\\'))
 		{
-			Assert.Throws<ArgumentException>(() => Migrator.Load(package, input));
+			Assert.Throws<ArgumentException>(() => Migration.Load(package, input));
 			Assert.Empty(package.Entries);
 			return;
 		}
 
-		var error = Assert.Throws<FileNotFoundException>(() => Migrator.Load(package, input));
+		var error = Assert.Throws<FileNotFoundException>(() => Migration.Load(package, input));
 		Assert.Equal(Path.Combine(source, "bootstrap(migrate)@2.7.1_linux-x64.tar.gz"), error.FileName);
 		var pair = Pair(directory, "hosting/web/bootstrap", null, "2.7.1", "linux-x64");
-		var migrator = Migrator.Load(package, input);
-		Assert.Equal(pair.Archive, migrator.Archive);
-		Assert.Equal(pair.Script, migrator.Script);
+		var migration = Migration.Load(package, input);
+		Assert.Equal(pair.Archive, migration.Archive);
+		Assert.Equal(pair.Script, migration.Script);
 	}
 	#endregion
 
@@ -203,8 +203,8 @@ public sealed partial class MigratorPackageTest
 		var source = SetSearchSource(directory, package);
 		directory.Write("hosting/web/zongsoft.daemon.service", "[Unit]\nDescription=Hosting\n[Service]\nExecStart=/bin/true\n");
 		var pair = Pair(directory, "bootstrap", "Enterprise", "2.7.1", "linux-x64");
-		package.Migrator = Migrator.Load(package, "bootstrap");
-		package.Migrator.Attach(package);
+		package.Migration = Migration.Load(package, "bootstrap");
+		package.Migration.Attach(package);
 		package.Scriptor.Script();
 		package.Pack(source, true);
 
@@ -213,13 +213,15 @@ public sealed partial class MigratorPackageTest
 		Assert.Equal(2, migration.Length);
 		Assert.Equal(File.ReadAllBytes(pair.Archive), Assert.Single(migration, entry => entry.Key.EndsWith(".tar.gz", StringComparison.Ordinal)).Value);
 		Assert.Equal(File.ReadAllBytes(pair.Script), Assert.Single(migration, entry => entry.Key.EndsWith(".sh", StringComparison.Ordinal)).Value);
+
 		var modes = ReadMigrationModes(source, format);
 		Assert.Equal((UnixFileMode)384, Assert.Single(modes, entry => entry.Key.EndsWith(Path.GetFileName(pair.Archive), StringComparison.Ordinal)).Value);
 		Assert.Equal((UnixFileMode)493, Assert.Single(modes, entry => entry.Key.EndsWith(Path.GetFileName(pair.Script), StringComparison.Ordinal)).Value);
+
 		var script = ReadInstalled(source, format);
 		AssertOrdered(script, "ExecStartPre=/bin/sh", Path.GetFileName(pair.Script) + "\" apply", "systemctl start");
 		Assert.Contains(Path.GetFileName(pair.Script) + "\" check", script);
-		Assert.Contains(Migrator.StateDirectory(package), script);
+		Assert.Contains(Migration.StateDirectory(package), script);
 		Assert.Contains("set -e", script);
 		Assert.DoesNotContain("apply || true", script);
 	}

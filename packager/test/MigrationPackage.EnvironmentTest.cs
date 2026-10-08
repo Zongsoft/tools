@@ -13,7 +13,7 @@ using Zongsoft.Configuration.Profiles;
 
 namespace Zongsoft.Tools.Packager.Tests;
 
-public sealed partial class MigratorPackageTest
+public sealed partial class MigrationPackageTest
 {
 	[Fact]
 	public async Task Command_EnvironmentSourceIsFixedAndIndependentOfWorkingDirectoryAsync()
@@ -26,6 +26,7 @@ public sealed partial class MigratorPackageTest
 		directory.Write("source/application.txt", "selected source payload");
 		directory.Write("wrong/.version", "wrong@9.9.9");
 		directory.Write("wrong/application.txt", "wrong source payload");
+
 		var previousDirectory = Environment.CurrentDirectory;
 		var previousSource = Environment.GetEnvironmentVariable("zongsoft_env_source");
 		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
@@ -36,6 +37,7 @@ public sealed partial class MigratorPackageTest
 			Environment.CurrentDirectory = Path.Combine(directory.Path, "working");
 			Environment.SetEnvironmentVariable("zongsoft_env_source", "../source");
 			Terminal.Default = DispatchProxy.Create<ITerminal, RecordingTerminal>();
+
 			var command = new TarCommand();
 			var arguments = new[] { "tar", "--source:$(zongsoft_env_source)", "--output:$(zongsoft_env_output)", "--platform:Linux", "--architecture:X64", "--framework:net10.0", "--daemon:disabled", "$(zongsoft_env_payload)" };
 			var context = new CommandContext(new CommandExecutor(), CommandLine.Parse(CommandLine.Get(arguments))[0], command, null);
@@ -63,6 +65,7 @@ public sealed partial class MigratorPackageTest
 		directory.Write(".env", "zongsoft_env_only_source=source\n");
 		directory.Write("source/.version", "zongsoft.daemon@1.0.0");
 		directory.Write("source/application.txt", "payload");
+
 		var previousDirectory = Environment.CurrentDirectory;
 		var previousSource = Environment.GetEnvironmentVariable("zongsoft_env_only_source");
 		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
@@ -73,9 +76,9 @@ public sealed partial class MigratorPackageTest
 			Environment.CurrentDirectory = directory.Path;
 			Environment.SetEnvironmentVariable("zongsoft_env_only_source", null);
 			Terminal.Default = DispatchProxy.Create<ITerminal, RecordingTerminal>();
+
 			var command = new TarCommand();
 			var context = new CommandContext(new CommandExecutor(), CommandLine.Parse("tar --source:$(zongsoft_env_only_source) --output:out --platform:Linux --architecture:X64 --daemon:disabled application.txt")[0], command, null);
-
 			var error = await Assert.ThrowsAsync<InvalidOperationException>(async () => await ((ICommand)command).ExecuteAsync(context, TestContext.Current.CancellationToken));
 
 			Assert.Contains("zongsoft_env_only_source", error.Message, StringComparison.Ordinal);
@@ -97,6 +100,7 @@ public sealed partial class MigratorPackageTest
 		directory.Write(".version", "zongsoft.daemon@1.0.0");
 		directory.Write(".env", "#@import .env\n");
 		directory.Write("application.txt", "payload");
+
 		var artifact = directory.Write("out/zongsoft.daemon@1.0.0-x64.tar.gz", "previous archive");
 		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
 		var previousTerminal = (ITerminal)terminalField.GetValue(null);

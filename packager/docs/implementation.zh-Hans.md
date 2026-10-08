@@ -40,7 +40,7 @@ hosting 当前脚本省略 `--framework`，框架由工具从 Variables 读取�
 | `Generator.Tar.cs` | 写入 gzip PAX tar、`install.sh`、`uninstall.sh`。 |
 | `Generator.Deb.cs` | 写入 Debian `ar` 容器、`control.tar.gz`、`data.tar.gz`。 |
 | `Generator.Rpm.cs` | 写入 RPM lead、signature/header、metadata header、gzip cpio payload。 |
-| `Migrator.cs` | 按最终应用身份定位外部升迁产物，验证 PAX，原样收录并提供安装协调脚本。 |
+| `Migration.cs` | 按最终应用身份定位外部升迁产物，验证 PAX，原样收录并提供安装协调脚本。 |
 | `ApplicationHost.cs` | 一次解析应用宿主、已有或待生成服务及最终 listen，服务生成和 Web 的 ~ 共用此结果。 |
 | `Scriptor.Systemd.cs` | 生成或收集 systemd 单元文件，组合应用、升迁和 Web 生命周期。 |
 | `Web/Definition*.cs` | 用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Profile 收集来源声明，处理整体后端覆盖、继承、变量及字段校验。 |
@@ -74,10 +74,10 @@ flowchart TD
     C --> D["Select and validate identity, then create invocation variables"]
     D --> E["Normalize source/output paths"]
     E --> F["Create Package.Tar/Deb/Rpm"]
-    F --> M["Locate and validate optional migrator artifacts"]
+    F --> M["Locate and validate optional migration artifacts"]
     M --> G["Resolve application host and final listen"]
     G --> H["Load ordinary package entries"]
-    H --> N["Attach unchanged migrator archive and launcher"]
+    H --> N["Attach unchanged migration archive and launcher"]
     N --> W["Load Web Profile, generate and attach hoster configuration"]
     W --> L["Generate service and lifecycle scripts; validate targets"]
     L --> V["Replace installation root .version with memory entry"]
@@ -129,7 +129,7 @@ Debug 引用本地 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/ma
 | 选项 | 默认值 | 说明 |
 | --- | --- | --- |
 | `--source` | 当前目录 | 输入目录。 |
-| `--migrator` | 空 | 升迁制作时的输入名称，可带目录；裸名称从源目录向父目录查找，每层还查直属 `.migration/`，按最终 Edition、Version、Runtime 匹配。 |
+| `--migration` | 空 | 升迁制作时的输入名称，可带目录；裸名称从源目录向父目录查找，每层还查直属 `.migration/`，按最终 Edition、Version、Runtime 匹配。 |
 | `--output` | `source` | 始终作为输出目录；相对路径基于 `source`，不支持指定文件名。 |
 | `--exclude` | 空 | 加载打包项时跳过的文件模式列表，多个模式用逗号或分号分隔。 |
 | `--edition` | Current 或唯一 Edition | 产品 Edition，参与包名。 |
@@ -176,7 +176,7 @@ systemd 与生命周期脚本选项：
 
 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 命令描述符将可能含变量的选项保留为字符串；`source` 先由完整原始变量集展开。显式 `name`、`edition`、`version` 随后展开，`version` 再转为 `System.Version`，用于从源目录的 `.edition` 清单文件或 `.version` 版本标识文件选择版本。确定最终身份后，`platform`、`architecture` 与 `overwrite` 在使用时展开并转换。裸 `--overwrite` 仍为 true，未指定时为 false。
 
-身份仍由源目录的 `.edition` 清单文件或 `.version` 版本标识文件与显式 name/edition/version 选项共同确定，不从同名环境变量或 `.env` 变量隐式替代身份；显式选项可引用 `.env` 中的其他变量。最终身份及已解析的 source/output 覆盖变量集合。`--migrator` 仍须显式启用，`--overwrite` 可从环境变量或 `.env` 提供并由命令行覆盖。
+身份仍由源目录的 `.edition` 清单文件或 `.version` 版本标识文件与显式 name/edition/version 选项共同确定，不从同名环境变量或 `.env` 变量隐式替代身份；显式选项可引用 `.env` 中的其他变量。最终身份及已解析的 source/output 覆盖变量集合。`--migration` 仍须显式启用，`--overwrite` 可从环境变量或 `.env` 提供并由命令行覆盖。
 
 ### 变量语法
 
@@ -243,7 +243,7 @@ dotnet-pack deb \
 - `Dependencies`
 - `Entries`
 - `Scripts`
-- `Migrator`
+- `Migration`
 
 包名规则：
 
@@ -1077,9 +1077,9 @@ RPM 的单比较使用普通 flags/name/version 条目；有限区间转换为 `
 
 升迁由独立的 [migrator 工具](../../migrator/README.zh-Hans.md) 预先制作。packager 不解析 `.migration`/`.ini`、SQL 或执行计划，也不携带原生执行器。
 
-`--migrator` 指定制作升迁时的输入名称，可带目录，例如 `--migrator:../../packages/zongsoft`。
+`--migration` 指定制作升迁时的输入名称，可带目录，例如 `--migration:../../packages/zongsoft`。
 
-先展开变量，再判断是否包含目录分隔符 `/` 或 `\`：不包含时，从最终打包源目录（`--source`）逐级向父目录查找，直到文件系统根目录；每层先查目录本身，再查直属 `.migration/`，不遍历其他子目录。包含分隔符时只定位显式目录：相对路径基于源目录，绝对路径直接使用，既不向上查找，也不隐式检查 `.migration/`。源目录为 `hosting/web/default/`、产物位于 `hosting/.migration/` 时，`--migrator:zongsoft` 即可找到；`--migrator:./zongsoft` 只查源目录。查找起点不是运行命令时的工作目录。
+先展开变量，再判断是否包含目录分隔符 `/` 或 `\`：不包含时，从最终打包源目录（`--source`）逐级向父目录查找，直到文件系统根目录；每层先查目录本身，再查直属 `.migration/`，不遍历其他子目录。包含分隔符时只定位显式目录：相对路径基于源目录，绝对路径直接使用，既不向上查找，也不隐式检查 `.migration/`。源目录为 `hosting/web/default/`、产物位于 `hosting/.migration/` 时，`--migration:zongsoft` 即可找到；`--migration:./zongsoft` 只查源目录。查找起点不是运行命令时的工作目录。
 
 文件前缀为 `<name>[-<edition>](migrate)@<version>_<RID>`，名称原样使用，无 Edition 时省略对应部分。选项填写制作升迁时的 `--name`，不包含自动生成的 `(migrate)` 标记。不能填写 Edition、版本、RID、扩展名、通配符或路径列表。
 
@@ -1094,7 +1094,7 @@ zongsoft-enterprise(migrate)@1.0.0_linux-x64.sh
 
 两个文件原样存入安装根 `.migration/`，不展开归档；脚本为 0755，压缩包为 0600。升迁启动脚本执行时另建临时目录，归档内容直接展开到该目录根部，结束后清理，不在安装目录中增加一层 `.migration/`。与载荷目标冲突时报错。安装时调用脚本 `apply` 并传入 `/var/lib/<包名>/packager`；失败阻止启动。systemd 的 `ExecStartPre` 调用同一脚本 `check`，只比较完成标记，不解压、不连接服务。无 daemon 时仍执行升迁，DESTDIR 暂存不执行钩子，卸载保留状态与数据库/桶。目标机需要 POSIX sh、tar/gzip、cmp 和运行器所需系统库；详见升迁指南。
 
-定位与归档校验在 `Migrator.Load` 中分离：私有 `Locate` 方法沿 `DirectoryInfo.Parent` 遍历目录，包含根目录，按目录本身、直属 `.migration/` 的顺序记录检查位置；选中同目录配套后由 `Validate` 检查 PAX 元数据。显式目录只检查一次，不隐式查找子目录。所有定位与校验均先于产物收录和制包。
+定位与归档校验在 `Migration.Load` 中分离：私有 `Locate` 方法沿 `DirectoryInfo.Parent` 遍历目录，包含根目录，按目录本身、直属 `.migration/` 的顺序记录检查位置；选中同目录配套后由 `Validate` 检查 PAX 元数据。显式目录只检查一次，不隐式查找子目录。所有定位与校验均先于产物收录和制包。
 
 ## 验证建议
 

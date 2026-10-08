@@ -47,7 +47,7 @@ public sealed class PackageCommandTest
 
 		try
 		{
-			Terminal.Default = DispatchProxy.Create<ITerminal, MigratorPackageTest.RecordingTerminal>();
+			Terminal.Default = DispatchProxy.Create<ITerminal, MigrationPackageTest.RecordingTerminal>();
 			var executor = new CommandExecutor();
 			executor.Root.Children.Add(command);
 
@@ -115,7 +115,7 @@ public sealed class PackageCommandTest
 		{
 			Environment.SetEnvironmentVariable("framework", null);
 			Environment.SetEnvironmentVariable("compilation", null);
-			Terminal.Default = DispatchProxy.Create<ITerminal, MigratorPackageTest.RecordingTerminal>();
+			Terminal.Default = DispatchProxy.Create<ITerminal, MigrationPackageTest.RecordingTerminal>();
 			var executor = new CommandExecutor();
 			executor.Root.Children.Add(command);
 			Assert.False(CommandDescriptor.Describe(command.GetType()).Options["framework"].Required);
@@ -180,7 +180,7 @@ public sealed class PackageCommandTest
 
 		try
 		{
-			Terminal.Default = DispatchProxy.Create<ITerminal, MigratorPackageTest.RecordingTerminal>();
+			Terminal.Default = DispatchProxy.Create<ITerminal, MigrationPackageTest.RecordingTerminal>();
 			var executor = new CommandExecutor();
 			executor.Root.Children.Add(command);
 

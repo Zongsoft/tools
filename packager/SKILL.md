@@ -15,7 +15,7 @@ description: 修改打包命令、应用版本管理、载荷路径、三种包�
 - 依赖：Dependency 解析统一 name[:range]，保留原生端点、开闭边界及 OR 分组；[v) 等同 [v,)，区间内逗号不可分组。Debian 用分配律展开替代项（单组最多 1024 个关系组），RPM 用 with/or 与 RichDependencies 能力；~ /^ 端点声明 TildeInVersions / CaretInVersions。版本比较交给目标系统，虚拟提供者按各平台原生语义；其他关系字段不复用区间转换。
 - 安装及服务：ApplicationHost 固定共享的宿主/listen 结果，Scriptor.Systemd 组合生命周期；Generated 宿主的有效 Listen 同时写入三格式包头，既有服务、禁用宿主及空值不声明，不增加元数据载荷文件；推演安装、升级、覆盖和最终卸载，保留 Debian/RPM 阶段差异。
 - Web 托管：Web/Definition、Configurator、Installation；严格导入、后端整组替换和有效值求值顺序不可颠倒。生成 .web/nginx 配置，Delivered 独立于生命周期和激活开关；测试采用临时目录与 Nginx/systemctl 替身，不运行真实安装。字段、模块要求和容器化约定见 [Web 指南](docs/web.zh-Hans.md)。
-- 外部升迁：Migrator.cs；按名称和最终应用身份定位 `<name>[-<edition>](migrate)@<version>_<RID>` 原样产物，name 原样使用，Edition 可省略，安装调用其脚本。变量展开后，裸名称从 source 逐级查到根，每层先查目录本身再查直属 `.migration/`；带 / 或 \ 的路径只查显式目录，./ 可限定源目录。两文件都缺失才查下一位置，半套或元数据无效即失败，不跨目录拼配；测试覆盖查找起点、最近目录、终止条件和三格式原样收录。生成/执行逻辑归独立 [migrator](../migrator/SKILL.md)。
+- 外部升迁：Migration.cs；按名称和最终应用身份定位 `<name>[-<edition>](migrate)@<version>_<RID>` 原样产物，name 原样使用，Edition 可省略，安装调用其脚本。变量展开后，裸名称从 source 逐级查到根，每层先查目录本身再查直属 `.migration/`；带 / 或 \ 的路径只查显式目录，./ 可限定源目录。两文件都缺失才查下一位置，半套或元数据无效即失败，不跨目录拼配；测试覆盖查找起点、最近目录、终止条件和三格式原样收录。生成/执行逻辑归独立 [migrator](../migrator/SKILL.md)。
 - 搜索与文本：Utility.Search 调用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Searcher；TextSource 解释 file:/text:，pre/post 为文件列表。
 
 变更先定位职责，保留用户修改。通用变量解析通过 tools/.shared 源码链接，升迁协议仍仅通过产物交接。新增诊断用双语资源并运行 ResXFileCodeGenerator。遵守 CRLF/Tab、版权头和区域分类规范；测试不编写本地化断言。

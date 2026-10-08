@@ -222,16 +222,16 @@
   <data name="DebianRelationshipInvalid.Message" xml:space="preserve">
     <value>Debian 关系字段“{0}”格式不正确。</value>
   </data>
-  <data name="MigratorNameInvalid.Message" xml:space="preserve">
+  <data name="MigrationNameInvalid.Message" xml:space="preserve">
     <value>请指定升迁器制作时的输入名称（可带目录），不要包含 Edition、版本号、运行平台或文件扩展名。</value>
   </data>
-  <data name="MigratorArtifactMissing.Message" xml:space="preserve">
+  <data name="MigrationArtifactMissing.Message" xml:space="preserve">
     <value>未找到本次打包所需的升迁产物：{0}</value>
   </data>
-  <data name="MigratorMetadataInvalid.Message" xml:space="preserve">
+  <data name="MigrationMetadataInvalid.Message" xml:space="preserve">
     <value>升迁包 {0} 必须包含 Migrator 元数据，且目标运行平台为 {1}。</value>
   </data>
-  <data name="MigratorArtifactsNotFound.Message" xml:space="preserve">
+  <data name="MigrationArtifactsNotFound.Message" xml:space="preserve">
     <value>未找到升迁产物“{0}”和“{1}”。{3}已检查目录：{2}</value>
   </data>
   <data name="Web.Field.Message" xml:space="preserve"><value>未知或格式错误的 Web 字段：{0}。</value></data>

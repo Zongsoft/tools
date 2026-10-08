@@ -99,7 +99,7 @@ public abstract partial class Package
 	public string[] Dependencies { get; set; }
 	public EntryCollection Entries { get; }
 	public InstallScripts Scripts { get; set; }
-	public Migrator Migrator { get; set; }
+	public Migration Migration { get; set; }
 	public IScriptor Scriptor { get; protected set; }
 	#endregion
 

@@ -477,7 +477,7 @@ SQL checksums only verify that packaged files match the current plan before any 
 
 ## Packager integration
 
-Use `--migrator:../../.migration/zongsoft` in hosting/web/default packaging commands, or `--migrator:../.migration/zongsoft` in daemon. Packager uses its final Edition, version and RID with the same artifact naming rule to locate both artifacts. Missing companions fail without fallback. Installation packages include both files unchanged; installers pass `/var/lib/<package-name>/packager` and prevent service startup on failure. This tool does not modify existing host commands or connection settings.
+Use `--migration:../../.migration/zongsoft` in hosting/web/default packaging commands, or `--migration:../.migration/zongsoft` in daemon. Packager uses its final Edition, version and RID with the same artifact naming rule to locate both artifacts. Missing companions fail without fallback. Installation packages include both files unchanged; installers pass `/var/lib/<package-name>/packager` and prevent service startup on failure. This tool does not modify existing host commands or connection settings.
 
 <a id="build-and-test"></a>
 

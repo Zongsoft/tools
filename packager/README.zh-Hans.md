@@ -145,7 +145,7 @@ deploy.cmd
 
 ### 第 2 步：生成安装包
 
-直接在宿主目录中制包，未指定 `--source` 时源目录就是当前目录，位置参数从中挑选载荷。也可运行宿主 [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd)：独立脚本默认 tar、Release、x64，只打包已有文件。当前 Web 脚本的环境提示未将输入值赋回 `environment`，因此运行前设置 `Environment=production`，选择 `deb`、版本 `1.0.0`，升迁提示留空。下面是对应的核心制包命令（省略空的 Edition 和 migrator 选项）：
+直接在宿主目录中制包，未指定 `--source` 时源目录就是当前目录，位置参数从中挑选载荷。也可运行宿主 [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd)：独立脚本默认 tar、Release、x64，只打包已有文件。以下示例选择 `deb`、版本 `1.0.0`、环境 `production`，升迁提示留空。下面是对应的核心制包命令（省略空的 `--edition` 和 `--migration` 选项）：
 
 ```cmd
 dotnet-pack deb ^
@@ -292,7 +292,7 @@ dotnet-pack rpm <选项...> [打包项...]
 | 选项 | 默认值 | 说明 |
 | --- | --- | --- |
 | `--web:<hoster[:filepath]>` | 空 | 生成 Web 托管器配置；当前支持 `nginx`，默认读取 `source/web.profile`。见 [Web 托管配置](#web-托管配置)。 |
-| `--migrator:<name>` | 空 | 收录升迁产物的输入名称，可带目录。见[升迁产物集成](#升迁产物集成)。 |
+| `--migration:<name>` | 空 | 收录升迁产物的输入名称，可带目录。见[升迁产物集成](#升迁产物集成)。 |
 | `--installing` 等 | 自动生成 | 生命周期钩子及前置/后置片段，见[生命周期脚本](#生命周期脚本)。 |
 
 ### 包依赖与关系
@@ -792,7 +792,7 @@ server = http://app:8069
 
 升迁（数据库、存储等的结构与数据变更）由独立的 [migrator 工具](../migrator/README.zh-Hans.md)预先制作。本打包工具只负责把已制作好的 **升迁归档** 和配套 **启动脚本** 收录进安装包：它不解析 `.migration`/`.ini`、SQL 或执行计划，也不携带原生执行器。
 
-使用 `--migrator:<名称或路径>` 启用。例如源目录为 `hosting/web/default/`、产物位于 `hosting/.migration/` 时，只需指定 `--migrator:zongsoft`。不指定该选项或提供空值时，不启用升迁集成。
+使用 `--migration:<名称或路径>` 启用。例如源目录为 `hosting/web/default/`、产物位于 `hosting/.migration/` 时，只需指定 `--migration:zongsoft`。不指定该选项或提供空值时，不启用升迁集成。
 
 ### 产物命名
 
@@ -869,7 +869,7 @@ $(name)
 - 命令先保留原始选项文本。定位 `source` 后，显式提供的 `name`、`edition`、`version` 先展开，再用于源目录的 `.edition` 清单文件或 `.version` 版本标识文件校验及版本转换；`platform`、`architecture` 和 `overwrite` 也先展开再转换。
 - `name`、`edition`、`version` 只由源目录的 `.edition` 清单文件或 `.version` 版本标识文件和显式身份选项决定，同名的环境变量或 `.env` 变量不能替代身份；但显式选项可以引用 `.env` 中的变量。尚未从源目录的 `.edition` 清单文件或 `.version` 版本标识文件获得的身份值不能用于定位该源目录。
 - 最终身份以及解析后的 `source`、`output` 会覆盖变量集合中的同名值。
-- `--migrator` 必须显式启用；`--overwrite` 可由环境变量或 `.env` 提供，再由命令行覆盖。
+- `--migration` 必须显式启用；`--overwrite` 可由环境变量或 `.env` 提供，再由命令行覆盖。
 
 可以传入字面量 `$(APP_VERSION)` 或 `%APP_VERSION%` 由打包器展开（在 Bash 中须加单引号，避免 Shell 抢先解释），也可以直接让 Shell 展开：
 
@@ -1056,7 +1056,7 @@ RPM 的 `PACKAGER` 标签（1015）保存的是 `--maintainer` 维护者信息�
 3. **确认软件包身份。** 检查 `--name`、`--version`、可选的 `--edition`、平台和架构；确认生成的服务标识、`--install-path` 与 `--listen` 地址符合目标环境。
 4. **检查生成物。** 使用 `tar -tzf`、`dpkg-deb --info`/`--contents` 或 `rpm -qip`/`-qlp`/`-qp --scripts` 检查文件和元数据；包会管理服务时，同时复核生命周期脚本和 systemd 单元。
 5. **在预发布环境安装验证。** 测试安装、服务启动、配置路径和卸载行为；可对 tar 包使用 `DESTDIR`，或使用一次性主机。记录环境相关配置，不依赖只有生产机才具备的隐式条件。
-6. **谨慎发布到生产。** 生产安装前备份应用数据并确认恢复步骤。启用 `--migrator` 后，安装会执行升迁，可能修改数据库和 Amazon S3 桶；不同版本的软件包之间要保留同一个升迁状态目录。
+6. **谨慎发布到生产。** 生产安装前备份应用数据并确认恢复步骤。启用 `--migration` 后，安装会执行升迁，可能修改数据库和 Amazon S3 桶；不同版本的软件包之间要保留同一个升迁状态目录。
 
 > 💡 提示：`--overwrite` 只会替换输出目录中已有的安装包文件，不会覆盖或更新已经安装的应用。
 

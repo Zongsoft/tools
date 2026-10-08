@@ -85,7 +85,7 @@ public sealed class ListenerMetadataTest
 
 		try
 		{
-			Terminal.Default = DispatchProxy.Create<ITerminal, MigratorPackageTest.RecordingTerminal>();
+			Terminal.Default = DispatchProxy.Create<ITerminal, MigrationPackageTest.RecordingTerminal>();
 			var executor = new CommandExecutor();
 			executor.Root.Children.Add(command);
 			return Assert.IsType<string>(await executor.ExecuteAsync(Utility.FormatCommand(format, arguments), cancellation: TestContext.Current.CancellationToken));

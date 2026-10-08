@@ -42,10 +42,10 @@ using System.Text.RegularExpressions;
 namespace Zongsoft.Tools.Packager;
 
 /// <summary>定位并集成独立升迁工具的既有产物。</summary>
-public sealed class Migrator
+public sealed class Migration
 {
 	#region 构造函数
-	private Migrator(string archive, string script)
+	private Migration(string archive, string script)
 	{
 		this.Archive = archive;
 		this.Script = script;
@@ -58,11 +58,11 @@ public sealed class Migrator
 	#endregion
 
 	#region 公共方法
-	public static Migrator Load(Package package, string name)
+	public static Migration Load(Package package, string name)
 	{
 		ArgumentNullException.ThrowIfNull(package);
 		if(string.IsNullOrWhiteSpace(name))
-			throw new ArgumentException(Properties.Resources.MigratorNameInvalid_Message, nameof(name));
+			throw new ArgumentException(Properties.Resources.MigrationNameInvalid_Message, nameof(name));
 
 		name = Normalizer.Normalize(name, package.Variables, null);
 		var searchParents = name.IndexOfAny(['/', '\\']) < 0;
@@ -71,7 +71,7 @@ public sealed class Migrator
 
 		if(!Regex.IsMatch(name, @"^[A-Za-z0-9][A-Za-z0-9._+-]*$") ||
 			name.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".sh", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase))
-			throw new ArgumentException(Properties.Resources.MigratorNameInvalid_Message, nameof(name));
+			throw new ArgumentException(Properties.Resources.MigrationNameInvalid_Message, nameof(name));
 
 		if(package.Platform != Platform.Linux || package.Architecture is not (System.Runtime.InteropServices.Architecture.X64 or System.Runtime.InteropServices.Architecture.Arm64))
 			throw new InvalidOperationException(Properties.Resources.MigrationPlatformInvalid_Message);
@@ -83,10 +83,10 @@ public sealed class Migrator
 			throw new InvalidOperationException(Properties.Resources.MigrationInstallPathInvalid_Message);
 
 		var prefix = name + (string.IsNullOrEmpty(package.Edition) ? "" : "-" + package.Edition) + "(migrate)@" + package.Version + "_" + package.Runtime;
-		var migrator = Locate(Path.GetDirectoryName(path), prefix, searchParents);
+		var migration = Locate(Path.GetDirectoryName(path), prefix, searchParents);
 
-		Validate(migrator.Archive, package.Runtime);
-		return migrator;
+		Validate(migration.Archive, package.Runtime);
+		return migration;
 	}
 
 	public void Attach(Package package)
@@ -104,7 +104,7 @@ public sealed class Migrator
 	#endregion
 
 	#region 私有方法
-	private static Migrator Locate(string directory, string prefix, bool searchParents)
+	private static Migration Locate(string directory, string prefix, bool searchParents)
 	{
 		var archiveName = prefix + ".tar.gz";
 		var scriptName = prefix + ".sh";
@@ -129,12 +129,12 @@ public sealed class Migrator
 				if(hasArchive || hasScript || !searchParents)
 				{
 					var missing = hasArchive ? script : archive;
-					throw new FileNotFoundException(string.Format(Properties.Resources.MigratorArtifactMissing_Message, missing), missing);
+					throw new FileNotFoundException(string.Format(Properties.Resources.MigrationArtifactMissing_Message, missing), missing);
 				}
 			}
 		}
 
-		throw new FileNotFoundException(string.Format(Properties.Resources.MigratorArtifactsNotFound_Message,
+		throw new FileNotFoundException(string.Format(Properties.Resources.MigrationArtifactsNotFound_Message,
 			archiveName, scriptName, Utility.Indent(string.Join(Environment.NewLine, searched)), Environment.NewLine), Path.Combine(directory, archiveName));
 	}
 
@@ -147,7 +147,7 @@ public sealed class Migrator
 		if(reader.GetNextEntry() is not PaxGlobalExtendedAttributesTarEntry metadata ||
 			!metadata.GlobalExtendedAttributes.TryGetValue("Runtime", out var runtime) || runtime != expectedRuntime ||
 			!metadata.GlobalExtendedAttributes.TryGetValue("Migrator", out var generator) || string.IsNullOrWhiteSpace(generator))
-			throw new InvalidDataException(string.Format(Properties.Resources.MigratorMetadataInvalid_Message, archive, expectedRuntime));
+			throw new InvalidDataException(string.Format(Properties.Resources.MigrationMetadataInvalid_Message, archive, expectedRuntime));
 	}
 	#endregion
 
@@ -175,10 +175,10 @@ public sealed class Migrator
 		finally { System.Globalization.CultureInfo.CurrentUICulture = culture; }
 	}
 
-	internal static string ApplyScript(Package package) => package.Migrator == null ? null :
-		$"sh \"$PACK_INSTALL_PATH/.migration/{Path.GetFileName(package.Migrator.Script)}\" apply {Quote(StateDirectory(package))}";
+	internal static string ApplyScript(Package package) => package.Migration == null ? null :
+		$"sh \"$PACK_INSTALL_PATH/.migration/{Path.GetFileName(package.Migration.Script)}\" apply {Quote(StateDirectory(package))}";
 
-	internal static string ContextScript(Package package) => package.Migrator == null ? null : $$"""
+	internal static string ContextScript(Package package) => package.Migration == null ? null : $$"""
 		PACK_INSTALL_PATH=${TARGET:-{{Quote(package.InstallPath)}}}
 		export PACK_INSTALL_PATH
 		if [ "$PACK_INSTALL_PATH" != {{Quote(package.InstallPath)}} ]; then
@@ -187,6 +187,6 @@ public sealed class Migrator
 		fi
 		""";
 
-	internal static string InvalidateScript(Package package) => package.Migrator == null ? null : $"rm -f {Quote(StateDirectory(package) + "/ready")}";
+	internal static string InvalidateScript(Package package) => package.Migration == null ? null : $"rm -f {Quote(StateDirectory(package) + "/ready")}";
 	#endregion
 }

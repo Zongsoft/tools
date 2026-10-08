@@ -219,7 +219,7 @@ public class WebPackageTest
 
 		try
 		{
-			Terminal.Default = DispatchProxy.Create<ITerminal, MigratorPackageTest.RecordingTerminal>();
+			Terminal.Default = DispatchProxy.Create<ITerminal, MigrationPackageTest.RecordingTerminal>();
 			return Assert.IsType<string>(await ((ICommand)command).ExecuteAsync(context, TestContext.Current.CancellationToken));
 		}
 		finally

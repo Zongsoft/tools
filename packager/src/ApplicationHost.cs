@@ -67,7 +67,7 @@ internal sealed record ApplicationHost(ApplicationHost.HostKind Kind, string Ent
 
 		if(entry == null)
 		{
-			if(package.Migrator != null)
+			if(package.Migration != null)
 				throw new InvalidOperationException(Properties.Resources.MigrationHostRequired_Message);
 
 			Dumper.HostLocateFailed();

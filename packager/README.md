@@ -25,7 +25,7 @@ Package formats are written directly in .NET without calling external `tar`, `dp
 - [systemd services](#systemd-services)
 - [Lifecycle scripts](#lifecycle-scripts)
 - [Web hosting configuration](#web-hosting-configuration)
-- [Migrator artifact integration](#migrator-artifact-integration)
+- [Migration artifact integration](#migration-artifact-integration)
 - [Variables](#variables)
 - [Package formats](#package-formats)
 - [Recommended workflow](#recommended-workflow)
@@ -145,7 +145,7 @@ deploy.cmd
 
 ### Step 2: Build the package
 
-Package directly from the host directory: without `--source`, the source is the current directory, and positional arguments select its payload. Alternatively, run the host's [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd). The standalone script defaults to tar, Release, and x64 and packages existing files only. The current Web environment prompt does not assign its input back to `environment`, so set `Environment=production` first, choose `deb` and version `1.0.0`, and leave the migration prompt empty. The corresponding core command follows, omitting empty Edition and migrator options:
+Package directly from the host directory: without `--source`, the source is the current directory, and positional arguments select its payload. Alternatively, run the host's [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd). The standalone script defaults to tar, Release, and x64 and packages existing files only. For the example below, choose `deb`, version `1.0.0`, and environment `production`, and leave the migration prompt empty. The corresponding core command follows, omitting empty `--edition` and `--migration` options:
 
 ```cmd
 dotnet-pack deb ^
@@ -292,7 +292,7 @@ Ordinary file packaging needs neither `--framework` nor `--compilation`; these o
 | Option | Default | Description |
 | --- | --- | --- |
 | `--web:<hoster[:filepath]>` | empty | Generates Web hoster configuration; currently `nginx`, reading `source/web.profile` by default. See [Web hosting configuration](#web-hosting-configuration). |
-| `--migrator:<name>` | empty | Input name of migration artifacts to include, optionally with a directory. See [Migrator artifact integration](#migrator-artifact-integration). |
+| `--migration:<name>` | empty | Input name of migration artifacts to include, optionally with a directory. See [Migration artifact integration](#migration-artifact-integration). |
 | `--installing`, etc. | generated | Lifecycle hooks and pre/post snippets; see [Lifecycle scripts](#lifecycle-scripts). |
 
 ### Dependencies and relationships
@@ -788,11 +788,11 @@ For the Web host, `server=~` uses the generated service's listening port (such a
 
 > 💡 **Tip:** See the [Web configuration guide](docs/web.md) for field scopes, defaults, and inheritance; complete examples of matching, certificates, load balancing, health checks, native settings, variables, and container builds; and the modules and minimum versions required by active checks and cookie affinity.
 
-## Migrator artifact integration
+## Migration artifact integration
 
 Migrations (schema and data changes for databases, storage, and similar resources) are prepared in advance by the independent [migrator tool](../migrator/README.md). The packager only includes an already generated **migration archive** and its **launcher script**: it does not parse `.migration`/`.ini`, SQL, or execution plans, and does not carry a native executor.
 
-Enable it with `--migrator:<name-or-path>`. For a source at `hosting/web/default/` and artifacts in `hosting/.migration/`, specify `--migrator:zongsoft`. Omitting the option or supplying an empty value disables migration integration.
+Enable it with `--migration:<name-or-path>`. For a source at `hosting/web/default/` and artifacts in `hosting/.migration/`, specify `--migration:zongsoft`. Omitting the option or supplying an empty value disables migration integration.
 
 ### Artifact names
 
@@ -869,7 +869,7 @@ An omitted or empty `--framework` uses a nonempty `framework` from the merged va
 - Option text is kept until used. After `source` is located, explicit `name`, `edition`, and `version` expand before validating the source `.edition` manifest or `.version` identifier and converting the version; `platform`, `architecture`, and `overwrite` also expand before conversion.
 - `name`, `edition`, and `version` come only from the source `.edition` manifest or `.version` identifier and explicit identity options; same-named environment or `.env` variables never replace the identity, although explicit options may reference `.env` variables. Identity values available only from the source `.edition` manifest or `.version` identifier cannot locate that source directory.
 - The final identity and resolved `source` and `output` override same-named values in the collection.
-- `--migrator` requires explicit activation; `--overwrite` can come from the environment or `.env` and be overridden on the command line.
+- `--migration` requires explicit activation; `--overwrite` can come from the environment or `.env` and be overridden on the command line.
 
 Pass a literal `$(APP_VERSION)` or `%APP_VERSION%` for the packager to expand (use single quotes in Bash to prevent shell expansion), or let the shell expand values directly:
 
@@ -1056,7 +1056,7 @@ The RPM `PACKAGER` tag (1015) holds the `--maintainer` value. This metadata live
 3. **Verify the package identity.** Check `--name`, `--version`, the optional `--edition`, platform, and architecture; confirm the generated service identifier, `--install-path`, and `--listen` address match the target environment.
 4. **Inspect the output.** Use `tar -tzf`, `dpkg-deb --info`/`--contents`, or `rpm -qip`/`-qlp`/`-qp --scripts`; for service-managing packages, also review lifecycle scripts and the systemd unit.
 5. **Validate in staging.** Test installation, service startup, configuration paths, and removal, using `DESTDIR` with tar packages or a disposable host. Record environment-specific configuration instead of relying on production-only conditions.
-6. **Release to production carefully.** Back up application data and confirm recovery steps first. With `--migrator`, installation runs migrations that may change databases and Amazon S3 buckets; keep the same migration state directory across package versions.
+6. **Release to production carefully.** Back up application data and confirm recovery steps first. With `--migration`, installation runs migrations that may change databases and Amazon S3 buckets; keep the same migration state directory across package versions.
 
 > 💡 **Tip:** `--overwrite` only replaces existing package files in the output directory; it never overwrites or updates an installed application.
 

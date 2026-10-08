@@ -142,6 +142,24 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
+        ///   Looks up a localized string similar to The required migration artifact was not found: {0}.
+        /// </summary>
+        internal static string MigrationArtifactMissing_Message {
+            get {
+                return ResourceManager.GetString("MigrationArtifactMissing.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to The migration artifacts &quot;{0}&quot; and &quot;{1}&quot; were not found.{3}Searched directories:{2}.
+        /// </summary>
+        internal static string MigrationArtifactsNotFound_Message {
+            get {
+                return ResourceManager.GetString("MigrationArtifactsNotFound.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
         ///   Looks up a localized string similar to A migration package requires a locatable service host or --daemon:none..
         /// </summary>
         internal static string MigrationHostRequired_Message {
@@ -178,6 +196,24 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
+        ///   Looks up a localized string similar to The migration archive {0} must contain Migrator metadata and target runtime {1}..
+        /// </summary>
+        internal static string MigrationMetadataInvalid_Message {
+            get {
+                return ResourceManager.GetString("MigrationMetadataInvalid.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Specify a migration input name, optionally including its directory, without edition, version, runtime or file extension..
+        /// </summary>
+        internal static string MigrationNameInvalid_Message {
+            get {
+                return ResourceManager.GetString("MigrationNameInvalid.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
         ///   Looks up a localized string similar to Package entry uses a reserved migration path: {0}.
         /// </summary>
         internal static string MigrationPathReserved_Message {
@@ -192,42 +228,6 @@ namespace Zongsoft.Tools.Packager.Properties {
         internal static string MigrationPlatformInvalid_Message {
             get {
                 return ResourceManager.GetString("MigrationPlatformInvalid.Message", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to The required migrator artifact was not found: {0}.
-        /// </summary>
-        internal static string MigratorArtifactMissing_Message {
-            get {
-                return ResourceManager.GetString("MigratorArtifactMissing.Message", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to The migrator artifacts &quot;{0}&quot; and &quot;{1}&quot; were not found.{3}Searched directories:{2}.
-        /// </summary>
-        internal static string MigratorArtifactsNotFound_Message {
-            get {
-                return ResourceManager.GetString("MigratorArtifactsNotFound.Message", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to The migrator archive {0} must contain Migrator metadata and target runtime {1}..
-        /// </summary>
-        internal static string MigratorMetadataInvalid_Message {
-            get {
-                return ResourceManager.GetString("MigratorMetadataInvalid.Message", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Specify a migrator input name, optionally including its directory, without edition, version, runtime or file extension..
-        /// </summary>
-        internal static string MigratorNameInvalid_Message {
-            get {
-                return ResourceManager.GetString("MigratorNameInvalid.Message", resourceCulture);
             }
         }
 

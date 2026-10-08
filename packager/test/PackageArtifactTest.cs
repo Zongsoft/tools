@@ -286,7 +286,7 @@ public sealed class PackageArtifactTest
 
 		try
 		{
-			Terminal.Default = DispatchProxy.Create<ITerminal, MigratorPackageTest.RecordingTerminal>();
+			Terminal.Default = DispatchProxy.Create<ITerminal, MigrationPackageTest.RecordingTerminal>();
 			package.Entries.Load(directory.Path, ["first.txt:shared.txt", "second.txt:shared.txt", "first.txt:shared.txt"]);
 			Assert.Equal(first, Assert.Single(package.Entries).Source);
 			package.Pack(directory.Path, true);

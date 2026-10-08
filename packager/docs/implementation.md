@@ -40,7 +40,7 @@ The main design choices are:
 | `Generator.Tar.cs` | Write gzip PAX tar, `install.sh`, and `uninstall.sh`. |
 | `Generator.Deb.cs` | Write the Debian `ar` container, `control.tar.gz`, and `data.tar.gz`. |
 | `Generator.Rpm.cs` | Write the RPM lead, signature/header, metadata header, and gzip cpio payload. |
-| `Migrator.cs` | Locate external migration artifacts by final application identity, validate PAX metadata, attach unchanged files, and provide installation coordination scripts. |
+| `Migration.cs` | Locate external migration artifacts by final application identity, validate PAX metadata, attach unchanged files, and provide installation coordination scripts. |
 | `ApplicationHost.cs` | Resolve the application host, service and final listen once, shared by systemd generation and Web ~. |
 | `Scriptor.Systemd.cs` | Generate/collect systemd units and compose application, migration and Web lifecycle scripts. |
 | `Web/Definition*.cs` | Collect [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Profile declarations and resolve replacement, inheritance, variables and validation. |
@@ -74,10 +74,10 @@ flowchart TD
     C --> D["Select and validate identity, then create invocation variables"]
     D --> E["Normalize source/output paths"]
     E --> F["Create Package.Tar/Deb/Rpm"]
-    F --> M["Locate and validate optional migrator artifacts"]
+    F --> M["Locate and validate optional migration artifacts"]
     M --> G["Resolve application host and final listen"]
     G --> H["Load ordinary package entries"]
-    H --> N["Attach unchanged migrator archive and launcher"]
+    H --> N["Attach unchanged migration archive and launcher"]
     N --> W["Load Web Profile, generate and attach hoster configuration"]
     W --> L["Generate service and lifecycle scripts; validate targets"]
     L --> V["Replace installation root .version with memory entry"]
@@ -129,7 +129,7 @@ Common optional settings:
 | Option | Default | Description |
 | --- | --- | --- |
 | `--source` | Current directory | Input directory. |
-| `--migrator` | Empty | Original migration input name, optionally with a directory; bare names search source and ancestors plus each direct `.migration/` child using final Edition, Version, and Runtime. |
+| `--migration` | Empty | Original migration input name, optionally with a directory; bare names search source and ancestors plus each direct `.migration/` child using final Edition, Version, and Runtime. |
 | `--output` | `source` | Always an output directory; relative paths use `source`. A filename cannot be specified. |
 | `--exclude` | Empty | Comma- or semicolon-separated patterns skipped during entry collection. |
 | `--edition` | Current or the sole Edition | Product Edition, included in the package name. |
@@ -176,7 +176,7 @@ Shared `Utility.LoadEnvironmentVariables` reads each immediate `.env` from the f
 
 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) command descriptors retain options that may contain variables as strings. `source` expands first using the complete raw variable set. Explicit `name`, `edition`, and `version` then expand; `version` is converted to `System.Version` to select the version from the source `.edition` manifest or `.version` identifier. After identity is finalized, `platform`, `architecture`, and `overwrite` expand and convert when used. Bare `--overwrite` remains true; omission defaults to false.
 
-Identity still comes from the source `.edition` manifest or `.version` identifier and explicit name/edition/version options; same-named environment or `.env` variables do not implicitly replace identity. Explicit options may reference other `.env` variables. Final identity and resolved source/output overwrite the variable collection. `--migrator` requires explicit activation; `--overwrite` can come from the environment or `.env` and be overridden on the command line.
+Identity still comes from the source `.edition` manifest or `.version` identifier and explicit name/edition/version options; same-named environment or `.env` variables do not implicitly replace identity. Explicit options may reference other `.env` variables. Final identity and resolved source/output overwrite the variable collection. `--migration` requires explicit activation; `--overwrite` can come from the environment or `.env` and be overridden on the command line.
 
 ### Variable syntax
 
@@ -243,7 +243,7 @@ The abstract `Package` class holds metadata shared by all formats:
 - `Dependencies`
 - `Entries`
 - `Scripts`
-- `Migrator`
+- `Migration`
 
 Package names follow:
 
@@ -1077,9 +1077,9 @@ RPM uses ordinary flags/name/version entries for single comparisons. A finite ra
 
 The independent [migrator tool](../../migrator/README.md) prepares migrations. Packager does not parse `.migration`/`.ini`, SQL, or execution plans, and does not carry its own native executor.
 
-`--migrator` selects the original input name used during migration generation, optionally with a directory, such as `--migrator:../../packages/zongsoft`.
+`--migration` selects the original input name used during migration generation, optionally with a directory, such as `--migration:../../packages/zongsoft`.
 
-After variable expansion, a value without `/` or `\` searches from the final packaging source (`--source`) through parents to the filesystem root. Each level checks that directory first, then its direct `.migration/` child; other child directories are not searched. A value containing either separator selects an explicit directory: relative paths use source, absolute paths are used directly, and neither searches parents or an implicit `.migration/` child. With source `hosting/web/default/` and artifacts in `hosting/.migration/`, `--migrator:zongsoft` finds them; `--migrator:./zongsoft` checks only source. Lookup starts at source, not the command's working directory.
+After variable expansion, a value without `/` or `\` searches from the final packaging source (`--source`) through parents to the filesystem root. Each level checks that directory first, then its direct `.migration/` child; other child directories are not searched. A value containing either separator selects an explicit directory: relative paths use source, absolute paths are used directly, and neither searches parents or an implicit `.migration/` child. With source `hosting/web/default/` and artifacts in `hosting/.migration/`, `--migration:zongsoft` finds them; `--migration:./zongsoft` checks only source. Lookup starts at source, not the command's working directory.
 
 The file stem is `<name>[-<edition>](migrate)@<version>_<RID>`, using the name verbatim and omitting Edition when absent. Supply the generator's `--name` without the automatic `(migrate)` marker. Do not include Edition, version, RID, extension, wildcards, or path lists.
 
@@ -1094,7 +1094,7 @@ The migration name may differ from the host name, but Edition, version, and RID 
 
 The unchanged files enter `.migration/` under the installation root without archive extraction; the script uses 0755 and archive 0600. At execution time the migrator launcher creates a separate temporary directory, extracts the archive contents directly into its root and cleans it up afterward; it does not add another `.migration/` layer to the installation directory. Payload target conflicts fail. Installation calls the launcher with `apply` and `/var/lib/<package-name>/packager`; failure prevents startup. Systemd `ExecStartPre` calls the same launcher with `check`, which only compares completion markers without extraction or service connections. Migration runs even without a daemon; DESTDIR staging skips hooks. Uninstallation preserves state and databases/buckets. Targets need POSIX sh, tar/gzip, cmp, and the executor's system libraries; see the migration guide.
 
-`Migrator.Load` separates location from archive validation. Private `Locate` follows `DirectoryInfo.Parent`, includes the root, and records each direct directory followed by its `.migration/` child in search order. After selecting a same-directory pair, `Validate` checks PAX metadata. Explicit directories are checked once without an implicit child lookup. All lookup and validation precede artifact attachment and package generation.
+`Migration.Load` separates location from archive validation. Private `Locate` follows `DirectoryInfo.Parent`, includes the root, and records each direct directory followed by its `.migration/` child in search order. After selecting a same-directory pair, `Validate` checks PAX metadata. Explicit directories are checked once without an implicit child lookup. All lookup and validation precede artifact attachment and package generation.
 
 ## Validation guidance
 

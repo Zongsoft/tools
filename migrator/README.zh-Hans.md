@@ -477,7 +477,7 @@ SQL 校验和只用于在外部资源操作之前验证包内文件与当前计�
 
 ## 与 packager 配合
 
-在 hosting/web/default 的打包命令中使用 `--migrator:../../.migration/zongsoft`；daemon 使用 `--migrator:../.migration/zongsoft`。packager 根据最终 Edition、版本和 RID 查找准确配套文件，使用同一产物命名规则。任一文件缺失即失败，不选择其他版本。安装包原样包含归档和脚本；安装时显式传入 `/var/lib/<包名>/packager` 状态目录，升迁失败阻止启动。实际宿主命令和连接参数不由本工具自动修改。
+在 hosting/web/default 的打包命令中使用 `--migration:../../.migration/zongsoft`；daemon 使用 `--migration:../.migration/zongsoft`。packager 根据最终 Edition、版本和 RID 查找准确配套文件，使用同一产物命名规则。任一文件缺失即失败，不选择其他版本。安装包原样包含归档和脚本；安装时显式传入 `/var/lib/<包名>/packager` 状态目录，升迁失败阻止启动。实际宿主命令和连接参数不由本工具自动修改。
 
 <a id="build-and-test"></a>
 

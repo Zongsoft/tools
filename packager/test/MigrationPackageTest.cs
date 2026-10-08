@@ -17,7 +17,7 @@ using Zongsoft.Components;
 
 namespace Zongsoft.Tools.Packager.Tests;
 
-public sealed partial class MigratorPackageTest
+public sealed partial class MigrationPackageTest
 {
 	#region 产物消费
 	[Theory]
@@ -27,15 +27,16 @@ public sealed partial class MigratorPackageTest
 	[InlineData("tar", false)]
 	[InlineData("deb", false)]
 	[InlineData("rpm", false)]
-	public async Task Command_MigratorUsesResolvedSourceEditionVersionAndRuntimeAsync(string format, bool explicitEdition)
+	public async Task Command_MigrationUsesResolvedSourceEditionVersionAndRuntimeAsync(string format, bool explicitEdition)
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write(".edition", "Zongsoft.Hosting.Web=Enterprise\n\n[Community]\n1.0.0\n\n[Enterprise]\n2.7.1\n");
 		directory.Write("application.txt", "hosting application");
+
 		var pair = Pair(directory, "releases/zongsoft.bootstrap", "Enterprise", "2.7.1", "linux-arm64");
 		Pair(directory, "releases/zongsoft.bootstrap", "Community", "1.0.0", "linux-x64");
 		CommandBase<CommandContext> command = format switch { "tar" => new TarCommand(), "deb" => new DebCommand(), _ => new RpmCommand() };
-		var arguments = new[] { format, "--source:" + directory.Path, "--output:out", "--platform:Linux", "--architecture:Arm64", "--framework:net10.0", "--edition:enterprise", "--daemon:disabled", "--install-path:/opt/zongsoft/web", "--migrator:releases/zongsoft.bootstrap", "application.txt" };
+		var arguments = new[] { format, "--source:" + directory.Path, "--output:out", "--platform:Linux", "--architecture:Arm64", "--framework:net10.0", "--edition:enterprise", "--daemon:disabled", "--install-path:/opt/zongsoft/web", "--migration:releases/zongsoft.bootstrap", "application.txt" };
 
 		if(!explicitEdition)
 			arguments = arguments.Where(argument => !argument.StartsWith("--edition:", StringComparison.Ordinal)).ToArray();
@@ -49,6 +50,7 @@ public sealed partial class MigratorPackageTest
 			Terminal.Default = DispatchProxy.Create<ITerminal, RecordingTerminal>();
 			var path = Assert.IsType<string>(await ((ICommand)command).ExecuteAsync(context, TestContext.Current.CancellationToken));
 			Assert.Contains("-Enterprise@2.7.1-arm64", Path.GetFileName(path));
+
 			var payload = ReadPayload(Path.GetDirectoryName(path), format);
 			Assert.Equal(File.ReadAllBytes(pair.Archive), Assert.Single(payload, entry => entry.Key.EndsWith(Path.GetFileName(pair.Archive), StringComparison.Ordinal)).Value);
 			Assert.Equal(File.ReadAllBytes(pair.Script), Assert.Single(payload, entry => entry.Key.EndsWith(Path.GetFileName(pair.Script), StringComparison.Ordinal)).Value);
@@ -66,6 +68,7 @@ public sealed partial class MigratorPackageTest
 		using var directory = new MigrationTestDirectory();
 		directory.Write(".version", "zongsoft.daemon@1.0.0");
 		directory.Write("application.txt", "isolated package payload");
+
 		var existing = directory.Write("out/zongsoft.daemon@2.3.4-arm64.tar.gz", "previous artifact");
 		var names = new[] { "zongsoft_pack_source", "zongsoft_pack_name", "zongsoft_pack_version", "zongsoft_pack_release", "zongsoft_pack_platform", "zongsoft_pack_architecture", "zongsoft_pack_overwrite" };
 		var previousEnvironment = names.ToDictionary(name => name, Environment.GetEnvironmentVariable);
@@ -143,6 +146,7 @@ public sealed partial class MigratorPackageTest
 		using var directory = new MigrationTestDirectory();
 		directory.Write(".version", "zongsoft.daemon@1.0.0");
 		directory.Write("application.txt", "package payload");
+
 		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
 		var previousTerminal = (ITerminal)terminalField.GetValue(null);
 		var arguments = new[] { format, "--source:" + directory.Path, "--output:out", "--platform:Linux", "--architecture:X64", "--framework:net10.0", "--daemon:disabled", "--overwrite:false", "application.txt" };
@@ -184,6 +188,7 @@ public sealed partial class MigratorPackageTest
 		using var directory = new MigrationTestDirectory();
 		directory.Write("source with spaces/.version", "zongsoft.daemon@1.0.0");
 		directory.Write("source with spaces/application.txt", "package payload");
+
 		var previousDirectory = Environment.CurrentDirectory;
 		var previousOverwrite = Environment.GetEnvironmentVariable("overwrite");
 		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
@@ -194,6 +199,7 @@ public sealed partial class MigratorPackageTest
 		{
 			Environment.CurrentDirectory = directory.Path;
 			Terminal.Default = DispatchProxy.Create<ITerminal, RecordingTerminal>();
+
 			var invalidArguments = arguments.Select(argument => argument == "--architecture=X64" ? "--architecture=invalid" : argument).ToArray();
 			var invalid = new TarCommand();
 			var invalidLine = CommandLine.Parse(Utility.FormatCommand(invalidArguments[0], invalidArguments.AsSpan(1)))[0];
@@ -205,6 +211,7 @@ public sealed partial class MigratorPackageTest
 			var line = CommandLine.Parse(Utility.FormatCommand(arguments[0], arguments.AsSpan(1)))[0];
 			Assert.Equal("source with spaces", Assert.Single(line.Options, option => option.Name == "source").Value);
 			Assert.Equal("out with spaces", Assert.Single(line.Options, option => option.Name == "output").Value);
+
 			var context = new CommandContext(new CommandExecutor(), line, command, null);
 			var archive = Assert.IsType<string>(await ((ICommand)command).ExecuteAsync(context, TestContext.Current.CancellationToken));
 			Assert.Contains(Path.Combine("source with spaces", "out with spaces"), archive);
@@ -229,28 +236,29 @@ public sealed partial class MigratorPackageTest
 
 	[Theory]
 	[InlineData("tar", null)]
-	[InlineData("tar", "--migrator")]
-	[InlineData("tar", "--migrator:")]
-	[InlineData("tar", "--migrator:\"\"")]
-	[InlineData("tar", "--migrator:\"   \"")]
-	[InlineData("tar", "--migrator:\" \t \"")]
+	[InlineData("tar", "--migration")]
+	[InlineData("tar", "--migration:")]
+	[InlineData("tar", "--migration:\"\"")]
+	[InlineData("tar", "--migration:\"   \"")]
+	[InlineData("tar", "--migration:\" \t \"")]
 	[InlineData("deb", null)]
-	[InlineData("deb", "--migrator")]
-	[InlineData("deb", "--migrator:")]
-	[InlineData("deb", "--migrator:\"\"")]
-	[InlineData("deb", "--migrator:\"   \"")]
-	[InlineData("deb", "--migrator:\" \t \"")]
+	[InlineData("deb", "--migration")]
+	[InlineData("deb", "--migration:")]
+	[InlineData("deb", "--migration:\"\"")]
+	[InlineData("deb", "--migration:\"   \"")]
+	[InlineData("deb", "--migration:\" \t \"")]
 	[InlineData("rpm", null)]
-	[InlineData("rpm", "--migrator")]
-	[InlineData("rpm", "--migrator:")]
-	[InlineData("rpm", "--migrator:\"\"")]
-	[InlineData("rpm", "--migrator:\"   \"")]
-	[InlineData("rpm", "--migrator:\" \t \"")]
-	public async Task Command_EmptyMigrator_PreservesOrdinaryPayloadAndServiceLifecycleAsync(string format, string option)
+	[InlineData("rpm", "--migration")]
+	[InlineData("rpm", "--migration:")]
+	[InlineData("rpm", "--migration:\"\"")]
+	[InlineData("rpm", "--migration:\"   \"")]
+	[InlineData("rpm", "--migration:\" \t \"")]
+	public async Task Command_EmptyMigration_PreservesOrdinaryPayloadAndServiceLifecycleAsync(string format, string option)
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write(".version", "zongsoft.daemon@2.7.1");
 		directory.Write("application.txt", "ordinary application");
+
 		var service = directory.Write("zongsoft.daemon.service", "[Unit]\nDescription=Hosting\n[Service]\nExecStart=/bin/true\n");
 		CommandBase<CommandContext> command = format switch { "tar" => new TarCommand(), "deb" => new DebCommand(), _ => new RpmCommand() };
 		var arguments = new[] { format, "--source:" + directory.Path, "--output:out", "--platform:Linux", "--architecture:X64", "--framework:net10.0", "--daemon:zongsoft.daemon.service", "--install-path:/opt/zongsoft/daemon", "application.txt" };
@@ -266,6 +274,7 @@ public sealed partial class MigratorPackageTest
 			Assert.Equal("ordinary application", Encoding.UTF8.GetString(Assert.Single(payload, entry => entry.Key.EndsWith("application.txt", StringComparison.Ordinal)).Value));
 			Assert.Equal(File.ReadAllBytes(service), Assert.Single(payload, entry => entry.Key.EndsWith("zongsoft.daemon.service", StringComparison.Ordinal)).Value);
 			Assert.DoesNotContain(payload.Keys, name => name.Contains(".migration", StringComparison.Ordinal));
+
 			var script = ReadInstalled(Path.GetDirectoryName(path), format);
 			Assert.DoesNotContain(".migration", script);
 			Assert.DoesNotContain("20-packager-migration.conf", script);
@@ -281,31 +290,34 @@ public sealed partial class MigratorPackageTest
 	[InlineData("tar")]
 	[InlineData("deb")]
 	[InlineData("rpm")]
-	public void Migrator_DirectoryNameFinalIdentityAndPax_EmbedsOriginalPairAcrossFormats(string format)
+	public void Migration_DirectoryNameFinalIdentityAndPax_EmbedsOriginalPairAcrossFormats(string format)
 	{
 		using var directory = new MigrationTestDirectory();
 		var package = Create(format, directory, "Enterprise", Architecture.Arm64);
 		var pair = Pair(directory, "releases/zongsoft.bootstrap", "Enterprise", "2.7.1", "linux-arm64");
 		Pair(directory, "releases/zongsoft.bootstrap", null, "1.0.0", "linux-x64");
-		package.Migrator = Migrator.Load(package, "$(inputs)/zongsoft.bootstrap");
-		Assert.Equal(pair.Archive, package.Migrator.Archive);
-		Assert.Equal(pair.Script, package.Migrator.Script);
-		package.Migrator.Attach(package);
+		package.Migration = Migration.Load(package, "$(inputs)/zongsoft.bootstrap");
+		Assert.Equal(pair.Archive, package.Migration.Archive);
+		Assert.Equal(pair.Script, package.Migration.Script);
+		package.Migration.Attach(package);
+
 		var archiveEntry = Assert.Single(package.Entries, entry => entry.EntryName.EndsWith(Path.GetFileName(pair.Archive), StringComparison.Ordinal));
 		Assert.Equal((UnixFileMode)384, archiveEntry.Mode);
 		Assert.Equal((UnixFileMode)493, Assert.Single(package.Entries, entry => entry.EntryName.EndsWith(Path.GetFileName(pair.Script), StringComparison.Ordinal)).Mode);
 		package.Scriptor.Script();
 		package.Pack(directory.Path, true);
+
 		var payload = ReadPayload(directory.Path, format);
 		var entries = payload.Where(pair => pair.Key.Contains(".migration/", StringComparison.Ordinal)).ToArray();
 		Assert.Equal(2, entries.Length);
 		Assert.Equal(File.ReadAllBytes(pair.Archive), Assert.Single(entries, entry => entry.Key.EndsWith(".tar.gz", StringComparison.Ordinal)).Value);
 		Assert.Equal(File.ReadAllBytes(pair.Script), Assert.Single(entries, entry => entry.Key.EndsWith(".sh", StringComparison.Ordinal)).Value);
 		Assert.DoesNotContain(payload.Keys, name => name.EndsWith("migration.json", StringComparison.Ordinal) || name.EndsWith("schema.sql", StringComparison.Ordinal));
+
 		var script = ReadInstalled(directory.Path, format);
 		AssertOrdered(script, "ExecStartPre=/bin/sh", Path.GetFileName(pair.Script) + "\" apply", "systemctl start");
 		Assert.Contains(Path.GetFileName(pair.Script) + "\" check", script);
-		Assert.Contains(Migrator.StateDirectory(package), script);
+		Assert.Contains(Migration.StateDirectory(package), script);
 		Assert.Contains("set -e", script);
 		Assert.DoesNotContain("apply || true", script);
 
@@ -320,28 +332,29 @@ public sealed partial class MigratorPackageTest
 	[InlineData("zongsoft-migration")]
 	[InlineData("zongsoft.migrate")]
 	[InlineData("zongsoft.MIGRATION")]
-	public void Migrator_NameEndingInMigrationWord_IsPreserved(string name)
+	public void Migration_NameEndingInMigrationWord_IsPreserved(string name)
 	{
 		using var directory = new MigrationTestDirectory();
 		var package = Create("tar", directory);
 		var pair = Pair(directory, "releases/" + name, null, "2.7.1", "linux-x64");
-		var migrator = Migrator.Load(package, "releases/" + name);
-		Assert.Equal(pair.Archive, migrator.Archive);
-		Assert.Equal(pair.Script, migrator.Script);
-		Assert.Equal(name + "(migrate)@2.7.1_linux-x64.tar.gz", Path.GetFileName(migrator.Archive));
+		var migration = Migration.Load(package, "releases/" + name);
+		Assert.Equal(pair.Archive, migration.Archive);
+		Assert.Equal(pair.Script, migration.Script);
+		Assert.Equal(name + "(migrate)@2.7.1_linux-x64.tar.gz", Path.GetFileName(migration.Archive));
 	}
 
 	[Theory]
 	[InlineData("archive")]
 	[InlineData("script")]
-	public void Migrator_MissingPair_ReportsMissingFileWithoutPublishing(string missing)
+	public void Migration_MissingPair_ReportsMissingFileWithoutPublishing(string missing)
 	{
 		using var directory = new MigrationTestDirectory();
 		var package = Create("tar", directory);
 		var pair = Pair(directory, "releases/zongsoft.bootstrap", null, "2.7.1", "linux-x64");
 		var path = missing == "archive" ? pair.Archive : pair.Script;
 		File.Delete(path);
-		var error = Assert.Throws<FileNotFoundException>(() => Migrator.Load(package, "releases/zongsoft.bootstrap"));
+
+		var error = Assert.Throws<FileNotFoundException>(() => Migration.Load(package, "releases/zongsoft.bootstrap"));
 		Assert.Equal(path, error.FileName);
 		Assert.Empty(package.Entries);
 		Assert.Empty(Directory.GetFiles(directory.Path, "*.tar.gz"));
@@ -354,12 +367,13 @@ public sealed partial class MigratorPackageTest
 	[InlineData("runtime-mismatch")]
 	[InlineData("no-global")]
 	[InlineData("late-global")]
-	public void Migrator_InvalidRequiredMetadata_RejectsBeforePublishing(string failure)
+	public void Migration_InvalidRequiredMetadata_RejectsBeforePublishing(string failure)
 	{
 		using var directory = new MigrationTestDirectory();
 		var package = Create("tar", directory);
 		var pair = Pair(directory, "releases/zongsoft.bootstrap", null, "2.7.1", "linux-x64", failure);
-		var error = Assert.Throws<InvalidDataException>(() => Migrator.Load(package, "releases/zongsoft.bootstrap"));
+		var error = Assert.Throws<InvalidDataException>(() => Migration.Load(package, "releases/zongsoft.bootstrap"));
+
 		Assert.Contains(pair.Archive, error.Message);
 		Assert.Contains("linux-x64", error.Message);
 		Assert.Empty(package.Entries);
@@ -369,24 +383,25 @@ public sealed partial class MigratorPackageTest
 	[InlineData("bootstrap.tar.gz")]
 	[InlineData("bootstrap.sh")]
 	[InlineData("bootstrap.cmd")]
-	public void Migrator_FileExtensionInsteadOfInputName_IsRejected(string name)
+	public void Migration_FileExtensionInsteadOfInputName_IsRejected(string name)
 	{
 		using var directory = new MigrationTestDirectory();
 		var package = Create("tar", directory);
-		Assert.Throws<ArgumentException>(() => Migrator.Load(package, "releases/" + name));
+		Assert.Throws<ArgumentException>(() => Migration.Load(package, "releases/" + name));
 		Assert.Empty(package.Entries);
 	}
 
 	[Fact]
-	public void Migrator_ReservedPayloadDirectory_RejectsWithoutAddingPair()
+	public void Migration_ReservedPayloadDirectory_RejectsWithoutAddingPair()
 	{
 		using var directory = new MigrationTestDirectory();
 		var package = Create("tar", directory);
 		Pair(directory, "releases/zongsoft.bootstrap", null, "2.7.1", "linux-x64");
 		directory.Write(".migration/existing.txt", "owned payload");
 		package.Entries.Load(directory.Path, [".migration/existing.txt"]);
+
 		var before = package.Entries.Count;
-		Assert.Throws<InvalidOperationException>(() => Migrator.Load(package, "releases/zongsoft.bootstrap").Attach(package));
+		Assert.Throws<InvalidOperationException>(() => Migration.Load(package, "releases/zongsoft.bootstrap").Attach(package));
 		Assert.Equal(before, package.Entries.Count);
 	}
 
@@ -394,13 +409,14 @@ public sealed partial class MigratorPackageTest
 	[InlineData("tar")]
 	[InlineData("deb")]
 	[InlineData("rpm")]
-	public void Package_WithoutMigrator_PreservesOrdinaryServiceLifecycle(string format)
+	public void Package_WithoutMigration_PreservesOrdinaryServiceLifecycle(string format)
 	{
 		using var directory = new MigrationTestDirectory();
 		var package = Create(format, directory);
 		package.Scriptor.Script();
 		package.Pack(directory.Path, true);
 		Assert.DoesNotContain(ReadPayload(directory.Path, format).Keys, name => name.Contains(".migration", StringComparison.Ordinal));
+
 		var script = ReadInstalled(directory.Path, format);
 		Assert.DoesNotContain(".migration", script);
 		Assert.Contains("systemctl start", script);
@@ -415,23 +431,25 @@ public sealed partial class MigratorPackageTest
 		using var directory = new MigrationTestDirectory();
 		var package = Create(format, directory, daemon: "disabled", installed: "text:echo custom-installed-marker");
 		var pair = Pair(directory, "releases/zongsoft.bootstrap", null, "2.7.1", "linux-x64");
-		package.Migrator = Migrator.Load(package, "releases/zongsoft.bootstrap");
-		package.Migrator.Attach(package);
+
+		package.Migration = Migration.Load(package, "releases/zongsoft.bootstrap");
+		package.Migration.Attach(package);
 		package.Scriptor.Script();
 		package.Pack(directory.Path, true);
+
 		var script = ReadInstalled(directory.Path, format);
 		AssertOrdered(script, Path.GetFileName(pair.Script) + "\" apply", "echo custom-installed-marker");
 		Assert.DoesNotContain("systemctl start", script);
 	}
 
 	[Fact]
-	public void Package_MigratorWithoutResolvableDaemon_FailsInsteadOfDroppingMigration()
+	public void Package_MigrationWithoutResolvableDaemon_FailsInsteadOfDroppingMigration()
 	{
 		using var directory = new MigrationTestDirectory();
 		var package = Create("tar", directory, daemon: "missing-host");
 		Directory.CreateDirectory(Path.Combine(directory.Path, "bin", "Release", "net10.0"));
 		Pair(directory, "releases/zongsoft.bootstrap", null, "2.7.1", "linux-x64");
-		package.Migrator = Migrator.Load(package, "releases/zongsoft.bootstrap");
+		package.Migration = Migration.Load(package, "releases/zongsoft.bootstrap");
 		Assert.Throws<InvalidOperationException>(() => package.Scriptor.Script());
 		Assert.Empty(Directory.GetFiles(directory.Path, "*.tar.gz"));
 	}
@@ -453,6 +471,7 @@ public sealed partial class MigratorPackageTest
 	private static Package Create(string format, MigrationTestDirectory directory, string edition = null, Architecture architecture = Architecture.X64, string daemon = "zongsoft.daemon.service", string installed = null)
 	{
 		directory.Write("zongsoft.daemon.service", "[Unit]\nDescription=Hosting\n[Service]\nExecStart=/bin/true\n");
+
 		var variables = new Variables(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
 		{
 			["source"] = directory.Path,
@@ -463,6 +482,7 @@ public sealed partial class MigratorPackageTest
 			["edition"] = "WrongEdition",
 			["installed"] = installed,
 		});
+
 		Package package = format switch
 		{
 			"tar" => new Package.Tar("zongsoft.daemon", edition, new Version(2, 7, 1), Platform.Linux, architecture, variables),
@@ -470,6 +490,7 @@ public sealed partial class MigratorPackageTest
 			"rpm" => new Package.Rpm("zongsoft.daemon", edition, new Version(2, 7, 1), Platform.Linux, architecture, variables),
 			_ => throw new ArgumentOutOfRangeException(nameof(format)),
 		};
+
 		package.InstallPath = "/opt/zongsoft/daemon";
 		return package;
 	}
@@ -479,6 +500,7 @@ public sealed partial class MigratorPackageTest
 		var name = input + (edition == null ? "" : "-" + edition) + "(migrate)@" + version + "_" + runtime;
 		var archive = directory.Write(name + ".tar.gz", "");
 		var script = directory.Write(name + ".sh", "#!/bin/sh\n# opaque external launcher, never executed by tests\nexit 0\n");
+
 		using var stream = File.Create(archive);
 		using var gzip = new GZipStream(stream, CompressionLevel.SmallestSize);
 		using var writer = new TarWriter(gzip, TarEntryFormat.Pax, false);
@@ -493,6 +515,7 @@ public sealed partial class MigratorPackageTest
 			writer.WriteEntry(new PaxTarEntry(TarEntryType.Directory, ".artifacts"));
 		if(failure != "no-global")
 			writer.WriteEntry(new PaxGlobalExtendedAttributesTarEntry(metadata));
+
 		using var body = new MemoryStream(Encoding.UTF8.GetBytes("opaque sql fixture: SELECT 'original';\n"));
 		writer.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, ".artifacts/mysql/schema.sql") { DataStream = body, Mode = (UnixFileMode)384 });
 		return (archive, script);
@@ -501,6 +524,7 @@ public sealed partial class MigratorPackageTest
 	private static void AssertOrdered(string script, params string[] fragments)
 	{
 		var previous = -1;
+
 		foreach(var fragment in fragments)
 		{
 			var index = script.IndexOf(fragment, StringComparison.Ordinal);
@@ -516,6 +540,7 @@ public sealed partial class MigratorPackageTest
 			return Encoding.UTF8.GetString(ReadTar(File.ReadAllBytes(file))["install.sh"]);
 		if(format == "deb")
 			return Encoding.UTF8.GetString(ReadTar(ReadAr(file)["control.tar.gz"])["postinst"]);
+
 		var bytes = File.ReadAllBytes(file);
 		var start = RpmHeaderEnd(bytes, 96, true);
 		var count = ReadInt(bytes, start + 8);
@@ -524,8 +549,10 @@ public sealed partial class MigratorPackageTest
 		for(var i = 0; i < count; i++)
 		{
 			var entry = start + 16 + i * 16;
+
 			if(ReadInt(bytes, entry) != 1024)
 				continue;
+
 			var offset = store + ReadInt(bytes, entry + 8);
 			return Encoding.UTF8.GetString(bytes, offset, Array.IndexOf(bytes, (byte)0, offset) - offset);
 		}
@@ -540,8 +567,10 @@ public sealed partial class MigratorPackageTest
 			return ReadTar(File.ReadAllBytes(file));
 		if(format == "deb")
 			return ReadTar(ReadAr(file)["data.tar.gz"]);
+
 		var bytes = File.ReadAllBytes(file);
 		var offset = RpmHeaderEnd(bytes, RpmHeaderEnd(bytes, 96, true), false);
+
 		using var compressed = new MemoryStream(bytes, offset, bytes.Length - offset);
 		using var gzip = new GZipStream(compressed, CompressionMode.Decompress);
 		using var content = new MemoryStream();
@@ -560,6 +589,7 @@ public sealed partial class MigratorPackageTest
 
 			if(name == "TRAILER!!!")
 				break;
+
 			entries.Add(name, bytes[offset..(offset + size)]);
 			offset = (offset + size + 3) & ~3;
 		}
@@ -597,6 +627,7 @@ public sealed partial class MigratorPackageTest
 		{
 			if(entry.DataStream == null)
 				continue;
+
 			using var content = new MemoryStream();
 			entry.DataStream.CopyTo(content);
 			result.Add(entry.Name, content.ToArray());
@@ -651,6 +682,7 @@ public sealed partial class MigratorPackageTest
 			{
 				if(arguments.Length > 0)
 					this.Output.Write(arguments[^1]);
+
 				return null;
 			}
 
@@ -658,6 +690,7 @@ public sealed partial class MigratorPackageTest
 				return this.Output;
 			if(method.Name == "get_Encoding")
 				return Encoding.UTF8;
+
 			return null;
 		}
 	}

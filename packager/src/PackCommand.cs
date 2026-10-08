@@ -54,7 +54,7 @@ namespace Zongsoft.Tools.Packager;
 [CommandOption(ARCHITECTURE_OPTION, typeof(string), "X64")]
 [CommandOption(OUTPUT_OPTION, typeof(string))]
 [CommandOption(EXCLUDE_OPTION, typeof(string))]
-[CommandOption(MIGRATOR_OPTION, typeof(string))]
+[CommandOption(MIGRATION_OPTION, typeof(string))]
 [CommandOption(WEB_OPTION, typeof(string))]
 [CommandOption(OVERWRITE_OPTION, typeof(string), "False")]
 [CommandOption(HOMEPAGE_OPTION, typeof(string), DEFAULT_HOMEPAGE)]
@@ -104,7 +104,7 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	protected const string MANUFACTURER_OPTION = Variables.MANUFACTURER;
 	protected const string DEPENDENCIES_OPTION = Variables.DEPENDENCIES;
 	protected const string EXCLUDE_OPTION = Variables.EXCLUDE;
-	protected const string MIGRATOR_OPTION = "migrator";
+	protected const string MIGRATION_OPTION = "migration";
 	protected const string WEB_OPTION = "web";
 	protected const string OVERWRITE_OPTION = "overwrite";
 	protected const string INSTALL_PATH_OPTION = "install-path";
@@ -190,9 +190,9 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 			return ValueTask.FromResult<object>(null);
 
 		//确保输出目录存在
-		var migrator = context.Options.GetValue<string>(MIGRATOR_OPTION);
-		if(!string.IsNullOrWhiteSpace(migrator))
-			package.Migrator = Migrator.Load(package, migrator);
+		var migration = context.Options.GetValue<string>(MIGRATION_OPTION);
+		if(!string.IsNullOrWhiteSpace(migration))
+			package.Migration = Migration.Load(package, migration);
 
 		//服务与 Web 配置器共用本次宿主解析结果。
 		package.Host = ApplicationHost.Resolve(package);
@@ -202,7 +202,7 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 			context.Arguments,
 			[resolved.Exclude]);
 
-		package.Migrator?.Attach(package);
+		package.Migration?.Attach(package);
 
 		var web = Web.Configurator.Parse(context.Options.GetValue<string>(WEB_OPTION), source, resolved);
 		if(web.Enabled)
