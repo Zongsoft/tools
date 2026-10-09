@@ -373,7 +373,7 @@ Run regression tests without publishing:
 dotnet test test/Zongsoft.Tools.Deployer.Tests.csproj -f net10.0 -p:GeneratePackageOnBuild=false
 ```
 
-Profile imports use Core: ImportDirective handles imports through a shared ProfileReadSession; ProfileOptions.Loading records imported manifest hashes. See [implementation details](docs/implementation.md#profile-import-callbacks).
+Profile imports use Core: ImportDirective handles imports through a shared ProfileReader.Session; ProfileOptions.Loading records imported manifest hashes. See [implementation details](docs/implementation.md#profile-import-callbacks).
 
 See [implementation details](docs/implementation.md#core-profile-declarations-and-saving) for Core Profile source/override rules and read/write responsibilities. Deployment does not save its manifests.
 

@@ -39,7 +39,7 @@ Release references the Zongsoft.Core NuGet package; Debug references the local C
 | TFM | NuGetFramework represents framework identity and uses System.Version for framework/platform versions. NuGetVersion and VersionRange represent package versions and constraints. Explicit framework-filter rules, including ^, are handled separately from nearest-compatible asset selection. |
 | RID | NuGet `JsonRuntimeFormat.ReadRuntimeGraph` loads the graph; `RuntimeGraph.ExpandRuntime` supplies fallback candidates. |
 
-Core registers implementations globally in Profile.Directives. ProfileReader parses one source; ProfileReadSession dispatches directives and manages cycle/depth checks. ProfileOptions exposes keyed Directives settings and Loading/Loaded file callbacks; the collection owns Processing/Processed callbacks and an Options reference to its owner. Deployer hashes imported files in Loading when Referer is non-null and records roots separately. Appsettings dotted keys, target containment, link rejection and ownership remain deployment responsibilities.
+Core registers implementations globally in Profile.Directives. ProfileReader parses one source; ProfileReader.Session dispatches directives and manages cycle/depth checks. ProfileOptions exposes keyed Directives settings and Loading/Loaded file callbacks; the collection owns Processing/Processed callbacks and an Options reference to its owner. Deployer hashes imported files in Loading when Referer is non-null and records roots separately. Appsettings dotted keys, target containment, link rejection and ownership remain deployment responsibilities.
 
 ## From manifests to execution
 
@@ -146,13 +146,13 @@ Reader resolves the import options from ProfileOptions.Directives. ProfileDirect
 
 Deployer only subscribes to `Loading`. Hashing reopens the input path and is not a strict snapshot of parsed bytes.
 
-Core separates parsing in ProfileReader, import paths and optional/strict open failures in ImportDirective, and recursion guards in ProfileReadSession. The session owns the active chain, streams and file notifications. Profile.Load remains a facade. After parsing a child, parent Profile.Import merges effective references and records relationships, then Loaded notifies before activity cleanup.
+Core separates parsing in ProfileReader, import paths and optional/strict open failures in ImportDirective, and recursion guards in ProfileReader.Session. The session owns the active chain, streams and file notifications. Profile.Load remains a facade. After parsing a child, parent Profile.Import merges effective references and records relationships, then Loaded notifies before activity cleanup.
 
 Loading/Loaded use Action<ProfileContext>: FilePath is the absolute source path, Depth is the active depth, Referer is the direct referring profile or null for a root, and Profile is null before parsing and identifies the parsed source afterward. Each file notification has a separate context. The session captures the global registry before cloning load options; the cloned settings collection points to the cloned ProfileOptions. ProfileDirectiveContext inherits ProfileContext, with Profile identifying the declaring source and Referer its direct parent. Directives.Processing/Directives.Processed surround each directive, permit Argument rewriting and Handled takeover, and preserve the original comment. Import options use None for the built-in optional-file behavior, Strict for required files, Ignore for comment-only handling, and Suppress for rejection before directive callbacks. Deployer uses the import defaults and subscribes only to Loading for child hashes. Callback exceptions abort the entire load.
 
 ## Core Profile declarations and saving
 
-Core separates ordered local statements from the merged effective view. Imports replace effective references and entries identify their actual source declarations. Duplicate local keys still fail; local/import precedence follows reading order. ProfileReadSession coordinates loading, ProfileReader parses declarations and ProfileWriter owns saving.
+Core separates ordered local statements from the merged effective view. Imports replace effective references and entries identify their actual source declarations. Duplicate local keys still fail; local/import precedence follows reading order. ProfileReader.Session coordinates loading, ProfileReader parses declarations and ProfileWriter owns saving.
 
 Core Save() without an explicit destination writes changed declarations in the receiver and import subtree back to their respective sources. Explicit paths, streams and text writers output only the receiver's statements. Unchanged files are not rewritten. Multiple outputs are all prepared before individual commits; this is not a cross-file transaction. Deployer only reads manifests and records hashes through Loading; it does not invoke these save entry points.
 
