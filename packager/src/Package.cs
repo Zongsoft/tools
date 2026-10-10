@@ -47,7 +47,14 @@ namespace Zongsoft.Tools.Packager;
 public abstract partial class Package
 {
 	#region 构造函数
-	protected Package(string name, string edition, Version version, Platform platform, Architecture architecture, Variables variables = null)
+	/// <summary>根据应用身份、目标平台及制作选项初始化安装包。</summary>
+	/// <param name="name">应用名称，不能为空。</param>
+	/// <param name="edition">应用发行版；为空时不附加发行版标识。</param>
+	/// <param name="version">非零的应用版本。</param>
+	/// <param name="platform">目标操作系统平台。</param>
+	/// <param name="architecture">目标处理器架构。</param>
+	/// <param name="options">本次制作的类型化选项；为空时使用独立的默认选项。</param>
+	protected Package(string name, string edition, Version version, Platform platform, Architecture architecture, PackageOptions options = null)
 	{
 		ArgumentException.ThrowIfNullOrEmpty(name);
 
@@ -59,20 +66,20 @@ public abstract partial class Package
 		this.Version = version;
 		this.Platform = platform;
 		this.Architecture = architecture;
-		this.Variables = variables ?? new Variables();
+		this.Options = options ?? new PackageOptions();
 		this.Runtime = Utility.GetRuntimeIdentifier(platform, architecture);
-		this.PackageIdentity = GetPackageIdentity(name, this.Variables);
+		this.PackageIdentity = GetPackageIdentity(name, this.Options);
 		this.PackageName = GetPackageName(this.PackageIdentity, edition);
-		this.Framework = this.Variables.Framework;
-		this.Title = this.Variables.Title;
-		this.Summary = this.Variables.Summary;
-		this.Description = this.Variables.Description;
-		this.Homepage = this.Variables.Homepage;
-		this.Category = this.Variables.Category;
-		this.License = this.Variables.License;
-		this.Maintainer = this.Variables.Maintainer;
-		this.Manufacturer = this.Variables.Manufacturer;
-		this.Dependencies = this.Variables.Dependencies;
+		this.Framework = this.Options.Framework;
+		this.Title = this.Options.Title;
+		this.Summary = this.Options.Summary;
+		this.Description = this.Options.Description;
+		this.Homepage = this.Options.Homepage;
+		this.Category = this.Options.Category;
+		this.License = this.Options.License;
+		this.Maintainer = this.Options.Maintainer;
+		this.Manufacturer = this.Options.Manufacturer;
+		this.Dependencies = this.Options.Dependencies;
 		this.Entries = new(this);
 	}
 	#endregion
@@ -104,7 +111,7 @@ public abstract partial class Package
 	#endregion
 
 	#region 内部属性
-	internal Variables Variables { get; }
+	internal PackageOptions Options { get; }
 	internal ApplicationHost Host { get; set; }
 	internal Web.Configurator.Result Web { get; set; }
 	internal abstract string FileName { get; }
@@ -148,9 +155,9 @@ public abstract partial class Package
 
 	#region 私有方法
 	private static string GetPackageName(string name, string edition) => string.IsNullOrEmpty(edition) ? name : $"{name}-{edition}";
-	private static string GetPackageIdentity(string name, Variables variables)
+	private static string GetPackageIdentity(string name, PackageOptions options)
 	{
-		var daemon = variables.Daemon;
+		var daemon = options.Daemon;
 
 		if(daemon.Disabled || string.IsNullOrWhiteSpace(daemon.Identifier))
 			return name;
@@ -256,24 +263,10 @@ public abstract partial class Package
 			_entries[entryName] = new(System.Text.Encoding.UTF8.GetBytes(content), entryName, Utility.Unix.GetTimestamp(DateTime.UtcNow), mode, false);
 		}
 
-		internal void Add(string source, string argument)
-		{
-			var text = Normalizer.Normalize(argument, _package.Variables, null);
-			var index = text.LastIndexOf(':');
-
-			if(OperatingSystem.IsWindows() && index == 1)
-				index = -1;
-
-			var path = index > 0 ? text[..index].Trim() : text;
-			var alias = index > 0 ? text[(index + 1)..].Trim() : null;
-
-			this.AddEntry(source, path, alias, _package.EntryPrefix);
-		}
-
 		internal void Load(string source, IReadOnlyCollection<string> arguments, IEnumerable<string> exclusions = null)
 		{
 			_manifest = Path.GetFullPath(Path.Combine(source, ".edition"));
-			var exclusion = EntryExclusion.Create(source, exclusions, _package.Variables);
+			var exclusion = EntryExclusion.Create(source, exclusions, _package.Options);
 
 			if(arguments == null || arguments.Count == 0)
 			{
@@ -283,7 +276,7 @@ public abstract partial class Package
 
 			foreach(var argument in arguments)
 			{
-				var text = Normalizer.Normalize(argument, _package.Variables, null);
+				var text = _package.Options.Evaluator.Evaluate(argument).Trim();
 				var index = text.LastIndexOf(':');
 
 				if(OperatingSystem.IsWindows() && index == 1)
@@ -296,7 +289,7 @@ public abstract partial class Package
 			}
 		}
 
-		void AddEntry(string source, string path, string alias, string prefix) => this.AddEntry(source, path, alias, prefix, null);
+		internal void AddEntry(string source, string path, string alias, string prefix) => this.AddEntry(source, path, alias, prefix, null);
 		void AddEntry(string source, string path, string alias, string prefix, EntryExclusion exclusion)
 		{
 			var rooted = IsRootedAlias(alias);
@@ -462,7 +455,7 @@ public abstract partial class Package
 				_patterns = patterns;
 			}
 
-			public static EntryExclusion Create(string source, IEnumerable<string> exclusions, Variables variables)
+			public static EntryExclusion Create(string source, IEnumerable<string> exclusions, PackageOptions options)
 			{
 				if(exclusions == null)
 					return null;
@@ -474,7 +467,7 @@ public abstract partial class Package
 					if(string.IsNullOrWhiteSpace(exclusion))
 						continue;
 
-					var text = Normalizer.Normalize(exclusion, variables, null);
+					var text = options.Evaluator.Evaluate(exclusion).Trim();
 					if(string.IsNullOrWhiteSpace(text))
 						continue;
 

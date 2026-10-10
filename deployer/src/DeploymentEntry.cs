@@ -68,6 +68,8 @@ public sealed class DeploymentEntry
 			(destinationRequisite.IsEmpty ? sourceRequisite.ToString() : $"{sourceRequisite} & {destinationRequisite}");
 
 		var index = source.IndexOf(':');
+		if(index >= 0 && source.AsSpan(0, index).Contains("${", StringComparison.Ordinal))
+			index = -1;
 
 		var name = index switch
 		{

@@ -29,7 +29,7 @@ public class NginxConfiguratorTest
 	public void NativeGroupsMaskUnusedCommonValuesAndApplicationInference()
 	{
 		using var files = new MigrationTestDirectory();
-		var result = Configure(files, "[api]\nbind!legacy=$(absent)\nhost=$(absent)\nnginx:listen!80\nnginx:server_name=example.com\nserver=~\n[api home]\nnginx:proxy_pass=http://app");
+		var result = Configure(files, "[api]\nbind!legacy=${absent}\nhost=${absent}\nnginx:listen!80\nnginx:server_name=example.com\nserver=~\n[api home]\nnginx:proxy_pass=http://app");
 		var text = Assert.Single(result.Files, file => file.Path.EndsWith(".conf", StringComparison.Ordinal)).Content.Render("/opt/example");
 		Assert.Contains("listen 80;", text);
 		Assert.Contains("proxy_pass http://app;", text);
@@ -69,12 +69,12 @@ public class NginxConfiguratorTest
 	public void RegexAndHeaderPriorityArePreserved()
 	{
 		using var files = new MigrationTestDirectory();
-		var result = Configure(files, "[api]\nbind!legacy=http://*\nserver=http://app\nnginx:proxy_set_header!Host=$(unused)\n[api route]\nmatch=regex\npath=^/items/[0-9]{2}$\nheader!Host=literal.example\nnginx:proxy_set_header!X-Remote=$remote_addr");
+		var result = Configure(files, "[api]\nbind!legacy=http://*\nserver=http://app\nnginx:proxy_set_header!Host=${unused}\n[api route]\nmatch=regex\npath=^/items/[0-9]{2}$\nheader!Host=literal.example\nnginx:proxy_set_header!X-Remote=$remote_addr");
 		var text = Assert.Single(result.Files, file => file.Path.EndsWith(".conf", StringComparison.Ordinal)).Content.Render("/opt/example");
 		Assert.Contains("location ~* \"^/items/[0-9]{2}$\"", text);
 		Assert.Contains("proxy_set_header Host literal.example;", text);
 		Assert.Contains("proxy_set_header X-Remote $remote_addr;", text);
-		Assert.DoesNotContain("$(unused)", text);
+		Assert.DoesNotContain("${unused}", text);
 	}
 
 	[Theory]
@@ -110,5 +110,5 @@ public class NginxConfiguratorTest
 
 
 	internal static Configurator.Result Configure(MigrationTestDirectory files, string profile) =>
-		new Configurator.Nginx().Configure(Definition.Load(files.Write("web.profile", profile)), new("example", "/opt/example", new Dictionary<string, string>()));
+		new Configurator.Nginx().Configure(Definition.Load(files.Write("web.profile", profile)), new("example", "/opt/example", Utility.CreateEvaluator()));
 }

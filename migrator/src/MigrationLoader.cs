@@ -38,15 +38,18 @@ using System.Collections.Generic;
 
 using Zongsoft.Terminals;
 using Zongsoft.Components;
+using Zongsoft.Text.Templating;
 using Zongsoft.Configuration.Profiles;
 
 namespace Zongsoft.Tools.Migrator.Migration;
 
 /// <summary>解析升迁文件及参数，并在打包端生成有序 SQL 批次。</summary>
-public sealed partial class MigrationLoader(Func<string, string> expand, Action<string> warning = null)
+/// <param name="evaluator">提供配置变量及模板求值的评估器；为空时创建独立的内存变量来源。</param>
+/// <param name="warning">接收非致命诊断的回调；为空时向终端输出警告。</param>
+public sealed partial class MigrationLoader(TemplateEvaluator evaluator, Action<string> warning = null)
 {
 	#region 成员字段
-	private readonly Func<string, string> _expand = expand ?? (value => value);
+	private readonly TemplateEvaluator _evaluator = evaluator ?? Utility.CreateEvaluator();
 	private readonly Action<string> _warning = warning ?? (message => Terminal.WriteLine(CommandOutletColor.DarkYellow, message));
 	#endregion
 
@@ -78,16 +81,15 @@ public sealed partial class MigrationLoader(Func<string, string> expand, Action<
 		{
 			found = true;
 
-			var sources = new List<Profile>();
-			var profile = MigrationProfile.Load(file, item => { Validate(item); sources.Add(item); }, true);
+			var imports = new Dictionary<(Profile Profile, int Line), Profile>();
+			var profile = this.LoadProfile(file, Validate, true, imports);
 			var selections = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 			var sections = profile.Sections.SelectMany(section => new[] { section }.Concat(section.Sections))
 				.ToDictionary(section => section.FullName, StringComparer.OrdinalIgnoreCase);
 			var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 			var batches = new List<(ProfileSection Section, string Path, List<ProfileEntry> Entries)>();
 
-			foreach(var declaration in GetDeclarations(file, sources.Select(item => item.FilePath).ToHashSet(
-				OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)))
+			foreach(var declaration in GetDeclarations(profile, imports))
 			{
 				var section = sections[declaration.Name];
 				if(MigrationProvider.Get(section.Section?.Name ?? section.Name).Name == "amazon.s3")
@@ -125,7 +127,7 @@ public sealed partial class MigrationLoader(Func<string, string> expand, Action<
 				if(provider == "amazon.s3")
 					this.AddSteps(plan, section, indexes);
 				else
-					this.AddDatabaseSteps(plan, section, provider, section.Section == null ? null : _expand(section.Name), indexes, selections, batch.Entries, batch.Path);
+					this.AddDatabaseSteps(plan, section, provider, section.Section == null ? null : _evaluator.Evaluate(section.Name), indexes, selections, batch.Entries, batch.Path);
 			}
 		}
 
@@ -203,7 +205,7 @@ public sealed partial class MigrationLoader(Func<string, string> expand, Action<
 					plan.Steps.Add(step);
 				}
 
-				add(_expand(entry.Name), _expand(entry.Value));
+				add(_evaluator.Evaluate(entry.Name), _evaluator.Evaluate(entry.Value));
 			}
 			catch(Exception ex) when(ex is not OutOfMemoryException)
 			{
@@ -217,7 +219,7 @@ public sealed partial class MigrationLoader(Func<string, string> expand, Action<
 	{
 		foreach(var argument in paths.SelectMany(path => (path ?? string.Empty).Split([';', '|'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)))
 		{
-			var path = Path.GetFullPath(Path.Combine(source, _expand(argument)));
+			var path = Path.GetFullPath(Path.Combine(source, _evaluator.Evaluate(argument)));
 			var files = Utility.Search(path, files: true, sourceDirectory: source).Select(match => match.Path).ToArray();
 
 			if(files.Length == 0)
@@ -236,6 +238,23 @@ public sealed partial class MigrationLoader(Func<string, string> expand, Action<
 		}
 	}
 
+	private Profile LoadProfile(string path, Action<Profile> validate = null, bool migration = false, Dictionary<(Profile Profile, int Line), Profile> imports = null)
+	{
+		var pending = new Stack<ProfileDirectiveContext>();
+		var options = Utility.ConfigureDirectiveEvaluation(new ProfileOptions(), _evaluator);
+		options.Directives.Processing += context =>
+		{
+			pending.Push(context);
+		};
+		options.Directives.Processed += _ => pending.Pop();
+		options.Loaded += context =>
+		{
+			if(imports != null && context.Referer != null && pending.TryPeek(out var directive))
+				imports[(context.Referer, directive.LineNumber)] = context.Profile;
+		};
+		return MigrationProfile.Load(path, validate, migration, options);
+	}
+
 	private Dictionary<string, string> FindParameters(string migration, string provider, string runtime)
 	{
 		provider = MigrationProvider.Get(provider).Name;
@@ -251,7 +270,7 @@ public sealed partial class MigrationLoader(Func<string, string> expand, Action<
 				if(!File.Exists(path))
 					continue;
 
-				var profile = MigrationProfile.Load(path);
+				var profile = this.LoadProfile(path);
 				var sections = profile.Sections.Where(section => MigrationProvider.Get(provider).Aliases.Contains(section.Name, StringComparer.OrdinalIgnoreCase)).ToArray();
 
 				if(sections.Length > 1)
@@ -269,7 +288,7 @@ public sealed partial class MigrationLoader(Func<string, string> expand, Action<
 				{
 					try
 					{
-						result.Add(entry.Name, _expand(entry.Value));
+						result.Add(entry.Name, _evaluator.Evaluate(entry.Value));
 					}
 					catch
 					{

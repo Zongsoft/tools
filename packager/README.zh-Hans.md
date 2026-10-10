@@ -42,7 +42,7 @@
 - **应用版本管理**：读取并回写源目录的 `.edition` 清单（回退 `.version`），支持多个 发行版 _(**E**dition)_。
 - **Web 托管配置**：从 `web.profile` 生成 Nginx 站点配置，并在安装时激活。
 - **升迁集成**：收录独立 [migrator 工具](../migrator/README.zh-Hans.md)制作的升迁产物，安装时自动执行。
-- **变量**：支持 `$(name)` 与 `%name%` 两种引用语法，可从环境变量和 `.env` 文件取值。
+- **变量**：支持 `${name}` 模板引用语法，可从环境变量和 `.env` 文件取值。
 - **跨平台制包**：在 Unix 类系统上保留文件权限；在 Windows 上为可执行文件提供保守的默认权限。
 
 ## 基础概念
@@ -55,7 +55,7 @@
 
 1. **固定源目录**：解析 `--source`（默认当前目录）。
 2. **确定应用身份**：合并源目录的 `.edition` 清单文件或回退读取的 `.version` 版本标识文件中的值与 `--name`、`--edition`、`--version` 选项。
-3. **加载变量**：依次读取默认值、环境变量、各级 `.env` 和命令选项。
+3. **加载变量**：组合命令选项、各级 `.env` 和环境变量，默认值由 Core 在最后回退查询。
 4. **收集打包项**：按位置参数和 `--exclude` 确定载荷文件。
 5. **生成附属内容**：systemd 服务、生命周期脚本、Nginx 配置、升迁产物。
 6. **编码并写出**：生成 `.tar.gz`（含配套 `.sh`）、`.deb` 或 `.rpm`。
@@ -72,7 +72,7 @@
 | **根路径条目** | 别名以 `/` 开头的打包项，安装到系统绝对路径（如 `/etc/...`），而不是安装根之下。 |
 | **服务(daemon)** | 默认生成或收录的 systemd 服务，安装后启用。只打包文件时使用 `--daemon:none`。 |
 | **生命周期脚本** | 在目标主机安装前后、卸载前后执行的脚本，默认自动生成，也可自定义。 |
-| **变量** | 在选项值和打包项中以 `$(name)` 或 `%name%` 引用的值。 |
+| **变量** | 在选项值和打包项中以 `${name}` 引用的值。 |
 
 ### 职责边界
 
@@ -139,7 +139,7 @@ dotnet tool uninstall -g Zongsoft.Tools.Packager
 ```cmd
 set "framework=net10.0"
 set "Environment=production"
-cd /d D:\Zongsoft\hosting\web\default
+cd /d D:/Zongsoft/hosting/web/default
 deploy.cmd
 ```
 
@@ -162,7 +162,7 @@ dotnet-pack deb ^
 	--daemon:zongsoft.web ^
 	--web:nginx ^
 	--daemon-environments:Environment,DOTNET_ENVIRONMENT,ASPNETCORE_ENVIRONMENT ^
-	--exclude:**/logs/;bin/$(compilation)/$(framework)/*.staticwebassets.* ^
+	--exclude:**/logs/;bin/${compilation}/${framework}/*.staticwebassets.* ^
 	--output:.packages ^
 	../../mime ^
 	appsettings.json ^
@@ -170,7 +170,7 @@ dotnet-pack deb ^
 	web*.option ^
 	wwwroot ^
 	plugins ^
-	bin/$(compilation)/$(framework):~
+	bin/${compilation}/${framework}:~
 ```
 
 | 选项或参数 | 作用 |
@@ -178,7 +178,7 @@ dotnet-pack deb ^
 | `--name:Zongsoft.Hosting.Web` | 应用名称，入口程序集为 `Zongsoft.Hosting.Web.dll`。 |
 | `--title:Zongsoft.Web` | 人类可读标题，也作为服务描述。 |
 | `--version:1.0.0` | 示例发行版本号，请按实际版本号设置。 |
-| `--compilation`、`framework` | 编译配置由选项传入，框架从合并 Variables（本例为 hosting `.env`）读取；供 `--exclude` 和载荷参数中的 `$(compilation)`、`$(framework)` 引用。 |
+| `--compilation`、`framework` | 编译配置由选项传入，框架从组合变量来源（本例为 hosting `.env`）读取；供 `--exclude` 和载荷参数中的 `${compilation}`、`${framework}` 引用。 |
 | `--Environment`、`--DOTNET_ENVIRONMENT`、`--ASPNETCORE_ENVIRONMENT` | 自定义变量，经 `--daemon-environments` 写入生成服务的环境变量。 |
 | `--listen:8069` | 生成的服务监听 `http://127.0.0.1:8069`。 |
 | `--daemon:zongsoft.web` | 软件包和服务标识为 `zongsoft.web`，安装目录为 `/opt/zongsoft/web`。 |
@@ -186,7 +186,7 @@ dotnet-pack deb ^
 | `--exclude` | 跳过日志目录和构建产生的静态 Web 资产清单。 |
 | `--output:.packages` | 安装包输出到宿主目录下的 `.packages`。 |
 | `../../mime` 至 `plugins` | 选择载荷：hosting 仓库根目录的 MIME 定义、宿主配置、静态文件和已部署的插件。 |
-| `bin/$(compilation)/$(framework):~` | 目录别名 `~` 把编译输出的内容直接放到安装根目录。 |
+| `bin/${compilation}/${framework}:~` | 目录别名 `~` 把编译输出的内容直接放到安装根目录。 |
 
 > 💡 提示：把 `deb` 换成 `tar` 或 `rpm` 即可生成其他格式。重复生成同一格式时，请更换输出目录或添加 `--overwrite`。
 
@@ -250,9 +250,9 @@ dotnet-pack rpm <选项...> [打包项...]
 | `--version:<version>` | _条件必需_ | 发行版本号；存在源目录的 `.edition` 清单文件或 `.version` 版本标识文件时，覆盖其中所选版本的版本号。零版本号 _(`0.0.0.0`)_ 会被拒绝。 |
 | `--edition:<name>` | 由 `.edition` 定义 | 可选发行版名，追加到包名。 |
 | `--platform:<platform>` | **必需** | 目标平台：`linux`、`unix`、`osx`、`windows`/`win`、`unknown`；Linux 包通常用 `linux`。 |
-| `--framework:<tfm>` | `framework` 变量或空 | 可选 .NET 目标框架，例如 `net10.0`；用于查找 `bin/<compilation>/<framework>` 中的宿主。选项未指定或为空时使用合并后的变量；最终值为空时跳过该构建目录，仍可定位源目录中的宿主。 |
+| `--framework:<tfm>` | `framework` 变量或空 | 可选 .NET 目标框架，例如 `net10.0`；用于查找 `bin/<compilation>/<framework>` 中的宿主。省略选项时按变量来源查找；显式空值终止回退；最终值为空时跳过该构建目录，仍可定位源目录中的宿主。 |
 | `--architecture:<arch>` | `x64` | 目标 CPU 架构，例如 `x64`、`x86`、`arm64`、`arm`。 |
-| `--compilation:<name>` | `Release` | 可选 .NET 构建配置，用于查找 `bin/<compilation>/<framework>` 中的宿主；也可通过 `$(compilation)` 引用。 |
+| `--compilation:<name>` | `Release` | 可选 .NET 构建配置，用于查找 `bin/<compilation>/<framework>` 中的宿主；也可通过 `${compilation}` 引用。 |
 
 普通文件打包无需提供 `--framework` 或 `--compilation`，这两个选项不会执行编译。源目录已有应用 DLL，或使用现成的 `.service` 文件时，也可省略两项；从 .NET 构建目录查找宿主时通过 `--framework`、环境变量或祖先 `.env` 提供框架，`--compilation` 默认使用 `Release`。
 
@@ -478,7 +478,7 @@ Zongsoft.Hosting.Web=Enterprise
 2.0.0
 ```
 
-单版本与具名 Edition 格式不能混用。省略 `=Enterprise` 表示未设置 [`Editions.Current`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Services/ApplicationManifest.cs)。旧多 Edition `.version` 必须改名为 `.edition`；标识读取器只读取首个非空行，不解析后续 Edition 段落。回退标识可写为 `Zongsoft.Hosting.Web-Community@1.0.0`。
+单版本与具名 Edition 格式不能混用。省略 `=Enterprise` 表示未设置 [`Editions.Current`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Services/ApplicationManifest.cs)。回退标识可写为 `Zongsoft.Hosting.Web-Community@1.0.0`。
 
 ### 身份合并规则
 
@@ -669,7 +669,7 @@ HTTPS 需要在宿主中配置可用的默认服务器证书，打包器不生�
 
 ### 服务环境变量
 
-`--daemon-environments` 列出的变量值会写入生成服务的 `Environment=`。Web 宿主的 [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd) 用它写入 `Environment`、`DOTNET_ENVIRONMENT` 和 `ASPNETCORE_ENVIRONMENT`。下面的 Bash 示例显式指定框架；宿主脚本则从 Variables 读取框架：
+`--daemon-environments` 列出的变量值会写入生成服务的 `Environment=`。Web 宿主的 [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd) 用它写入 `Environment`、`DOTNET_ENVIRONMENT` 和 `ASPNETCORE_ENVIRONMENT`。下面的 Bash 示例显式指定框架；宿主脚本则从变量来源读取框架：
 
 ```bash
 dotnet-pack deb \
@@ -836,30 +836,32 @@ zongsoft-enterprise(migrate)@1.0.0_linux-x64.sh
 
 ## 变量
 
-选项值和打包项参数都可以引用变量，支持两种等价语法：
+工具明确启用 Core 的变量回退：具名变量按当前命名空间、各级父命名空间、全局的顺序查询；每一级先按来源优先级查询全部来源，最后才允许命令选项已声明的默认值。无命名空间的引用仍写作 `${name}`，命中空值也停止回退。
+
+选项值和打包项参数都可以引用变量，采用 Core 模板语法：
 
 ```text
-$(name)
-%name%
+${name}
+${namespace:name}
 ```
 
-变量名不区分大小写，可包含点号、连字符和索引。
+变量名采用 ASCII 标识符；配置和命令选项忽略大小写，系统环境按平台规则查询（Windows 忽略大小写，Unix/Linux 区分大小写）；命名空间以点号分层。命令选项中的点号、连字符改为下划线后引用。系统环境通过 `Variables.Environments()` 实时读取，只提供默认命名空间，不改写名称或原始值。
 
-### 加载顺序
+### 查询顺序
 
-变量按以下顺序加载，后加载的覆盖先加载的（空值同样参与覆盖）：
+全局变量按以下优先级查询，首个命中即生效（空值也终止查询）：
 
-1. 描述符默认值
-2. 系统环境变量
-3. 从文件系统根目录到源目录，各级目录直属的 `.env` 文件（由远到近）
-4. 显式命令选项，包括额外选项（如 `--Environment:Production`）
+1. 显式命令选项，包括额外选项（如 `--Environment:Production`）
+2. 从源目录到文件系统根目录，各级目录直属的 `.env` 文件（由近到远）
+3. 系统环境变量
+4. 描述符默认值：仅在前三项全部未命中时由 Core 查询
 
-`--framework` 未指定或为空时，使用合并后变量集中的非空 `framework`；非空选项优先。没有非空变量可用时沿用原有处理流程，纯空白选项值保持原有行为。
+所有变量（包括 `framework`）统一遵循首个命中生效：null、空字符串、false 和 0 都不会触发下层回退。只有未提供该值时才继续查找；需要有效值的业务操作负责校验并在无法继续时报告错误。
 
 `.env` 的读取规则：
 
 - 先用环境变量和选项解析并固定 `--source`，再加载 `.env`；`.env` 不能确定或重新指定 source，也不会额外加载工作目录的祖先链或子目录。
-- 使用 [`Profile.Load`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Configuration/Profiles/Profile.cs) 读取，支持 INI 与 `#@import`。根级条目保留原名；段落各级名称与条目名以 `_` 拼接。例如 `[io rustfs]` 下的 `access_key=example` 生成 `io_rustfs_access_key`，根级 `environment=Development` 生成 `environment`。
+- 使用 [`Profile.Load`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Configuration/Profiles/Profile.cs) 读取，支持 INI 与 `#@import`。根级条目属于默认命名空间；章节层级以点号组成命名空间，条目名的点号和连字符改为下划线。例如 `[io rustfs]` 下的 `access_key=example` 生成 `io.rustfs:access_key`，根级 `environment=Development` 生成 `environment`。
 - 缺失的文件跳过；读取或解析失败则终止制包。
 - 每次调用的变量相互独立，不修改进程环境变量。
 
@@ -871,7 +873,7 @@ $(name)
 - 最终身份以及解析后的 `source`、`output` 会覆盖变量集合中的同名值。
 - `--migration` 必须显式启用；`--overwrite` 可由环境变量或 `.env` 提供，再由命令行覆盖。
 
-可以传入字面量 `$(APP_VERSION)` 或 `%APP_VERSION%` 由打包器展开（在 Bash 中须加单引号，避免 Shell 抢先解释），也可以直接让 Shell 展开：
+可以传入字面量 `${APP_VERSION}` 由打包器展开（在 Bash 中须加单引号，避免 Shell 抢先解释），也可以直接让 Shell 展开：
 
 ```bash
 export APP_NAME=Zongsoft.Hosting.Web

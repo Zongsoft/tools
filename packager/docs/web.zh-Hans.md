@@ -74,7 +74,7 @@ server = http://app:8069
 | `nginx`、`nginx:` | 读取最终 source 直属的 `web.profile`。 |
 | `nginx:config/web.profile` | 相对最终 source 定位。 |
 | `nginx:../shared/web.production.profile` | 允许输入位于 source 外，但不自动向父目录搜索。 |
-| `nginx:D:\config\web.profile` | 支持构建平台的绝对路径；只拆第一个冒号，保留盘符。 |
+| `nginx:D:/config/web.profile` | 支持构建平台的绝对路径；只拆第一个冒号，保留盘符。 |
 | `:web.profile`、`none:web.profile` | 非空路径缺少有效托管器，报错。 |
 | `iis`、`iis:...` | 报告未实现，不回退 Nginx。 |
 | 其他托管器名称 | 报未知托管器。 |
@@ -171,10 +171,11 @@ server = http://local:8069
 `#@import` 可用空白、Tab 或 `|` 分隔多个目标：
 
 ```ini
-#@import shared/common.profile|shared/sites.profile
+#@import shared/common.profile
+#@import shared/sites.profile
 ```
 
-导入路径不执行打包变量展开，不支持引号包裹、通配符或含空格文件名；可改用没有空格的共享路径。顶层 `--web` 的终端引号能力不改变该规则。跨平台共享文件建议使用 `/` 分隔路径。
+导入参数通过 `Directives.Processing` 评估模板，每条指令导入一个完整路径；内部空格属于文件名，不移除引号，不展开通配符。跨平台共享文件建议使用 `/` 分隔路径。
 
 所有直接和递归导入目标都必须存在且可读。循环导入失败；默认最大深度为 64（包含顶层文件）。一个已完成的文件可再次导入，不等于递归循环。错误保留来源文件、段落、条目、行号及底层详情。
 
@@ -1099,37 +1100,35 @@ server = http://app:8069
 <a id="variables"></a>
 ## 变量与转义
 
-字段值支持 <code>&#36;(name)</code> 和 `%name%`，使用本次命令固定后的变量视图；来源依次包括默认值、环境、从根到最终 source 的 `.env` 以及显式选项。源目录和包身份遵循通用打包规则，不能用 Web 输入反向改变。
+字段值支持 <code>&#36;(name)</code> 和 `${name}`，使用本次命令固定后的变量视图；来源依次包括默认值、环境、从根到最终 source 的 `.env` 以及显式选项。源目录和包身份遵循通用打包规则，不能用 Web 输入反向改变。
 
 ```ini
 [api]
-host = $(Environment).api.example.com
+host = ${Environment}.api.example.com
 bind!legacy = http://*
-server = http://%BackendHost%:8069
-header!X-Environment = $(Environment)
+server = http://${BackendHost}:8069
+header!X-Environment = ${Environment}
 ```
 
 只有有效值需要求值。缺失的有效变量报错；被替换的无效后端不再求值。已知但未选择的 `iis:...` 值不求值；拼错前缀如 `ngnix:...` 则报错。
 
-段落名、公共字段名、成员标识及 import 路径不展开。原始 `!` 后缀代表实际参数，会按原始参数求值；不要据此在公共键名中使用变量。
+段落名、公共字段名和成员标识不求值。导入参数在 `Directives.Processing` 中评估模板；原始 `!` 后缀按实际参数求值。
 
 | 写法 | 行为 |
 | --- | --- |
-| <code>&#36;(name)</code>、`%name%` | 打包变量。 |
-| <code>&#36;&#36;(name)</code>、`%%name%%` | 转义为字面的 <code>&#36;(name)</code>、`%name%`，递归展开也不再求值。 |
-| <code>&#36;host</code>、<code>&#36;{host}</code>、<code>&#36;remote_addr</code> | 不是这两类打包变量；在原始设置中保留给 Nginx。 |
+| `${name}`、`${namespace:name}` | 打包变量。 |
+| `\${name}` | 保留字面的 `${name}`，递归评估也不再次展开。 |
+| `$host`、`$remote_addr` | 保留给 Nginx 的运行时变量。`${host}` 形式需写为 `\${host}`。 |
 
-Profile 引号不会保护变量免于展开。变量转义只解决求值，不保证目标配置能表示该字面值：例如公共固定头含 <code>&#36;</code> 时，当前 Nginx 输出器无法安全保持字面语义，会明确报错；不能把 <code>header!X-Template=&#36;&#36;(name)</code> 当作有效 Nginx 固定头示例。`header!X-Template=%%Environment%%` 则可表达字面 `%Environment%`。
+Profile 引号不阻止模板评估。变量转义不替代目标编码：公共固定头含 `$` 时，Nginx 输出器无法保证字面语义，会报错；运行时变量应放在原始 Nginx 指令中。
 
-按环境选择顶层文件可在命令参数中展开。Bash/PowerShell 中用单引号避免终端先解释 <code>&#36;()</code>：
+Bash/PowerShell 使用单引号保护命令参数中的模板，Windows cmd 可用双引号：
 
 ```shell
-dotnet-pack deb '--web:nginx:web.$(Environment).profile'
+dotnet-pack deb '--web:nginx:web.${Environment}.profile'
 ```
 
-Windows cmd 可用双引号。被选文件再用固定的相对 import 共享内容；不写 <code>#@import web.&#36;(Environment).profile</code>。
-
-构建期 `#@import` 与运行期 `nginx:include` 不同：前者读取 Profile，后者只是输出 Nginx 引用，不自动复制其目标文件。
+共享文件可以用 `#@import web.${Environment}.profile` 选择环境。每条指令导入一个文件；内部空格属于文件名，不用引号包裹路径。构建期 `#@import` 读取 Profile；运行期 `nginx:include` 只输出 Nginx 引用，不复制文件。
 
 <a id="example"></a>
 ## 完整配置示例
@@ -1351,7 +1350,7 @@ DESTDIR 前缀不写入默认引用；关闭激活或跳过生命周期仍必须
 | 现象 | 检查与处理 |
 | --- | --- |
 | 找不到 web.profile | 默认只查最终 source 直属文件；使用显式路径或纠正 source。 |
-| import 缺失/路径异常 | 按声明文件的目录解析；不能给 import 加变量、引号或空格路径。 |
+| import 缺失/路径异常 | 按声明文件的目录解析评估后的完整路径；检查变量来源和目标文件，不要给路径添加引号。 |
 | 同文件 server 混用 | 选择单后端或具名池；跨文件覆盖时才允许更换形式。 |
 | ~ 无法解析 | 检查是否本次生成服务、listen 是否唯一可连接；也可显式填写 server。 |
 | 路径未命中 | 检查 match、大小写、尾斜杠、正则顺序及是否显式保留根兜底。 |

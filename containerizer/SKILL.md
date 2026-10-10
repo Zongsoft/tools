@@ -27,6 +27,8 @@ README 面向使用者；implementation 解释当前契约和实现；本文件�
 
 制作端可用 Core；执行端保持 BCL-only。共享内容继续源码链接，不引入共享 DLL、DI 容器或通用状态机。已有 `IProcessRunner` 和 `IInstallationHost` 是生产调用边界；不为测试增加接口、回调、反射访问或包装入口。原本只需 private 的成员保持 private，覆盖不到的细节如实说明。
 
+工具通过共享 Utility 显式启用 TemplateEvaluatorOptions.Fallback；同一命名空间按来源顺序查询，全部未找到才逐级进入父命名空间及全局，最后查询来源已声明的默认值。原始值读取、递归模板和指令参数评估使用同一设置。Profile 变量视图不自行展开模板。
+
 ## 修改时保持的契约
 
 - CLI source 自身相对于调用目录，其余受管本地路径相对于最终 source；不要把 Linux 目标路径交给宿主平台路径规范化。

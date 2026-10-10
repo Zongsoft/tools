@@ -36,6 +36,7 @@ using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 
+using Zongsoft.Text.Templating;
 using Zongsoft.Configuration.Profiles;
 
 namespace Zongsoft.Tools.Packager.Web;
@@ -52,7 +53,7 @@ partial class Definition
 		#endregion
 
 		#region 加载方法
-		internal Definition Load(string filePath)
+		internal Definition Load(string filePath, TemplateEvaluator evaluator)
 		{
 			filePath = Path.GetFullPath(filePath);
 			_scopes.Add(string.Empty, new(string.Empty, 0, new(filePath)));
@@ -60,7 +61,7 @@ partial class Definition
 
 			try
 			{
-				profile = Profile.Load(filePath, new ProfileOptions(false)
+				profile = Profile.Load(filePath, Utility.ConfigureDirectiveEvaluation(new ProfileOptions(false)
 				{
 					Directives = { ProfileDirectiveOptions.Import(ProfileDirectiveBehavior.Strict) },
 					Loading = context =>
@@ -69,7 +70,7 @@ partial class Definition
 							this.Collect(context.Referer);
 					},
 					Loaded = context => this.Collect(context.Profile),
-				});
+				}, evaluator));
 			}
 			catch(DefinitionException) { throw; }
 			catch(Exception exception) when(exception is IOException or UnauthorizedAccessException or ProfileException or ArgumentException)

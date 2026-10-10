@@ -30,9 +30,9 @@ public sealed class PackageLifecycleTest
 	public void Tar_Metadata_IsReadableFromRenamedArchive(Architecture architecture, string expected)
 	{
 		using var directory = new TemporaryDirectory();
-		var variables = CreateVariables(directory.Path);
-		variables["daemon"] = "zongsoft.web.service";
-		var package = new Package.Tar("Zongsoft.Hosting.Web", "Enterprise", new Version(1, 0, 0), Platform.Linux, architecture, variables)
+		var options = CreateOptions(directory.Path);
+		options["daemon"] = "zongsoft.web.service";
+		var package = new Package.Tar("Zongsoft.Hosting.Web", "Enterprise", new Version(1, 0, 0), Platform.Linux, architecture, options)
 		{
 			Manufacturer = "Hosting Manufacturer",
 			Maintainer = "Hosting Maintainer",
@@ -79,7 +79,7 @@ public sealed class PackageLifecycleTest
 	public void Tar_Metadata_PackageSize_CountsPayloadBytesAndPreservesVersionIdentity()
 	{
 		using var directory = new TemporaryDirectory();
-		var package = new Package.Tar("Zongsoft.Hosting.Web", "Enterprise", new Version(1, 2, 3, 4), Platform.Linux, Architecture.X64, CreateVariables(directory.Path))
+		var package = new Package.Tar("Zongsoft.Hosting.Web", "Enterprise", new Version(1, 2, 3, 4), Platform.Linux, Architecture.X64, CreateOptions(directory.Path))
 		{
 			Scripts = new(":", ":", ":", ":"),
 		};
@@ -87,7 +87,7 @@ public sealed class PackageLifecycleTest
 		var file = Path.Combine(directory.Path, "settings.conf");
 		File.WriteAllBytes(file, new byte[1025]);
 		package.Entries.AddGeneratedContent("application.txt", content, Utility.Unix.Mode644);
-		package.Entries.Add(directory.Path, "settings.conf:/etc/zongsoft/settings.conf");
+		package.Entries.AddEntry(directory.Path, "settings.conf", "/etc/zongsoft/settings.conf", package.EntryPrefix);
 		var identity = new ApplicationIdentifier(package.Name, package.Edition, package.Version);
 		package.Entries.SetVersion(identity);
 		using var version = new MemoryStream();
@@ -121,7 +121,7 @@ public sealed class PackageLifecycleTest
 	public void Tar_Metadata_TextEscaping_DistinguishesNewlinesAndBackslashes()
 	{
 		using var directory = new TemporaryDirectory();
-		var package = new Package.Tar("example", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, CreateVariables(directory.Path))
+		var package = new Package.Tar("example", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, CreateOptions(directory.Path))
 		{
 			Summary = "摘要\\n\r\n说明",
 			Description = "说明\\path\r\n\n第二段\r结尾",
@@ -144,7 +144,7 @@ public sealed class PackageLifecycleTest
 	public void Tar_Metadata_EmptyOptionalValues_AreOmitted(string value)
 	{
 		using var directory = new TemporaryDirectory();
-		var package = new Package.Tar("example", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, CreateVariables(directory.Path))
+		var package = new Package.Tar("example", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, CreateOptions(directory.Path))
 		{
 			License = value,
 			Homepage = value,
@@ -177,7 +177,7 @@ public sealed class PackageLifecycleTest
 	public void Tar_Metadata_TextFallbacks_PreserveSummaryAndDescription(string summary, string title, string description, string expectedSummary, string expectedDescription)
 	{
 		using var directory = new TemporaryDirectory();
-		var package = new Package.Tar("example", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, CreateVariables(directory.Path))
+		var package = new Package.Tar("example", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, CreateOptions(directory.Path))
 		{
 			Title = title,
 			Summary = summary,
@@ -210,15 +210,15 @@ public sealed class PackageLifecycleTest
 	public void Package_Provenance_RecordsGeneratorAndPreservesApplicationMetadata(string format, string manufacturer, string expectedManufacturer)
 	{
 		using var directory = new TemporaryDirectory();
-		var variables = CreateVariables(directory.Path);
-		variables["manufacturer"] = manufacturer;
-		variables["homepage"] = "https://example.test/product";
+		var options = CreateOptions(directory.Path);
+		options["manufacturer"] = manufacturer;
+		options["homepage"] = "https://example.test/product";
 		var version = new Version(1, 2, 3);
 		Package package = format switch
 		{
-			"tar" => new Package.Tar("zongsoft.daemon", null, version, Platform.Linux, Architecture.X64, variables),
-			"deb" => new Package.Deb("zongsoft.daemon", null, version, Platform.Linux, Architecture.X64, variables),
-			_ => new Package.Rpm("zongsoft.daemon", null, version, Platform.Linux, Architecture.X64, variables),
+			"tar" => new Package.Tar("zongsoft.daemon", null, version, Platform.Linux, Architecture.X64, options),
+			"deb" => new Package.Deb("zongsoft.daemon", null, version, Platform.Linux, Architecture.X64, options),
+			_ => new Package.Rpm("zongsoft.daemon", null, version, Platform.Linux, Architecture.X64, options),
 		};
 		package.InstallPath = INSTALL_PATH;
 		package.Maintainer = "Hosting Maintainer";
@@ -347,9 +347,9 @@ public sealed class PackageLifecycleTest
 	public void TarUninstallScript_ExplicitUninstall_DeletesOnlyResolvedTarget()
 	{
 		using var directory = new TemporaryDirectory();
-		var variables = CreateVariables(directory.Path);
+		var options = CreateOptions(directory.Path);
 
-		var package = new Package.Tar("lifecycle-test", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, variables)
+		var package = new Package.Tar("lifecycle-test", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, options)
 		{
 			InstallPath = INSTALL_PATH,
 		};
@@ -370,9 +370,9 @@ public sealed class PackageLifecycleTest
 
 	private static string GenerateDebianScript(string output, string name)
 	{
-		var variables = CreateVariables(output);
+		var options = CreateOptions(output);
 
-		var package = new Package.Deb("lifecycle-test", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, variables)
+		var package = new Package.Deb("lifecycle-test", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, options)
 		{
 			InstallPath = INSTALL_PATH,
 			Scripts = new(":", ":", UNINSTALLING_MARKER, UNINSTALLED_MARKER),
@@ -384,9 +384,9 @@ public sealed class PackageLifecycleTest
 
 	private static (string PreUninstall, string PostUninstall) GenerateRpmUninstallScripts(string output)
 	{
-		var variables = CreateVariables(output);
+		var options = CreateOptions(output);
 
-		var package = new Package.Rpm("lifecycle-test", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, variables)
+		var package = new Package.Rpm("lifecycle-test", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, options)
 		{
 			InstallPath = INSTALL_PATH,
 			Scripts = new(":", ":", UNINSTALLING_MARKER, UNINSTALLED_MARKER),
@@ -398,14 +398,14 @@ public sealed class PackageLifecycleTest
 		return (scripts[1025], scripts[1026]);
 	}
 
-	private static Variables CreateVariables(string source)
+	private static PackageOptions CreateOptions(string source)
 	{
-		return new Variables(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+		return new PackageOptions(Utility.CreateEvaluator(new global::Zongsoft.Common.Variables
 		{
 			["framework"] = "net10.0",
-			["source"] = source,
+			["source"] = source.Replace('\\', '/'),
 			["daemon"] = "disabled",
-		});
+		}));
 	}
 
 	private static string[] GetDebianLifecycleActions(string script)

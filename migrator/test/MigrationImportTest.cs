@@ -13,6 +13,27 @@ public sealed class MigrationImportTest
 {
 	#region 测试方法
 	[Fact]
+	public void Load_DynamicImportWithSpaces_PreservesSqlOrderAndOrigins()
+	{
+		using var directory = new MigrationTestDirectory();
+		directory.Write("main.migration", "[sqlite]\n./first.sql\n#@import ${selected}\n./last.sql\n");
+		directory.Write("child/part one.migration", "[sqlite]\n./child.sql\n");
+		directory.Write("main.ini", "[sqlite]\nDatabase=/data/root.db\n");
+		directory.Write("child/part one.ini", "[sqlite]\nDatabase=/data/child.db\n");
+		var first = directory.Write("first.sql", "SELECT 'first';");
+		var child = directory.Write("child/child.sql", "SELECT 'child';");
+		var last = directory.Write("last.sql", "SELECT 'last';");
+		var variables = new global::Zongsoft.Common.Variables { ["selected"] = "child/part one.migration" };
+		var loader = new MigrationLoader(Utility.CreateEvaluator(variables));
+
+		var plan = loader.Load("main.migration", directory.Path, "test", "1.0.0");
+
+		Assert.Equal(new[] { first, child, last }, plan.Steps.SelectMany(task => task.Scripts).Select(script => script.Source));
+		Assert.Equal(new[] { "SELECT 'first';", "SELECT 'child';", "SELECT 'last';" }, plan.Steps.SelectMany(task => task.Scripts).Select(script => script.Content));
+		Assert.Equal(new[] { "/data/root.db", "/data/child.db", "/data/root.db" }, plan.Steps.Select(task => plan.Databases[task.DatabaseIndex.Value].Name));
+	}
+
+	[Fact]
 	public void Load_NestedImports_UsesEachSqlOriginAndItsOwnParameters()
 	{
 		using var directory = new MigrationTestDirectory();
@@ -220,7 +241,7 @@ public sealed class MigrationImportTest
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "[postgres]\n./schema.sql\n");
 		directory.Write("postgres.ini", "[postgres]\nServer=localhost\nDatabase=test\nUserName=operator\n#@import settings/secret.ini\n");
-		var child = directory.Write("settings/secret.ini", "[postgres]\nPassword=private-prefix-$(missing)\n");
+		var child = directory.Write("settings/secret.ini", "[postgres]\nPassword=private-prefix-${missing}\n");
 		directory.Write("schema.sql", "SELECT 1;");
 
 		var error = Assert.Throws<InvalidDataException>(() => Loader().Load("main.migration", directory.Path, "test", "1.0.0"));
@@ -325,13 +346,6 @@ public sealed class MigrationImportTest
 	#endregion
 
 	#region 辅助方法
-	private static MigrationLoader Loader(Action<string> warning = null) => new(value =>
-	{
-		var result = Normalizer.Normalize(value, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
-		if(!result.Succeed)
-			throw new InvalidDataException("Undefined variable: " + result.Value);
-
-		return result.Value;
-	}, warning);
+	private static MigrationLoader Loader(Action<string> warning = null) => new(Utility.CreateEvaluator(), warning);
 	#endregion
 }

@@ -11,9 +11,9 @@ public sealed class OutputTests
 	[Fact]
 	public void LocalizedMessagesStyleParametersSeparatelyWithoutExpandingTheirContents()
 	{
-		var content = Output.FormatMessage("{1}：缺少 {0}，请提供 {0}。", CommandOutletColor.Magenta, "$(password){1}", "redis");
+		var content = Output.FormatMessage("{1}：缺少 {0}，请提供 {0}。", CommandOutletColor.Magenta, "${password}{1}", "redis");
 		var segments = GetSegments(content);
-		Assert.Equal("redis：缺少 $(password){1}，请提供 $(password){1}。", string.Concat(segments.Select(segment => segment.Text)));
+		Assert.Equal("redis：缺少 ${password}{1}，请提供 ${password}{1}。", string.Concat(segments.Select(segment => segment.Text)));
 		Assert.All(segments.FindAll(segment => segment.Style == CommandOutletStyles.Bold), segment => Assert.Equal(CommandOutletColor.Yellow, segment.ForegroundColor));
 		Assert.All(segments.FindAll(segment => segment.Style != CommandOutletStyles.Bold && !string.IsNullOrEmpty(segment.Text)), segment => Assert.Equal(CommandOutletColor.Magenta, segment.ForegroundColor));
 	}

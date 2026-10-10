@@ -39,6 +39,7 @@ using System.Globalization;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
+using Zongsoft.Text.Templating;
 using Zongsoft.Configuration.Profiles;
 using Zongsoft.Tools.Containerizer.Protocol;
 
@@ -53,7 +54,8 @@ internal sealed partial class ContainerManifest(bool planning = false)
 
 	#region 公共属性
 	public Dictionary<string, string> Root { get; } = new(StringComparer.OrdinalIgnoreCase);
-	public Dictionary<string, string> Variables { get; } = new(StringComparer.OrdinalIgnoreCase);
+	/// <summary>获取或设置配置值求值时使用的模板评估器。</summary>
+	public TemplateEvaluator Evaluator { get; set; } = Utility.CreateEvaluator();
 	public List<Component> Components { get; } = [];
 	public List<string> Migrations { get; } = [];
 	public string InputPath { get; private set; }
@@ -71,17 +73,22 @@ internal sealed partial class ContainerManifest(bool planning = false)
 	#region 公共方法
 	public string ResolvePath(string path) => Path.GetFullPath(path, this["source"]);
 
-	public static ContainerManifest Read(string path, bool planning = false)
+	/// <summary>加载容器清单，并在指令执行前求值指令参数。</summary>
+	/// <param name="path">待加载的清单文件路径。</param>
+	/// <param name="planning">是否采用允许延迟变量解析的规划模式。</param>
+	/// <param name="evaluator">导入等指令参数的外部变量来源；为空时仅使用当前 Profile 已读取的条目。</param>
+	/// <returns>包含原始配置值和声明来源的清单。</returns>
+	public static ContainerManifest Read(string path, bool planning = false, TemplateEvaluator evaluator = null)
 	{
 		var result = new ContainerManifest(planning) { InputPath = Path.GetFullPath(path), InputHash = Files.Hash(path) };
 		var declarations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
 		var migrations = new SortedDictionary<int, string>();
-		var profile = Profile.Load(path, new ProfileOptions
+		var profile = Profile.Load(path, Utility.ConfigureDirectiveEvaluation(new ProfileOptions
 		{
 			Directives = { ProfileDirectiveOptions.Import(ProfileDirectiveBehavior.Strict) },
 			Loading = context => ValidateLines(context.FilePath, declarations),
-		});
+		}, evaluator));
 
 		foreach(var entry in profile.Entries)
 		{
@@ -179,16 +186,15 @@ internal sealed partial class ContainerManifest(bool planning = false)
 	#endregion
 
 	#region 内部方法
-	internal string ResolveValue(string value) => this.IsComplete || this.IsPlanning ? value ?? "" : Evaluate(value, this.Variables, allowEscapes: true);
-	internal static bool HasVariables(string value) => GetVariableExpressionRegex().IsMatch(value ?? "");
-	internal static string EscapeVariables(string value) => GetVariableExpressionRegex().Replace(value ?? "", match => match.Value[0] == '$' ? $"${match.Value}" : $"%{match.Value}%");
-	[GeneratedRegex(@"\$\([\w.\[\]-]+\)|%[\w.\[\]-]+%")]
-	private static partial Regex GetVariableExpressionRegex();
+	internal string ResolveValue(string value) => this.IsComplete || this.IsPlanning ? value ?? "" : Evaluate(value, this.Evaluator);
+	internal static bool HasVariables(string value) => value?.Contains("${", StringComparison.Ordinal) == true;
+	internal static string EscapeVariables(string value) => value?.Replace("\\", "\\\\").Replace("${", "\\${") ?? "";
 
-	internal static string Evaluate(string value, IReadOnlyDictionary<string, string> variables, bool allowEscapes = false)
+	internal static string Evaluate(string value, TemplateEvaluator evaluator)
 	{
-		var result = VariableEvaluator.Evaluate(value, variables, allowEscapes: allowEscapes);
-		return result.Succeed ? result.Value : throw new ContainerizationException(2, string.Format(Properties.Resources.Manifest_13_Message, result.Variable, result.Reason));
+		if(evaluator.TryEvaluate(value, out var text, out var error))
+			return text;
+		throw new ContainerizationException(2, string.Format(Properties.Resources.Manifest_13_Message, error.Expression, error.Code));
 	}
 
 	internal static void ValidateIdentity(string value)

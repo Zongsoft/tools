@@ -115,8 +115,8 @@ public class WebPackageTest
 	{
 		using var files = new MigrationTestDirectory();
 		files.Write("example.dll", "");
-		var variables = new Variables(new Dictionary<string, string> { ["source"] = files.Path, ["listen"] = "8069" });
-		var package = new Package.Tar("example", null, new Version(1, 0), Platform.Linux, Architecture.X64, variables);
+		var options = new PackageOptions(Utility.CreateEvaluator(new global::Zongsoft.Common.Variables { ["source"] = files.Path.Replace('\\', '/'), ["listen"] = "8069" }));
+		var package = new Package.Tar("example", null, new Version(1, 0), Platform.Linux, Architecture.X64, options);
 		package.Host = ApplicationHost.Resolve(package);
 		package.Scriptor.Script();
 		var host = package.Host;
@@ -125,7 +125,7 @@ public class WebPackageTest
 		Assert.Equal("http://127.0.0.1:8069", host.Listen);
 
 		var definition = Definition.Load(files.Write("web.profile", "[api]\nbind!legacy=http://*"));
-		var content = new Configurator.Nginx().Configure(definition, new("example", "/opt/example", variables.Raw, host.Listen)).Files[0].Content.Render("/opt/example");
+		var content = new Configurator.Nginx().Configure(definition, new("example", "/opt/example", options.Evaluator, host.Listen)).Files[0].Content.Render("/opt/example");
 		Assert.Contains("proxy_pass http://127.0.0.1:8069;", content);
 
 		using var reader = new StreamReader(Assert.Single(package.Entries, entry => entry.EntryName.EndsWith(".service", StringComparison.Ordinal)).OpenRead());
@@ -140,7 +140,7 @@ public class WebPackageTest
 	public void DisabledOptionDoesNotProbeTheInput(string value)
 	{
 		using var files = new MigrationTestDirectory();
-		Assert.False(Configurator.Parse(value, files.Path, new Variables()).Enabled);
+		Assert.False(Configurator.Parse(value, files.Path, new PackageOptions()).Enabled);
 	}
 
 	[Theory]
@@ -153,7 +153,7 @@ public class WebPackageTest
 	public void InvalidOptionsFailExplicitly(string value)
 	{
 		using var files = new MigrationTestDirectory();
-		Assert.Throws<DefinitionException>(() => Configurator.Parse(value, files.Path, new Variables()));
+		Assert.Throws<DefinitionException>(() => Configurator.Parse(value, files.Path, new PackageOptions()));
 	}
 
 	[Fact]
@@ -161,10 +161,10 @@ public class WebPackageTest
 	{
 		using var files = new MigrationTestDirectory();
 		var path = files.Write("nested input/web.profile", "");
-		var variables = new Variables(new Dictionary<string, string> { ["input"] = path });
+		var options = new PackageOptions(Utility.CreateEvaluator(new global::Zongsoft.Common.Variables { ["input"] = path.Replace('\\', '/') }));
 
-		Assert.Equal(path, Configurator.Parse("NGINX:$(input)", files.Path, variables).FilePath);
-		Assert.Equal(path, Configurator.Parse("nginx:nested input/web.profile", files.Path, variables).FilePath);
+		Assert.Equal(path, Configurator.Parse("NGINX:${input}", files.Path, options).FilePath);
+		Assert.Equal(path, Configurator.Parse("nginx:nested input/web.profile", files.Path, options).FilePath);
 	}
 
 	[Theory]
@@ -175,18 +175,18 @@ public class WebPackageTest
 	{
 		using var files = new MigrationTestDirectory();
 		var source = files.Write("manual.conf", "manual");
-		var variables = new Variables(new Dictionary<string, string> { ["source"] = files.Path, ["daemon"] = "none" });
+		var options = new PackageOptions(Utility.CreateEvaluator(new global::Zongsoft.Common.Variables { ["source"] = files.Path.Replace('\\', '/'), ["daemon"] = "none" }));
 
 		Package package = format switch
 		{
-			"tar" => new Package.Tar("example", null, new Version(1, 0), Platform.Linux, Architecture.X64, variables),
-			"deb" => new Package.Deb("example", null, new Version(1, 0), Platform.Linux, Architecture.X64, variables),
-			_ => new Package.Rpm("example", null, new Version(1, 0), Platform.Linux, Architecture.X64, variables),
+			"tar" => new Package.Tar("example", null, new Version(1, 0), Platform.Linux, Architecture.X64, options),
+			"deb" => new Package.Deb("example", null, new Version(1, 0), Platform.Linux, Architecture.X64, options),
+			_ => new Package.Rpm("example", null, new Version(1, 0), Platform.Linux, Architecture.X64, options),
 		};
 		package.InstallPath = "/opt/example";
 
 		Installation.Attach(package, NginxConfiguratorTest.Configure(files, "[api]\nbind!legacy=http://*\nserver=http://app"));
-		var error = Assert.Throws<DefinitionException>(() => package.Entries.Add(files.Path, source + ":/opt/example/.web/nginx/example.conf"));
+		var error = Assert.Throws<DefinitionException>(() => package.Entries.AddEntry(files.Path, source, "/opt/example/.web/nginx/example.conf", package.EntryPrefix));
 		Assert.Equal("Conflict", error.Diagnostic.Code);
 	}
 
@@ -212,7 +212,7 @@ public class WebPackageTest
 	private static async Task<string> ExecuteAsync(string format, MigrationTestDirectory files, IReadOnlyList<string> options, string source = null)
 	{
 		CommandBase<CommandContext> command = format switch { "tar" => new TarCommand(), "deb" => new DebCommand(), _ => new RpmCommand() };
-		var arguments = new[] { format, "--source:" + (source ?? files.Path), "--output:out", "--platform:Linux", "--framework:net10.0", "--daemon:none", "--install-path:/opt/example" }.Concat(options).ToArray();
+		var arguments = new[] { format, "--source:" + (source ?? files.Path).Replace('\\', '/'), "--output:out", "--platform:Linux", "--framework:net10.0", "--daemon:none", "--install-path:/opt/example" }.Concat(options).ToArray();
 		var context = new CommandContext(new CommandExecutor(), CommandLine.Parse(CommandLine.Get(arguments))[0], command, null);
 		var field = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
 		var previous = (ITerminal)field.GetValue(null);

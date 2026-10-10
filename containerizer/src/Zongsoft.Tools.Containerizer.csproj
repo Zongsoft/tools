@@ -24,7 +24,6 @@
 
 	<ItemGroup>
 		<Compile Include="..\..\.shared\Utility.cs" Link="Shared\Utility.cs" />
-		<Compile Include="..\..\.shared\VariableEvaluator.cs" Link="Shared\VariableEvaluator.cs" />
 	</ItemGroup>
 
 	<Choose>

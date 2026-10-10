@@ -19,7 +19,7 @@ It is recommended to define a default deployment file named `.deploy` in the dep
 
 The deployment file is a plain text file in `.ini` format, and its content consists of **Section**(`Paragraph`) and **Entry**(`Entry`) enclosed in square brackets, the **Section** part represents the destination directory of deployment.
 
-The **Section** and **Entry** values both support variable references in the format of dollar sign followed by parentheses `$(...)` or double percent signs `%...%`, variables come from command options, environment variables, ancestor `.env` files and destination appsettings.
+The **Section** and **Entry** values support Core `${...}` template expressions; variables come from command options, environment variables, ancestor `.env` files and destination appsettings.
 
 Each entry consists of **KEY** and **VALUE** parts separated by an equal sign _(`=`)_, and the **VALUE** part is optional.
 
@@ -39,7 +39,7 @@ The default parser is named `path`, and its name can be omitted. It copies the s
 
 The _Parser-Argument_ represents the path of the source file to be deployed, the source file path supports `*`, `?` and `**` wildcards, the `**` means multi-level directory matching.
 
-For an absolute Windows source path containing a drive-letter colon, use the `path:` prefix, for example `path:D:\dir\files.ext` or `path:D:/dir/files.ext`. Otherwise, `D` in `D:/...` is interpreted as a resolver name. Alternatively, use a path relative to the deployment file or expand the absolute path from a variable.
+For an absolute Windows source path containing a drive-letter colon, use the `path:` prefix, for example `path:D:/dir/files.ext` or `path:D:/dir/files.ext`. Otherwise, `D` in `D:/...` is interpreted as a resolver name. Alternatively, use a path relative to the deployment file or expand the absolute path from a variable.
 
 ```ini
 [plugins zongsoft data]
@@ -82,7 +82,7 @@ The format of _Parser-Argument_: `package@version/path`, where `@version` and `/
 - If the path part is unspecified:
 	- If the root directory contains a `.deploy` file, execute that manifest without additionally selecting default assets or downloading unused dependencies;
 	- Otherwise resolve the dependency closure and select the nearest assets: use a compatible RID managed runtime group in preference to `lib/{framework}`, plus native and eligible content assets.
-		> The `{framework}` indicates the version of the *target framework* nearest to the one declared by the `$(Framework)` variable.
+		> The `{framework}` indicates the version of the *target framework* nearest to the one declared by the `${Framework}` variable.
 
 > 💡 **Tip:** _**Z**ongsoft_'s NuGet package usually has a deployment file named `.deploy` in it's root directory, and the `artifacts` directory in the package includes its plugin files(`*.plugin`)_(required, one or more)_, configuration files(`*.option`), the mapping files(`*.mapping`) for [_**Z**ongsoft.**D**ata_ ORM](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Data), and other ancillary files.
 
@@ -132,12 +132,12 @@ The part enclosed by `<` and `>` at the end of the entry is the filter condition
 Multiple conditions are supported. Each condition consists of a variable name and the comparison values, If the variable name starts with `!`, it means that the matching result of the condition is negated; If you are comparing multiple values, separate them with commas. As follows:
 
 ```plaintext
-../.deploy/$(scheme)/options/app.$(environment).option       = web.option    <application>
-../.deploy/$(scheme)/options/app.$(environment).option       = web.option    <!application>
-../.deploy/$(scheme)/options/app.$(environment)-debug.option = web.option    <preview:A,B,C>
-../.deploy/$(scheme)/options/app.$(environment)-debug.option = web.option    <!preview:X,Y,Z>
-../.deploy/$(scheme)/options/app.$(environment)-debug.option = web.option    <application | debug:on>
-../.deploy/$(scheme)/options/app.$(environment)-debug.option = web.option    <!application & !debug:on>
+../.deploy/${scheme}/options/app.${environment}.option       = web.option    <application>
+../.deploy/${scheme}/options/app.${environment}.option       = web.option    <!application>
+../.deploy/${scheme}/options/app.${environment}-debug.option = web.option    <preview:A,B,C>
+../.deploy/${scheme}/options/app.${environment}-debug.option = web.option    <!preview:X,Y,Z>
+../.deploy/${scheme}/options/app.${environment}-debug.option = web.option    <application | debug:on>
+../.deploy/${scheme}/options/app.${environment}-debug.option = web.option    <!application & !debug:on>
 ```
 
 > 1. `<application>` means that there is a variable named `application` (*Regardless of its content*), then the result is true.
@@ -150,17 +150,19 @@ Multiple conditions are supported. Each condition consists of a variable name an
 Supports matching and version comparison of *TargetFramework*. If *TargetFramework* ends with `^`, it means that the version of the current deployment *TargetFramework* must be greater than or equal to this version, as follows:
 
 ```plaintext
-%NUGET_PACKAGES%/mysql.data/8.1.0/lib/netstandard2.1/*.dll     <framework:net7.0^>
-%NUGET_PACKAGES%/mysql.data/6.10.9/lib/netstandard2.0/*.dll    <framework:net5.0,net6.0>
+${NUGET_PACKAGES}/mysql.data/8.1.0/lib/netstandard2.1/*.dll     <framework:net7.0^>
+${NUGET_PACKAGES}/mysql.data/6.10.9/lib/netstandard2.0/*.dll    <framework:net5.0,net6.0>
 ```
 
 ## Variables
 
-Variables load in this order: environment variables, ancestor `.env` files from the filesystem root to the working directory, the destination application's `appsettings.json`, and command options. Later values overwrite earlier values with the same case-insensitive name, including empty values.
+The tool explicitly enables Core variable fallback: named references search their namespace, its parents and global, querying every source in priority order at each level. A missing variable is reported after all levels miss. Unqualified references remain `${name}`, and a found null or empty value stops fallback.
 
-An omitted or empty `--framework` uses a nonempty `framework` from the merged variables, following the same load order. A nonempty option takes precedence. If the variable is missing or empty, the existing framework handling remains; whitespace-only option values keep their existing behavior.
+At each namespace, query command options, the destination application's `appsettings.json`, `.env` files from the working directory up to the filesystem root, then environment variables. The first match wins; an explicit null in `appsettings.json` also stops fallback to lower-priority sources. Configuration and command-option names ignore case. Core `Variables.Environments()` reads system values live in the default namespace without rewriting names or values; names are case-insensitive on Windows and case-sensitive on Unix/Linux.
 
-Each directory contributes only its direct `.env`; child directories and individual manifest directories are not searched. All manifests in one invocation share the resulting variables. Core `Profile.Load` reads these INI files, including `#@import`. Root entries retain their names; section levels and entry names join with `_`: `[io rustfs]` with `access_key=example` creates `io_rustfs_access_key=example`. A root `environment=Development` creates `environment`. Missing `.env` files are skipped; read or parse failures stop initialization. Values expand only when used, and process environment variables are not modified.
+All variables, including `framework`, use the first successful lookup: null, empty strings, false and zero never trigger fallback to a lower source. Only a missing value continues lookup. Operations requiring a valid value validate it and report an error when they cannot proceed.
+
+Each directory contributes only its direct `.env`; child directories and individual manifest directories are not searched. All manifests in one invocation share the resulting variables. Core `Profile.Load` reads these INI files, including `#@import`. Root entries use the default namespace; section levels form dot-separated namespaces and entry dots/hyphens become underscores: `[io rustfs]` with `access_key=example` creates `io.rustfs:access_key=example`. A root `environment=Development` creates `environment`. Missing `.env` files are skipped; read or parse failures stop initialization. Values expand only when used, and process environment variables are not modified.
 
 Variable values may reference other values recursively, regardless of command-option order. Values expand when used; missing references, cycles, and chains longer than 64 levels fail. `destination` may reference command options, environment variables and loaded `.env` values; its `appsettings.json` is loaded afterward.
 
@@ -173,12 +175,12 @@ NuGet-related parameters can be specified via command options, environment varia
 
 ### Framework and variables in hosting scripts
 
-The hosting `deploy.cmd` scripts omit the deployment command's `--framework`. Define root-level `framework=net10.0` in the hosting root's `.env`. The deployer reads it from Variables, following environment variables → ancestor `.env` → destination application `appsettings.json` → command options; it does not read one environment variable directly. Omitted, null, or empty options preserve an existing nonempty framework; whitespace keeps its previous behavior.
+The hosting `deploy.cmd` scripts omit the deployment command's `--framework`. Define root-level `framework=net10.0` in the hosting root's `.env`. The deployer reads it from its variable providers, querying the global namespace in this order: command options → destination application `appsettings.json` → nearest-to-farthest ancestor `.env` → environment variables. Omitted options continue to subsequent sources; explicit null/empty values stop fallback, as with every other variable.
 
 From the daemon host directory, a deployment command can be:
 
 ```cmd
-dotnet deploy --verbosity:quiet --overwrite:newest --prerelease:true --host:daemon --site:daemon --scheme:default --environment:development --debug:off --edition:Release --platform:linux --architecture:x64 --destination:bin/$(edition)/$(framework) .deploy ../.deploy/default/$(host).deploy ../.deploy/default/$(site).deploy
+dotnet deploy --verbosity:quiet --overwrite:newest --prerelease:true --host:daemon --site:daemon --scheme:default --environment:development --debug:off --edition:Release --platform:linux --architecture:x64 --destination:bin/${edition}/${framework} .deploy ../.deploy/default/${host}.deploy ../.deploy/default/${site}.deploy
 ```
 
 In this deployment workflow, `--edition:Release` selects the build-configuration directory; an installation package's Edition is a separate identity parameter. This command deploys plugins without building the host or creating installation/migration packages. The current hosting `deploy.cmd` scripts also omit Cake's `--framework`, so each host's `build.cake` uses its `Argument("framework", "net10.0")` default; the Cake scripts do not read `.env` or the `framework` process variable. Keep that build value consistent with deployment and packaging variables. To change the build framework, pass `--framework` to Cake explicitly or update its default. See the [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.md#installation-and-migration-packages) for script parameters and standalone packaging.
@@ -246,7 +248,7 @@ dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:
 
 - If the host(target) directory does not have a default deployment file (`.deploy`), you must manually specify the deployment file name (multiple deployment files are supported). The following example assumes `Zongsoft.Data@6.2.0` has been downloaded and extracted into the NuGet package directory:
 ```bash
-dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:x64 "%NUGET_PACKAGES%/zongsoft.data/6.2.0/.deploy"
+dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:x64 "${NUGET_PACKAGES}/zongsoft.data/6.2.0/.deploy"
 ```
 
 - For the convenience of deployment, you can create a corresponding edition of the deployment script files in the host(target) project, for example:
@@ -286,12 +288,12 @@ The two entry points are equivalent and have no subcommands. With no positional 
 | `--previous:<file>` | None | Read the previous report to identify no-longer-selected files. |
 | `--prune[:boolean]` | `false` | With `previous`, remove unchanged stale files; preserve modified files. |
 
-Boolean options accept a bare switch, `true/false`, `1/0`, `yes/no`, `on/off`, or `enable(d)/disable(d)`, case-insensitively; other values are false under Core's `Switch` convention. `$(name)` and `%name%` support names containing dots, hyphens, and indices. Values expand lazily and recursively; missing, cyclic, or over-64-level references fail when used, before type conversion. Enum options follow Core conversion rules without an additional check that the enum member is defined; callers must supply a valid member. Unselected deployment branches are not expanded.
+Boolean options accept a bare switch, `true/false`, `1/0`, `yes/no`, `on/off`, or `enable(d)/disable(d)`, case-insensitively; other values are false under Core's `Switch` convention. `${name}` support Core identifiers, namespaces, and member/index access. Values expand lazily and recursively; missing, cyclic, or over-64-level references fail when used, before type conversion. Enum options follow Core conversion rules without an additional check that the enum member is defined; callers must supply a valid member. Unselected deployment branches are not expanded.
 
 `NuGet_Server` and `NuGet_Packages` may be supplied as command options, environment variables or `.env` entries. `Framework`, `Platform`, `Architecture`, and `edition` are ordinary variables used by resolvers and manifests. Example:
 
 ```powershell
-dotnet deploy --destination:'bin/$(edition)/$(framework)' --edition:Release --framework:net10.0 --dry-run --report:deploy-plan.json .deploy extra.deploy
+dotnet deploy --destination:'bin/${edition}/${framework}' --edition:Release --framework:net10.0 --dry-run --report:deploy-plan.json .deploy extra.deploy
 ```
 
 ### NuGet Packages
@@ -306,12 +308,12 @@ Explicit library paths inside the `NuGet_Packages` cache select the nearest appl
 
 Assuming the `Framework` variable is `net9.0`, when a deployment file has the following deployment items:
 ```ini
-%NUGET_PACKAGES%/mysql.data/8.3.0/lib/net9.0/*.dll
+${NUGET_PACKAGES}/mysql.data/8.3.0/lib/net9.0/*.dll
 ```
 
 However, the above package library directory does not contains the `net9.0` framework version, so the tool will use the library file that is most applicable(*nearest*) to that framework version. The path will be redirected to:
 ```ini
-%NUGET_PACKAGES%/mysql.data/8.3.0/lib/net8.0/*.dll
+${NUGET_PACKAGES}/mysql.data/8.3.0/lib/net8.0/*.dll
 ```
 
 ## Others
@@ -365,7 +367,7 @@ RID fallback uses the repository-pinned dotnet/runtime v10.0.0 graph through NuG
 
 Package access, dependency resolution, asset selection, and RID fallback have separate implementations; framework and version models reuse NuGet/.NET types. See [implementation details](docs/implementation.md) for responsibilities and behavior.
 
-Variables load from the environment, ancestor `.env` files, the destination application's appsettings.json, and finally command options. Nested JSON keys support `$(Database.Name)` and `%Items[0].Name%`; substitution preserves URL slashes.
+Variables load from the environment, ancestor `.env` files, the destination application's appsettings.json, and finally command options. Nested JSON keys support `${Database_Name}` and `${Items_0_Name}`; substitution preserves URL slashes.
 
 Run regression tests without publishing:
 

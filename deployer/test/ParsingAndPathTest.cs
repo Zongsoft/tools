@@ -1,5 +1,7 @@
 using Xunit;
 
+using Zongsoft.Text.Templating;
+
 namespace Zongsoft.Tools.Deployer.Tests;
 
 public class ParsingAndPathTest
@@ -37,52 +39,53 @@ public class ParsingAndPathTest
 	[Theory]
 	[InlineData("https://example.test/api")]
 	[InlineData("http://example.test:8080/api")]
-	public void Normalize_UrlPreservesSlashesDuringVariableExpansion(string endpoint)
+	public void Evaluate_UrlPreservesSlashesDuringVariableExpansion(string endpoint)
 	{
-		var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+		var variables = new global::Zongsoft.Common.Variables
 		{
 			["ApiEndpoint"] = endpoint,
 			["Resource"] = "orders",
 		};
-		Assert.Equal(endpoint + "/v1/orders?next=/page/2", Normalizer.Normalize("%apiendpoint%/v1/$(Resource)?next=/page/2", variables));
-		Assert.Equal("https://example.test/orders", Normalizer.Normalize("https://example.test/$(Resource)", variables));
+		var evaluator = new TemplateEvaluator(new() { Recursive = true }) { Providers = { variables } };
+		Assert.Equal(endpoint + "/v1/orders?next=/page/2", evaluator.Evaluate("${apiendpoint}/v1/${Resource}?next=/page/2"));
+		Assert.Equal("https://example.test/orders", evaluator.Evaluate("https://example.test/${Resource}"));
 	}
 
 	[Theory]
-	[InlineData("$(Database.Name)-%Items[0]%-$(items[1].name)")]
-	[InlineData("%database.name%-$(items[0])-%Items[1].Name%")]
-	public void Normalize_ConfigurationPathsAndMixedCaseExpand(string text)
+	[InlineData("${Database_Name}-${Items_0}-${items_1_name}")]
+	[InlineData("${database_name}-${items_0}-${Items_1_Name}")]
+	public void Evaluate_CanonicalNamesAndMixedCaseExpand(string text)
 	{
-		var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+		var variables = new global::Zongsoft.Common.Variables
 		{
-			["Database.Name"] = "business",
-			["Items[0]"] = "first",
-			["Items[1].Name"] = "second",
+			["Database_Name"] = "business",
+			["Items_0"] = "first",
+			["Items_1_Name"] = "second",
 		};
-		var failures = new List<string>();
-		Assert.Equal("business-first-second", Normalizer.Normalize(text, variables, failures.Add));
-		Assert.Empty(failures);
+		var evaluator = new TemplateEvaluator(new() { Recursive = true }) { Providers = { variables } };
+		Assert.Equal("business-first-second", evaluator.Evaluate(text));
 	}
 
 	[Fact]
-	public void Normalize_MissingVariableReportsNameAndThrows()
+	public void Evaluate_MissingVariableReportsNameAndThrows()
 	{
-		var failures = new List<string>();
-		var error = Assert.Throws<FormatException>(() => Normalizer.Normalize("before-$(Missing)-after", new Dictionary<string, string>(), failures.Add));
-		Assert.Contains("Missing", error.Message, StringComparison.Ordinal);
-		Assert.Equal(["Missing"], failures);
+		var evaluator = new TemplateEvaluator(new() { Recursive = true });
+		var error = Assert.Throws<TemplateEvaluationException>(() => evaluator.Evaluate("before-${Missing}-after"));
+		Assert.Equal("MissingVariable", error.Code);
+		Assert.Equal("Missing", error.Expression);
 	}
 
 	[Fact]
-	public void Normalize_OrdinaryDictionaryIgnoresVariableNameCase()
+	public void Evaluate_CoreVariablesIgnoreVariableNameCase()
 	{
-		var variables = new Dictionary<string, string>
+		var variables = new global::Zongsoft.Common.Variables
 		{
-			["Root"] = "$(service.name)",
-			["Service.Name"] = "worker",
+			["Root"] = "${service_name}",
+			["Service_Name"] = "worker",
 		};
 
-		Assert.Equal("worker/worker", Normalizer.Normalize("$(ROOT)/%SERVICE.NAME%", variables));
+		var evaluator = new TemplateEvaluator(new() { Recursive = true }) { Providers = { variables } };
+		Assert.Equal("worker/worker", evaluator.Evaluate("${ROOT}/${SERVICE_NAME}"));
 	}
 
 	[Fact]
@@ -92,7 +95,7 @@ public class ParsingAndPathTest
 		fixture.Write("content/root.txt", "root");
 		fixture.Write("content/nested/child.txt", "child");
 		fixture.Write("content/nested/deep/grandchild.txt", "grandchild");
-		var files = DeploymentUtility.GetFiles(Path.Combine(fixture.Root, "content", "**", "*.txt"), fixture.Variables, cancellation: TestContext.Current.CancellationToken).ToArray();
+		var files = DeploymentUtility.GetFiles(Path.Combine(fixture.Root, "content", "**", "*.txt"), fixture.Evaluator, cancellation: TestContext.Current.CancellationToken).ToArray();
 		Assert.Equal(["child.txt", "grandchild.txt", "root.txt"], files.Select(file => Path.GetFileName(file.Path)).Order().ToArray());
 		Assert.Equal("nested", files.Single(file => file.Path.EndsWith("child.txt") && !file.Path.EndsWith("grandchild.txt")).Suffix);
 		Assert.Equal(Path.Combine("nested", "deep"), files.Single(file => file.Path.EndsWith("grandchild.txt")).Suffix?.Replace('/', Path.DirectorySeparatorChar));
@@ -111,7 +114,7 @@ public class ParsingAndPathTest
 		fixture.Write("content/dir1/sub1/three.txt", "three");
 		fixture.Write("content/dir2/sub2/four.txt", "four");
 		fixture.Write("content/dir2/deep/sub3/five.txt", "five");
-		var files = DeploymentUtility.GetFiles(Path.Combine(fixture.Root, "content", pattern.Replace('/', Path.DirectorySeparatorChar)), fixture.Variables, cancellation: TestContext.Current.CancellationToken);
+		var files = DeploymentUtility.GetFiles(Path.Combine(fixture.Root, "content", pattern.Replace('/', Path.DirectorySeparatorChar)), fixture.Evaluator, cancellation: TestContext.Current.CancellationToken);
 		Assert.Equal(names.Split(';', StringSplitOptions.RemoveEmptyEntries).Order(), files.Select(file => Path.GetFileName(file.Path)).Order());
 	}
 }

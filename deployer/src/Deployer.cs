@@ -39,6 +39,7 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 
 using Zongsoft.Terminals;
+using Zongsoft.Text.Templating;
 using Zongsoft.Configuration.Profiles;
 
 namespace Zongsoft.Tools.Deployer;
@@ -62,20 +63,21 @@ public partial class Deployer
 	#endregion
 
 	#region 构造函数
-	public Deployer(IDictionary<string, string> variables) : this(variables, Console.Out)
+	/// <summary>使用指定模板评估器和标准输出创建部署器。</summary>
+	/// <param name="evaluator">本次部署使用的模板评估器，不能为空；实例由调用方持有。</param>
+	public Deployer(TemplateEvaluator evaluator) : this(evaluator, Console.Out)
 	{
 	}
 
-	public Deployer(IDictionary<string, string> variables, TextWriter output)
+	/// <summary>使用指定模板评估器和输出目标创建部署器。</summary>
+	/// <param name="evaluator">本次部署使用的模板评估器，不能为空；缺少的 NuGet 默认值写入其首个变量来源。</param>
+	/// <param name="output">部署诊断输出，空值表示丢弃输出；部署器不负责释放它。</param>
+	public Deployer(TemplateEvaluator evaluator, TextWriter output)
 	{
-		ArgumentNullException.ThrowIfNull(variables);
+		ArgumentNullException.ThrowIfNull(evaluator);
 
-		var raw = variables is VariableMap map ?
-			new Dictionary<string, string>(map.Raw, StringComparer.OrdinalIgnoreCase) :
-			new Dictionary<string, string>(variables, StringComparer.OrdinalIgnoreCase);
-
-		NugetUtility.Initialize(raw);
-		this.Variables = new VariableMap(raw, text => Normalizer.Normalize(text, raw, name => throw new FormatException(string.Format(Properties.Resources.Review_UndefinedVariable, name))));
+		this.Evaluator = evaluator;
+		NugetUtility.Initialize(this.Evaluator);
 		this.Output = output ?? TextWriter.Null;
 	}
 	#endregion
@@ -83,7 +85,8 @@ public partial class Deployer
 	#region 公共属性
 	public ITerminal Terminal => Terminals.Terminal.Console;
 	public TextWriter Output { get; }
-	public IDictionary<string, string> Variables { get; }
+	/// <summary>获取解析部署参数及配置模板的评估器。</summary>
+	public TemplateEvaluator Evaluator { get; }
 	public DeploymentPlan Plan { get; private set; }
 	#endregion
 
@@ -104,37 +107,35 @@ public partial class Deployer
 
 		this.Plan = null;
 		var counter = new DeploymentCounter();
-		NugetUtility.ResetCache(this.Variables);
+		NugetUtility.ResetCache(this.Evaluator);
 
 		try
 		{
 			var files = paths.ToArray();
 			counter = new DeploymentCounter(string.Join(";", files));
-			destinationDirectory ??= this.Variables.TryGetValue(DESTINATION_OPTION, out var target) ? target : Environment.CurrentDirectory;
-
-			var root = Path.GetFullPath(this.Normalize(destinationDirectory));
+			var root = Path.GetFullPath(destinationDirectory == null ? this.Evaluator.GetOption(DESTINATION_OPTION) ?? Environment.CurrentDirectory : this.Normalize(destinationDirectory));
 			this.Session = new DeploymentSession(root, counter);
 			this.Plan = this.Session.Plan;
-			this.Overwrite = GetOverwrite(this.Variables);
+			this.Overwrite = GetOverwrite(this.Evaluator);
 
-			ValidateVerbosity(this.Variables);
+			ValidateVerbosity(this.Evaluator);
 
 			this.Session.Validate(root);
 
-			if(Flag(this.Variables, "locked"))
+			if(Flag(this.Evaluator, "locked"))
 			{
-				if(!this.Variables.TryGetValue("lockFile", out var lockFile))
+				if(!this.Evaluator.TryGetOption("lockFile", out var lockFile))
 					throw new InvalidOperationException(string.Format(Properties.Resources.Review_Locked, "lockFile"));
 
-				this.Session.LockedPlan = DeploymentPlan.Load(this.Normalize(lockFile));
+				this.Session.LockedPlan = DeploymentPlan.Load(lockFile);
 			}
 
 			foreach(var file in files.Distinct(DeploymentPath.Comparer))
-				await this.PlanManifestAsync(file, root, cancellation);
+				await this.PlanManifestAsync(this.Normalize(file), root, cancellation);
 
 			if(counter.Failures == 0)
 			{
-				this.Session.Packages = await NugetGraph.ResolveAsync(this.Variables, this.Session.Roots, cancellation, this.Session.LockedPlan?.Packages);
+				this.Session.Packages = await NugetGraph.ResolveAsync(this.Evaluator, this.Session.Roots, cancellation, this.Session.LockedPlan?.Packages);
 
 				foreach(var placeholder in this.Plan.Operations.Where(item => item.Expand != null).ToArray())
 				{
@@ -166,11 +167,11 @@ public partial class Deployer
 		}
 		finally
 		{
-			if(this.Session != null && this.Variables.TryGetValue("report", out var report) && !string.IsNullOrWhiteSpace(report))
+			if(this.Session != null && this.Evaluator.TryGetOption("report", out var report) && !string.IsNullOrWhiteSpace(report))
 			{
 				try
 				{
-					var path = Path.GetFullPath(this.Normalize(report));
+					var path = Path.GetFullPath(report);
 					this.ValidateOutput(path, true);
 					this.Plan.Save(path);
 				}
@@ -191,6 +192,10 @@ public partial class Deployer
 	#endregion
 
 	#region 虚拟方法
+	/// <summary>加载部署清单，并在通用指令回调中求值参数。</summary>
+	/// <param name="path">已解析的清单路径。</param>
+	/// <param name="destination">已确定的部署目标目录。</param>
+	/// <returns>包含加载后配置与本次评估器的部署上下文。</returns>
 	protected virtual DeploymentContext CreateContext(string path, string destination)
 	{
 		var options = new ProfileOptions
@@ -202,7 +207,7 @@ public partial class Deployer
 			},
 		};
 
-		return new(this, Profile.Load(path, options), destination);
+		return new(this, Profile.Load(path, Utility.ConfigureDirectiveEvaluation(options, this.Evaluator)), destination);
 	}
 	#endregion
 
@@ -210,7 +215,7 @@ public partial class Deployer
 	internal async Task PlanManifestAsync(string path, string destination, CancellationToken cancellation)
 	{
 		cancellation.ThrowIfCancellationRequested();
-		path = Path.GetFullPath(this.Normalize(path));
+		path = Path.GetFullPath(path);
 
 		if(Directory.Exists(path))
 			path = Path.Combine(path, DEFAULT_DEPLOYMENT_FILENAME);
@@ -263,11 +268,11 @@ public partial class Deployer
 		{
 			try
 			{
-				//Evaluate filters before expanding optional branch variables.
+				//Evaluate filters before expanding optional branch evaluator.
 				Utility.Requisition.GetRequisites(entry.Name, out var sourceFilter);
 				Utility.Requisition.GetRequisites(entry.Value, out var targetFilter);
 
-				if(!Utility.Requisition.IsRequisites(this.Variables, sourceFilter) || !Utility.Requisition.IsRequisites(this.Variables, targetFilter))
+				if(!Utility.Requisition.IsRequisites(this.Evaluator, sourceFilter) || !Utility.Requisition.IsRequisites(this.Evaluator, targetFilter))
 				{
 					context.Counter.Skip();
 
@@ -298,18 +303,18 @@ public partial class Deployer
 		this.Output.WriteLine(text);
 	}
 
-	internal string Normalize(string text) => Normalizer.Normalize(text, this.Variables, name => throw new FormatException(string.Format(Properties.Resources.Review_UndefinedVariable, name)));
+	internal string Normalize(string text) => this.Evaluator.Evaluate(text);
 
-	private static void ValidateVerbosity(IDictionary<string, string> variables)
+	private static void ValidateVerbosity(TemplateEvaluator evaluator)
 	{
-		if(variables.TryGetValue(VERBOSITY_OPTION, out var verbosity) &&
+		if(evaluator.TryGetOption(VERBOSITY_OPTION, out var verbosity) &&
 			!Zongsoft.Common.Convert.TryConvertValue<Verbosity>(verbosity, out _))
 			throw new ArgumentException(string.Format(Properties.Resources.Review_InvalidOption, VERBOSITY_OPTION, verbosity));
 	}
 
-	internal static bool Flag(IDictionary<string, string> variables, string key)
+	internal static bool Flag(TemplateEvaluator evaluator, string key)
 	{
-		if(!variables.TryGetValue(key, out var value))
+		if(!evaluator.TryGetOption(key, out var value))
 			return false;
 
 		if(string.IsNullOrEmpty(value))
@@ -326,9 +331,9 @@ public partial class Deployer
 			string.Equals(value, "enabled", StringComparison.OrdinalIgnoreCase);
 	}
 
-	internal static Overwrite GetOverwrite(IDictionary<string, string> variables)
+	internal static Overwrite GetOverwrite(TemplateEvaluator evaluator)
 	{
-		if(!variables.TryGetValue(OVERWRITE_OPTION, out var text))
+		if(!evaluator.TryGetOption(OVERWRITE_OPTION, out var text))
 			return Overwrite.Newest;
 
 		if(Zongsoft.Common.Convert.TryConvertValue<Overwrite>(text, out var result))

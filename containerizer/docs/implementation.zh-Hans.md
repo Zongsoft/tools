@@ -45,7 +45,16 @@ plan 和 make 共用服务准备，但 plan 不连接引擎、不读取 `.mirror
 
 `.container` 接受固定根字段及组件字段，拒绝未知字段、重复组件/字段与嵌套组件。Profile 导入复用 Core 机制；导入文件参与声明检查，source 相对于实际声明文件解析。`.settings` 和模板读取禁止导入。
 
-变量先由共享 Utility 收集：默认值、系统环境、从根到 source 的各级 `.env`、命令上下文按既有优先级合并，分段名称以下划线连接。最终根字段加入本次变量视图。求值不整份导出环境，也不修改进程环境；仅名称相同不会自动建立绑定。输入选择和根路径需要立即求值；服务 settings/environment 在 plan 保留引用，make 按值求值。完成清单以字面值回放；由完成清单重新 plan 时转义字面引用，避免再次展开。
+共享 Utility 组合命令选项、从 source 至根目录的各级 `.env` 和系统环境，Core 在它们全部未命中后查询描述符默认值，章节层级以点号连接为命名空间。最终根字段通过 `Variables.Wrap(result.Root)` 直接作为实时变量视图放在最前面，后续字典修改立即可见；source/output 保存为 `/` 分隔的绝对路径。求值不整份导出环境，也不修改进程环境；仅名称相同不会自动建立绑定。输入选择和根路径需要立即求值；服务 settings/environment 在 plan 保留引用，make 按值求值。完成清单以字面值回放；由完成清单重新 plan 时转义字面引用，避免再次展开。
+
+变量契约使用 `Zongsoft.Common.IVariables`。命令选项直接使用 `context.Options`，工具计算值保存在 Core `Variables` 中，`.env` 保留 `Profile.ToVariables()` 视图，系统环境直接使用 `Variables.Environments()` 实时读取，不复制、不改写名称或值。环境来源只提供默认命名空间，Windows 忽略大小写，Unix/Linux 区分大小写；参与模板的路径值使用 `/`，其余转义遵循 Core。`TemplateEvaluatorOptions.Fallback` 显式设为 true；同一命名空间按 Providers 顺序查询，全部未找到才逐级进入父命名空间及全局，最后允许来源自身已声明的默认值。首个命中即生效，包括 null。指令参数评估沿用父评估器的 Fallback、Recursive、Culture 和 MaximumDepth；不带命名空间的模板无需额外语法。默认空间用 `${name}`，具名空间用 `${io.rustfs:access_key}`；章节层级以点号连接，条目名及命令选项名中的点号和连字符转换为下划线，非法配置名称不提供变量，配置名称冲突仅在查询时失败。
+
+命令选项集合 context.Options 只注册一次，放在配置及系统环境之前。Core VariablesExtension.TryGetValue 按每一级命名空间查询全部来源，普通查询均传入 false；全局也全部未找到后，才以全局命名空间传入 true 查询已声明的默认值。因此全局优先级为显式选项、近层 .env、远层 .env、系统环境、命令默认值。HasDefaultValue 区别未声明与显式 null，缺省不合成类型零值。工具直接读取、递归模板和指令参数评估共享 Fallback 设置；计算出的覆盖值放在最前面的 Variables 中。
+
+模板直接通过 Core `TemplateEvaluator.Evaluate` / `TryEvaluate` 求值，启用 `Recursive`，默认上限为 64（根模板和递归字符串均计层）。所有输入遵循 Core 转义；`\${name}` 输出字面引用，`\\` 输出字面反斜杠。路径优先使用相对路径，绝对路径使用 `/`，例如 `../.shared/${product}.env` 或 `D:/deploy/${scheme}`。未知变量、循环和深度超限按 Core 错误契约处理。
+
+`.env` 的指令参数通过 `Directives.Processing` 求值，查找顺序为显式选项、当前文件已读内容（含已完成导入）、已加载的祖先 `.env` 和环境/默认值。不读取后文，不隐式查找导入父文件的局部变量。制作清单的回调先查本次命令的实际值，再查当前 Profile，全部未命中后才查描述符默认值。每条 import 使用完整参数导入一个文件，原始声明和条目值不被模板结果改写。Profile 只负责读取和导入，模板评估由工具显式发起。
+
 
 source 的 CLI 值相对于调用目录；其他受管本地路径相对于最终 source。模板配置文件相对于模板所在目录，Linux 容器路径使用独立校验，不受制作主机路径规则影响。生成清单把 source 写成相对于输出目录的路径，output 和本地组件输入写成相对于 source 的路径。
 

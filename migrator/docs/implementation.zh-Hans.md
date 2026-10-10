@@ -8,17 +8,25 @@ MySQL provider 默认 `Secured=false`、`AllowPublicKeyRetrieval=true`，`Prepar
 
 生成端 src 使用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Profile 与 Searcher 解析输入，MigrationLoader.Database 预处理 SQL 批次，AmazonS3 解析桶选项。MigrationBundle 收集完整原生产物和计划；Generator 使用 System.Formats.Tar 写 PAX，记录 Migrator（程序集名@版本）和 Runtime。项目不引用 packager。
 
-版本解析前，共享 `Utility.CreateVariables` 依次加载默认值、系统环境、从文件系统根目录到工作目录的直属 `.env`、显式选项。`Utility.LoadEnvironmentVariables` 使用 `Profile.Load`，各级段落与条目以下划线拼名，根条目保留原名，同时保留 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 空值和导入语义。仅跳过打开阶段的缺失文件，其余读取及解析错误传播。变量按需展开、每次调用独立，不修改进程环境；全部输入共用变量视图，不随各输入所在目录改变。
+版本解析前，共享 `Utility.CreateEvaluator` 组合命令选项、工作目录由近及远的祖先链 `.env` 和系统环境，工具启用 Fallback，默认值由 Core 在全部普通变量缺失后查询。`Utility.LoadEnvironmentProfiles` 使用 `Profile.Load`，章节层级以点号连接为命名空间，条目名中的点号和连字符改为下划线，根条目属于默认命名空间，同时保留 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 空值和导入语义。仅跳过打开阶段的缺失文件，其余读取及解析错误传播。变量按需展开、每次调用独立，不修改进程环境；全部输入共用变量视图，不随各输入所在目录改变。
 
-`Variables.From` 将 `FRAMEWORK` 放入不区分大小写的集合，通过 `fallbackOptions` 参数传给共享 `Utility.CreateVariables`。原有选项合并循环仅在已声明选项的原始值为 null 或空字符串时保留已有非空变量；没有非空回退值时保留原赋值，使显式空变量仍展开为空。纯空白选项、表达式展开为空、较近 `.env` 清空先前值的行为不变。framework 仍是通用变量，不参与原生执行器或 RID 选择。
+变量契约使用 `Zongsoft.Common.IVariables`。命令选项直接使用 `context.Options`，工具计算值保存在 Core `Variables` 中，`.env` 保留 `Profile.ToVariables()` 视图，系统环境直接使用 `Variables.Environments()` 实时读取，不复制、不改写名称或值。环境来源只提供默认命名空间，Windows 忽略大小写，Unix/Linux 区分大小写；参与模板的路径值使用 `/`，其余转义遵循 Core。`TemplateEvaluatorOptions.Fallback` 显式设为 true；同一命名空间按 Providers 顺序查询，全部未找到才逐级进入父命名空间及全局，最后允许来源自身已声明的默认值。首个命中即生效，包括 null。指令参数评估沿用父评估器的 Fallback、Recursive、Culture 和 MaximumDepth；不带命名空间的模板无需额外语法。默认空间用 `${name}`，具名空间用 `${io.rustfs:access_key}`；章节层级以点号连接，条目名及命令选项名中的点号和连字符转换为下划线，非法配置名称不提供变量，配置名称冲突仅在查询时失败。
 
-数据库与 Amazon S3 从声明来源向根目录逐级查找 `<输入名>.ini`，然后查找 `postgres.ini`、`postgresql.ini` 等 provider 别名文件。保持就近选择完整配置、仅合并显式导入的规则，错误将来源位置与原因分行显示，候选参数文件按查找顺序逐行列出；共享 `Utility.Indent` 使用平台换行并保留嵌套详情的缩进。自动查找不再回退 `*.env`；原有参数夹具、示例及导入路径使用 `.ini`。通用 `.env` 变量继承不参与连接配置的跨文件合并。
+命令选项集合 context.Options 只注册一次，放在配置及系统环境之前。Core VariablesExtension.TryGetValue 按每一级命名空间查询全部来源，普通查询均传入 false；全局也全部未找到后，才以全局命名空间传入 true 查询已声明的默认值。因此全局优先级为显式选项、近层 .env、远层 .env、系统环境、命令默认值。HasDefaultValue 区别未声明与显式 null，缺省不合成类型零值。工具直接读取、递归模板和指令参数评估共享 Fallback 设置；计算出的覆盖值放在最前面的 Variables 中。
+
+模板直接通过 Core `TemplateEvaluator.Evaluate` / `TryEvaluate` 求值，启用 `Recursive`，默认上限为 64（根模板和递归字符串均计层）。所有输入遵循 Core 转义；`\${name}` 输出字面引用，`\\` 输出字面反斜杠。路径优先使用相对路径，绝对路径使用 `/`，例如 `../.shared/${product}.env` 或 `D:/deploy/${scheme}`。未知变量、循环和深度超限按 Core 错误契约处理。
+
+`.env` 的指令参数通过 `Directives.Processing` 求值，查找顺序为显式选项、当前文件已读内容（含已完成导入）、已加载的祖先 `.env` 和环境/默认值。不读取后文，不隐式查找导入父文件的局部变量。制作清单的回调先查本次命令的实际值，再查当前 Profile，全部未命中后才查描述符默认值。每条 import 使用完整参数导入一个文件，原始声明和条目值不被模板结果改写。Profile 只负责读取和导入，模板评估由工具显式发起。
+
+所有变量（包括 `framework`）统一遵循首个命中生效：null、空字符串、false 和 0 都不会触发下层回退。只有未提供该值时才继续查找；需要有效值的业务操作负责校验并在无法继续时报告错误。
+
+数据库与 Amazon S3 从声明来源向根目录逐级查找 `<输入名>.ini`，然后查找 `postgres.ini`、`postgresql.ini` 等 provider 别名文件。保持就近选择完整配置、仅合并显式导入的规则，错误将来源位置与原因分行显示，候选参数文件按查找顺序逐行列出；共享 `Utility.Indent` 使用平台换行并保留嵌套详情的缩进。参数文件和显式导入路径使用 `.ini`。通用 `.env` 变量继承不参与连接配置的跨文件合并。
 
 `MigrateCommand.Version.cs` 的私有嵌套类型 `VersionSource` 负责解析。主流程排除环境及 `.env` 隐式提供的 version、edition，仅从命令选项取值。解析器展开版本输入并优先识别数字版本；默认或显式目录先通过 `ApplicationManifest.Load(Stream)` 读取直属 `.edition`，仅清单缺失时才通过 `ApplicationIdentifier.Load(Stream)` 读取 `.version`。显式文件名以 `.version` 结尾时忽略大小写使用标识读取器，其他名称使用清单读取器。读取和格式错误保留完整路径，不换解析器重试。
 
-来源选择与产物 Edition 分离：显式非空 Edition 选择清单项并保留拼写；否则从 Current、唯一 Edition 或顶层版本取得版本号，不据此填入产物 Edition。多个 Edition 且无 Current 时要求选择。标识文件提供版本号，显式 Edition 可覆盖或补充其 Edition。未显式指定时产物 Edition 为 null，数字版本和具名 Current 均如此。最终版本必须非零。源文件（含 Current）从不保存；旧多 Edition `.version` 须改名为 `.edition`。
+来源选择与产物 Edition 分离：显式非空 Edition 选择清单项并保留拼写；否则从 Current、唯一 Edition 或顶层版本取得版本号，不据此填入产物 Edition。多个 Edition 且无 Current 时要求选择。标识文件提供版本号，显式 Edition 可覆盖或补充其 Edition。未显式指定时产物 Edition 为 null，数字版本和具名 Current 均如此。最终版本必须非零。源文件（含 Current）从不保存。
 
-进程入口使用 `tools/.shared/Utility.cs` 逐项保留参数边界，并转义反斜杠，保留空值与含空格的 Windows 路径。可能含变量的命令选项先作为字符串进入命令；版本来源解析后回填版本号和 Edition，并为本次命令建立独立 `Variables` 视图，按需递归展开其他值并在类型转换之前完成。布尔开关交由 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) `Switch` 判定。枚举使用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 转换，不额外检查成员定义。`--name` 独立于版本文件，输入和输出路径始终以当前目录为基准；全过程不保存版本文件。计划协议和原生执行器不参与源版本查找，只接收最终身份。命令测试覆盖版本号、文件、目录及默认来源、Edition 选择、变量展开，以及失败时源文件和已有输出保持不变。
+进程入口使用 `tools/.shared/Utility.cs` 逐项保留参数边界，并转义反斜杠，保留空值与含空格的 Windows 路径。可能含变量的命令选项先作为字符串进入命令；版本来源解析后回填版本号和 Edition，并为本次命令建立独立 `MigrationOptions` 选项对象，按需递归展开其他值并在类型转换之前完成。布尔开关交由 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) `Switch` 判定。枚举使用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 转换，不额外检查成员定义。`--name` 独立于版本文件，输入和输出路径始终以当前目录为基准；全过程不保存版本文件。计划协议和原生执行器不参与源版本查找，只接收最终身份。命令测试覆盖版本号、文件、目录及默认来源、Edition 选择、变量展开，以及失败时源文件和已有输出保持不变。
 
 .shared 通过 Compile Link 分别编译到生成端与 executor，不生成共享 DLL。MigrationPlan 采用 partial 和嵌套 Step/Script/Bucket/Database/User、源码生成 JSON；Source/Content 仅在生成端扩展，参数及计划校验由共享代码负责。源码生成 JSON 的字段和指纹规则见[制作阶段的高级说明](../README.zh-Hans.md#advanced-package-details)。
 

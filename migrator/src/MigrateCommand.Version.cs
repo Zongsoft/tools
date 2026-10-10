@@ -44,22 +44,20 @@ public sealed partial class MigrateCommand
 	private static class VersionSource
 	{
 		#region 公共方法
-		public static (Version Version, string Edition) Load(string value, Variables variables)
+		public static (Version Version, string Edition) Load(string value, MigrationOptions options)
 		{
-			var result = Normalizer.Normalize(string.IsNullOrWhiteSpace(value) ? "." : value, variables);
-			if(!result.Succeed)
-				throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed_Message, result.Value));
+			var text = options.Evaluator.Evaluate(string.IsNullOrWhiteSpace(value) ? "." : value);
 
-			if(Version.TryParse(result.Value, out var version))
+			if(Version.TryParse(text, out var version))
 			{
 				if(version.IsZero())
 					throw new InvalidOperationException(Properties.Resources.MigrateVersionInvalid_Message);
 
-				variables[Variables.VERSION] = version.ToString();
-				return (version, NormalizeEdition(variables.Edition));
+				options[MigrationOptions.VERSION] = version.ToString();
+				return (version, NormalizeEdition(options.Edition));
 			}
 
-			var path = Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, result.Value));
+			var path = Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, text));
 			var directory = Directory.Exists(path);
 			if(directory)
 				path = Path.Combine(path, ".edition");
@@ -91,7 +89,7 @@ public sealed partial class MigrateCommand
 				throw new InvalidDataException(string.Format(Properties.Resources.MigrateVersionLoadFailed_Message, path), exception);
 			}
 
-			var edition = NormalizeEdition(variables.Edition);
+			var edition = NormalizeEdition(options.Edition);
 			if(application == null)
 				version = identifier.Version;
 			else

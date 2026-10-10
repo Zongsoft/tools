@@ -55,7 +55,7 @@ public class NugetResolver : DeploymentResolverBase
 	#region 重写方法
 	protected override async Task<IEnumerable<DeploymentUtility.PathToken>> GetSourcesAsync(DeploymentContext context, DeploymentEntry deployment, CancellationToken cancellation)
 	{
-		if(!Utility.TryGetTargetFramework(context.Variables, out var framework))
+		if(!Utility.TryGetTargetFramework(context.Evaluator, out var framework))
 			throw new FormatException(string.Format(Properties.Resources.Review_UndefinedVariable, "Framework"));
 
 		if(NuGet.Frameworks.NuGetFramework.Parse(framework).IsUnsupported)
@@ -72,9 +72,9 @@ public class NugetResolver : DeploymentResolverBase
 			version = context.Deployer.Session.LockedPlan.Packages.Find(package => StringComparer.OrdinalIgnoreCase.Equals(package.Id, argument.Name))?.Version
 				?? throw new InvalidOperationException(string.Format(Properties.Resources.Review_Locked, argument.Name));
 
-		var metadata = await NugetUtility.GetPackageMetadataAsync(context.Variables, argument.Name, version, cancellation)
+		var metadata = await NugetUtility.GetPackageMetadataAsync(context.Evaluator, argument.Name, version, cancellation)
 			?? throw new InvalidOperationException(string.Format(Properties.Resources.Review_Missing, argument.ToString()));
-		var path = await NugetUtility.DownloadPackageAsync(context.Variables, argument.Name, metadata.Identity.Version, cancellation)
+		var path = await NugetUtility.DownloadPackageAsync(context.Evaluator, argument.Name, metadata.Identity.Version, cancellation)
 			?? throw new InvalidOperationException(string.Format(Properties.Resources.Review_Missing, argument.ToString()));
 		context.Deployer.Session.Requested[metadata.Identity.ToString()] = metadata;
 
@@ -83,11 +83,11 @@ public class NugetResolver : DeploymentResolverBase
 			var requested = Path.GetFullPath(Path.Combine(path, argument.Path));
 			DeploymentPath.ValidateSource(path, requested);
 
-			return DeploymentUtility.GetFiles(requested, context.Variables, cancellation: cancellation);
+			return DeploymentUtility.GetFiles(requested, context.Evaluator, cancellation: cancellation);
 		}
 
 		if(File.Exists(Path.Combine(path, Deployer.DEFAULT_DEPLOYMENT_FILENAME)))
-			return DeploymentUtility.GetFiles(Path.Combine(path, Deployer.DEFAULT_DEPLOYMENT_FILENAME), context.Variables, cancellation: cancellation);
+			return DeploymentUtility.GetFiles(Path.Combine(path, Deployer.DEFAULT_DEPLOYMENT_FILENAME), context.Evaluator, cancellation: cancellation);
 
 		// 保留清单中的占位位置，待所有根请求完成统一求解后再展开。
 		context.Deployer.Session.Roots.Add((metadata, framework));
@@ -126,10 +126,10 @@ public class NugetResolver : DeploymentResolverBase
 				continue;
 
 			var package = context.Deployer.Session.Packages[id];
-			var path = await NugetUtility.DownloadPackageAsync(context.Variables, id, package.Identity.Version, cancellation)
+			var path = await NugetUtility.DownloadPackageAsync(context.Evaluator, id, package.Identity.Version, cancellation)
 				?? throw new InvalidOperationException(string.Format(Properties.Resources.Review_Missing, package.Identity));
 
-			foreach(var file in NugetAssets.GetPackageFiles(path, framework, context.Variables, cancellation))
+			foreach(var file in NugetAssets.GetPackageFiles(path, framework, context.Evaluator, cancellation))
 			{
 				file.Package = package.Identity.ToString();
 				files.Add(file);
@@ -138,7 +138,7 @@ public class NugetResolver : DeploymentResolverBase
 			// 栈后进先出，反向入栈以保持依赖声明的访问顺序。
 			foreach(var dependency in NugetGraph.GetDependencies(package, framework).Reverse())
 			{
-				if(!NugetGraph.ShouldIgnoreDependency(context.Variables, dependency.Id))
+				if(!NugetGraph.ShouldIgnoreDependency(context.Evaluator, dependency.Id))
 					pending.Push(dependency.Id);
 			}
 		}

@@ -83,7 +83,7 @@ public abstract class DeploymentResolverBase : IDeploymentResolver
 			var directory = string.IsNullOrEmpty(source.Suffix) ? deployment.Destination.Path : Path.Combine(deployment.Destination.Path, source.Suffix);
 			context.Deployer.Session.Validate(directory);
 
-			if(Utility.IsDeploymentFile(source.Path) && !Deployer.Flag(context.Variables, Deployer.IGNOREDEPLOYMENTFILE_OPTION))
+			if(Utility.IsDeploymentFile(source.Path) && !Deployer.Flag(context.Evaluator, Deployer.IGNOREDEPLOYMENTFILE_OPTION))
 			{
 				await context.Deployer.PlanManifestAsync(source.Path, directory, cancellation);
 				continue;
@@ -106,14 +106,19 @@ public abstract class DeploymentResolverBase : IDeploymentResolver
 				Destination = destination,
 				Manifest = deployment.Profile.FilePath,
 				Package = source.Package,
-				Framework = Utility.GetTargetFramework(context.Variables),
-				Runtime = context.Variables.TryGetValue("platform", out var platform) && context.Variables.TryGetValue("architecture", out var architecture) ? $"{platform}-{architecture}" : null,
+				Framework = Utility.GetTargetFramework(context.Evaluator),
+				Runtime = context.Evaluator.TryGetOption("platform", out var platform) && context.Evaluator.TryGetOption("architecture", out var architecture) ? $"{platform}-{architecture}" : null,
 			});
 		}
 	}
 	#endregion
 
 	#region 虚拟方法
-	protected virtual Task<IEnumerable<DeploymentUtility.PathToken>> GetSourcesAsync(DeploymentContext context, DeploymentEntry deployment, CancellationToken cancellation) => Task.FromResult(DeploymentUtility.GetFiles(deployment.Source.FullPath, context.Variables, true, cancellation, Path.GetDirectoryName(deployment.Profile.FilePath)));
+	/// <summary>枚举部署项已经解析的源路径所匹配的文件。</summary>
+	/// <param name="context">包含当前模板评估器与来源清单的部署上下文。</param>
+	/// <param name="deployment">源和目标均已完成模板求值的部署项。</param>
+	/// <param name="cancellation">用于取消文件枚举的令牌。</param>
+	/// <returns>返回匹配文件序列的任务；序列在枚举时执行文件系统搜索。</returns>
+	protected virtual Task<IEnumerable<DeploymentUtility.PathToken>> GetSourcesAsync(DeploymentContext context, DeploymentEntry deployment, CancellationToken cancellation) => Task.FromResult(DeploymentUtility.GetFiles(deployment.Source.FullPath, context.Evaluator, true, cancellation, Path.GetDirectoryName(deployment.Profile.FilePath)));
 	#endregion
 }

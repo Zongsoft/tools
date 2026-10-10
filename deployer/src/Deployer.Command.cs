@@ -35,57 +35,36 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 
-using Zongsoft.Collections;
+using Zongsoft.Text.Templating;
 
 namespace Zongsoft.Tools.Deployer;
 
 partial class Deployer
 {
-	#region 成员字段
-	private static readonly HashSet<string> _fallbackOptions = new(StringComparer.OrdinalIgnoreCase) { Utility.FRAMEWORK_VARIABLE };
-	#endregion
-
 	#region 变量加载
-	public static IDictionary<string, string> CreateVariables(IDictionary<string, string> options, string currentDirectory = null)
+	/// <summary>组合命令参数、目标应用配置、逐级 .env 视图和系统环境，并解析部署目标目录。</summary>
+	/// <param name="options">原始命令选项；变量名称中的点号和连字符映射为下划线。</param>
+	/// <param name="currentDirectory">搜索 .env 及解析相对目标路径的起始目录；为空时使用进程当前目录。</param>
+	/// <returns>按优先级组织变量来源并启用递归求值的评估器。</returns>
+	public static TemplateEvaluator CreateEvaluator(IDictionary<string, string> options, string currentDirectory = null)
 	{
 		currentDirectory ??= Environment.CurrentDirectory;
+		var commands = new global::Zongsoft.Common.Variables();
 
-		var variables = Environment.GetEnvironmentVariables().ToDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-		Utility.LoadEnvironmentVariables(variables, currentDirectory);
-		var arguments = new Dictionary<string, string>(options, StringComparer.OrdinalIgnoreCase);
+		foreach(var option in options)
+			commands[Utility.NormalizeVariableName(option.Key)] = option.Value;
 
-		if(!arguments.TryGetValue(DESTINATION_OPTION, out var target) && !variables.TryGetValue(DESTINATION_OPTION, out target))
-			target = currentDirectory;
+		var evaluator = Utility.CreateEvaluator(commands);
+		evaluator.Providers.Add(global::Zongsoft.Common.Variables.Environments());
+		Utility.LoadEnvironmentProfiles(evaluator, currentDirectory);
+		var target = Path.GetFullPath(evaluator.GetOption(DESTINATION_OPTION) ?? currentDirectory, currentDirectory);
 
-		//目标配置尚未加载；启动路径依赖环境、.env 和本次命令的完整选项集。
-		var bootstrap = new Dictionary<string, string>(variables, StringComparer.OrdinalIgnoreCase);
-		foreach(var option in arguments)
-		{
-			if(_fallbackOptions.Contains(option.Key) && string.IsNullOrEmpty(option.Value) &&
-				bootstrap.TryGetValue(option.Key, out var previous) && !string.IsNullOrEmpty(previous))
-				continue;
-
-			bootstrap[option.Key] = option.Value ?? string.Empty;
-		}
-
-		target = Normalizer.Normalize(target, bootstrap, name => throw new FormatException(string.Format(Properties.Resources.Review_UndefinedVariable, name)));
-		target = Path.GetFullPath(target, currentDirectory);
-		AppSettingsUtility.Load(variables, target);
-
-		foreach(var option in arguments)
-		{
-			if(_fallbackOptions.Contains(option.Key) && string.IsNullOrEmpty(option.Value) &&
-				variables.TryGetValue(option.Key, out var previous) && !string.IsNullOrEmpty(previous))
-				continue;
-
-			variables[option.Key] = option.Value ?? string.Empty;
-		}
-
-		variables[DESTINATION_OPTION] = target;
-		NugetUtility.Initialize(variables);
-
-		var raw = new Dictionary<string, string>(variables, StringComparer.OrdinalIgnoreCase);
-		return new VariableMap(raw, text => Normalizer.Normalize(text, raw, name => throw new FormatException(string.Format(Properties.Resources.Review_UndefinedVariable, name))));
+		var settings = new global::Zongsoft.Common.Variables();
+		AppSettingsUtility.Load(settings, target);
+		evaluator.Providers.Insert(1, settings);
+		evaluator.SetVariable(DESTINATION_OPTION, target.Replace('\\', '/'));
+		NugetUtility.Initialize(evaluator);
+		return evaluator;
 	}
 	#endregion
 }

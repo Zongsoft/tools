@@ -39,19 +39,11 @@ namespace Zongsoft.Tools.Migrator;
 internal static class TextSource
 {
 	#region 公共方法
-	public static string Read(string source, string value, Variables variables, bool fileOnly = false)
+	public static string Read(string source, string value, MigrationOptions options, bool fileOnly = false)
 	{
-		ArgumentNullException.ThrowIfNull(variables);
+		ArgumentNullException.ThrowIfNull(options);
 
-		return Utility.ReadTextSource(source, value, text =>
-		{
-			var result = Normalizer.Normalize(text, variables);
-
-			if(!result.Succeed)
-				throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed_Message, result.Value));
-
-			return result.Value;
-		}, fileOnly, Properties.Resources.TextSourceFileRequired_Message, Properties.Resources.TextSourceMissing_Message);
+		return Utility.ReadTextSource(source, value, text => options.Evaluator.Evaluate(text), fileOnly, Properties.Resources.TextSourceFileRequired_Message, Properties.Resources.TextSourceMissing_Message);
 	}
 	#endregion
 }

@@ -10,7 +10,7 @@
 
 - 输入仅支持 .migration（[Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Profile INI 格式），参数为 .ini。导入复用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Reader，所有来源均校验；条目路径与参数定位跟随 entry.Profile.FilePath。参数查找不隐式补齐较近配置。
 - 生成端通用变量解析由 tools/.shared 源码链接；选项值先按需递归展开，再转换为版本、架构或布尔值。此共享源码不属于升迁计划协议，executor 仍只共享 migrator/.shared。
-- 生成端依次加载默认值、系统环境、从根到工作目录的直属 `.env`、显式选项；用共享 Utility/Profile.Load 读取，多级段落与条目以下划线拼名，先加载再解析版本来源。同次命令全部输入共用变量。升迁参数自动查找只选 `<输入名>.ini` 或 `<provider>.ini`，不回退旧 `*.env`；参数仅合并显式导入，与 `.env` 变量的逐层合并不同。
+- 生成端按显式选项、近层至远层 `.env`、系统环境的顺序查询，全部缺失后再查询描述符默认值；用共享 Utility/Profile.Load 读取，章节层级以点号连接为命名空间，条目名中的点号和连字符改为下划线，先加载再解析版本来源。同次命令全部输入共用变量。升迁参数自动查找只选 `<输入名>.ini` 或 `<provider>.ini`，参数仅合并显式导入，与 `.env` 变量的逐层合并不同。
 - 按显式参数位置处理输入，模式内按相对路径 Ordinal 排序，任务按连续声明来源划分，同一来源段落内去重。SQL 分段仅在 MigrationLoader.Database 私有实现，按规范 provider 共用连续编号；每次 Load 重新计数。Amazon S3 不生成空目录。
 - 支持六种数据库和 Amazon S3；MigrationProvider 管参数规则，MigrationPlan 管结构；TDengine 用 WebSocket。执行器每次 apply 执行全部 SQL，脚本负责幂等；无成功文件历史、自动回滚或并发调度。
 - 产物名为 `<name>[-<edition>](migrate)@<version>_<RID>.tar.gz` 与同名 .sh/.cmd；name 原样使用，计划名称及默认状态目录保留既有升迁后缀规范化规则；不生成描述文件；版本文件只读，不创建或保存。两文件先暂存后发布，覆盖失败恢复原文件。

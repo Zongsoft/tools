@@ -41,6 +41,7 @@ using System.Runtime.InteropServices;
 
 using Zongsoft.Terminals;
 using Zongsoft.Components;
+using Zongsoft.Text.Templating;
 
 namespace Zongsoft.Tools.Packager;
 
@@ -62,7 +63,7 @@ namespace Zongsoft.Tools.Packager;
 [CommandOption(LICENSE_OPTION, typeof(string))]
 [CommandOption(CATEGORY_OPTION, typeof(string))]
 [CommandOption(MAINTAINER_OPTION, typeof(string), DEFAULT_MAINTAINER)]
-[CommandOption(MANUFACTURER_OPTION, typeof(string), Variables.DEFAULT_MANUFACTURER)]
+[CommandOption(MANUFACTURER_OPTION, typeof(string), PackageOptions.DEFAULT_MANUFACTURER)]
 [CommandOption(SUMMARY_OPTION, typeof(string))]
 [CommandOption(DESCRIPTION_OPTION, typeof(string))]
 [CommandOption(DEPENDENCIES_OPTION, typeof(string))]
@@ -85,44 +86,44 @@ namespace Zongsoft.Tools.Packager;
 public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext> where TPackage : Package
 {
 	#region 常量定义
-	protected const string NAME_OPTION = Variables.NAME;
-	protected const string TITLE_OPTION = Variables.TITLE;
-	protected const string SOURCE_OPTION = Variables.SOURCE;
-	protected const string OUTPUT_OPTION = Variables.OUTPUT;
-	protected const string EDITION_OPTION = Variables.EDITION;
-	protected const string VERSION_OPTION = Variables.VERSION;
-	protected const string PLATFORM_OPTION = Variables.PLATFORM;
-	protected const string FRAMEWORK_OPTION = Variables.FRAMEWORK;
-	protected const string COMPILATION_OPTION = Variables.COMPILATION;
-	protected const string ARCHITECTURE_OPTION = Variables.ARCHITECTURE;
-	protected const string SUMMARY_OPTION = Variables.SUMMARY;
-	protected const string DESCRIPTION_OPTION = Variables.DESCRIPTION;
-	protected const string HOMEPAGE_OPTION = Variables.HOMEPAGE;
-	protected const string LICENSE_OPTION = Variables.LICENSE;
-	protected const string CATEGORY_OPTION = Variables.CATEGORY;
-	protected const string MAINTAINER_OPTION = Variables.MAINTAINER;
-	protected const string MANUFACTURER_OPTION = Variables.MANUFACTURER;
-	protected const string DEPENDENCIES_OPTION = Variables.DEPENDENCIES;
-	protected const string EXCLUDE_OPTION = Variables.EXCLUDE;
+	protected const string NAME_OPTION = PackageOptions.NAME;
+	protected const string TITLE_OPTION = PackageOptions.TITLE;
+	protected const string SOURCE_OPTION = PackageOptions.SOURCE;
+	protected const string OUTPUT_OPTION = PackageOptions.OUTPUT;
+	protected const string EDITION_OPTION = PackageOptions.EDITION;
+	protected const string VERSION_OPTION = PackageOptions.VERSION;
+	protected const string PLATFORM_OPTION = PackageOptions.PLATFORM;
+	protected const string FRAMEWORK_OPTION = PackageOptions.FRAMEWORK;
+	protected const string COMPILATION_OPTION = PackageOptions.COMPILATION;
+	protected const string ARCHITECTURE_OPTION = PackageOptions.ARCHITECTURE;
+	protected const string SUMMARY_OPTION = PackageOptions.SUMMARY;
+	protected const string DESCRIPTION_OPTION = PackageOptions.DESCRIPTION;
+	protected const string HOMEPAGE_OPTION = PackageOptions.HOMEPAGE;
+	protected const string LICENSE_OPTION = PackageOptions.LICENSE;
+	protected const string CATEGORY_OPTION = PackageOptions.CATEGORY;
+	protected const string MAINTAINER_OPTION = PackageOptions.MAINTAINER;
+	protected const string MANUFACTURER_OPTION = PackageOptions.MANUFACTURER;
+	protected const string DEPENDENCIES_OPTION = PackageOptions.DEPENDENCIES;
+	protected const string EXCLUDE_OPTION = PackageOptions.EXCLUDE;
 	protected const string MIGRATION_OPTION = "migration";
 	protected const string WEB_OPTION = "web";
 	protected const string OVERWRITE_OPTION = "overwrite";
 	protected const string INSTALL_PATH_OPTION = "install-path";
-	protected const string LISTEN_OPTION = Variables.LISTEN;
-	protected const string DAEMON_OPTION = Variables.DaemonVariable.DAEMON;
-	protected const string DAEMON_ENVIRONMENTS_OPTION = Variables.DaemonVariable.DAEMON_ENVIRONMENTS;
-	protected const string INSTALLING_OPTION = Variables.ScriptVariable.INSTALLING;
-	protected const string INSTALLED_OPTION = Variables.ScriptVariable.INSTALLED;
-	protected const string UNINSTALLING_OPTION = Variables.ScriptVariable.UNINSTALLING;
-	protected const string UNINSTALLED_OPTION = Variables.ScriptVariable.UNINSTALLED;
-	protected const string PREINSTALLING_OPTION = Variables.ScriptVariable.PREINSTALLING;
-	protected const string POSTINSTALLING_OPTION = Variables.ScriptVariable.POSTINSTALLING;
-	protected const string PREINSTALLED_OPTION = Variables.ScriptVariable.PREINSTALLED;
-	protected const string POSTINSTALLED_OPTION = Variables.ScriptVariable.POSTINSTALLED;
-	protected const string PREUNINSTALLING_OPTION = Variables.ScriptVariable.PREUNINSTALLING;
-	protected const string POSTUNINSTALLING_OPTION = Variables.ScriptVariable.POSTUNINSTALLING;
-	protected const string PREUNINSTALLED_OPTION = Variables.ScriptVariable.PREUNINSTALLED;
-	protected const string POSTUNINSTALLED_OPTION = Variables.ScriptVariable.POSTUNINSTALLED;
+	protected const string LISTEN_OPTION = PackageOptions.LISTEN;
+	protected const string DAEMON_OPTION = PackageOptions.DaemonOptions.DAEMON;
+	protected const string DAEMON_ENVIRONMENTS_OPTION = PackageOptions.DaemonOptions.DAEMON_ENVIRONMENTS;
+	protected const string INSTALLING_OPTION = PackageOptions.ScriptOptions.INSTALLING;
+	protected const string INSTALLED_OPTION = PackageOptions.ScriptOptions.INSTALLED;
+	protected const string UNINSTALLING_OPTION = PackageOptions.ScriptOptions.UNINSTALLING;
+	protected const string UNINSTALLED_OPTION = PackageOptions.ScriptOptions.UNINSTALLED;
+	protected const string PREINSTALLING_OPTION = PackageOptions.ScriptOptions.PREINSTALLING;
+	protected const string POSTINSTALLING_OPTION = PackageOptions.ScriptOptions.POSTINSTALLING;
+	protected const string PREINSTALLED_OPTION = PackageOptions.ScriptOptions.PREINSTALLED;
+	protected const string POSTINSTALLED_OPTION = PackageOptions.ScriptOptions.POSTINSTALLED;
+	protected const string PREUNINSTALLING_OPTION = PackageOptions.ScriptOptions.PREUNINSTALLING;
+	protected const string POSTUNINSTALLING_OPTION = PackageOptions.ScriptOptions.POSTUNINSTALLING;
+	protected const string PREUNINSTALLED_OPTION = PackageOptions.ScriptOptions.PREUNINSTALLED;
+	protected const string POSTUNINSTALLED_OPTION = PackageOptions.ScriptOptions.POSTUNINSTALLED;
 
 	private const string DEFAULT_COMPILATION = "Release";
 	private const string DEFAULT_MAINTAINER = "Zongsoft";
@@ -136,13 +137,9 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		Dumper.Splash();
 
 		//仅使用已知变量解析源目录，身份信息随后由源版本文件补全。
-		var variables = GetVariables(context);
+		var evaluator = CreateEvaluator(context);
 
-		var normalized = Normalizer.Normalize(variables.GetValueOrDefault(SOURCE_OPTION), variables);
-		if(!normalized.Succeed)
-			throw new InvalidOperationException(string.Format(Properties.Resources.SourceVariableUndefined_Message, normalized.Value));
-
-		var source = normalized.Value;
+		var source = evaluator.GetOption(SOURCE_OPTION);
 
 		if(string.IsNullOrEmpty(source))
 			source = Environment.CurrentDirectory;
@@ -157,8 +154,8 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 
 		//源目录确定后加载其祖先链 .env；后续变量不能改变本次查找起点。
 		source = Path.GetFullPath(source);
-		variables = GetVariables(context, source);
-		variables[SOURCE_OPTION] = source;
+		evaluator = CreateEvaluator(context, source);
+		evaluator.SetVariable(SOURCE_OPTION, source.Replace('\\', '/'));
 
 		var name = ResolveIdentity(NAME_OPTION);
 		var edition = ResolveIdentity(EDITION_OPTION);
@@ -170,27 +167,27 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		var versionFile = VersionFile.Load(source, name, edition,
 			string.IsNullOrWhiteSpace(versionText) ? null : Version.Parse(versionText));
 		//身份确定后初始化全部变量，输出、载荷与脚本均使用最终值。
-		variables[NAME_OPTION] = versionFile.Identifier.Name;
-		variables[EDITION_OPTION] = versionFile.Identifier.Edition;
-		variables[VERSION_OPTION] = versionFile.Identifier.Version.ToString();
-		variables[SOURCE_OPTION] = Path.GetFullPath(source);
+		evaluator.SetVariable(NAME_OPTION, versionFile.Identifier.Name);
+		evaluator.SetVariable(EDITION_OPTION, versionFile.Identifier.Edition);
+		evaluator.SetVariable(VERSION_OPTION, versionFile.Identifier.Version.ToString());
+		evaluator.SetVariable(SOURCE_OPTION, Path.GetFullPath(source).Replace('\\', '/'));
 
-		var resolved = new Variables(variables);
+		var options = new PackageOptions(evaluator);
 		var cmdlet = new CommandLine.Cmdlet(context.Command.Name);
-		cmdlet.Options.Add(new(CommandLine.CmdletOptionKind.Fully, OVERWRITE_OPTION, resolved[OVERWRITE_OPTION]));
+		cmdlet.Options.Add(new(CommandLine.CmdletOptionKind.Fully, OVERWRITE_OPTION, options[OVERWRITE_OPTION]));
 		var overwrite = new CommandContext(context.Executor, cmdlet, context.Command, null).Options.Switch(OVERWRITE_OPTION);
-		var output = resolved.Output ?? source;
+		var output = options.Output ?? source;
 
-		resolved[SOURCE_OPTION] = source = Path.GetFullPath(source);
-		resolved[OUTPUT_OPTION] = output = Path.GetFullPath(Path.Combine(source, output));
+		options[SOURCE_OPTION] = source = Path.GetFullPath(source).Replace('\\', '/');
+		options[OUTPUT_OPTION] = output = Path.GetFullPath(Path.Combine(source, output)).Replace('\\', '/');
 
 		//创建安装包对象
-		var package = this.CreatePackage(context, resolved);
+		var package = this.CreatePackage(context, options);
 		if(package == null)
 			return ValueTask.FromResult<object>(null);
 
 		//确保输出目录存在
-		var migration = context.Options.GetValue<string>(MIGRATION_OPTION);
+		var migration = context.Options.GetValue<string>(MIGRATION_OPTION, null);
 		if(!string.IsNullOrWhiteSpace(migration))
 			package.Migration = Migration.Load(package, migration);
 
@@ -200,16 +197,16 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		//加载安装条目
 		package.Entries.Load(source,
 			context.Arguments,
-			[resolved.Exclude]);
+			[options.Exclude]);
 
 		package.Migration?.Attach(package);
 
-		var web = Web.Configurator.Parse(context.Options.GetValue<string>(WEB_OPTION), source, resolved);
+		var web = Web.Configurator.Parse(context.Options.GetValue<string>(WEB_OPTION, null), source, options);
 		if(web.Enabled)
 		{
 			var configurator = Web.Configurator.Get(web.Hoster);
-			var definition = Web.Definition.Load(web.FilePath);
-			var configuration = new Web.Configurator.Context(package.PackageName, package.InstallPath, resolved.Raw,
+			var definition = Web.Definition.Load(web.FilePath, options.Evaluator);
+			var configuration = new Web.Configurator.Context(package.PackageName, package.InstallPath, options.Evaluator,
 				package.Host.Kind == ApplicationHost.HostKind.Generated ? package.Host.Listen : null, package.Architecture);
 			var result = configurator.Configure(definition, configuration);
 			Web.Installation.Attach(package, result);
@@ -239,46 +236,44 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		//返回安装包的文件路径
 		return ValueTask.FromResult<object>(Path.Combine(output, package.FileName));
 
-		string ResolveIdentity(string key)
-		{
-			var result = Normalizer.Normalize(variables.GetValueOrDefault(key), variables);
-			if(!result.Succeed)
-				throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed_Message, result.Value));
-			return result.Value;
-		}
+		string ResolveIdentity(string key) => evaluator.GetOption(key);
 	}
 	#endregion
 
 	#region 抽象方法
-	protected abstract TPackage CreatePackage(CommandContext context, Variables variables);
+	/// <summary>使用最终选项创建相应格式的安装包。</summary>
+	/// <param name="context">本次命令的上下文。</param>
+	/// <param name="options">包含最终身份、路径及制作参数的类型化选项。</param>
+	/// <returns>创建的安装包；返回空值时不继续制作。</returns>
+	protected abstract TPackage CreatePackage(CommandContext context, PackageOptions options);
 	#endregion
 
 	#region 配置方法
 	protected static void Configure(Package package, CommandContext context)
 	{
-		var installPath = package.Variables[INSTALL_PATH_OPTION];
+		var installPath = package.Options[INSTALL_PATH_OPTION];
 
 		if(!string.IsNullOrEmpty(installPath))
-			package.InstallPath = Normalizer.Normalize(installPath, package.Variables, null);
+			package.InstallPath = installPath.Trim();
 	}
 	#endregion
 
 	#region 私有方法
-	internal static Dictionary<string, string> GetVariables(CommandContext context, string directory = null)
+	internal static TemplateEvaluator CreateEvaluator(CommandContext context, string directory = null)
 	{
-		var variables = Variables.From(context, directory);
+		var evaluator = Utility.CreateEvaluator(context, directory);
 
 		//身份只由显式选项与源版本文件决定，环境和 .env 可作为选项引用的变量。
 		foreach(var option in new[] { NAME_OPTION, EDITION_OPTION, VERSION_OPTION })
 		{
-			var value = context.Options.GetValue(option)?.ToString();
+			var value = context.Options.GetValue<string>(option, null);
 			if(!string.IsNullOrWhiteSpace(value))
-				variables[option] = value;
+				evaluator.SetVariable(option, value);
 			else
-				variables.Remove(option);
+				evaluator.SetVariable(option, null);
 		}
 
-		return variables;
+		return evaluator;
 	}
 	#endregion
 }

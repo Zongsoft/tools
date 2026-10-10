@@ -44,18 +44,18 @@ public sealed class RpmCommand : PackCommand<Package.Rpm>
 	private const string PROVIDES_OPTION = "provides";
 	private const string CONFLICTS_OPTION = "conflicts";
 
-	protected override Package.Rpm CreatePackage(CommandContext context, Variables variables)
+	protected override Package.Rpm CreatePackage(CommandContext context, PackageOptions options)
 	{
 		var package = new Package.Rpm(
-			variables.Name,
-			variables.Edition,
-			variables.Version,
-			variables.Platform,
-			variables.Architecture,
-			variables)
+			options.Name,
+			options.Edition,
+			options.Version,
+			options.Platform,
+			options.Architecture,
+			options)
 		{
-			Provides = variables[PROVIDES_OPTION]?.Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries),
-			Conflicts = variables[CONFLICTS_OPTION]?.Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries),
+			Provides = options[PROVIDES_OPTION]?.Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries),
+			Conflicts = options[CONFLICTS_OPTION]?.Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries),
 		};
 
 		Configure(package, context);

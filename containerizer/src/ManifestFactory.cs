@@ -46,10 +46,10 @@ internal static class ManifestFactory
 	#region 公共方法
 	public static ContainerManifest Create(CommandContext context, bool planning = false, bool make = false)
 	{
-		var initial = Utility.CreateVariables(context);
-		var options = context.Options.ToDictionary(item => item.Key, item => item.Value?.ToString(), StringComparer.OrdinalIgnoreCase);
+		var initialEvaluator = Utility.CreateEvaluator(context);
+		var options = context.Options;
 		var arguments = context.Arguments.ToArray();
-		var start = options.TryGetValue("source", out var source) ? Path.GetFullPath(ContainerManifest.Evaluate(source, initial)) : Environment.CurrentDirectory;
+		var start = options.Contains("source") ? Path.GetFullPath(ContainerManifest.Evaluate(options.GetValue<string>("source"), initialEvaluator)) : Environment.CurrentDirectory;
 		var manifests = arguments.Where(argument => argument.EndsWith(".container", StringComparison.OrdinalIgnoreCase)).ToArray();
 
 		if(manifests.Length > 0 && (manifests.Length != 1 || arguments.Length != 1))
@@ -60,26 +60,26 @@ internal static class ManifestFactory
 		if(manifests.Length == 1 && options.Keys.Any(key => key is not ("version" or "source" or "output" or "engine" or "refresh")))
 			throw new ContainerizationException(2, Properties.Resources.Make_Options_Message);
 
-		var result = manifests.Length == 1 ? ContainerManifest.Read(Path.GetFullPath(manifests[0], start), planning) : new ContainerManifest(planning);
+		var result = manifests.Length == 1 ? ContainerManifest.Read(Path.GetFullPath(manifests[0], start), planning, Utility.CreateEvaluator(context, start)) : new ContainerManifest(planning);
 
-		if(!options.ContainsKey("source") && !string.IsNullOrEmpty(result["source"]))
-			start = Path.GetFullPath(result.IsComplete ? result["source"] : ContainerManifest.Evaluate(result["source"], initial), result.SourceBaseDirectory ?? Path.GetDirectoryName(result.InputPath));
+		if(!options.Contains("source") && !string.IsNullOrEmpty(result["source"]))
+			start = Path.GetFullPath(result.IsComplete ? result["source"] : ContainerManifest.Evaluate(result["source"], initialEvaluator), result.SourceBaseDirectory ?? Path.GetDirectoryName(result.InputPath));
 		if(!Directory.Exists(start))
 			throw new ContainerizationException(2, string.Format(Properties.Resources.Manifest_2_Message, start));
 
-		var variables = Utility.CreateVariables(context, start);
-		variables["source"] = start;
+		var evaluator = Utility.CreateEvaluator(context, start);
+		evaluator.SetVariable("source", start.Replace('\\', '/'));
 
 		foreach(var key in ContainerManifest.RootKeys)
 		{
-			if(options.TryGetValue(key, out var value))
-				result[key] = value;
-			if(result.Root.ContainsKey(key) && (!result.IsComplete || options.ContainsKey(key)))
-				result[key] = ContainerManifest.Evaluate(result[key], variables);
+			if(options.Contains(key))
+				result[key] = options.GetValue<string>(key);
+			if(result.Root.ContainsKey(key) && (!result.IsComplete || options.Contains(key)))
+				result[key] = ContainerManifest.Evaluate(result[key], evaluator);
 		}
 
-		result["source"] = start;
-		result["output"] = Path.GetFullPath(string.IsNullOrEmpty(result["output"]) ? "." : result["output"], start);
+		result["source"] = start.Replace('\\', '/');
+		result["output"] = Path.GetFullPath(string.IsNullOrEmpty(result["output"]) ? "." : result["output"], start).Replace('\\', '/');
 		result["architecture"] = string.IsNullOrEmpty(result["architecture"]) ? "x64" : result["architecture"].ToLowerInvariant();
 		result["distribution"] = Distribution.Normalize(result["distribution"]);
 
@@ -117,19 +117,19 @@ internal static class ManifestFactory
 				foreach(var key in component.Values.Keys.ToArray())
 				{
 					if(key != "settings" && !key.StartsWith("environment!", StringComparison.OrdinalIgnoreCase))
-						component[key] = ContainerManifest.Evaluate(component[key], variables, allowEscapes: true);
+						component[key] = ContainerManifest.Evaluate(component[key], evaluator);
 				}
 			}
 		}
 
 		for(int index = 0; index < result.Migrations.Count; index++)
-			result.Migrations[index] = result.ResolvePath(result.IsComplete ? result.Migrations[index] : ContainerManifest.Evaluate(result.Migrations[index], variables));
+			result.Migrations[index] = result.ResolvePath(result.IsComplete ? result.Migrations[index] : ContainerManifest.Evaluate(result.Migrations[index], evaluator));
 
 		if(manifests.Length == 0)
 		{
 			foreach(var argument in arguments)
 			{
-				var value = ContainerManifest.Evaluate(argument, variables);
+				var value = ContainerManifest.Evaluate(argument, evaluator);
 				var parts = value.Split('@', 2);
 				ContainerManifest.Component component;
 
@@ -150,19 +150,17 @@ internal static class ManifestFactory
 			}
 		}
 
-		if(options.TryGetValue("migration", out var migration))
+		if(options.Contains("migration"))
 		{
 			result.Migrations.Clear();
-			migration = ContainerManifest.Evaluate(migration, variables);
+			var migration = ContainerManifest.Evaluate(options.GetValue<string>("migration"), evaluator);
 
 			if(!string.IsNullOrEmpty(migration))
 				result.Migrations.AddRange(MigrationInput.Select(result.ResolvePath(migration), result["name"], result["architecture"]));
 		}
 
-		foreach(var pair in variables)
-			result.Variables[pair.Key] = pair.Value;
-		foreach(var pair in result.Root)
-			result.Variables[pair.Key] = pair.Value;
+		result.Evaluator = evaluator;
+		result.Evaluator.Providers.Insert(0, global::Zongsoft.Common.Variables.Wrap(result.Root));
 
 		result.Normalize();
 		result.ApplyDefaults(result.InputPath != null ? new ServiceDefaults() : ServiceDefaults.Read(Path.Combine(result["output"], ".settings")));

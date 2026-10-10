@@ -57,7 +57,7 @@ These are all template-declared environment/command parameters. Unset optional p
 | `mariadb` | `password` | `MARIADB_PASSWORD` | — | — | Optional |
 | `mongodb` | `root-user` | `MONGO_INITDB_ROOT_USERNAME` | — | — | Required |
 | `mongodb` | `root-password` | `MONGO_INITDB_ROOT_PASSWORD` | — | — | Required |
-| `mysql` | `root-password` | `MYSQL_ROOT_PASSWORD` | — | `mysql_root_password` | Required |
+| `mysql` | `root-password` | `MYSQL_ROOT_PASSWORD` | — | `mysql:root_password` | Required |
 | `mysql` | `database` | `MYSQL_DATABASE` | — | — | Optional |
 | `mysql` | `user` | `MYSQL_USER` | — | — | Optional |
 | `mysql` | `password` | `MYSQL_PASSWORD` | — | — | Optional |
@@ -73,8 +73,8 @@ These are all template-declared environment/command parameters. Unset optional p
 | `rabbitmq` | `password` | `RABBITMQ_DEFAULT_PASS` | — | — | Required |
 | `redis` | `maxmemory` | `--maxmemory` | — | — | Optional |
 | `redis` | `maxmemory-policy` | `--maxmemory-policy` | — | — | Optional |
-| `rustfs` | `access-key` | `RUSTFS_ACCESS_KEY` | — | `rustfs_access_key` | Required |
-| `rustfs` | `secret-key` | `RUSTFS_SECRET_KEY` | — | `rustfs_secret_key` | Required |
+| `rustfs` | `access-key` | `RUSTFS_ACCESS_KEY` | — | `rustfs:access_key` | Required |
+| `rustfs` | `secret-key` | `RUSTFS_SECRET_KEY` | — | `rustfs:secret_key` | Required |
 | `sqlserver` | `password` | `MSSQL_SA_PASSWORD` | — | — | Required |
 | `sqlserver` | `accept-eula` | `ACCEPT_EULA` | — | — | Required |
 | `valkey` | `maxmemory` | `--maxmemory` | — | — | Optional |
@@ -164,6 +164,6 @@ A port named default creates the port parameter. Other names create NAME-port pa
 
 Values are selected from explicit settings, the corresponding explicit environment! value, variable binding, then default. Explicit emptiness blocks fallback; an existing empty variable stays empty. Conflicting simultaneous parameter/environment values fail. Environment values not managed by parameters can be overridden directly. Derived environment is not duplicated in completed manifests, preventing replay from overriding edited settings.
 
-Make evaluates template values against the manifest variable view, supporting $(name), %name% and literal escapes; fixed metadata uses literal values. JSON arrays are parsed before evaluating individual elements, so quotes inside variables cannot change argument boundaries. Only configuration input paths are evaluated; file contents are copied unchanged. Targets do not evaluate values again.
+Make evaluates template values against the manifest variable view, supporting ${name}, ${namespace:name} and literal escapes; fixed metadata uses literal values. JSON arrays are parsed before evaluating individual elements, so quotes inside variables cannot change argument boundaries. Only configuration input paths are evaluated; file contents are copied unchanged. Targets do not evaluate values again.
 
 Application startup, runtimes and Web handoff are outside template extensions; see [Implementation](implementation.md#applications-web-and-service-preparation). Raw Compose/Pod YAML is not accepted as service input. There is no generic config parameter, template inheritance or resource-limit configuration entry.

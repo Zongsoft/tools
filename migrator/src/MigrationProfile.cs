@@ -44,7 +44,13 @@ namespace Zongsoft.Tools.Migrator.Migration;
 internal static class MigrationProfile
 {
 	#region 公共方法
-	public static Profile Load(string path, Action<Profile> validate = null, bool migration = false)
+	/// <summary>验证来源文件并通过 Core 加载升迁配置。</summary>
+	/// <param name="path">配置文件路径。</param>
+	/// <param name="validate">每个配置文件加载完成后的验证回调。</param>
+	/// <param name="migration">是否要求来源文件具有升迁文件扩展名。</param>
+	/// <param name="options">加载选项；现有回调保留并追加来源验证。</param>
+	/// <returns>完成导入及来源验证的配置。</returns>
+	public static Profile Load(string path, Action<Profile> validate = null, bool migration = false, ProfileOptions options = null)
 	{
 		path = Path.GetFullPath(path);
 		var paths = new Stack<string>();
@@ -52,18 +58,16 @@ internal static class MigrationProfile
 
 		try
 		{
-			var options = new ProfileOptions
+			options ??= new ProfileOptions();
+			options.Loading += context =>
 			{
-				Loading = context =>
-				{
-					paths.Push(context.FilePath);
-					Validate(context.FilePath, migration);
-				},
-				Loaded = context =>
-				{
-					validate?.Invoke(context.Profile);
-					paths.Pop();
-				},
+				paths.Push(context.FilePath);
+				Validate(context.FilePath, migration);
+			};
+			options.Loaded += context =>
+			{
+				validate?.Invoke(context.Profile);
+				paths.Pop();
 			};
 
 			return Profile.Load(path, options);

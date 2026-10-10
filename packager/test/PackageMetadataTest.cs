@@ -49,7 +49,7 @@ public sealed class PackageMetadataTest
 			package.Dependencies = ["runtime:[10.0,11.0) | alternative:[9.0)", "libssl:[3.0]"];
 			package.Host = new(ApplicationHost.HostKind.Generated, Listen: "http://127.0.0.1:8069");
 			package.Entries.AddGeneratedContent("payload.txt", "生成载荷", Utility.Unix.Mode644);
-			package.Entries.Add(directory.Path, "settings.conf:/etc/example/settings.conf");
+			package.Entries.AddEntry(directory.Path, "settings.conf", "/etc/example/settings.conf", package.EntryPrefix);
 			package.Entries.SetVersion(new(package.Name, package.Edition, package.Version));
 			package.Pack(directory.Path, false);
 
@@ -178,17 +178,17 @@ public sealed class PackageMetadataTest
 	#region 辅助方法
 	private static Package Create(string format, string source, Architecture architecture = Architecture.X64)
 	{
-		var variables = new Variables(new Dictionary<string, string>
+		var options = new PackageOptions(Utility.CreateEvaluator(new global::Zongsoft.Common.Variables
 		{
-			["source"] = source,
+			["source"] = source.Replace('\\', '/'),
 			["daemon"] = "example.service"
-		});
+		}));
 
 		Package package = format switch
 		{
-			"tar" => new Package.Tar("example", "enterprise", new Version(1, 2, 3, 4), Platform.Linux, architecture, variables),
-			"deb" => new Package.Deb("example", "enterprise", new Version(1, 2, 3, 4), Platform.Linux, architecture, variables),
-			_ => new Package.Rpm("example", "enterprise", new Version(1, 2, 3, 4), Platform.Linux, architecture, variables),
+			"tar" => new Package.Tar("example", "enterprise", new Version(1, 2, 3, 4), Platform.Linux, architecture, options),
+			"deb" => new Package.Deb("example", "enterprise", new Version(1, 2, 3, 4), Platform.Linux, architecture, options),
+			_ => new Package.Rpm("example", "enterprise", new Version(1, 2, 3, 4), Platform.Linux, architecture, options),
 		};
 
 		package.InstallPath = "/opt/example";

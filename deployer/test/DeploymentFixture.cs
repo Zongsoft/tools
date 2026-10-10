@@ -16,14 +16,16 @@ internal sealed class DeploymentFixture : IDisposable
 		Directory.CreateDirectory(this.Destination);
 		Directory.CreateDirectory(this.Packages);
 		Directory.CreateDirectory(Path.Combine(this.Root, "feed"));
-		this.Variables = new(StringComparer.OrdinalIgnoreCase)
+		this.Variables = new()
 		{
 			["Framework"] = "net10.0",
-			["NuGet_Packages"] = this.Packages,
-			["NuGet_Server"] = Path.Combine(this.Root, "feed"),
+			["NuGet_Packages"] = this.Packages.Replace('\\', '/'),
+			["NuGet_Server"] = Path.Combine(this.Root, "feed").Replace('\\', '/'),
 			["verbosity"] = "quiet",
 			["offline"] = "true",
 		};
+		this.Evaluator = new(new() { Recursive = true });
+		this.Evaluator.Providers.Add(this.Variables);
 	}
 	#endregion
 
@@ -31,12 +33,13 @@ internal sealed class DeploymentFixture : IDisposable
 	public string Root { get; }
 	public string Destination => Path.Combine(this.Root, "target");
 	public string Packages => Path.Combine(this.Root, "packages");
-	public Dictionary<string, string> Variables { get; }
+	public global::Zongsoft.Common.Variables Variables { get; }
+	public Zongsoft.Text.Templating.TemplateEvaluator Evaluator { get; }
 	public StringWriter Log { get; } = new();
 	#endregion
 
 	#region 辅助方法
-	public Deployer CreateDeployer() => new(this.Variables, this.Log);
+	public Deployer CreateDeployer() => new(this.Evaluator, this.Log);
 
 	public string Write(string relativePath, string content)
 	{

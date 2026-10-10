@@ -66,7 +66,7 @@ partial class MigrationLoader
 					loader = new(step, Path.GetDirectoryName(source.FilePath), indexes, selected);
 				}
 
-				loader.Add(_expand(entry.Name), _expand(entry.Value));
+				loader.Add(_evaluator.Evaluate(entry.Name), _evaluator.Evaluate(entry.Value));
 			}
 			catch(Exception ex) when(ex is not (OutOfMemoryException or MigrationPrivilegeException))
 			{
@@ -120,7 +120,7 @@ partial class MigrationLoader
 				if(!File.Exists(path))
 					continue;
 
-				var profile = MigrationProfile.Load(path);
+				var profile = this.LoadProfile(path);
 				var sections = profile.Sections.Where(section => provider.Aliases.Contains(section.Name, StringComparer.OrdinalIgnoreCase)).ToArray();
 
 				if(sections.Length > 1)
@@ -142,7 +142,7 @@ partial class MigrationLoader
 						throw new InvalidDataException(string.Format(MigrationResources.ParameterMissing_Message, "Database", providerName));
 
 					var matches = (section == null ? profile.Sections : section.Sections)
-						.Where(child => string.Equals(_expand(child.Name), target, StringComparison.OrdinalIgnoreCase)).ToArray();
+						.Where(child => string.Equals(_evaluator.Evaluate(child.Name), target, StringComparison.OrdinalIgnoreCase)).ToArray();
 					if(matches.Length > 1 || matches.Length == 0 && !string.Equals(defaultName, target, StringComparison.OrdinalIgnoreCase))
 						throw new InvalidDataException(string.Format(MigrationResources.ParameterValueInvalid_Message, "Database"));
 
@@ -150,7 +150,7 @@ partial class MigrationLoader
 					var database = new MigrationPlan.Database
 					{
 						Provider = provider.Name,
-						Name = configuration == null ? target : _expand(configuration.Name),
+						Name = configuration == null ? target : _evaluator.Evaluate(configuration.Name),
 						Settings = parameters,
 						Options = configuration == null ? new(StringComparer.OrdinalIgnoreCase) : this.ReadParameters(configuration.Entries),
 					};
@@ -175,7 +175,7 @@ partial class MigrationLoader
 
 							database.Users.Add(new()
 							{
-								Name = _expand(child.Name),
+								Name = _evaluator.Evaluate(child.Name),
 								Password = values.Get("Password"),
 								Permission = values.Get("Permission", "readwrite"),
 								Privileges = Split(values.Get("Privileges")),
@@ -209,7 +209,7 @@ partial class MigrationLoader
 
 		foreach(var entry in entries)
 		{
-			try { result.Add(entry.Name, _expand(entry.Value) ?? ""); }
+			try { result.Add(entry.Name, _evaluator.Evaluate(entry.Value) ?? ""); }
 			catch
 			{
 				throw new InvalidDataException(string.Format(Properties.Resources.MigrationParameterUnresolved_Message,
@@ -221,9 +221,10 @@ partial class MigrationLoader
 	}
 
 	private static string[] Split(string value) => value == null ? [] : value.Split([',', '|'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-	private static IEnumerable<(string Name, string Path, string Entry)> GetDeclarations(string path, HashSet<string> sources)
+	private static IEnumerable<(string Name, string Path, string Entry)> GetDeclarations(Profile profile, IReadOnlyDictionary<(Profile Profile, int Line), Profile> imports)
 	{
-		// Core 仍解析全部条目。无导入的本地视图仅补充其内部声明表未公开的位置信息。
+		// 根据实际导入结果恢复声明顺序，避免再次解释指令参数。
+		var path = profile.FilePath;
 		var lines = File.ReadAllLines(path);
 		using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(string.Join("\n",
 			lines.Select(line => line.TrimStart().StartsWith('#') || line.TrimStart().StartsWith(';') ? "" : line))));
@@ -245,20 +246,10 @@ partial class MigrationLoader
 			}
 			else if(entries.TryGetValue(item.Index, out var entry))
 				yield return (entry.Section.FullName, path, entry.Name);
-			else if(text.Length >= 8 && text[0] is '#' or ';' &&
-				text.AsSpan(1).StartsWith("@import", StringComparison.OrdinalIgnoreCase) &&
-				(text.Length == 8 || text[8] is ' ' or '\t'))
+			else if(imports.TryGetValue((profile, item.Index + 1), out var imported))
 			{
-				foreach(var value in text[8..].Split([' ', '\t', '|'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-				{
-					var imported = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(path), value));
-
-					if(sources.Contains(imported))
-					{
-						foreach(var declaration in GetDeclarations(imported, sources))
-							yield return declaration;
-					}
-				}
+				foreach(var declaration in GetDeclarations(imported, imports))
+					yield return declaration;
 			}
 		}
 	}

@@ -11,7 +11,7 @@ public sealed class ProgramEntryTest
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "source content");
-		var manifest = fixture.Manifest("file.txt");
+		var manifest = fixture.Manifest("file.txt").Replace('\\', '/');
 		var target = fixture.Write("target with spaces/file.txt", "original content");
 		var previousDirectory = Environment.CurrentDirectory;
 		var previousOverwrite = Environment.GetEnvironmentVariable("overwrite");
@@ -20,9 +20,9 @@ public sealed class ProgramEntryTest
 		{
 			Environment.CurrentDirectory = fixture.Root;
 			Environment.SetEnvironmentVariable("overwrite", "alway");
-			var destination = "--destination=" + Path.GetDirectoryName(target);
+			var destination = "--destination=" + Path.GetDirectoryName(target).Replace('\\', '/');
 
-			Assert.Equal(1, await RunAsync([destination, fixture.Manifest("unknown:input", "source/invalid.deploy")]));
+			Assert.Equal(1, await RunAsync([destination, fixture.Manifest("unknown:input", "source/invalid.deploy").Replace('\\', '/')]));
 			Assert.Equal(0, await RunAsync([destination, "missing.deploy"]));
 			Assert.Equal(0, await RunAsync(["--overwrite=never", destination, manifest]));
 			Assert.Equal("original content", File.ReadAllText(target));

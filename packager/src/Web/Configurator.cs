@@ -44,13 +44,12 @@ internal static partial class Configurator
 		_ => throw DefinitionException.Create("Hoster", default, name),
 	};
 
-	internal static Options Parse(string value, string source, Variables variables)
+	internal static Options Parse(string value, string source, PackageOptions options)
 	{
-		var expanded = VariableEvaluator.Evaluate(value, variables.Raw, allowEscapes: true);
-		if(!expanded.Succeed)
-			throw DefinitionException.Create("Variable", new(source, Entry: "--web"), expanded.Variable);
+		if(!options.Evaluator.TryEvaluate(value, out var text, out var error))
+			throw DefinitionException.Create("Variable", new(source, Entry: "--web"), error.Expression, error);
 
-		value = expanded.Value.Trim();
+		value = text.Trim();
 		if(value.Length == 0)
 			return default;
 

@@ -86,8 +86,8 @@ partial class Deployer
 			{
 				Id = package.Identity.Id,
 				Version = package.Identity.Version.ToNormalizedString(),
-				Framework = Utility.GetTargetFramework(this.Variables),
-				Hash = NugetUtility.PackageHash(this.Variables, package),
+				Framework = Utility.GetTargetFramework(this.Evaluator),
+				Hash = NugetUtility.PackageHash(this.Evaluator, package),
 			};
 
 			if(this.Session.Requested.ContainsKey(package.Identity.ToString()))
@@ -116,19 +116,19 @@ partial class Deployer
 
 		foreach(var key in new[] { "report", "lockFile" })
 		{
-			if(this.Variables.TryGetValue(key, out var output) && !string.IsNullOrEmpty(output))
+			if(this.Evaluator.TryGetOption(key, out var output) && !string.IsNullOrEmpty(output))
 			{
-				var path = Path.GetFullPath(this.Normalize(output));
+				var path = Path.GetFullPath(output);
 				this.ValidateOutput(path, key == "report");
 			}
 		}
 
-		if(Flag(this.Variables, "locked"))
+		if(Flag(this.Evaluator, "locked"))
 		{
-			if(!this.Variables.TryGetValue("lockFile", out var lockPath) || !File.Exists(this.Normalize(lockPath)))
+			if(!this.Evaluator.TryGetOption("lockFile", out var lockPath) || !File.Exists(lockPath))
 				throw new InvalidOperationException(string.Format(Properties.Resources.Review_Locked, "lockFile"));
 
-			var previous = DeploymentPlan.Load(this.Normalize(lockPath));
+			var previous = DeploymentPlan.Load(lockPath);
 
 			if(!previous.Succeeded || !Shape(previous).SequenceEqual(Shape(this.Plan), StringComparer.Ordinal)
 				|| !previous.Manifests.OrderBy(item => item.Key).SequenceEqual(this.Plan.Manifests.OrderBy(item => item.Key))
@@ -136,9 +136,9 @@ partial class Deployer
 				throw new InvalidOperationException(string.Format(Properties.Resources.Review_Locked, lockPath));
 		}
 
-		if(this.Variables.TryGetValue("previous", out var previousPath))
+		if(this.Evaluator.TryGetOption("previous", out var previousPath))
 		{
-			var previous = DeploymentPlan.Load(this.Normalize(previousPath));
+			var previous = DeploymentPlan.Load(previousPath);
 
 			if(!previous.Succeeded || !DeploymentPath.Comparer.Equals(Path.GetFullPath(previous.Root), this.Plan.Root))
 				throw new InvalidOperationException(string.Format(Properties.Resources.Review_Locked, "previous root/result"));
@@ -158,7 +158,7 @@ partial class Deployer
 				this.Plan.Operations.Add(new DeploymentOperation
 
 				{
-					Kind = Flag(this.Variables, "prune") && unchanged ? "Prune" : "Stale",
+					Kind = Flag(this.Evaluator, "prune") && unchanged ? "Prune" : "Stale",
 					Destination = path,
 					Hash = item.Hash,
 					Manifest = previousPath,
@@ -166,7 +166,7 @@ partial class Deployer
 				});
 			}
 		}
-		else if(Flag(this.Variables, "prune"))
+		else if(Flag(this.Evaluator, "prune"))
 			throw new ArgumentException(string.Format(Properties.Resources.Review_InvalidOption, "prune", "previous required"));
 
 		static IEnumerable<string> Shape(DeploymentPlan plan) => plan.Operations.Where(operation => operation.Kind is "Copy" or "Delete").Select(operation => $"{operation.Kind}|{Path.GetRelativePath(plan.Root, operation.Destination)}|{operation.Package}|{operation.SourceHash}|{operation.ResolvedSource}");
@@ -176,7 +176,7 @@ partial class Deployer
 	#region 输出验证
 	private void ValidateOutput(string path, bool report = false)
 	{
-		if(report && this.Variables.TryGetValue("lockFile", out var lockFile) && DeploymentPath.Comparer.Equals(path, Path.GetFullPath(this.Normalize(lockFile))))
+		if(report && this.Evaluator.TryGetOption("lockFile", out var lockFile) && DeploymentPath.Comparer.Equals(path, Path.GetFullPath(lockFile)))
 			throw new IOException(string.Format(Properties.Resources.Review_Conflict, path));
 
 		if(this.Plan.Manifests.ContainsKey(path) || this.Plan.Operations.Any(operation => DeploymentPath.Comparer.Equals(path, operation.Source) || DeploymentPath.Comparer.Equals(path, operation.ResolvedSource) || DeploymentPath.Comparer.Equals(path, operation.Destination)))
@@ -189,7 +189,7 @@ partial class Deployer
 	#region 计划执行
 	private Task ExecutePlanAsync(CancellationToken cancellation)
 	{
-		var dryRun = Flag(this.Variables, "dry-run");
+		var dryRun = Flag(this.Evaluator, "dry-run");
 
 		foreach(var operation in this.Plan.Operations)
 		{
@@ -251,7 +251,7 @@ partial class Deployer
 					operation.Hash = DeploymentSession.Hash(operation.Destination);
 				}
 
-				if(Flag(this.Variables, "explain") || this.IsVerbosity(Verbosity.Detail))
+				if(Flag(this.Evaluator, "explain") || this.IsVerbosity(Verbosity.Detail))
 					this.Output.WriteLine(string.Format(Properties.Resources.Review_Planned, operation.Status, operation.Package ?? operation.Source, operation.Destination));
 			}
 			catch(OperationCanceledException)
@@ -270,8 +270,8 @@ partial class Deployer
 
 		this.Plan.Succeeded = this.Session.Counter.Failures == 0;
 
-		if(!dryRun && this.Plan.Succeeded && !Flag(this.Variables, "locked") && this.Variables.TryGetValue("lockFile", out var path))
-			this.Plan.Save(Path.GetFullPath(this.Normalize(path)));
+		if(!dryRun && this.Plan.Succeeded && !Flag(this.Evaluator, "locked") && this.Evaluator.TryGetOption("lockFile", out var path))
+			this.Plan.Save(Path.GetFullPath(path));
 
 		return Task.CompletedTask;
 	}

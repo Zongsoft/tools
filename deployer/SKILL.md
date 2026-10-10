@@ -12,19 +12,21 @@ description: 修改或审查 Zongsoft tools/deployer 的 .deploy 描述语法、
 1. 从 `Program.cs`、`Deployer.Command.cs` 确认参数如何进入变量集以及默认 `.deploy` 的处理。
 2. 从 `Deployer.cs`、`DeploymentContext.cs` 跟踪章节目标、条目执行顺序、计数和错误输出。
 3. 语法或解析问题读取 `DeploymentEntry.cs`、`DeploymentResolverManager.cs` 和对应 resolver；不要只修 README 示例。
-4. 路径选择问题读取 `DeploymentUtility.GetFiles`、`NugetAssets.ResolveLibraryPath/GetPackageFiles`和 `Normalizer.cs`。
+4. 路径选择问题读取 `DeploymentUtility.GetFiles`、`NugetAssets.ResolveLibraryPath/GetPackageFiles`和 共享 `Utility.cs`。
 5. NuGet 问题读取 `NugetResolver.cs`、`NugetUtility.cs`、`NugetGraph.cs`、`NugetAssets.cs`、`NugetRuntime.cs`，分别检查编排、包访问、版本求解、资产选择和 RID 回退。它们是独立类型；Graph 每次求解新建实例，资产展开用显式栈保持先根后依赖顺序。
+
+工具通过共享 Utility 显式启用 TemplateEvaluatorOptions.Fallback；同一命名空间按来源顺序查询，全部未找到才逐级进入父命名空间及全局；没有额外的命令描述符默认值层。原始值读取、递归模板和指令参数评估使用同一设置。Profile 变量视图不自行展开模板。
 
 ## 必守语义
 
 - 条目省略解析器名时直接使用 `path` 进行本地路径解析，解析器名不区分大小写；`nuget` 下载并解析包；`delete`/`remove` 删除目标文件且不接受目标路径部分。
 - 源路径支持 `*`、`?`、`**`，目标路径由章节目录和条目目标共同决定。
 - 显式 NuGet 缓存路径由 NugetAssets.ResolveLibraryPath 调整 lib 框架目录，路径内框架优先于 Framework 变量，保留后续路径和通配符后缀；仅检查缓存根以内的路径，根外或无匹配时保留原路径。普通包资产已选择框架，枚举时使用 resolveLibrary: false，内容中的 lib 子目录按普通目录处理。
-- `DeploymentEntry.Get` 在变量展开前取第一个冒号划分解析器；没有冒号时名称为 `path`。GetResolver 对 null、空字符串和纯空白名称返回默认路径解析器，这是功能约定；未知名称返回 null。Windows 字面绝对路径使用 `path:D:/...` 或 `path:D:\dir\files.ext`，也可用变量/相对路径，不要把盘符误当解析器。
+- `DeploymentEntry.Get` 在首个模板之前识别解析器前缀，`${...}` 中的命名空间冒号不作为解析器分隔符；没有冒号时名称为 `path`。GetResolver 对 null、空字符串和纯空白名称返回默认路径解析器，这是功能约定；未知名称返回 null。Windows 字面绝对路径使用 `path:D:/...` 或 `path:D:/dir/files.ext`，也可用变量/相对路径，不要把盘符误当解析器。
 - 条目过滤支持变量存在、否定、候选值、`&`/`|` 组合以及目标框架版本比较。
-- 变量支持 `$(name)` 与 `%name%`，名称允许点号、连字符和索引且不区分大小写；环境、从根到工作目录的 `.env`、`appsettings.json`、命令选项依次覆盖。共享 Utility 使用 Profile.Load 读取直属 `.env`，各级段落与条目以下划线拼名；同次命令所有清单共用变量，不搜索子目录。
+- 变量支持 `${name}`，名称按 Core 标识符规则解析，配置及命令选项查询不区分大小写，系统环境通过 `Variables.Environments()` 实时读取且按平台规则比较；每一级命名空间按命令选项、`appsettings.json`、由近到远的 `.env`、环境变量顺序查询，首个命中即生效，JSON null 也会阻止回退。共享 Utility 使用 Profile.Load 读取直属 `.env`，章节层级以点号连接为命名空间，条目名中的点号和连字符改为下划线；同次命令所有清单共用变量，不搜索子目录。
 - 变量值按需递归展开，循环、缺失及超过 64 层失败；`destination` 先用全部命令选项、环境变量及 `.env` 定位，再加载目标配置，不受选项遍历顺序影响。
-- `--framework` 未指定或原始值为 null/空字符串时保留合并变量集中已有的非空值；目标目录预解析和最终合并均适用。无非空变量时保留原赋值，纯空白、表达式展开为空及其他空选项保持原行为。
+- 所有变量（包括 `framework`）统一遵循首个命中生效：null、空字符串、false 和 0 都不会触发下层回退。只有未提供该值时才继续查找；需要有效值的业务操作负责校验并在无法继续时报告错误。
 - 未指定 NuGet 包内路径时优先处理根 `.deploy`；否则先统一求解普通根包依赖闭包，再选择目标 RID/TFM 的托管、原生和内容资产。默认/自定义依赖忽略前缀不区分大小写，明确根请求不受过滤。
 - 普通 NuGet 根请求在一次命令内统一求解，根版本固定，依赖选择满足全部范围的最低可用版本；无解与循环失败。同目标同内容的包资产去重，不同内容报冲突；显式 delete 保留顺序。该求解不等于完整 MSBuild restore。用最终文件版本和宿主首次调用验证。
 - `overwrite` 支持 `alway`（始终覆盖）、`never`（仅复制目标不存在的文件）、`newest`（源文件修改时间不早于目标时复制），默认值为 `newest`。
@@ -56,7 +58,7 @@ dry-run/offline/explain/report、lockFile/locked、previous/prune 的行为见�
 
 类型的 XML 注释说明主要功能与职责边界；流程注释重点解释回溯、状态隔离、执行顺序和所有权等不直观约定。访问级别遵循最小可见性，类内实现保持 private，跨类型生产协作才使用相应入口，不为测试扩大访问范围。
 
-实现细节见 [中文](docs/implementation.zh-Hans.md) / [English](docs/implementation.md)。优先复用 Core 与 NuGet API。Core Profile.Directives 默认登记 ImportDirective，ProfileReader.Session 管理递归状态，ProfileReader 仅解析单个来源，ProfileOptions.Directives 按名称配置 ProfileDirectiveOptions；ImportOptions.MaximumDepth=0 使用默认 64，根文件计一层，循环检查独立。Loading/Loaded 文件回调覆盖根及子文件；Directives.Processing/Directives.Processed 指令回调支持 Argument 改写及 Handled 接管，原始注释仍用于保存。deployer 在 Loading 中仅对 Referer 非 null 的来源记录哈希，根描述文件单独记录，不订阅其他回调；采用默认导入行为允许缺失文件。根读取固定集合、选项及委托快照，异常终止并清理。合并按读取顺序替换有效引用并保留声明，deployer 不调用保存入口。
+实现细节见 [中文](docs/implementation.zh-Hans.md) / [English](docs/implementation.md)。优先复用 Core 与 NuGet API。Core Profile.Directives 默认登记 ImportDirective，ProfileReader.Session 管理递归状态，ProfileReader 仅解析单个来源，ProfileOptions.Directives 按名称配置 ProfileDirectiveOptions；ImportOptions.MaximumDepth=0 使用默认 64，根文件计一层，循环检查独立。Loading/Loaded 文件回调覆盖根及子文件；Directives.Processing/Directives.Processed 指令回调支持 Argument 改写及 Handled 接管，原始注释仍用于保存。deployer 在 Loading 中仅对 Referer 非 null 的来源记录哈希，根描述文件单独记录，并在 Directives.Processing 中求值指令参数；采用默认导入行为允许缺失文件。根读取固定集合、选项及委托快照，异常终止并清理。合并按读取顺序替换有效引用并保留声明，deployer 不调用保存入口。
 
 RID 资源使用 src/Resources/ 中固定的 dotnet/runtime v10.0.0 图谱，禁止从 MSBuildToolsPath 或运行机器 SDK 目录取图谱。图谱及许可证等第三方文件保留上游原始字节，不转换换行、编码或缩进；.gitattributes 的 -text 防止 Git 自动转换。更新快照时同步双语实现文档的版本/哈希及上游许可证，核对上游原件哈希并验证竞争候选顺序。通用包版本在仓库根 Directory.Packages.props 维护，NuGet.* 专用依赖在本项目通过 VersionOverride 维护。
 

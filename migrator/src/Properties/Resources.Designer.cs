@@ -404,29 +404,11 @@ namespace Zongsoft.Tools.Migrator.Properties {
         }
 
         /// <summary>
-        ///   Looks up a localized string similar to The migration variable &apos;{0}&apos; is undefined..
-        /// </summary>
-        internal static string MigrationVariableUndefined_Message {
-            get {
-                return ResourceManager.GetString("MigrationVariableUndefined.Message", resourceCulture);
-            }
-        }
-
-        /// <summary>
         ///   Looks up a localized string similar to Invalid MySQL DELIMITER..
         /// </summary>
         internal static string MySqlDelimiterInvalid_Message {
             get {
                 return ResourceManager.GetString("MySqlDelimiterInvalid.Message", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to The variable normalizer has not been initialized..
-        /// </summary>
-        internal static string NormalizerNotInitialized_Message {
-            get {
-                return ResourceManager.GetString("NormalizerNotInitialized.Message", resourceCulture);
             }
         }
 
@@ -454,15 +436,6 @@ namespace Zongsoft.Tools.Migrator.Properties {
         internal static string TextSourceMissing_Message {
             get {
                 return ResourceManager.GetString("TextSourceMissing.Message", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Variable &quot;{0}&quot; is undefined or contains a cyclic reference..
-        /// </summary>
-        internal static string VariableResolutionFailed_Message {
-            get {
-                return ResourceManager.GetString("VariableResolutionFailed.Message", resourceCulture);
             }
         }
     }

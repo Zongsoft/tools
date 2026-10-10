@@ -42,12 +42,12 @@ internal sealed record ApplicationHost(ApplicationHost.HostKind Kind, string Ent
 	#region 公共方法
 	internal static ApplicationHost Resolve(Package package)
 	{
-		var variables = package.Variables;
-		if(variables.Daemon.Disabled)
+		var options = package.Options;
+		if(options.Daemon.Disabled)
 			return new(HostKind.None);
 
-		var source = variables.Source;
-		var identifier = string.IsNullOrEmpty(variables.Daemon.Identifier) ? package.Name.ToLowerInvariant() : variables.Daemon.Identifier;
+		var source = options.Source;
+		var identifier = string.IsNullOrEmpty(options.Daemon.Identifier) ? package.Name.ToLowerInvariant() : options.Daemon.Identifier;
 		var file = new FileInfo(Path.GetFullPath(Path.Combine(source, identifier)));
 
 		if(file.Exists)
@@ -74,7 +74,7 @@ internal sealed record ApplicationHost(ApplicationHost.HostKind Kind, string Ent
 			return new(HostKind.None);
 		}
 
-		var listen = variables.Listen;
+		var listen = options.Listen;
 		if(ushort.TryParse(listen, out var port))
 			listen = $"http://127.0.0.1:{port}";
 
@@ -102,10 +102,10 @@ internal sealed record ApplicationHost(ApplicationHost.HostKind Kind, string Ent
 		if(files.Length == 1)
 			return Path.GetFileNameWithoutExtension(files[0]) + ".dll";
 
-		if(string.IsNullOrWhiteSpace(package.Variables.Compilation) || string.IsNullOrWhiteSpace(package.Variables.Framework))
+		if(string.IsNullOrWhiteSpace(package.Options.Compilation) || string.IsNullOrWhiteSpace(package.Options.Framework))
 			return null;
 
-		var directory = Path.Combine(source, "bin", package.Variables.Compilation, package.Variables.Framework);
+		var directory = Path.Combine(source, "bin", package.Options.Compilation, package.Options.Framework);
 		path = Path.Combine(directory, package.Name + ".dll");
 		if(File.Exists(path))
 			return Path.GetFileName(path);

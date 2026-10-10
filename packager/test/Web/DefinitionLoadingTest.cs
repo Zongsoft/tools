@@ -15,7 +15,7 @@ public class DefinitionLoadingTest
 	{
 		using var files = new MigrationTestDirectory();
 		files.Write("shared.profile", "[api]\nserver=http://good");
-		var path = files.Write("web.profile", "[api]\nunknown=$(unused)\n#@import shared.profile");
+		var path = files.Write("web.profile", "[api]\nunknown=${unused}\n#@import shared.profile");
 		var error = Assert.Throws<DefinitionException>(() => Definition.Load(path));
 		Assert.Equal("Field", error.Diagnostic.Code);
 		Assert.Equal(path, error.Diagnostic.Source.File);
@@ -23,9 +23,9 @@ public class DefinitionLoadingTest
 	}
 
 	[Theory]
-	[InlineData("server!a=$(missing)", "server=http://local", "http://local:80")]
-	[InlineData("server=$(missing)", "server!b=http://local", "http://local:80")]
-	[InlineData("server!a=$(missing)\nserver!b=invalid weight=0", "server!c=http://local", "http://local:80")]
+	[InlineData("server!a=${missing}", "server=http://local", "http://local:80")]
+	[InlineData("server=${missing}", "server!b=http://local", "http://local:80")]
+	[InlineData("server!a=${missing}\nserver!b=invalid weight=0", "server!c=http://local", "http://local:80")]
 	public void ImportReplacesTheEntireServerGroup(string shared, string local, string expected)
 	{
 		using var files = new MigrationTestDirectory();
@@ -43,7 +43,7 @@ public class DefinitionLoadingTest
 		files.Write("common.profile", "[api]\nbind!legacy=http://*\nserver!common=http://common\n[api z]\npath=/z\n[api a]\npath=/a");
 		files.Write("left.profile", "#@import common.profile\n[api]\nserver!left=http://left");
 		files.Write("right.profile", "#@import common.profile\n[api]\nserver!right=http://right");
-		var path = files.Write("web.profile", "[api]\nserver!before=http://before\n#@import left.profile|right.profile|left.profile\n[api]\nserver!after=http://after");
+		var path = files.Write("web.profile", "[api]\nserver!before=http://before\n#@import left.profile\n#@import right.profile\n#@import left.profile\n[api]\nserver!after=http://after");
 		var model = Resolve(path);
 		var site = Assert.Single(model.Sites);
 		Assert.Equal(["api z", "api a"], site.Routes.Select(item => item.Name));
@@ -74,6 +74,6 @@ public class DefinitionLoadingTest
 		Assert.Equal(content.Replace("\n", "\r\n"), System.IO.File.ReadAllText(path));
 	}
 
-	internal static Definition.Model Resolve(string path, Dictionary<string, string> variables = null, string application = null) =>
-		Definition.Load(path).Resolve(new("example", "/opt/example", variables ?? [], application), new("nginx"));
+	internal static Definition.Model Resolve(string path, global::Zongsoft.Common.Variables variables = null, string application = null) =>
+		Definition.Load(path).Resolve(new("example", "/opt/example", Utility.CreateEvaluator(variables), application), new("nginx"));
 }

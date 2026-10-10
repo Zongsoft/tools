@@ -150,21 +150,21 @@ web/default/.packages/zongsoft.web@1.0.0-x64.deb
 ```ini
 [mysql]
 tag=8.4.11
-settings=storage=persistent;root-password=$(mysql_root_password)
+settings=storage=persistent;root-password=${mysql:root_password}
 
 [redis]
 tag=8.10.2
-settings=storage=persistent;persistence=both;password=$(redis_password)
+settings=storage=persistent;persistence=both;password=${redis:password}
 
 [rustfs]
 tag=1.0.1
-settings=storage=persistent;access-key=$(rustfs_access_key);secret-key=$(rustfs_secret_key)
+settings=storage=persistent;access-key=${rustfs:access_key};secret-key=${rustfs:secret_key}
 
 [nginx]
 tag=1.30.5
 ```
 
-其中的 `$(...)` 引用通过共享变量流程读取 hosting 根目录的 [.env](https://github.com/Zongsoft/hosting/blob/main/.env)，因此 `.settings` 中不会写入任何凭据。完整规则见[服务默认值与变量](#服务默认值与变量)。
+其中的 `${___}` 引用通过共享变量流程读取 hosting 根目录的 [.env](https://github.com/Zongsoft/hosting/blob/main/.env)，因此 `.settings` 中不会写入任何凭据。完整规则见[服务默认值与变量](#服务默认值与变量)。
 
 ### 步骤 3：规划清单
 
@@ -210,17 +210,17 @@ migration#1=.migration\zongsoft(migrate)@1.0.0_linux-x64.tar.gz
 [redis]
 tag=8.10.2
 repository=docker.io/library/redis
-settings=storage=persistent;persistence=both;password=$(redis_password)
+settings=storage=persistent;persistence=both;password=${redis:password}
 
 [mysql]
 tag=8.4.11
 repository=docker.io/library/mysql
-settings=storage=persistent;root-password=$(mysql_root_password)
+settings=storage=persistent;root-password=${mysql:root_password}
 
 [rustfs]
 tag=1.0.1
 repository=docker.io/rustfs/rustfs
-settings=storage=persistent;access-key=$(rustfs_access_key);secret-key=$(rustfs_secret_key)
+settings=storage=persistent;access-key=${rustfs:access_key};secret-key=${rustfs:secret_key}
 
 [zongsoft.daemon]
 package=daemon\.packages\zongsoft.daemon@1.0.0-x64.deb
@@ -358,23 +358,27 @@ file!/etc/ssl/example/key.pem=./certs/key.pem
 
 ### 服务默认值与变量
 
+工具明确启用 Core 的变量回退：具名变量按当前命名空间、各级父命名空间、全局的顺序查询；每一级先按来源优先级查询全部来源，最后才允许命令选项已声明的默认值。无命名空间的引用仍写作 `${name}`，命中空值也停止回退。
+
+系统环境由 Core `Variables.Environments()` 实时读取，只提供默认命名空间，不改写名称或原始值；Windows 忽略名称大小写，Unix/Linux 区分大小写。配置及命令选项名称忽略大小写。
+
 `output/.settings` 保存共享默认值，按组件名称分段，每段只接受 `tag`、`repository` 和 `settings`：
 
 ```ini
 [redis]
 tag=latest
-settings=port=16379;storage=persistent;persistence=both;password=$(redis_password)
+settings=port=16379;storage=persistent;persistence=both;password=${redis:password}
 
 [mysql]
 tag=latest
-settings=root-password=$(mysql_root_password);database=example
+settings=root-password=${mysql:root_password};database=example
 ```
 
 某个段落不会自动选中该服务，选中只由组件列表或清单决定。取值按参数逐项合并：显式组件配置优先于 `.settings`，`.settings` 优先于模板默认值。镜像 tag 缺省为字面 `latest`，工具不会搜索“最新稳定版本”。
 
 `plan`、失败的制作和清单回放都不会改写 `.settings`。**只有按组件列表完整制作成功**，才补充缺失的服务 tag；已有的 tag、repository 和 settings 不会被改写。
 
-变量来自环境、从文件系统根目录到 source 各级 `.env`，以及命令选项。引用形式为 `$(name)` 或 `%name%`，`$$(name)` 与 `%%name%%` 保留字面引用。与参数同名的变量不会被自动绑定：内置绑定只有 MySQL 的 `mysql_root_password` 及 RustFS 的 `rustfs_access_key`、`rustfs_secret_key`；其他取值必须显式提供，如 hosting 示例所示。
+变量来自环境、从文件系统根目录到 source 各级 `.env`，以及命令选项。引用形式为 `${name}`，`\${name}` 保留字面引用。与参数同名的变量不会被自动绑定：内置绑定只有 MySQL 的 `mysql:root_password` 及 RustFS 的 `rustfs:access_key`、`rustfs:secret_key`；其他取值必须显式提供，如 hosting 示例所示。
 
 服务参数使用单行连接字符串：
 

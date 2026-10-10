@@ -150,21 +150,21 @@ Service defaults live in `output/.settings` and are shared by every delivery of 
 ```ini
 [mysql]
 tag=8.4.11
-settings=storage=persistent;root-password=$(mysql_root_password)
+settings=storage=persistent;root-password=${mysql:root_password}
 
 [redis]
 tag=8.10.2
-settings=storage=persistent;persistence=both;password=$(redis_password)
+settings=storage=persistent;persistence=both;password=${redis:password}
 
 [rustfs]
 tag=1.0.1
-settings=storage=persistent;access-key=$(rustfs_access_key);secret-key=$(rustfs_secret_key)
+settings=storage=persistent;access-key=${rustfs:access_key};secret-key=${rustfs:secret_key}
 
 [nginx]
 tag=1.30.5
 ```
 
-The `$(...)` references read the hosting root's [.env](https://github.com/Zongsoft/hosting/blob/main/.env) through the shared variable pipeline, so no credential is written into `.settings`. See [Service defaults and variables](#service-defaults-and-variables) for the full rules.
+The `${___}` references read the hosting root's [.env](https://github.com/Zongsoft/hosting/blob/main/.env) through the shared variable pipeline, so no credential is written into `.settings`. See [Service defaults and variables](#service-defaults-and-variables) for the full rules.
 
 ### Step 3: Plan the manifest
 
@@ -210,17 +210,17 @@ migration#1=.migration\zongsoft(migrate)@1.0.0_linux-x64.tar.gz
 [redis]
 tag=8.10.2
 repository=docker.io/library/redis
-settings=storage=persistent;persistence=both;password=$(redis_password)
+settings=storage=persistent;persistence=both;password=${redis:password}
 
 [mysql]
 tag=8.4.11
 repository=docker.io/library/mysql
-settings=storage=persistent;root-password=$(mysql_root_password)
+settings=storage=persistent;root-password=${mysql:root_password}
 
 [rustfs]
 tag=1.0.1
 repository=docker.io/rustfs/rustfs
-settings=storage=persistent;access-key=$(rustfs_access_key);secret-key=$(rustfs_secret_key)
+settings=storage=persistent;access-key=${rustfs:access_key};secret-key=${rustfs:secret_key}
 
 [zongsoft.daemon]
 package=daemon\.packages\zongsoft.daemon@1.0.0-x64.deb
@@ -358,23 +358,27 @@ file!/etc/ssl/example/key.pem=./certs/key.pem
 
 ### Service defaults and variables
 
+The tool explicitly enables Core variable fallback: named references search their namespace, its parents and global, querying every source in priority order at each level before allowing declared option defaults. Unqualified references remain `${name}`, and a found null or empty value stops fallback.
+
+Core `Variables.Environments()` reads the default namespace live without rewriting environment names or values. Environment names ignore case on Windows and are case-sensitive on Unix/Linux; configuration and command-option names ignore case.
+
 `output/.settings` holds shared defaults, with one section per component accepting only `tag`, `repository` and `settings`:
 
 ```ini
 [redis]
 tag=latest
-settings=port=16379;storage=persistent;persistence=both;password=$(redis_password)
+settings=port=16379;storage=persistent;persistence=both;password=${redis:password}
 
 [mysql]
 tag=latest
-settings=root-password=$(mysql_root_password);database=example
+settings=root-password=${mysql:root_password};database=example
 ```
 
 A section never selects its service; only the component list or the manifest does that. Values merge per parameter, and explicit component values win over `.settings`, which wins over template defaults. A default image tag is the literal `latest` — the tool does not search for the newest stable release.
 
 `plan`, failed builds and manifest replay never rewrite `.settings`. Only a **successful complete build from a component list** fills in missing service tags; existing tags, repositories and settings are left alone.
 
-Variables come from the environment, the `.env` files along the path from the filesystem root down to the source, and command options. References use `$(name)` or `%name%`; `$$(name)` and `%%name%%` keep a literal reference. Names that merely match a parameter are not bound automatically — the only built-in bindings are MySQL's `mysql_root_password` and RustFS's `rustfs_access_key` and `rustfs_secret_key`. Any other value must be set explicitly, as the hosting example does.
+Variables come from the environment, the `.env` files along the path from the filesystem root down to the source, and command options. References use `${name}`; `\${name}` keep a literal reference. Names that merely match a parameter are not bound automatically — the only built-in bindings are MySQL's `mysql:root_password` and RustFS's `rustfs:access_key` and `rustfs:secret_key`. Any other value must be set explicitly, as the hosting example does.
 
 Service parameters use a single-line connection string:
 

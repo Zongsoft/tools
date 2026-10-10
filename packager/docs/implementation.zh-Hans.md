@@ -8,7 +8,7 @@
 
 本文的应用示例引用 hosting 中真实的 [Zongsoft.Hosting.Web](https://github.com/Zongsoft/hosting/tree/main/web/default) 宿主，暂存目录、Bash 工作目录和版本约定见 [README 快速开始](../README.zh-Hans.md#快速开始)。宿主 DLL 为 `Zongsoft.Hosting.Web.dll`，`--daemon:zongsoft.web` 指定包和服务标识。自动 Web 配置使用宿主的 web.profile；根路径别名一节另以用户自备的 manual.conf 演示普通载荷。
 
-hosting 当前脚本省略 `--framework`，框架由工具从 Variables 读取，编译配置由 `--compilation` 指定。生成服务时，daemon 声明 `Environment,DOTNET_ENVIRONMENT`，Web 另声明 `ASPNETCORE_ENVIRONMENT`；terminal 禁用 daemon，声明变量列表不代表设置交互进程环境。脚本中的编译、部署和升迁制作均发生在本工具调用之外，独立 `pack.cmd` 只收集已有载荷。脚本设置及实际命令见 [快速开始](../README.zh-Hans.md#快速开始)。
+hosting 当前脚本省略 `--framework`，框架由工具从变量来源读取，编译配置由 `--compilation` 指定。生成服务时，daemon 声明 `Environment,DOTNET_ENVIRONMENT`，Web 另声明 `ASPNETCORE_ENVIRONMENT`；terminal 禁用 daemon，声明变量列表不代表设置交互进程环境。脚本中的编译、部署和升迁制作均发生在本工具调用之外，独立 `pack.cmd` 只收集已有载荷。脚本设置及实际命令见 [快速开始](../README.zh-Hans.md#快速开始)。
 
 ## 设计目标
 
@@ -46,9 +46,9 @@ hosting 当前脚本省略 `--framework`，框架由工具从 Variables 读取�
 | `Web/Definition*.cs` | 用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Profile 收集来源声明，处理整体后端覆盖、继承、变量及字段校验。 |
 | `Web/Configurator*.cs` | 配置器契约、Nginx 指令树与校验、稳定序列化、可重定位内容片段。 |
 | `Web/Installation*.cs` | 生成载荷冲突校验、交付重定位、激活与卸载脚本。 |
-| `Normalizer.cs` / `TextSource.cs` | 按需展开变量；统一解析源目录文件与直接文本。 |
+| `Utility.cs` / `TextSource.cs` | 按需展开变量；统一解析源目录文件与直接文本。 |
 | `Utility.Search` / `Generator.Entries.cs` | 路径段匹配、目录元数据、受控临时载荷流。 |
-| `Variables.cs` | 变量集合和常用变量的强类型访问器。 |
+| `PackageOptions.cs` | 制作选项的类型化访问、模板求值及工具默认值；变量来源由 Core 评估器管理。 |
 | `Dependency.cs` | 解析统一依赖区间和替代分组；由 Debian/RPM 编码器按原生关系语法输出。 |
 | `Utility.cs` | RID、安装路径、路径规范化、Unix 时间戳、文件权限等辅助逻辑。 |
 | `Dumper.cs` | 控制台输出启动画面、错误和警告消息。 |
@@ -90,7 +90,7 @@ flowchart TD
 `PackCommand<TPackage>` 做通用工作，子类只负责创建具体 `Package`：
 
 ```csharp
-protected override Package.Deb CreatePackage(CommandContext context, Variables variables)
+protected override Package.Deb CreatePackage(CommandContext context, PackageOptions options)
 ```
 
 `RpmCommand` 额外读取：
@@ -102,7 +102,7 @@ protected override Package.Deb CreatePackage(CommandContext context, Variables v
 
 ## 源版本与包内版本
 
-`VersionFile` 使用 `File.OpenRead` 和 `ApplicationManifest.Load(Stream)` 读取源目录直属 `.edition`。仅 `FileNotFoundException` 才允许回退 `.version` 并调用 `ApplicationIdentifier.Load(Stream)`；空标识、损坏文件、目录占位和其他 I/O 错误立即失败。不搜索其他目录。旧多 Edition `.version` 须改名为 `.edition`。
+`VersionFile` 使用 `File.OpenRead` 和 `ApplicationManifest.Load(Stream)` 读取源目录直属 `.edition`。仅 `FileNotFoundException` 才允许回退 `.version` 并调用 `ApplicationIdentifier.Load(Stream)`；空标识、损坏文件、目录占位和其他 I/O 错误立即失败。不搜索其他目录。
 
 清单依次选择显式非空 Edition、Current、唯一 Edition；多个且无选择时报错，无具名 Edition 时用顶层版本。显式选择须存在并保留清单拼写。标识回退允许显式 Edition 替换或补充文件中的 Edition。显式名称须与源名称忽略大小写一致；显式版本覆盖所选版本，最终版本非零。身份只取显式选项及源文件，环境和 `.env` 可通过显式变量引用使用。
 
@@ -133,7 +133,7 @@ Debug 引用本地 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/ma
 | `--output` | `source` | 始终作为输出目录；相对路径基于 `source`，不支持指定文件名。 |
 | `--exclude` | 空 | 加载打包项时跳过的文件模式列表，多个模式用逗号或分号分隔。 |
 | `--edition` | Current 或唯一 Edition | 产品 Edition，参与包名。 |
-| `--framework` | `framework` 变量或空 | 可选 .NET 目标框架，用于查找 `bin/<compilation>/<framework>` 中的宿主；选项未指定或为空时使用合并后的变量。 |
+| `--framework` | `framework` 变量或空 | 可选 .NET 目标框架，用于查找 `bin/<compilation>/<framework>` 中的宿主；省略选项时按变量来源查找；显式空值终止回退。 |
 | `--compilation` | `Release` | 可选 .NET 构建配置，用于上述宿主目录查找，也可作为变量引用。 |
 | `--architecture` | `x64` | 目标架构。 |
 | `--overwrite` | `false` | 是否覆盖已存在的输出文件。 |
@@ -166,13 +166,22 @@ systemd 与生命周期脚本选项：
 
 ### 变量来源
 
-`PackCommand<TPackage>.GetVariables(context, directory)` 依次加载描述符默认值、系统环境变量、指定目录的祖先链 `.env`、显式命令选项（包括额外选项）。省略 directory 时跳过 `.env`，供第一次解析 source 使用。源目录存在并绝对化后重新加载变量并固定 source；`.env` 不参与 source 的反向推导。变量名不区分大小写，优先级为显式选项 > 近层 `.env` > 远层 `.env` > 环境变量 > 默认值。
+`PackCommand<TPackage>.CreateEvaluator(context, directory)` 组合命令选项、指定目录由近及远的祖先链 `.env` 和系统环境，工具启用 Fallback，默认值由 Core 在全部普通变量缺失后查询。省略 directory 时跳过 `.env`，供第一次解析 source 使用。源目录存在并绝对化后重新加载变量并固定 source；`.env` 不参与 source 的反向推导。配置及命令选项名不区分大小写，环境变量按平台规则查询；全局变量优先级为显式选项 > 近层 `.env` > 远层 `.env` > 环境变量 > 默认值。
 
-共享 `Utility.LoadEnvironmentVariables` 从文件系统根目录到 source 加载直属 `.env`，不搜索子目录。使用 `Profile.Load` 保留 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 的空值和导入语义，各级段落与条目以下划线拼名；读取或解析异常终止制包，仅缺失文件跳过。不写入进程环境变量。
+共享 `Utility.LoadEnvironmentProfiles` 从文件系统根目录到 source 加载直属 `.env`，不搜索子目录。使用 `Profile.Load` 保留 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 的空值和导入语义，章节层级以点号连接为命名空间，条目名中的点号和连字符改为下划线；读取或解析异常终止制包，仅缺失文件跳过。不写入进程环境变量。
 
-`Variables.From` 将 `FRAMEWORK` 放入不区分大小写的集合，通过 `fallbackOptions` 参数传给共享 `Utility.CreateVariables`。源目录预解析和最终加载均在原有选项合并循环中直接执行规则：仅在已声明选项的原始值为 null 或空字符串时保留已有非空变量；没有非空回退值时保留原赋值。纯空白值、非空表达式展开为空、较近 `.env` 清空先前值的行为不变，不改变 source 查找范围及框架校验。
+变量契约使用 `Zongsoft.Common.IVariables`。命令选项直接使用 `context.Options`，工具计算值保存在 Core `Variables` 中，`.env` 保留 `Profile.ToVariables()` 视图，系统环境直接使用 `Variables.Environments()` 实时读取，不复制、不改写名称或值。环境来源只提供默认命名空间，Windows 忽略大小写，Unix/Linux 区分大小写；参与模板的路径值使用 `/`，其余转义遵循 Core。`TemplateEvaluatorOptions.Fallback` 显式设为 true；同一命名空间按 Providers 顺序查询，全部未找到才逐级进入父命名空间及全局，最后允许来源自身已声明的默认值。首个命中即生效，包括 null。指令参数评估沿用父评估器的 Fallback、Recursive、Culture 和 MaximumDepth；不带命名空间的模板无需额外语法。默认空间用 `${name}`，具名空间用 `${io.rustfs:access_key}`；章节层级以点号连接，条目名及命令选项名中的点号和连字符转换为下划线，非法配置名称不提供变量，配置名称冲突仅在查询时失败。
 
-`PackCommand` 为每次调用建立独立的 `Variables` 视图，并传给包、脚本和文本来源；不保留进程级变量状态。访问值时递归展开引用，未使用的未知引用不会阻止制包。未知变量、循环引用及超过 64 层的展开失败，诊断指出变量名。展开不读取文件。
+命令选项集合 context.Options 只注册一次，放在配置及系统环境之前。Core VariablesExtension.TryGetValue 按每一级命名空间查询全部来源，普通查询均传入 false；全局也全部未找到后，才以全局命名空间传入 true 查询已声明的默认值。因此全局优先级为显式选项、近层 .env、远层 .env、系统环境、命令默认值。HasDefaultValue 区别未声明与显式 null，缺省不合成类型零值。工具直接读取、递归模板和指令参数评估共享 Fallback 设置；计算出的覆盖值放在最前面的 Variables 中。
+
+模板直接通过 Core `TemplateEvaluator.Evaluate` / `TryEvaluate` 求值，启用 `Recursive`，默认上限为 64（根模板和递归字符串均计层）。所有输入遵循 Core 转义；`\${name}` 输出字面引用，`\\` 输出字面反斜杠。路径优先使用相对路径，绝对路径使用 `/`，例如 `../.shared/${product}.env` 或 `D:/deploy/${scheme}`。未知变量、循环和深度超限按 Core 错误契约处理。
+
+`.env` 的指令参数通过 `Directives.Processing` 求值，查找顺序为显式选项、当前文件已读内容（含已完成导入）、已加载的祖先 `.env` 和环境/默认值。不读取后文，不隐式查找导入父文件的局部变量。制作清单的回调先查本次命令的实际值，再查当前 Profile，全部未命中后才查描述符默认值。每条 import 使用完整参数导入一个文件，原始声明和条目值不被模板结果改写。Profile 只负责读取和导入，模板评估由工具显式发起。
+
+
+所有变量（包括 `framework`）统一遵循首个命中生效：null、空字符串、false 和 0 都不会触发下层回退。只有未提供该值时才继续查找；需要有效值的业务操作负责校验并在无法继续时报告错误。
+
+`PackCommand` 为每次调用建立独立的 `PackageOptions` 选项对象，并传给包、脚本和文本来源；不保留进程级变量状态。访问值时递归展开引用，未使用的未知引用不会阻止制包。未知变量、循环引用及超过 64 层的展开失败，诊断指出变量名。展开不读取文件。
 
 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 命令描述符将可能含变量的选项保留为字符串；`source` 先由完整原始变量集展开。显式 `name`、`edition`、`version` 随后展开，`version` 再转为 `System.Version`，用于从源目录的 `.edition` 清单文件或 `.version` 版本标识文件选择版本。确定最终身份后，`platform`、`architecture` 与 `overwrite` 在使用时展开并转换。裸 `--overwrite` 仍为 true，未指定时为 false。
 
@@ -180,11 +189,11 @@ systemd 与生命周期脚本选项：
 
 ### 变量语法
 
-`Normalizer` 支持两种变量引用形式：
+Core `TemplateEvaluator` 支持两种变量引用形式：
 
 ```text
-$(name)
-%name%
+${name}
+${namespace:name}
 ```
 
 示例：
@@ -206,13 +215,13 @@ dotnet-pack deb \
 
 此示例的身份选项由 Bash 展开；`--version` 作为字符串进入 `OnExecuteAsync`，展开后才按 `System.Version` 解析，名称与 Edition 按传入值校验。打包器变量表达式也可用于后续路径、文本和升迁配置。
 
-源路径、输出、载荷、排除表达式、文本和升迁输入引用未知变量时均失败；未使用的变量不展开。`Normalizer.Normalize` 的结果结构可表示失败，调用方不得把错误值继续作为有效输入。
+源路径、输出、载荷、排除表达式、文本和升迁输入引用未知变量时均失败；未使用的变量不展开。`TryEvaluate` 返回 Core 异常，调用方不得把失败结果继续作为有效输入。
 
 ### 文本与文件
 
-`TextSource.Read(source, value, variables, fileOnly)` 统一处理 summary、description 和生命周期钩子：
+`TextSource.Read(source, value, options, fileOnly)` 统一处理 summary、description 和生命周期钩子：
 
-- `text:` 后内容原样返回，适用于含 Shell `$(...)`、`%...%` 或路径样式的字面文本。
+- `text:` 后内容原样返回，适用于含 Shell `${___}`、`${___}` 或路径样式的字面文本。
 - `file:` 后内容先展开变量，然后按绝对路径或相对 source 的路径读取；文件不存在报错。
 - 无前缀时先展开变量；多行值为文本，已有文件按 source 读取，明显的缺失路径报错，其他单行值为文本。可用前缀消除歧义。
 - 读取后的文件内容不展开变量，也不会再次解释成另一个文件路径。
@@ -453,7 +462,7 @@ Environment=DOTNET_NOLOGO=true
 WantedBy=multi-user.target
 ```
 
-监听值由 `Variables.Listen` 提供；多个完整 URL 以分号分隔，作为同一个 `--urls` 值保留。HTTP/HTTPS 可同时指定，HTTPS 默认服务器证书由宿主配置。省略选项时不追加 `--urls`，已有 service 的 ExecStart 不改写。
+监听值由 `PackageOptions.Listen` 提供；多个完整 URL 以分号分隔，作为同一个 `--urls` 值保留。HTTP/HTTPS 可同时指定，HTTPS 默认服务器证书由宿主配置。省略选项时不追加 `--urls`，已有 service 的 ExecStart 不改写。
 
 如果 `--listen` 非空，则改为：
 
@@ -500,7 +509,7 @@ http://127.0.0.1:<port>
 
 Definition.cs 提供 Load/Resolve 入口；Definition.Loader.cs 收集声明、组织段落并校验结构；Definition.Resolver.cs 集中合并声明、求值和生成有效模型，按绑定与资源、后端策略、健康检查、请求头、原始指令及基础值解析分区。字段值转换属于 Resolver，不单独拆分 Values 文件；Definition.Model.cs 保存模型类型。
 
-加载通过 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Profile.Load（Directives = { ProfileDirectiveOptions.Import(ProfileDirectiveBehavior.Strict) }），用 Loading 收集合并前的引用者声明，Loaded 收集各完成来源（包括根配置），保留 Profile 实例身份。同一层级的后端池按输入实例整组替换，不能直接枚举最终合并条目。公共字段及层级先校验，随后确定所选托管器覆盖关系，最后仅展开实际消费的值。共享 VariableEvaluator 的 allowEscapes 由 Web 显式启用；其他调用保留原模式。
+加载通过 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Profile.Load（Directives = { ProfileDirectiveOptions.Import(ProfileDirectiveBehavior.Strict) }），用 Loading 收集合并前的引用者声明，Loaded 收集各完成来源（包括根配置），保留 Profile 实例身份。同一层级的后端池按输入实例整组替换，不能直接枚举最终合并条目。公共字段及层级先校验，随后确定所选托管器覆盖关系，最后仅展开实际消费的值。指令参数及被消费的配置值直接使用 Core TemplateEvaluator，遵循相同的模板转义规则。
 
 Resolver 生成不可变站点、路径及策略记录；Nginx 生成器建立指令树，校验原始叶指令上下文/基数、静态监听冲突和正则 proxy_pass，再序列化为 UTF-8、Tab、CRLF。安装根是有类型的 ContentPart，不是可被用户文本碰撞的占位符。公共字面值不被当作 Nginx 运行时表达式；不能安全表示的值明确报错。
 
@@ -1052,7 +1061,7 @@ Debian 的 control/data gzip tar 分别写入受控临时文件，ar 依据实�
 
 ## 统一依赖
 
-`Variables.Dependencies` 先展开变量，再由 `Dependency.Split` 分割顶层逗号/分号组；区间及 RPM capability 括号内的标点保持完整。`Package.Dependencies` 仍为字符串数组，两种编码器均调用 `Dependency.Parse` 得到 AND 组及组内 OR 替代项，每项包含名称、原始上下界字符串及是否包含边界的标志。
+`PackageOptions.Dependencies` 先展开变量，再由 `Dependency.Split` 分割顶层逗号/分号组；区间及 RPM capability 括号内的标点保持完整。`Package.Dependencies` 仍为字符串数组，两种编码器均调用 `Dependency.Parse` 得到 AND 组及组内 OR 替代项，每项包含名称、原始上下界字符串及是否包含边界的标志。
 
 语法为 `name[:range]`：单独包名表示不限版本，以数字开头的裸版本表示包含下界。支持标准 NuGet 风格区间，并将 `[v)` 作为 `[v,)` 的别名；`[v]` 表示精确版本，`(v,)` 表示不含下界，`(,v]` / `(,v)` 表示上界，`(,)` 表示不限版本。缺省端点必须使用开边界。`libc6:any` 等包名限定仍属于名称；字母开头的原生版本请使用括号。保留原生 epoch、修订号及版本比较语义，不进行 NuGet 归一化、排序、浮动版本解析或矛盾区间合并。旧比较表达式、错误括号、浮动 `*`、空替代项及控制字符使用本地化诊断报错；空列表项及重复约束保留既有列表行为。
 

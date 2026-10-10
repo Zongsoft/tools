@@ -92,7 +92,7 @@ public sealed partial class MigrateCommandTest
 
 		try
 		{
-			var result = await RunAsync(directory, VersionArguments(absolute ? Path.Combine(directory.Path, value) : value));
+			var result = await RunAsync(directory, VersionArguments(absolute ? Path.Combine(directory.Path, value).Replace('\\', '/') : value));
 
 			Assert.True(result.Code == 0, result.Output);
 			AssertVersionArtifacts(directory, "2.3.4");
@@ -127,7 +127,7 @@ public sealed partial class MigrateCommandTest
 	[InlineData(null, "", "2.3.4", null)]
 	[InlineData(null, " \t ", "2.3.4", null)]
 	[InlineData(null, "community", "1.0.0", "Community")]
-	[InlineData(null, "$(chosen_edition)", "1.0.0", "Community")]
+	[InlineData(null, "${chosen_edition}", "1.0.0", "Community")]
 	[InlineData("2.3.4", null, "2.3.4", null)]
 	[InlineData("2.3.4", "community", "2.3.4", "community")]
 	[InlineData(".version", null, "5.6.7", null)]
@@ -276,9 +276,9 @@ public sealed partial class MigrateCommandTest
 		arguments.Remove("--output:out");
 		arguments.Remove("db.migration");
 		arguments.Add("--edition:enterprise");
-		arguments.Add("--output:out/$(edition)/$(version)");
-		arguments.Add("--title:$(name) $(edition) $(version)");
-		arguments.Add("$(edition)/$(version)/db.migration");
+		arguments.Add("--output:out/${edition}/${version}");
+		arguments.Add("--title:${name} ${edition} ${version}");
+		arguments.Add("${edition}/${version}/db.migration");
 
 		var result = await RunAsync(directory, arguments);
 
@@ -393,7 +393,7 @@ public sealed partial class MigrateCommandTest
 
 	[Theory]
 	[InlineData("versions/app.release", true)]
-	[InlineData("$(zongsoft_version_path)", false)]
+	[InlineData("${zongsoft_version_path}", false)]
 	[InlineData(null, false)]
 	public async Task Execute_VersionPathVariable_ExpandsOrRejectsUnknownAndCyclesAsync(string value, bool succeeds)
 	{
@@ -405,7 +405,7 @@ public sealed partial class MigrateCommandTest
 		try
 		{
 			Environment.SetEnvironmentVariable("zongsoft_version_path", value);
-			var result = await RunAsync(directory, VersionArguments("$(zongsoft_version_path)"));
+			var result = await RunAsync(directory, VersionArguments("${zongsoft_version_path}"));
 
 			if(succeeds)
 			{
@@ -415,7 +415,7 @@ public sealed partial class MigrateCommandTest
 			else
 			{
 				Assert.NotEqual(0, result.Code);
-				Assert.Contains("zongsoft_version_path", Assert.IsType<InvalidOperationException>(result.Error).Message);
+				Assert.Equal("zongsoft_version_path", Assert.IsType<Zongsoft.Text.Templating.TemplateEvaluationException>(result.Error).Expression);
 				Assert.False(Directory.Exists(Path.Combine(directory.Path, "out")));
 			}
 
@@ -436,17 +436,17 @@ public sealed partial class MigrateCommandTest
 
 		try
 		{
-			Environment.SetEnvironmentVariable("zongsoft_migrate_version", "$(zongsoft_migrate_release)");
+			Environment.SetEnvironmentVariable("zongsoft_migrate_version", "${zongsoft_migrate_release}");
 			Environment.SetEnvironmentVariable("zongsoft_migrate_release", "2.3.4");
 			Environment.SetEnvironmentVariable("zongsoft_migrate_platform", "Linux");
 			Environment.SetEnvironmentVariable("zongsoft_migrate_architecture", "Arm64");
 			Environment.SetEnvironmentVariable("zongsoft_migrate_overwrite", "true");
 
-			var arguments = VersionArguments("%zongsoft_migrate_version%");
+			var arguments = VersionArguments("${zongsoft_migrate_version}");
 			arguments.RemoveAll(argument => argument.StartsWith("--platform:", StringComparison.Ordinal) || argument.StartsWith("--architecture:", StringComparison.Ordinal));
-			arguments.Add("--platform:$(zongsoft_migrate_platform)");
-			arguments.Add("--architecture:$(zongsoft_migrate_architecture)");
-			arguments.Add("--overwrite:$(zongsoft_migrate_overwrite)");
+			arguments.Add("--platform:${zongsoft_migrate_platform}");
+			arguments.Add("--architecture:${zongsoft_migrate_architecture}");
+			arguments.Add("--overwrite:${zongsoft_migrate_overwrite}");
 
 			var result = await RunAsync(directory, arguments);
 

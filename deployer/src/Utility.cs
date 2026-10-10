@@ -36,6 +36,8 @@ using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 
+using Zongsoft.Text.Templating;
+
 namespace Zongsoft.Tools.Deployer;
 
 /// <summary>提供部署语法所需的路径、框架过滤及条件表达式辅助功能。</summary>
@@ -54,26 +56,37 @@ internal static partial class Utility
 	#endregion
 
 	#region 框架匹配
-	public static string GetTargetFramework(IDictionary<string, string> variables) => TryGetTargetFramework(variables, out var value) ? value : null;
-	public static bool TryGetTargetFramework(IDictionary<string, string> variables, out string value)
+	/// <summary>获取求值后的目标框架选项。</summary>
+	/// <param name="evaluator">提供框架选项的模板评估器。</param>
+	/// <returns>目标框架；没有有效选项时为空。</returns>
+	public static string GetTargetFramework(TemplateEvaluator evaluator) => TryGetTargetFramework(evaluator, out var value) ? value : null;
+	/// <summary>尝试获取非空的目标框架选项。</summary>
+	/// <param name="evaluator">提供框架选项的评估器，可以为空。</param>
+	/// <param name="value">目标框架求值结果。</param>
+	/// <returns>是否找到非空的目标框架。</returns>
+	public static bool TryGetTargetFramework(TemplateEvaluator evaluator, out string value)
 	{
-		if(variables == null || variables.Count == 0)
+		if(evaluator == null || evaluator.Providers.Count == 0)
 		{
 			value = null;
 
 			return false;
 		}
 
-		return variables.TryGetValue(FRAMEWORK_VARIABLE, out value) && !string.IsNullOrEmpty(value);
+		return evaluator.TryGetOption(FRAMEWORK_VARIABLE, out value) && !string.IsNullOrEmpty(value);
 	}
 
-	public static bool IsTargetFramework(IDictionary<string, string> variables, string targets)
+	/// <summary>判断目标框架是否满足指定筛选条件。</summary>
+	/// <param name="evaluator">提供目标框架的模板评估器。</param>
+	/// <param name="targets">以逗号或分号分隔的框架条件。</param>
+	/// <returns>没有筛选条件或至少满足一项条件时为真。</returns>
+	public static bool IsTargetFramework(TemplateEvaluator evaluator, string targets)
 	{
 		if(string.IsNullOrEmpty(targets))
 			return true;
 
-		return TryGetTargetFramework(variables, out var framework) &&
-			IsTargetFramework(framework, string.IsNullOrEmpty(targets) ? [] : targets.Split(TARGET_SEPARATORS, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
+		return TryGetTargetFramework(evaluator, out var framework) &&
+			IsTargetFramework(framework, targets.Split(TARGET_SEPARATORS, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
 	}
 
 	public static bool IsTargetFramework(string value, params string[] targets)
@@ -146,7 +159,11 @@ internal static partial class Utility
 			return text.Trim();
 		}
 
-		public static bool IsRequisites(IDictionary<string, string> variables, ReadOnlySpan<char> requisites)
+		/// <summary>根据当前变量来源求值部署项的条件表达式。</summary>
+		/// <param name="evaluator">提供条件变量的模板评估器。</param>
+		/// <param name="requisites">包含逻辑组合的条件文本。</param>
+		/// <returns>条件为空或条件满足时为真。</returns>
+		public static bool IsRequisites(TemplateEvaluator evaluator, ReadOnlySpan<char> requisites)
 		{
 			if(requisites.IsEmpty)
 				return true;
@@ -160,7 +177,7 @@ internal static partial class Utility
 				if(requisites[i] == '|' || requisites[i] == '&')
 				{
 					var requisite = requisites[position..i].Trim();
-					var matched = IsRequisite(variables, requisite);
+					var matched = IsRequisite(evaluator, requisite);
 					result = GetResult(result, matched, combiner);
 
 					combiner = requisites[i];
@@ -170,7 +187,7 @@ internal static partial class Utility
 
 			if(position < requisites.Length)
 			{
-				var matched = IsRequisite(variables, requisites[position..].Trim());
+				var matched = IsRequisite(evaluator, requisites[position..].Trim());
 
 				return GetResult(result, matched, combiner);
 			}
@@ -189,7 +206,7 @@ internal static partial class Utility
 			}
 		}
 
-		private static bool IsRequisite(IDictionary<string, string> variables, ReadOnlySpan<char> requisite)
+		private static bool IsRequisite(TemplateEvaluator evaluator, ReadOnlySpan<char> requisite)
 		{
 			if(requisite.IsEmpty || requisite.SequenceEqual("!"))
 				throw new FormatException(string.Format(Properties.Resources.Review_InvalidFilter, requisite.ToString()));
@@ -204,7 +221,7 @@ internal static partial class Utility
 					return false;
 				case < 0:
 					name = requisite[0] == '!' ? requisite[1..].Trim() : requisite.Trim();
-					result = variables.ContainsKey(name.ToString());
+					result = evaluator.TryGetVariable(Utility.NormalizeVariableName(name.ToString()), out _);
 					return requisite[0] == '!' ? !result : result;
 				default:
 					name = requisite[0] == '!' ? requisite[1..index].Trim() : requisite[0..index].Trim();
@@ -212,22 +229,22 @@ internal static partial class Utility
 
 					if(value.IsEmpty)
 					{
-						result = variables.ContainsKey(name.ToString());
+						result = evaluator.TryGetVariable(Utility.NormalizeVariableName(name.ToString()), out _);
 
 						return requisite[0] == '!' ? !result : result;
 					}
 
 					if(name.Equals(FRAMEWORK_VARIABLE, StringComparison.OrdinalIgnoreCase))
 					{
-						result = IsTargetFramework(variables, value.ToString());
+						result = IsTargetFramework(evaluator, value.ToString());
 
 						return requisite[0] == '!' ? !result : result;
 					}
 
-					if(variables.TryGetValue(name.ToString(), out var variable))
+					if(evaluator.TryGetOption(name.ToString(), out var variable))
 					{
 						var parts = value.ToString().Split(',', StringSplitOptions.TrimEntries);
-						result = parts.Contains(variable.Trim(), StringComparer.OrdinalIgnoreCase);
+						result = parts.Contains(variable?.Trim(), StringComparer.OrdinalIgnoreCase);
 
 						return requisite[0] == '!' ? !result : result;
 					}

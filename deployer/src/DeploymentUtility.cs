@@ -37,6 +37,8 @@ using System.Linq;
 using System.Threading;
 using System.Collections.Generic;
 
+using Zongsoft.Text.Templating;
+
 namespace Zongsoft.Tools.Deployer;
 
 /// <summary>提供本地部署源展开、NuGet 缓存路径适配及文件覆盖操作。</summary>
@@ -44,8 +46,14 @@ namespace Zongsoft.Tools.Deployer;
 public static class DeploymentUtility
 {
 	#region 文件操作
-	public static IEnumerable<PathToken> GetFiles(string filePath, IDictionary<string, string> variables, bool resolveLibrary = true, CancellationToken cancellation = default) => GetFiles(filePath, variables, resolveLibrary, cancellation, null);
-	internal static IEnumerable<PathToken> GetFiles(string filePath, IDictionary<string, string> variables, bool resolveLibrary, CancellationToken cancellation, string sourceDirectory)
+	/// <summary>按已解析的路径及部署选项惰性枚举本地文件。</summary>
+	/// <param name="filePath">已完成模板求值的路径，可包含通配符。</param>
+	/// <param name="evaluator">提供 NuGet、目标框架和目录展开选项的评估器。</param>
+	/// <param name="resolveLibrary">是否按目标框架解析 NuGet 包中的库目录。</param>
+	/// <param name="cancellation">用于取消搜索的令牌。</param>
+	/// <returns>包含实际文件路径及目标相对后缀的序列。</returns>
+	public static IEnumerable<PathToken> GetFiles(string filePath, TemplateEvaluator evaluator, bool resolveLibrary = true, CancellationToken cancellation = default) => GetFiles(filePath, evaluator, resolveLibrary, cancellation, null);
+	internal static IEnumerable<PathToken> GetFiles(string filePath, TemplateEvaluator evaluator, bool resolveLibrary, CancellationToken cancellation, string sourceDirectory)
 	{
 		if(string.IsNullOrEmpty(filePath))
 			yield break;
@@ -68,12 +76,12 @@ public static class DeploymentUtility
 			yield break;
 
 		var directoryName = Path.GetDirectoryName(filePath);
-		var expansion = Deployer.Flag(variables, Deployer.EXPANSION_OPTION);
+		var expansion = Deployer.Flag(evaluator, Deployer.EXPANSION_OPTION);
 		var selected = new HashSet<string>(DeploymentPath.Comparer);
 		var expanded = new List<string>();
 
 		// 先定位包目录，再调整框架，避免原框架不存在时通配搜索提前返回空集。
-		foreach(var candidate in GetLibraryDirectories(directoryName, variables, resolveLibrary, expansion, cancellation))
+		foreach(var candidate in GetLibraryDirectories(directoryName, evaluator, resolveLibrary, expansion, cancellation))
 		{
 			foreach(var directory in GetDirectories(candidate.Path, expansion, cancellation, sourceDirectory))
 			{
@@ -138,12 +146,12 @@ public static class DeploymentUtility
 			.Select(match => new PathToken(match.Path, expansion ? Path.GetRelativePath(match.Origin.FullName, match.Path) : Path.Combine(match.Captures.ToArray())));
 	}
 
-	private static IEnumerable<PathToken> GetLibraryDirectories(string directory, IDictionary<string, string> variables, bool resolveLibrary, bool expansion, CancellationToken cancellation)
+	private static IEnumerable<PathToken> GetLibraryDirectories(string directory, TemplateEvaluator evaluator, bool resolveLibrary, bool expansion, CancellationToken cancellation)
 	{
 		if(!resolveLibrary)
 			return [new PathToken(directory)];
 
-		var cache = Path.GetFullPath(NugetUtility.GetPackagesDirectory(variables));
+		var cache = Path.GetFullPath(NugetUtility.GetPackagesDirectory(evaluator));
 		var relative = Path.GetRelativePath(cache, directory);
 		if(Path.IsPathRooted(relative) || relative == ".." || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
 			return [new PathToken(directory)];
@@ -159,7 +167,7 @@ public static class DeploymentUtility
 		return GetDirectories(package, expansion, cancellation).Select(item =>
 		{
 			var requested = Path.Combine([item.Path, .. parts.Skip(prefixLength)]);
-			var resolved = NugetAssets.ResolveLibraryPath(requested, variables);
+			var resolved = NugetAssets.ResolveLibraryPath(requested, evaluator);
 			var suffix = item.Suffix;
 
 			// 包目录已消耗通配捕获；expansion 还需保留其后的固定段。

@@ -308,15 +308,15 @@ public sealed class PackageRpmTest
 	#region 辅助方法
 	private static Package Create(string format, string source, string daemon, string installed = null)
 	{
-		var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["framework"] = "net10.0", ["source"] = source, ["daemon"] = daemon };
+		var variables = new global::Zongsoft.Common.Variables { ["framework"] = "net10.0", ["source"] = source.Replace('\\', '/'), ["daemon"] = daemon };
 		if(installed != null)
 			variables["installed"] = installed;
-		var resolved = new Variables(variables);
+		var options = new PackageOptions(Utility.CreateEvaluator(variables));
 		Package package = format switch
 		{
-			"tar" => new Package.Tar("Zongsoft.Migration.TestHost", null, new Version(1, 1, 0), Platform.Linux, Architecture.X64, resolved),
-			"deb" => new Package.Deb("Zongsoft.Migration.TestHost", null, new Version(1, 1, 0), Platform.Linux, Architecture.X64, resolved),
-			"rpm" => new Package.Rpm("Zongsoft.Migration.TestHost", null, new Version(1, 1, 0), Platform.Linux, Architecture.X64, resolved),
+			"tar" => new Package.Tar("Zongsoft.Migration.TestHost", null, new Version(1, 1, 0), Platform.Linux, Architecture.X64, options),
+			"deb" => new Package.Deb("Zongsoft.Migration.TestHost", null, new Version(1, 1, 0), Platform.Linux, Architecture.X64, options),
+			"rpm" => new Package.Rpm("Zongsoft.Migration.TestHost", null, new Version(1, 1, 0), Platform.Linux, Architecture.X64, options),
 			_ => throw new ArgumentOutOfRangeException(nameof(format)),
 		};
 		package.InstallPath = "/opt/zongsoft/migration-test";

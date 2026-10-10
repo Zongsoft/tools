@@ -34,6 +34,8 @@
 using System;
 using System.Collections.Generic;
 
+using Zongsoft.Text.Templating;
+
 namespace Zongsoft.Tools.Packager.Web;
 
 internal sealed partial class Definition
@@ -57,7 +59,11 @@ internal sealed partial class Definition
 	#endregion
 
 	#region 公共方法
-	public static Definition Load(string filePath) => new Loader().Load(filePath);
+	/// <summary>加载 Web 定义，并在指令执行前求值指令参数。</summary>
+	/// <param name="filePath">Web 定义文件路径。</param>
+	/// <param name="evaluator">指令参数的外部模板变量来源；为空时仅使用当前 Profile 已读取的条目。</param>
+	/// <returns>保留声明来源及覆盖顺序的 Web 定义。</returns>
+	public static Definition Load(string filePath, TemplateEvaluator evaluator = null) => new Loader().Load(filePath, evaluator);
 	#endregion
 
 	#region 内部方法

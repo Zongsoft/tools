@@ -34,10 +34,11 @@
 using System;
 using System.IO;
 using System.Text;
-using System.Collections;
 using System.Collections.Generic;
 
+using Zongsoft.Common;
 using Zongsoft.Components;
+using Zongsoft.Text.Templating;
 using Zongsoft.Configuration.Profiles;
 
 #if DEPLOYER
@@ -117,44 +118,71 @@ internal static partial class Utility
 
 		return text.ToString();
 	}
-
-	internal static Dictionary<string, string> CreateVariables(CommandContext context, string directory = null, IReadOnlySet<string> fallbackOptions = null)
-	{
-		ArgumentNullException.ThrowIfNull(context);
-		var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-		foreach(var option in context.Descriptor.Options)
-			variables[option.Name] = option.DefaultValue?.ToString();
-
-		foreach(DictionaryEntry variable in Environment.GetEnvironmentVariables())
-			variables[variable.Key.ToString()] = variable.Value?.ToString();
-
-		if(directory != null)
-			LoadEnvironmentVariables(variables, directory);
-
-		foreach(var option in context.Options)
-		{
-			var value = option.Value?.ToString();
-			if(fallbackOptions?.Contains(option.Key) == true && string.IsNullOrEmpty(value) &&
-				variables.TryGetValue(option.Key, out var previous) && !string.IsNullOrEmpty(previous))
-				continue;
-
-			variables[option.Key] = value;
-		}
-
-		return variables;
-	}
 	#endregion
 
-	#region 环境文件
-	/// <summary>从文件系统根目录到指定目录依次加载 .env，将段落和条目以下划线拼接为变量名。</summary>
-	/// <param name="variables">接收环境文件变量的字典，已有同名项会被覆盖。</param>
-	/// <param name="directory">加载环境文件的目标目录，包含其祖先目录。</param>
-	internal static void LoadEnvironmentVariables(IDictionary<string, string> variables, string directory)
+	#region 模板来源
+	/// <summary>使用 Core 评估器及原始变量来源创建本次命令的模板环境。</summary>
+	/// <param name="variables">首个原始变量来源；为空时创建可写的内存变量集合。</param>
+	/// <returns>启用递归求值和变量回退的独立模板评估器。</returns>
+	internal static TemplateEvaluator CreateEvaluator(IVariables variables = null)
 	{
-		ArgumentNullException.ThrowIfNull(variables);
-		ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+		var evaluator = new TemplateEvaluator(new() { Recursive = true, Fallback = true });
+		evaluator.Providers.Add(variables ?? new global::Zongsoft.Common.Variables());
+		return evaluator;
+	}
 
+	/// <summary>组合显式命令参数、配置视图、系统环境和命令选项的默认值。</summary>
+	/// <param name="context">提供显式选项和描述符默认值的命令上下文。</param>
+	/// <param name="directory">配置搜索目录；为空时不加载配置文件。</param>
+	/// <returns>保留选项原始类型并按来源优先级查询的递归模板评估器。</returns>
+	internal static TemplateEvaluator CreateEvaluator(CommandContext context, string directory = null)
+	{
+		ArgumentNullException.ThrowIfNull(context);
+		var evaluator = CreateEvaluator(context.Options);
+		evaluator.Providers.Add(global::Zongsoft.Common.Variables.Environments());
+
+		if(directory != null)
+			LoadEnvironmentProfiles(evaluator, directory);
+		return evaluator;
+	}
+
+	/// <summary>通过 Core 按 <see cref="TemplateEvaluatorOptions.Fallback"/> 读取原始值；命中 <see langword="null"/> 也终止查找。</summary>
+	/// <param name="evaluator">按提供程序顺序查找变量的评估器。</param>
+	/// <param name="name">变量全名，可使用命名空间与名称之间的冒号。</param>
+	/// <param name="value">找到的原始值；未找到时为空。</param>
+	/// <returns>找到时返回 <see langword="true"/>，包括值为 <see langword="null"/> 的情况；未找到时返回 <see langword="false"/>。</returns>
+	internal static bool TryGetVariable(this TemplateEvaluator evaluator, string name, out object value)
+	{
+		var index = name.IndexOf(':');
+
+		return evaluator.Providers.TryGetValue(index < 0 ? null : name[..index], name[(index + 1)..], evaluator.Options.Fallback, out value);
+	}
+
+	internal static object GetVariable(this TemplateEvaluator evaluator, string name) => evaluator.TryGetVariable(name, out var value) ? value : null;
+	internal static bool TryGetOption(this TemplateEvaluator evaluator, string name, out string value)
+	{
+		var found = evaluator.TryGetVariable(NormalizeVariableName(name), out var raw);
+		value = raw == null ? null : evaluator.Evaluate(raw.ToString());
+		return found;
+	}
+	internal static string GetOption(this TemplateEvaluator evaluator, string name) => evaluator.TryGetOption(name, out var value) ? value : null;
+	internal static void SetVariable(this TemplateEvaluator evaluator, string name, object value)
+	{
+		if(evaluator.Providers.Count == 0 || evaluator.Providers[0] is not global::Zongsoft.Common.Variables)
+			evaluator.Providers.Insert(0, new global::Zongsoft.Common.Variables());
+		((global::Zongsoft.Common.Variables)evaluator.Providers[0])[NormalizeVariableName(name)] = value;
+	}
+	internal static string NormalizeVariableName(string name)
+	{
+		var index = name.IndexOf(':');
+		return index < 0 ? name.Replace('.', '_').Replace('-', '_') : name[..(index + 1)] + name[(index + 1)..].Replace('.', '_').Replace('-', '_');
+	}
+
+	/// <summary>按从根到目标目录的顺序加载 .env，保留 Profile 的实时变量视图。</summary>
+	/// <param name="evaluator">接收配置视图的评估器，首个来源保留给命令参数。</param>
+	/// <param name="directory">配置搜索的目标目录。</param>
+	internal static void LoadEnvironmentProfiles(TemplateEvaluator evaluator, string directory)
+	{
 		var paths = new Stack<string>();
 		for(var current = new DirectoryInfo(directory); current != null; current = current.Parent)
 			paths.Push(Path.Combine(current.FullName, ".env"));
@@ -163,33 +191,44 @@ internal static partial class Utility
 		{
 			FileStream stream;
 
-			//只忽略打开阶段的缺失文件；权限、读取及解析错误必须终止初始化。
-			try
-			{
-				stream = File.OpenRead(path);
-			}
+			try { stream = File.OpenRead(path); }
 			catch(FileNotFoundException) { continue; }
 			catch(DirectoryNotFoundException) { continue; }
 
 			using(stream)
-				Populate(Profile.Load(stream), null);
-		}
-
-		void Populate(IEnumerable<ProfileItem> items, string prefix)
-		{
-			foreach(var item in items)
 			{
-				switch(item)
-				{
-					case ProfileEntry entry:
-						variables[prefix == null ? entry.Name : $"{prefix}_{entry.Name}"] = entry.Value;
-						break;
-					case ProfileSection section:
-						Populate(section, prefix == null ? section.Name : $"{prefix}_{section.Name}");
-						break;
-				}
+				var profile = Profile.Load(stream, ConfigureDirectiveEvaluation(new ProfileOptions(), evaluator, 1));
+				evaluator.Providers.Insert(1, profile.ToVariables());
 			}
 		}
+	}
+
+	/// <summary>在通用指令回调中评估参数，当前文件仅提供已经读取的条目。</summary>
+	/// <param name="options">接收指令处理回调的配置选项。</param>
+	/// <param name="evaluator">提供外部变量来源的评估器，可以为空。</param>
+	/// <param name="profileIndex">当前配置视图的插入位置；负数表示放在所有外部来源之后。</param>
+	/// <returns>已挂接参数评估回调的原选项实例。</returns>
+	internal static ProfileOptions ConfigureDirectiveEvaluation(ProfileOptions options, TemplateEvaluator evaluator, int profileIndex = -1)
+	{
+		options.Directives.Processing += context =>
+		{
+			var evaluation = new TemplateEvaluator(new()
+			{
+				Recursive = evaluator?.Options.Recursive ?? true,
+				Fallback = evaluator?.Options.Fallback ?? true,
+				Culture = evaluator?.Options.Culture,
+				MaximumDepth = evaluator?.Options.MaximumDepth ?? 64,
+			});
+			if(evaluator != null)
+			{
+				foreach(var provider in evaluator.Providers)
+					evaluation.Providers.Add(provider);
+			}
+
+			evaluation.Providers.Insert(profileIndex < 0 ? evaluation.Providers.Count : profileIndex, context.Profile.ToVariables());
+			context.Argument = evaluation.Evaluate(context.Argument);
+		};
+		return options;
 	}
 	#endregion
 

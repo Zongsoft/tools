@@ -58,7 +58,7 @@ public class WebBindingsTest
 	{
 		using var files = new MigrationTestDirectory();
 		var definition = Definition.Load(files.Write("web.profile", "[api]\nbind!secure=https://*\nserver=~\n" + policy));
-		var result = new Configurator.Nginx().Configure(definition, new("example", "/opt/example", new Dictionary<string, string>(), "http://127.0.0.1:8069"));
+		var result = new Configurator.Nginx().Configure(definition, new("example", "/opt/example", Utility.CreateEvaluator(), "http://127.0.0.1:8069"));
 		var ordinary = result.Files.Single(file => file.Path.EndsWith(".conf", StringComparison.Ordinal)).Content.Render("/opt/example");
 		var template = result.Files.Single(file => file.Path.EndsWith(".template", StringComparison.Ordinal)).Content.Render("/opt/example");
 

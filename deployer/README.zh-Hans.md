@@ -19,7 +19,7 @@
 
 部署文件为 `.ini` 格式的纯文本文件，其内容由中括号包裹的 **章节**_(`Section`)_ 和 **条目**_(`Entry`)_ 两种内容组成，其中 **章节** 部分表示部署的目标目录。
 
-**章节** 和 **条目** 值均支持以美元符接圆括号 `$(...)` 或双百分号 `%...%` 格式的变量引用，变量来自命令选项、环境变量、祖先链 `.env` 和目标应用配置。
+**章节** 和 **条目** 值均支持以美元符接圆括号 `${___}` 或双百分号 `${___}` 格式的变量引用，变量来自命令选项、环境变量、祖先链 `.env` 和目标应用配置。
 
 每个条目由 **键** 和 **值** 两部分组成，以等于号 _(`=`)_ 分隔，其中 **值** 可省略。
 
@@ -39,7 +39,7 @@
 
 解析参数表示待部署的源文件路径，源文件路径支持 `*`、`?` 以及 `**` 三种通配符，其中 `**` 表示多级目录匹配。
 
-Windows 绝对源路径含有盘符冒号时，使用 `path:` 前缀，例如 `path:D:\dir\files.ext` 或 `path:D:/dir/files.ext`；否则 `D:/...` 中的 `D` 会被当成解析器名。也可使用相对于部署文件的路径，或通过变量展开绝对路径。
+Windows 绝对源路径含有盘符冒号时，使用 `path:` 前缀，例如 `path:D:/dir/files.ext` 或 `path:D:/dir/files.ext`；否则 `D:/...` 中的 `D` 会被当成解析器名。也可使用相对于部署文件的路径，或通过变量展开绝对路径。
 
 ```ini
 [plugins zongsoft data]
@@ -82,7 +82,7 @@ delete:Zongsoft.Messaging.Mqtt.option
 - 如果未指定路径则：
 	- 若该包的根目录包含 `.deploy` 文件，则执行该部署文件，不额外复制默认资产或下载未使用的依赖；
 	- 否则解析依赖闭包并部署最适用的资产：优先使用目标 RID 的托管运行时组，无适用运行时组才使用 `lib/{framework}`；同时选择目标 RID 的原生资产和符合规则的内容文件。
-		> `{framework}` 表示最接近 `$(Framework)` 变量声明的 *目标框架* 版本。
+		> `{framework}` 表示最接近 `${Framework}` 变量声明的 *目标框架* 版本。
 
 > 💡 提示：_**Z**ongsoft_ 的 NuGet 包内根目录通常有一个名为 `.deploy` 的部署文件，包内的 `artifacts` 目录则存放着它的插件文件(`*.plugin`)_(至少一个)_、配置文件(`*.option`)、[数据映射文件](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Data)(`*.mapping`)等附属文件。
 
@@ -131,12 +131,12 @@ _**N**uget_ 包下载器默认会忽略以 `System.`、`Microsoft.Extensions.`�
 支持多个条件组合，每个条件由变量名和比较值组成，变量名若以 `!` 打头则表示对该条件的匹配结果取反；如果要比对多个值则以逗号分隔。如下所示：
 
 ```plaintext
-../.deploy/$(scheme)/options/app.$(environment).option       = web.option    <application>
-../.deploy/$(scheme)/options/app.$(environment).option       = web.option    <!application>
-../.deploy/$(scheme)/options/app.$(environment)-debug.option = web.option    <preview:A,B,C>
-../.deploy/$(scheme)/options/app.$(environment)-debug.option = web.option    <!preview:X,Y,Z>
-../.deploy/$(scheme)/options/app.$(environment)-debug.option = web.option    <application | debug:on>
-../.deploy/$(scheme)/options/app.$(environment)-debug.option = web.option    <!application & !debug:on>
+../.deploy/${scheme}/options/app.${environment}.option       = web.option    <application>
+../.deploy/${scheme}/options/app.${environment}.option       = web.option    <!application>
+../.deploy/${scheme}/options/app.${environment}-debug.option = web.option    <preview:A,B,C>
+../.deploy/${scheme}/options/app.${environment}-debug.option = web.option    <!preview:X,Y,Z>
+../.deploy/${scheme}/options/app.${environment}-debug.option = web.option    <application | debug:on>
+../.deploy/${scheme}/options/app.${environment}-debug.option = web.option    <!application & !debug:on>
 ```
 
 > 1. `<application>` 表示存在名为 `application` 的变量(*不论其内容*)，则结果为真。
@@ -149,17 +149,19 @@ _**N**uget_ 包下载器默认会忽略以 `System.`、`Microsoft.Extensions.`�
 支持对 *目标框架* 进行匹配及版本比较，如果 *目标框架* 以`^`符结尾则表示当前部署 *目标框架* 版本必须大于或等于该版本，如下所示：
 
 ```plaintext
-%NUGET_PACKAGES%/mysql.data/8.1.0/lib/netstandard2.1/*.dll     <framework:net7.0^>
-%NUGET_PACKAGES%/mysql.data/6.10.9/lib/netstandard2.0/*.dll    <framework:net5.0,net6.0>
+${NUGET_PACKAGES}/mysql.data/8.1.0/lib/netstandard2.1/*.dll     <framework:net7.0^>
+${NUGET_PACKAGES}/mysql.data/6.10.9/lib/netstandard2.0/*.dll    <framework:net5.0,net6.0>
 ```
 
 ## 变量
 
-变量依次加载：系统环境变量、从文件系统根目录到工作目录的各级 `.env`、目标应用的 `appsettings.json`、命令选项。同名变量后加载覆盖先加载，空值也参与覆盖，变量名不区分大小写。
+工具明确启用 Core 的变量回退：具名变量按当前命名空间、各级父命名空间、全局的顺序查询；每一级先按来源优先级查询全部来源；全部缺失则报告缺少变量。无命名空间的引用仍写作 `${name}`，命中空值也停止回退。
 
-`--framework` 未指定或为空时，使用合并后变量集中的非空 `framework`，遵循上述加载顺序；非空选项优先。变量未定义或为空时沿用原有框架处理流程，纯空白选项值保持原有行为。
+每个命名空间内依次查询命令选项、目标应用的 `appsettings.json`、从工作目录到文件系统根目录的各级 `.env`、系统环境变量。首个命中生效，`appsettings.json` 中显式声明的 null 也会阻止低优先级来源回退。配置和命令选项名忽略大小写；系统环境通过 Core `Variables.Environments()` 实时读取，只提供默认命名空间，名称及原始值不改写，Windows 忽略大小写，Unix/Linux 区分大小写。
 
-每级只读取直属 `.env`，不搜索子目录或各个清单所在目录；同次调用的全部清单共用变量集合。INI 文件使用 Core `Profile.Load` 读取，支持 `#@import`。根条目保留原名，各级段落名与条目名以 `_` 拼接：`[io rustfs]` 下的 `access_key=example` 生成 `io_rustfs_access_key=example`，根级 `environment=Development` 生成 `environment`。缺失的 `.env` 跳过，读取或解析失败终止初始化。值仅在使用时展开，不修改进程环境变量。
+所有变量（包括 `framework`）统一遵循首个命中生效：null、空字符串、false 和 0 都不会触发下层回退。只有未提供该值时才继续查找；需要有效值的业务操作负责校验并在无法继续时报告错误。
+
+每级只读取直属 `.env`，不搜索子目录或各个清单所在目录；同次调用的全部清单共用变量集合。INI 文件使用 Core `Profile.Load` 读取，支持 `#@import`。根条目属于默认命名空间，章节层级以点号组成命名空间，条目名的点号和连字符改为下划线：`[io rustfs]` 下的 `access_key=example` 生成 `io.rustfs:access_key=example`，根级 `environment=Development` 生成 `environment`。缺失的 `.env` 跳过，读取或解析失败终止初始化。值仅在使用时展开，不修改进程环境变量。
 
 变量值可递归引用其他变量，不受命令选项顺序影响；仅在使用时展开，缺失、循环引用或超过 64 层会报错。`destination` 可引用命令选项、环境变量及已加载的 `.env` 变量；目标目录确定后才加载其中的 `appsettings.json`。
 
@@ -172,12 +174,12 @@ _**N**uget_ 包下载器默认会忽略以 `System.`、`Microsoft.Extensions.`�
 
 ### hosting 脚本中的框架与变量
 
-hosting 的 `deploy.cmd` 已省略部署命令的 `--framework`，可以在 hosting 根目录 `.env` 的根层定义 `framework=net10.0`。部署器从 Variables 获取它，仍遵循环境变量 → 祖先 `.env` → 目标应用 `appsettings.json` → 命令选项的覆盖顺序；不是直接读取某个环境变量。省略或传入 null/空字符串的选项保留已有非空框架，纯空白值保持原处理。
+hosting 的 `deploy.cmd` 已省略部署命令的 `--framework`，可以在 hosting 根目录 `.env` 的根层定义 `framework=net10.0`。部署器从变量来源获取它，全局查询顺序为命令选项 → 目标应用 `appsettings.json` → 由近到远的祖先 `.env` → 环境变量。省略选项时继续查询后续来源；显式 null/空字符串阻止回退，与其它变量一致。
 
 在 daemon 宿主目录中，部署命令可写为：
 
 ```cmd
-dotnet deploy --verbosity:quiet --overwrite:newest --prerelease:true --host:daemon --site:daemon --scheme:default --environment:development --debug:off --edition:Release --platform:linux --architecture:x64 --destination:bin/$(edition)/$(framework) .deploy ../.deploy/default/$(host).deploy ../.deploy/default/$(site).deploy
+dotnet deploy --verbosity:quiet --overwrite:newest --prerelease:true --host:daemon --site:daemon --scheme:default --environment:development --debug:off --edition:Release --platform:linux --architecture:x64 --destination:bin/${edition}/${framework} .deploy ../.deploy/default/${host}.deploy ../.deploy/default/${site}.deploy
 ```
 
 `--edition:Release` 在这个部署流程中用于定位构建配置目录；安装包的 Edition 是另外的身份参数，不应混用。这里仅执行插件部署，不编译宿主、不制作安装包或升迁包。当前 hosting 的 `deploy.cmd` 调用 Cake 时也省略 `--framework`，构建使用各宿主 `build.cake` 的 `Argument("framework", "net10.0")` 默认值；Cake 脚本不读取 `.env` 或进程变量 `framework`。应保持该构建值与部署、打包变量一致；需要改变构建框架时，显式向 Cake 传入 `--framework` 或调整其默认值。脚本参数和独立打包流程见 [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.zh-Hans.md#安装包与升迁包)。
@@ -204,7 +206,6 @@ dotnet tool update -g zongsoft.tools.deployer
 ```bash
 dotnet tool uninstall -g zongsoft.tools.deployer
 ```
-
 
 ### 从本地源码安装（用于测试）
 
@@ -242,7 +243,7 @@ dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:
 
 - 如果目标(宿主)目录没有默认部署文件(`.deploy`)，则必须手动指定部署文件名(支持多个部署文件)。以下示例假定 `Zongsoft.Data@6.2.0` 已下载并解压到 NuGet 包目录：
 ```bash
-dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:x64 "%NUGET_PACKAGES%/zongsoft.data/6.2.0/.deploy"
+dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:x64 "${NUGET_PACKAGES}/zongsoft.data/6.2.0/.deploy"
 ```
 
 - 为了部署方便可以在目标(宿主)项目创建相应版本的部署脚本文件，譬如：
@@ -282,12 +283,12 @@ dotnet-deploy [--选项:值 ...] [部署文件或目录 ...]
 | `--previous:<文件>` | 无 | 读取上次报告，识别不再选中的目标文件。 |
 | `--prune[:布尔值]` | `false` | 配合 `previous` 删除内容未变的旧文件；改动过的文件保留。 |
 
-所有布尔选项支持裸开关，以及 `true/false`、`1/0`、`yes/no`、`on/off`、`enable(d)/disable(d)`，大小写不敏感；其他值按 Core `Switch` 约定视为 false。可用 `$(name)` 或 `%name%` 引用变量，名称支持点号、连字符与索引，按需递归展开；用到的值缺失、循环或超过 64 层即报错，先展开再转换类型。枚举选项沿用 Core 的转换规则，不额外检查枚举成员是否已定义；调用方应提供有效枚举项。未选中的部署分支不展开。
+所有布尔选项支持裸开关，以及 `true/false`、`1/0`、`yes/no`、`on/off`、`enable(d)/disable(d)`，大小写不敏感；其他值按 Core `Switch` 约定视为 false。可用 `${name}` 引用变量，名称遵循 Core 模板标识符规则，支持命名空间及成员/索引访问，按需递归展开；用到的值缺失、循环或超过 64 层即报错，先展开再转换类型。枚举选项沿用 Core 的转换规则，不额外检查枚举成员是否已定义；调用方应提供有效枚举项。未选中的部署分支不展开。
 
 NuGet 相关的 `NuGet_Server` 与 `NuGet_Packages` 可通过命令选项、环境变量或 `.env` 提供；`Framework`、`Platform`、`Architecture`、`edition` 等是供解析器和部署文件使用的普通变量。示例：
 
 ```powershell
-dotnet deploy --destination:'bin/$(edition)/$(framework)' --edition:Release --framework:net10.0 --dry-run --report:deploy-plan.json .deploy extra.deploy
+dotnet deploy --destination:'bin/${edition}/${framework}' --edition:Release --framework:net10.0 --dry-run --report:deploy-plan.json .deploy extra.deploy
 ```
 
 ### NuGet 包
@@ -302,12 +303,12 @@ dotnet deploy --destination:'bin/$(edition)/$(framework)' --edition:Release --fr
 
 假设 `Framework` 变量为 `net9.0`，当某部署文件中有如下部署项：
 ```ini
-%NUGET_PACKAGES%/mysql.data/8.3.0/lib/net9.0/*.dll
+${NUGET_PACKAGES}/mysql.data/8.3.0/lib/net9.0/*.dll
 ```
 
 但上述包库目录并未包含 `net9.0` 框架版本，因此本工具会采用最适用(*接近*)该框架版本的库文件。即该路径将被重新定向为：
 ```ini
-%NUGET_PACKAGES%/mysql.data/8.3.0/lib/net8.0/*.dll
+${NUGET_PACKAGES}/mysql.data/8.3.0/lib/net8.0/*.dll
 ```
 
 ## 其他
@@ -361,7 +362,7 @@ RID 回退通过 NuGet.RuntimeModel 使用仓库内固定的 dotnet/runtime v10.
 
 包访问、依赖求解、资产选择和 RID 回退分别由独立类型负责，框架与版本模型复用 NuGet/.NET 类型，职责与行为见[实现细节](docs/implementation.zh-Hans.md)。
 
-变量按环境变量、祖先链 `.env`、目标目录 appsettings.json、命令选项的顺序加载；JSON 嵌套键可用 `$(Database.Name)`、`%Items[0].Name%` 引用。变量替换保留 URL 的斜线。
+变量按环境变量、祖先链 `.env`、目标目录 appsettings.json、命令选项的顺序加载；JSON 嵌套键可用 `${Database_Name}`、`${Items_0_Name}` 引用。变量替换保留 URL 的斜线。
 
 回归命令（不会推送工具包）：
 

@@ -69,7 +69,7 @@ public sealed class DependencyTest
 	public void Parse_EmptyDependenciesAreOmitted(string expression)
 	{
 		Assert.Empty(Dependency.Parse([expression]));
-		Assert.Empty(new Variables(new Dictionary<string, string> { ["dependencies"] = expression }).Dependencies);
+		Assert.Empty(new PackageOptions(Utility.CreateEvaluator(new global::Zongsoft.Common.Variables { ["dependencies"] = expression })).Dependencies);
 	}
 
 	[Theory]
@@ -105,18 +105,18 @@ public sealed class DependencyTest
 	[Theory]
 	[InlineData("deb")]
 	[InlineData("rpm")]
-	public void CommandVariables_ExpandRangesBeforeSplittingAtTopLevel(string format)
+	public void CommandOptions_ExpandRangesBeforeSplittingAtTopLevel(string format)
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write(".env", "minimum=10.0\nmaximum=11.0\ndependencies=runtime:[9.0,10.0)\n");
-		var commandLine = CommandLine.Parse(format + " --dependencies:\"runtime:[$(minimum),$(maximum)) | alternative:[9.0);libssl\"")[0];
+		var commandLine = CommandLine.Parse(format + " --dependencies:\"runtime:[${minimum},${maximum}) | alternative:[9.0);libssl\"")[0];
 		var command = format == "deb" ? (CommandBase<CommandContext>)new DebCommand() : new RpmCommand();
 		var context = new CommandContext(new CommandExecutor(), commandLine, command, null);
-		var values = PackCommand<Package.Deb>.GetVariables(context, directory.Path);
-		var variables = new Variables(values);
+		var evaluator = PackCommand<Package.Deb>.CreateEvaluator(context, directory.Path);
+		var options = new PackageOptions(evaluator);
 
-		Assert.Equal(new[] { "runtime:[10.0,11.0) | alternative:[9.0)", "libssl" }, variables.Dependencies);
-		var groups = Dependency.Parse(variables.Dependencies);
+		Assert.Equal(new[] { "runtime:[10.0,11.0) | alternative:[9.0)", "libssl" }, options.Dependencies);
+		var groups = Dependency.Parse(options.Dependencies);
 		Assert.Equal(2, groups.Length);
 		Assert.Equal("11.0", groups[0][0].Maximum);
 	}

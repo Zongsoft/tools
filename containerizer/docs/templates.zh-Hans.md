@@ -57,7 +57,7 @@ nginx 根据应用托管资产规划入口；caddy/haproxy 使用其自身模板
 | `mariadb` | `password` | `MARIADB_PASSWORD` | — | — | 可选 |
 | `mongodb` | `root-user` | `MONGO_INITDB_ROOT_USERNAME` | — | — | 必填 |
 | `mongodb` | `root-password` | `MONGO_INITDB_ROOT_PASSWORD` | — | — | 必填 |
-| `mysql` | `root-password` | `MYSQL_ROOT_PASSWORD` | — | `mysql_root_password` | 必填 |
+| `mysql` | `root-password` | `MYSQL_ROOT_PASSWORD` | — | `mysql:root_password` | 必填 |
 | `mysql` | `database` | `MYSQL_DATABASE` | — | — | 可选 |
 | `mysql` | `user` | `MYSQL_USER` | — | — | 可选 |
 | `mysql` | `password` | `MYSQL_PASSWORD` | — | — | 可选 |
@@ -73,8 +73,8 @@ nginx 根据应用托管资产规划入口；caddy/haproxy 使用其自身模板
 | `rabbitmq` | `password` | `RABBITMQ_DEFAULT_PASS` | — | — | 必填 |
 | `redis` | `maxmemory` | `--maxmemory` | — | — | 可选 |
 | `redis` | `maxmemory-policy` | `--maxmemory-policy` | — | — | 可选 |
-| `rustfs` | `access-key` | `RUSTFS_ACCESS_KEY` | — | `rustfs_access_key` | 必填 |
-| `rustfs` | `secret-key` | `RUSTFS_SECRET_KEY` | — | `rustfs_secret_key` | 必填 |
+| `rustfs` | `access-key` | `RUSTFS_ACCESS_KEY` | — | `rustfs:access_key` | 必填 |
+| `rustfs` | `secret-key` | `RUSTFS_SECRET_KEY` | — | `rustfs:secret_key` | 必填 |
 | `sqlserver` | `password` | `MSSQL_SA_PASSWORD` | — | — | 必填 |
 | `sqlserver` | `accept-eula` | `ACCEPT_EULA` | — | — | 必填 |
 | `valkey` | `maxmemory` | `--maxmemory` | — | — | 可选 |
@@ -164,6 +164,6 @@ default 命名端口产生 port 参数，其余命名端口产生 名称-port，
 
 参数值依次选择：显式 settings、对应的显式 environment!、variable 绑定、default。显式空值阻止回退；变量存在但为空仍为空。参数与显式环境同时提供且值冲突时报错；不由参数管理的环境项可直接覆盖。工具派生环境不重复写入完成清单，避免回放覆盖编辑后的 settings。
 
-make 对模板值使用清单变量视图求值，支持 $(name)、%name% 及字面转义；固定元数据使用普通字面值。JSON 数组先解析再逐项求值，变量中的引号不会改变参数边界。配置文件只对输入路径求值，正文原样复制。现场不再次求值。
+make 对模板值使用清单变量视图求值，支持 ${name}、${namespace:name} 及字面转义；固定元数据使用普通字面值。JSON 数组先解析再逐项求值，变量中的引号不会改变参数边界。配置文件只对输入路径求值，正文原样复制。现场不再次求值。
 
 应用启动、运行时及 Web 交接不属于模板扩展，见 [实现说明](implementation.zh-Hans.md#应用web-与服务准备)。不支持把原始 Compose/Pod YAML 作为服务输入，也没有通用 config 参数、模板继承或资源限制配置入口。

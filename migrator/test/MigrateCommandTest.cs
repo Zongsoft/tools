@@ -164,7 +164,7 @@ public sealed partial class MigrateCommandTest
 			foreach(var pair in values)
 				Environment.SetEnvironmentVariable(pair.Key, pair.Value);
 			var arguments = Arguments("zongsoft.daemon", "Linux", "X64");
-			arguments.Add("$(zongsoft_test_input).migration");
+			arguments.Add("${zongsoft_test_input}.migration");
 
 			var result = await RunAsync(directory, arguments);
 
@@ -344,12 +344,12 @@ public sealed partial class MigrateCommandTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var arguments = Arguments("zongsoft.daemon", "Linux", "X64");
-		arguments.Add("$(zongsoft_test_undefined_variable).migration");
+		arguments.Add("${zongsoft_test_undefined_variable}.migration");
 
 		var result = await RunAsync(directory, arguments);
 
 		Assert.NotEqual(0, result.Code);
-		Assert.Contains("zongsoft_test_undefined_variable", Assert.IsType<InvalidOperationException>(result.Error).Message);
+		Assert.Equal("zongsoft_test_undefined_variable", Assert.IsType<Zongsoft.Text.Templating.TemplateEvaluationException>(result.Error).Expression);
 		Assert.False(Directory.Exists(Path.Combine(directory.Path, "out")));
 	}
 
@@ -439,7 +439,7 @@ public sealed partial class MigrateCommandTest
 	private static void PrepareMigration(MigrationTestDirectory directory, string database)
 	{
 		directory.Write("db.migration", "[sqlite]\n./schema.sql\n");
-		directory.Write("db.ini", "[sqlite]\nDatabase=" + database + "\n");
+		directory.Write("db.ini", "[sqlite]\nDatabase=" + database.Replace("\\", "\\\\") + "\n");
 		directory.Write("schema.sql", "CREATE TABLE must_not_run (id INTEGER);");
 	}
 

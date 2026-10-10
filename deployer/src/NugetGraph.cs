@@ -41,6 +41,8 @@ using NuGet.Frameworks;
 using NuGet.Versioning;
 using NuGet.Packaging.Core;
 
+using Zongsoft.Text.Templating;
+
 namespace Zongsoft.Tools.Deployer;
 
 /// <summary>在固定根请求及各目标框架的版本约束下，为一次部署求解完整依赖闭包。</summary>
@@ -48,7 +50,7 @@ namespace Zongsoft.Tools.Deployer;
 internal sealed class NugetGraph
 {
 	#region 私有字段
-	private readonly IDictionary<string, string> _variables;
+	private readonly TemplateEvaluator _evaluator;
 	private readonly (NugetUtility.PackageMetadata Metadata, NuGetFramework Framework)[] _roots;
 	private readonly IReadOnlyList<PackageSelection> _locked;
 	private readonly CancellationToken _cancellation;
@@ -57,11 +59,11 @@ internal sealed class NugetGraph
 	#endregion
 
 	#region 构造函数
-	private NugetGraph(IDictionary<string, string> variables,
+	private NugetGraph(TemplateEvaluator evaluator,
 		IEnumerable<(NugetUtility.PackageMetadata Metadata, string Framework)> requests,
 		CancellationToken cancellation, IReadOnlyList<PackageSelection> locked)
 	{
-		_variables = variables;
+		_evaluator = evaluator;
 		_roots = requests.Select(request => (request.Metadata, NuGetFramework.Parse(request.Framework))).ToArray();
 		_cancellation = cancellation;
 		_locked = locked;
@@ -80,14 +82,14 @@ internal sealed class NugetGraph
 		NuGetFrameworkExtensions.GetNearest(package.DependencySets, framework)?.Packages ?? [];
 
 	/// <summary>按默认和自定义前缀判断是否忽略传递依赖，不用于过滤显式根请求。</summary>
-	/// <param name="variables">包含自定义忽略前缀的部署变量。</param>
+	/// <param name="evaluator">包含自定义忽略前缀的部署变量。</param>
 	/// <param name="name">要检查的传递依赖包名。</param>
 	/// <returns>包名匹配默认或自定义忽略前缀时为真，否则为假。</returns>
-	public static bool ShouldIgnoreDependency(IDictionary<string, string> variables, string name)
+	public static bool ShouldIgnoreDependency(TemplateEvaluator evaluator, string name)
 	{
 		var prefixes = new List<string> { "System.", "Microsoft.Extensions.", "Zongsoft." };
 
-		if(variables.TryGetValue(Deployer.IGNOREDEPENDENTPREFIX_OPTION, out var value) && !string.IsNullOrWhiteSpace(value))
+		if(evaluator.TryGetOption(Deployer.IGNOREDEPENDENTPREFIX_OPTION, out var value) && !string.IsNullOrWhiteSpace(value))
 			prefixes.AddRange(value.Split([',', ';', '|'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
 
 		return prefixes.Any(prefix => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
@@ -96,14 +98,14 @@ internal sealed class NugetGraph
 
 	#region 求解入口
 	/// <summary>固定根包版本并求解满足全部约束的依赖；指定锁定记录时仅使用锁内候选版本。</summary>
-	/// <param name="variables">包含包源和依赖求解选项的部署变量。</param>
+	/// <param name="evaluator">包含包源和依赖求解选项的部署变量。</param>
 	/// <param name="requests">包含根包元数据及其目标框架的请求。</param>
 	/// <param name="cancellation">用于取消依赖求解的令牌。</param>
 	/// <param name="locked">可选的锁定包记录，提供时限制候选版本。</param>
 	/// <returns>完成依赖求解并返回按包名索引的元数据字典的任务。</returns>
-	public static Task<Dictionary<string, NugetUtility.PackageMetadata>> ResolveAsync(IDictionary<string, string> variables,
+	public static Task<Dictionary<string, NugetUtility.PackageMetadata>> ResolveAsync(TemplateEvaluator evaluator,
 		IEnumerable<(NugetUtility.PackageMetadata Metadata, string Framework)> requests, CancellationToken cancellation, IReadOnlyList<PackageSelection> locked = null) =>
-		new NugetGraph(variables, requests, cancellation, locked).ResolveAsync();
+		new NugetGraph(evaluator, requests, cancellation, locked).ResolveAsync();
 
 	private async Task<Dictionary<string, NugetUtility.PackageMetadata>> ResolveAsync()
 	{
@@ -149,7 +151,7 @@ internal sealed class NugetGraph
 			return selected;
 
 		var versions = await this.GetVersionsAsync(unresolved.Key);
-		var permitPreview = Deployer.Flag(_variables, "prerelease") || unresolved.Value.Any(item => item.Range.MinVersion?.IsPrerelease == true);
+		var permitPreview = Deployer.Flag(_evaluator, "prerelease") || unresolved.Value.Any(item => item.Range.MinVersion?.IsPrerelease == true);
 
 		// 按升序尝试满足全部约束的候选；分支拥有自己的选择表，失败后回溯到下一版本。
 		foreach(var version in versions)
@@ -157,7 +159,7 @@ internal sealed class NugetGraph
 			if((!permitPreview && version.IsPrerelease) || unresolved.Value.Any(item => !item.Range.Satisfies(version)))
 				continue;
 
-			var metadata = await NugetUtility.GetPackageMetadataAsync(_variables, unresolved.Key, version.ToNormalizedString(), _cancellation);
+			var metadata = await NugetUtility.GetPackageMetadataAsync(_evaluator, unresolved.Key, version.ToNormalizedString(), _cancellation);
 			if(metadata == null)
 				continue;
 
@@ -179,7 +181,7 @@ internal sealed class NugetGraph
 	private Task<NuGetVersion[]> GetVersionsAsync(string name)
 	{
 		if(_locked == null)
-			return NugetUtility.GetVersionsAsync(_variables, name, _cancellation);
+			return NugetUtility.GetVersionsAsync(_evaluator, name, _cancellation);
 
 		// 锁定模式只允许锁内版本，不查询新的候选。
 		var pin = _locked.FirstOrDefault(package => StringComparer.OrdinalIgnoreCase.Equals(package.Id, name));
@@ -230,7 +232,7 @@ internal sealed class NugetGraph
 
 			foreach(var dependency in GetDependencies(metadata, framework))
 			{
-				if(ShouldIgnoreDependency(_variables, dependency.Id))
+				if(ShouldIgnoreDependency(_evaluator, dependency.Id))
 					continue;
 
 				if(!collected.TryGetValue(dependency.Id, out var ranges))

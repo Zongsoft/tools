@@ -6,12 +6,12 @@
 
 ## 入口与职责
 
-`Program.Main` 使用 Zongsoft.Core 的 `CommandLine` 解析命令，建立取消令牌，并调用 `Deployer.CreateVariables` 与 `DeployManyAsync`。没有参数时读取当前目录的 `.deploy`。正常结果退出 0，失败退出 1，取消退出 130。执行不依赖交互控制台句柄，日志输出到 `TextWriter`。
+`Program.Main` 使用 Zongsoft.Core 的 `CommandLine` 解析命令，建立取消令牌，并调用 `Deployer.CreateEvaluator` 与 `DeployManyAsync`。没有参数时读取当前目录的 `.deploy`。正常结果退出 0，失败退出 1，取消退出 130。执行不依赖交互控制台句柄，日志输出到 `TextWriter`。
 
 | 文件/类型 | 职责 |
 | --- | --- |
 | `Deployer.Command.cs` | 组合变量，定位目标应用配置。 |
-| `tools/.shared` 链接源码 | `Utility.cs` 与本项目的 `partial Utility` 合并编译，共用递归变量与命令辅助方法；`ArtifactPublisher` 统一管理暂存与发布，部署复制和报告写入使用其单文件原子替换。变量字典中的布尔值沿用 Core `Switch` 语义，枚举使用 Core 转换。 |
+| `tools/.shared` 链接源码 | `Utility.cs` 与本项目的 `partial Utility` 合并编译，组合 Core 变量来源并提供命令辅助方法；`ArtifactPublisher` 统一管理暂存与发布，部署复制和报告写入使用其单文件原子替换。选项中的布尔值沿用 Core `Switch` 语义，枚举使用 Core 转换。 |
 | `Deployer.cs` | 管理一次调用、遍历清单、收集请求及预检查错误。 |
 | `DeploymentSession.cs` | 持有本次计数、活动清单栈、包请求、选中版本和展开暂存列表。 |
 | `DeploymentPlan.cs`、`DeploymentOperation.cs`、`PackageSelection.cs` | 保存计划、操作来源、包版本与哈希；每种类型独立维护。 |
@@ -32,7 +32,7 @@ Release 引用 Zongsoft.Core NuGet 包，Debug 配置引用本地 Core 程序集
 | 能力 | 复用接口与本工具保留部分 |
 | --- | --- |
 | 命令行 | Core `CommandLine.Parse/Get`；工具只组织选项、退出码和取消。 |
-| 环境字典 | Core `DictionaryExtension.ToDictionary`，指定不区分大小写的比较器。 |
+| 变量来源与评估 | Core `Variables` 保存原始值，`Profile.ToVariables()` 提供配置视图，`TemplateEvaluator.Providers` 表达优先级。 |
 | INI 清单 | Core `Profile`、`ProfileOptions`、`ProfileContext` 及章节/条目集合负责 INI 解析。 |
 | 本地化 | `ResXFileCodeGenerator` 生成 `Properties.Resources` 强类型属性；调用处直接取属性并使用 `string.Format` 格式化；日志和报告保留原始消息。 |
 | 包元数据和内容规则 | NuGet `NuspecReader`、`PackageIdentity`、`VersionRange`；`GetContentFiles` 在每次包资产展开时读取一次规则。 |
@@ -56,15 +56,21 @@ Core 通过 Profile.Directives 全局登记指令实现，ProfileReader 解析�
 
 ## 变量、清单与路径
 
-`DeploymentEntry.Get` 在变量展开前以源条目的第一个冒号拆分解析器名与参数。没有冒号的条目直接使用 `path` 名称。`DeploymentResolverManager.GetResolver` 将 null、空字符串及纯空白名称解析为默认路径解析器；`path`、`nuget` 和 `delete`/`remove` 按不区分大小写的方式匹配，未知名称返回 null。空名称选择默认路径解析器是其功能约定。默认路径解析器自身的 Name 为空字符串，`path` 是选择该实例的解析器名。Windows 字面绝对源路径使用 `path:D:\dir\files.ext` 或 `path:D:/dir/files.ext`，避免盘符被解析为解析器名；相对路径可以省略前缀或显式使用 `path:`。
+`DeploymentEntry.Get` 在模板表达式之前识别解析器前缀，`${...}` 内的命名空间冒号不作为解析器分隔符。没有冒号的条目直接使用 `path` 名称。`DeploymentResolverManager.GetResolver` 将 null、空字符串及纯空白名称解析为默认路径解析器；`path`、`nuget` 和 `delete`/`remove` 按不区分大小写的方式匹配，未知名称返回 null。空名称选择默认路径解析器是其功能约定。默认路径解析器自身的 Name 为空字符串，`path` 是选择该实例的解析器名。Windows 字面绝对源路径使用 `path:D:/dir/files.ext`，避免盘符被解析为解析器名；相对路径可以省略前缀或显式使用 `path:`。
 
-变量名支持点号、连字符和索引，不区分大小写，覆盖顺序为环境变量、从根到工作目录的各级 `.env`、目标应用 `appsettings.json`、命令选项。先用环境变量、`.env` 及全部命令选项递归展开 `destination`，定位目标目录后加载其配置；最终变量保留原始值并按需递归展开，不受选项遍历顺序影响。缺失、循环或超过 64 层的已引用变量失败，未使用的变量不提前解析。先展开布尔、枚举等选项值再转换；`expansion` 按实际布尔值工作，无法转换的 `verbosity` 会报错。枚举选项沿用 Core 的转换规则，不额外检查枚举成员是否已定义；调用方应提供有效枚举项。JSON 支持注释和尾随逗号；嵌套对象和数组生成 `Database.Name`、`Items[0].Name` 等键。
+变量遵循 Core 模板标识符与命名空间规则，配置及命令选项查询不区分大小写，系统环境遵循平台规则；覆盖顺序为环境变量、从根到工作目录的各级 `.env`、目标应用 `appsettings.json`、命令选项。先用环境变量、`.env` 及全部命令选项递归展开 `destination`，定位目标目录后加载其配置；最终变量保留原始值并按需递归展开，不受选项遍历顺序影响。缺失、循环或超过 64 层的已引用变量失败，未使用的变量不提前解析。先展开布尔、枚举等选项值再转换；`expansion` 按实际布尔值工作，无法转换的 `verbosity` 会报错。枚举选项沿用 Core 的转换规则，不额外检查枚举成员是否已定义；调用方应提供有效枚举项。JSON 支持注释和尾随逗号；嵌套对象和数组生成 `Database_Name`、`Items_0_Name` 等键。
 
-共享 `Utility.LoadEnvironmentVariables` 收集祖先链，再逆序用 `Profile.Load` 加载各级直属 `.env`。根条目保留原名，递归段落与条目以下划线拼名，保留 Core 解析、空值和导入语义。仅跳过打开阶段的缺失文件；读取、权限及解析异常直接传播。每次调用独立加载，嵌套清单不重新加载，不修改进程环境变量。
+共享 `Utility.LoadEnvironmentProfiles` 收集祖先链，再逆序用 `Profile.Load` 加载各级直属 `.env`。根条目属于默认命名空间，章节层级以点号连接为命名空间，条目名中的点号和连字符改为下划线，保留 Core 解析、空值和导入语义。仅跳过打开阶段的缺失文件；读取、权限及解析异常直接传播。每次调用独立加载，嵌套清单不重新加载，不修改进程环境变量。
 
-deployer 通过不区分大小写的集合声明允许空值回退的选项，目前仅包含 `framework`。目标目录预解析与加载 appsettings 后的最终变量合并均在原有循环中直接执行规则：已声明选项的原始值为 null 或空字符串时保留变量集中已有的非空值。没有非空回退值时保留原赋值，包括存在性过滤使用的空值键。纯空白值、非空表达式展开为空的行为不变；较近 `.env` 的空值不回溯先前来源。
+变量契约使用 `Zongsoft.Common.IVariables`。显式命令选项及工具计算值保存在 Core `Variables` 中，`.env` 保留 `Profile.ToVariables()` 视图，系统环境直接使用 `Variables.Environments()` 实时读取，不复制、不改写名称或值。环境来源只提供默认命名空间，Windows 忽略大小写，Unix/Linux 区分大小写；参与模板的路径值使用 `/`，其余转义遵循 Core。`TemplateEvaluatorOptions.Fallback` 显式设为 true；同一命名空间按 Providers 顺序查询，全部未找到才逐级进入父命名空间及全局，最后允许来源自身已声明的默认值。首个命中即生效，包括 null。AppSettingsUtility 将对象与数组展开为变量名时保留显式 JSON null。指令参数评估沿用父评估器的 Fallback、Recursive、Culture 和 MaximumDepth；不带命名空间的模板无需额外语法。默认空间用 `${name}`，具名空间用 `${io.rustfs:access_key}`；章节层级以点号连接，条目名及命令选项名中的点号和连字符转换为下划线，非法配置名称不提供变量，配置名称冲突仅在查询时失败。
 
-`Normalizer` 处理 `$(name)` 和 `%name%`，保留 URL 中的斜线。部署路径展开发现未定义变量时报错；被过滤掉的分支无需提供变量。过滤组合保持从左到右求值，源过滤与目标过滤都必须满足。
+模板直接通过 Core `TemplateEvaluator.Evaluate` / `TryEvaluate` 求值，启用 `Recursive`，默认上限为 64（根模板和递归字符串均计层）。所有输入遵循 Core 转义；`\${name}` 输出字面引用，`\\` 输出字面反斜杠。路径优先使用相对路径，绝对路径使用 `/`，例如 `../.shared/${product}.env` 或 `D:/deploy/${scheme}`。未知变量、循环和深度超限按 Core 错误契约处理。
+
+`.env` 的指令参数通过 `Directives.Processing` 求值，查找顺序为显式选项、当前文件已读内容（含已完成导入）、已加载的祖先 `.env` 和环境/默认值。不读取后文，不隐式查找导入父文件的局部变量。制作清单的回调先查本次命令的实际值，再查当前 Profile，全部未命中后才查描述符默认值。每条 import 使用完整参数导入一个文件，原始声明和条目值不被模板结果改写。Profile 只负责读取和导入，模板评估由工具显式发起。
+
+所有变量（包括 `framework`）统一遵循首个命中生效：null、空字符串、false 和 0 都不会触发下层回退。只有未提供该值时才继续查找；需要有效值的业务操作负责校验并在无法继续时报告错误。
+
+Core `TemplateEvaluator` 处理 `${name}`，保留 URL 中的斜线。部署路径展开发现未定义变量时报错；被过滤掉的分支无需提供变量。过滤组合保持从左到右求值，源过滤与目标过滤都必须满足。
 
 `NugetAssets.ResolveLibraryPath` 集中处理显式缓存路径的框架适配：只解析相对 NuGet_Packages 根的路径，识别 lib 目录；路径内的框架优先于 Framework 变量，通过官方 NuGetFrameworkUtility.GetNearest 选择最近框架并保留后续子路径。根外、未指定目标框架或无适用目录时返回原路径。
 
@@ -72,7 +78,7 @@ deployer 通过不区分大小写的集合声明允许空值回退的选项，�
 
 glob 的 `**` 匹配零层或多层目录，`?` 匹配目录名中的单字符；展开时保留目标相对结构，并跳过目录链接遍历。Core Searcher 返回逻辑路径及通配捕获，部署适配层据此生成目标后缀。
 
-目标路径先绝对化，再以相对路径验证其位于 destination 内；写路径及其祖先拒绝 reparse point，包括悬空链接。源文件可以位于目标根外。清单源路径通过解析链接取得标识，活动栈检测直接/间接循环，最大深度为 64；重复清单在前一次展开完成后可用于另一个目标目录。`#@import` 有独立活动集合，并将实际读取的导入文件纳入哈希。缺失的可选 import 保留 Core 原有语义。
+目标路径先绝对化，再以相对路径验证其位于 destination 内；写路径及其祖先拒绝 reparse point，包括悬空链接。源文件可以位于目标根外。清单源路径通过解析链接取得标识，活动栈检测直接/间接循环，最大深度为 64；重复清单在前一次展开完成后可用于另一个目标目录。`#@import` 有独立活动集合，并将实际读取的导入文件纳入哈希。Core 跳过缺失的可选 import。
 
 ## 包版本与资产
 
@@ -80,7 +86,7 @@ NugetUtility、NugetGraph、NugetAssets、NugetRuntime 和 NugetResolver 各自�
 
 类型的 XML 注释说明职责，关键流程注释记录顺序与状态边界。构造、搜索、约束收集、框架匹配及缓存细节保持私有；内部入口仅用于生产组件协作，不为单元测试扩大可见性。测试通过实际部署与包访问入口验证行为。
 
-NugetUtility 管理以本次变量字典为作用域的包访问缓存；键同时包含包源、绝对缓存根、离线与预发布模式，切换这些配置不会复用其它上下文的结果。依赖回归通过实际部署入口检查计划和输出文件。
+NugetUtility 管理以本次评估器实例为作用域的包访问缓存；键同时包含包源、绝对缓存根、离线与预发布模式，切换这些配置不会复用其它上下文的结果。依赖回归通过实际部署入口检查计划和输出文件。
 
 普通根包版本固定；依赖按所有已知版本范围筛选，优先选最低可用版本，并回溯解决后续冲突。无解、循环或搜索上限触发错误。当前上限为 10,000 次搜索、512 个选中包；不同 TFM 的约束均参与检查。
 
@@ -160,7 +166,7 @@ Core 的无显式目标 Save() 仅将自身及导入子树中修改的声明写�
 
 ## hosting 调用边界
 
-hosting 脚本将构建、插件部署和可选安装包制作分为不同命令。当前脚本没有向 Cake 传入 `--framework`，各宿主 `build.cake` 使用 `Argument("framework", "net10.0")` 的默认值，不读取 `.env` 或进程变量 `framework`；deployer 按自身加载顺序从 Variables 取得框架，`appsettings.json` 参与最终合并。构建值须与部署、打包值一致。框架用于 destination 表达式时须在目标目录预解析阶段可用，不能靠随后加载的目标配置反推 destination。部署器不负责同步 Cake 参数，也不调用 packager 或 migrator。操作示例见 [README](../README.zh-Hans.md#hosting-脚本中的框架与变量)。
+hosting 脚本将构建、插件部署和可选安装包制作分为不同命令。当前脚本没有向 Cake 传入 `--framework`，各宿主 `build.cake` 使用 `Argument("framework", "net10.0")` 的默认值，不读取 `.env` 或进程变量 `framework`；deployer 按自身加载顺序从变量来源取得框架，`appsettings.json` 参与最终合并。构建值须与部署、打包值一致。框架用于 destination 表达式时须在目标目录预解析阶段可用，不能靠随后加载的目标配置反推 destination。部署器不负责同步 Cake 参数，也不调用 packager 或 migrator。操作示例见 [README](../README.zh-Hans.md#hosting-脚本中的框架与变量)。
 
 ## 本地搜索与源链接
 

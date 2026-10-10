@@ -49,7 +49,7 @@ public sealed class RunCommand : CommandBase<CommandContext>
 	protected override async ValueTask<object> OnExecuteAsync(CommandContext context, CancellationToken cancellation)
 	{
 		var arguments = context.Arguments.ToArray();
-		var choice = context.Options.GetValue<string>("engine") ?? ContainerEngine.AUTO;
+		var choice = context.Options.GetValue("engine", ContainerEngine.AUTO);
 
 		if(arguments.Length != 1 ||
 		   !File.Exists(arguments[0]) ||

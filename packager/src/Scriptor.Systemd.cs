@@ -46,12 +46,12 @@ partial class Scriptor
 
 		public void Script()
 		{
-			var source = _package.Variables.Source;
-			var scripts = _package.Variables.Script;
-			var installing = TextSource.Read(source, scripts.Installing, _package.Variables);
-			var installed = TextSource.Read(source, scripts.Installed, _package.Variables);
-			var uninstalling = TextSource.Read(source, scripts.Uninstalling, _package.Variables);
-			var uninstalled = TextSource.Read(source, scripts.Uninstalled, _package.Variables);
+			var source = _package.Options.Source;
+			var scripts = _package.Options.Script;
+			var installing = TextSource.Read(source, scripts.Installing, _package.Options);
+			var installed = TextSource.Read(source, scripts.Installed, _package.Options);
+			var uninstalling = TextSource.Read(source, scripts.Uninstalling, _package.Options);
+			var uninstalled = TextSource.Read(source, scripts.Uninstalled, _package.Options);
 			var host = _package.Host ??= ApplicationHost.Resolve(_package);
 			var web = Web.Installation.CreateScripts(_package);
 
@@ -82,7 +82,7 @@ partial class Scriptor
 
 			var serviceName = host.ServiceName;
 			if(host.Kind == ApplicationHost.HostKind.Existing)
-				_package.Entries.Add(source, host.ServiceSource);
+				_package.Entries.AddEntry(source, host.ServiceSource, null, _package.EntryPrefix);
 			else
 				_package.Entries.AddGeneratedContent(serviceName, GenerateDaemon(host, _package), Utility.Unix.Mode644, true);
 
@@ -174,7 +174,7 @@ partial class Scriptor
 
 			return paths
 				.Split([';', '|'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-				.Select(path => TextSource.Read(source, path, _package.Variables, true))
+				.Select(path => TextSource.Read(source, path, _package.Options, true))
 				.Where(script => !string.IsNullOrWhiteSpace(script))
 				.ToArray();
 		}
@@ -204,12 +204,12 @@ partial class Scriptor
 		{
 			var listen = application.Listen;
 			var host = application.Entry;
-			var environments = new string[package.Variables.Daemon.Environments.Length];
+			var environments = new string[package.Options.Daemon.Environments.Length];
 
 			for(int i = 0; i < environments.Length; i++)
 			{
-				var name = package.Variables.Daemon.Environments[i];
-				var value = package.Variables[name];
+				var name = package.Options.Daemon.Environments[i];
+				var value = package.Options[name];
 
 				if(value != null)
 					environments[i] = $"Environment={name}={value}";

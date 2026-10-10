@@ -31,7 +31,7 @@ public sealed class ListenerMetadataTest
 		using var directory = new MigrationTestDirectory();
 		directory.Write("example.dll", "application fixture");
 		directory.Write(".env", "packager_listener=" + value + "\n");
-		var path = await Execute(directory.Path, format, "--listen:$(packager_listener)");
+		var path = await Execute(directory.Path, format, "--listen:${packager_listener}");
 		Assert.Equal(expected, ReadListener(path, format));
 
 		var entries = PackageArtifactTest.ReadArchive(path, format);
@@ -79,7 +79,7 @@ public sealed class ListenerMetadataTest
 	private static async Task<string> Execute(string source, string format, params string[] options)
 	{
 		CommandBase<CommandContext> command = format switch { "tar" => new TarCommand(), "deb" => new DebCommand(), _ => new RpmCommand() };
-		var arguments = new[] { "--name:example", "--version:1.0.0", "--source:" + source, "--output:out", "--platform:Linux", "--architecture:X64", "--install-path:/opt/example" }.Concat(options).ToArray();
+		var arguments = new[] { "--name:example", "--version:1.0.0", "--source:" + source.Replace('\\', '/'), "--output:out", "--platform:Linux", "--architecture:X64", "--install-path:/opt/example" }.Concat(options).ToArray();
 		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
 		var terminal = (ITerminal)terminalField.GetValue(null);
 

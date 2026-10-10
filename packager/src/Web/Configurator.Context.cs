@@ -33,8 +33,9 @@
 
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Runtime.InteropServices;
+
+using Zongsoft.Text.Templating;
 
 namespace Zongsoft.Tools.Packager.Web;
 
@@ -42,7 +43,7 @@ partial class Configurator
 {
 	internal sealed class Context
 	{
-		internal Context(string packageName, string installPath, IReadOnlyDictionary<string, string> variables, string applicationAddress = null, Architecture architecture = Architecture.X64)
+		internal Context(string packageName, string installPath, TemplateEvaluator evaluator, string applicationAddress = null, Architecture architecture = Architecture.X64)
 		{
 			ArgumentException.ThrowIfNullOrEmpty(packageName);
 			ArgumentException.ThrowIfNullOrEmpty(installPath);
@@ -51,23 +52,20 @@ partial class Configurator
 			this.InstallPath = installPath;
 			this.ApplicationAddress = applicationAddress;
 			this.MaximumInteger = architecture is Architecture.X86 or Architecture.Arm ? int.MaxValue : long.MaxValue;
-			this.Variables = new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(variables, StringComparer.OrdinalIgnoreCase));
+			this.Evaluator = evaluator ?? Utility.CreateEvaluator();
 		}
 
 		internal string PackageName { get; }
 		internal string InstallPath { get; }
 		internal long MaximumInteger { get; }
 		internal string ApplicationAddress { get; }
-		internal IReadOnlyDictionary<string, string> Variables { get; }
+		internal TemplateEvaluator Evaluator { get; }
 
 		internal string Expand(string value, Diagnostic.Location source)
 		{
-			var result = VariableEvaluator.Evaluate(value, this.Variables, allowEscapes: true);
-
-			if(!result.Succeed)
-				throw DefinitionException.Create("Variable", source, result.Variable);
-
-			return result.Value;
+			if(!this.Evaluator.TryEvaluate(value, out var text, out var error))
+				throw DefinitionException.Create("Variable", source, error.Expression, error);
+			return text;
 		}
 	}
 }

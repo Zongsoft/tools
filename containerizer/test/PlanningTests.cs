@@ -20,19 +20,19 @@ public sealed class PlanningTests : IDisposable
 	[Fact]
 	public void PlanRetainsReferencesWarnsForMissingValuesAndNeverRunsEngine()
 	{
-		this.Write(".settings", "[redis]\ntag=8.4\nsettings=storage=temporary;password=$(cache_password)\n");
+		this.Write(".settings", "[redis]\ntag=8.4\nsettings=storage=temporary;password=${cache_password}\n");
 		var manifest = this.Create("redis", "rustfs");
 		var path = new DeliveryBuilder(new RejectRunner()).Plan(manifest);
 		var draft = ContainerManifest.Read(path);
 
 		Assert.Equal("plan", draft["stage"]);
 		Assert.False(draft.IsComplete);
-		Assert.Equal("$(cache_password)", draft.Components[0].Settings["password"]);
+		Assert.Equal("${cache_password}", draft.Components[0].Settings["password"]);
 		Assert.Equal("temporary", draft.Components[0].Settings["storage"]);
-		Assert.Equal("$(rustfs_access_key)", draft.Components[1].Settings["access-key"]);
+		Assert.Equal("${rustfs:access_key}", draft.Components[1].Settings["access-key"]);
 		Assert.Null(draft.Components[0]["digest"]);
 		Assert.Empty(Directory.GetFiles(_root, "*.tar.gz"));
-		Assert.Equal("[redis]\ntag=8.4\nsettings=storage=temporary;password=$(cache_password)\n", File.ReadAllText(Path.Combine(_root, ".settings")));
+		Assert.Equal("[redis]\ntag=8.4\nsettings=storage=temporary;password=${cache_password}\n", File.ReadAllText(Path.Combine(_root, ".settings")));
 	}
 
 	[Theory]
@@ -139,12 +139,12 @@ public sealed class PlanningTests : IDisposable
 		this.Write(".settings", "[redis]\ntag=8.4\nsettings=password=shared;storage=persistent\n");
 		var path = new DeliveryBuilder(new RejectRunner()).Plan(this.Create("redis"));
 		var text = File.ReadAllText(path);
-		text = text.Replace("password=shared", "password=$(test_password)", StringComparison.Ordinal);
+		text = text.Replace("password=shared", "password=${test_password}", StringComparison.Ordinal);
 		File.WriteAllText(path, text);
 		this.Write(".settings", "intentionally invalid and must not be read");
 		var manifest = ManifestFactory.Create(CreateContext(path));
-		manifest.Variables["test_password"] = "a;b=c\"d$(literal)";
-		manifest.Variables["literal"] = "value";
+		manifest.Evaluator.SetVariable("test_password", "a;b=c\"d${literal}");
+		manifest.Evaluator.SetVariable("literal", "value");
 		var source = Assert.Single(ServicePlanner.Prepare(manifest));
 
 		Assert.Contains("a;b=c\"dvalue", source.Plan.Command);
@@ -166,7 +166,7 @@ public sealed class PlanningTests : IDisposable
 
 		var mysql = this.Create("mysql");
 		mysql.Components[0]["settings"] = "root-password=";
-		mysql.Variables["mysql_root_password"] = "must-not-be-used";
+		mysql.Evaluator.SetVariable("mysql:root_password", "must-not-be-used");
 		Assert.Contains("root-password", TemplateCatalog.Read(mysql.Components[0], mysql).MissingSettings);
 	}
 
@@ -304,7 +304,7 @@ public sealed class PlanningTests : IDisposable
 	{
 		var manifest = this.Create("redis");
 		ServicePlanner.Prepare(manifest);
-		manifest.Components[0]["settings"] = ServiceSettings.Format(new Dictionary<string, string> { ["password"] = "$(absent);%absent%" });
+		manifest.Components[0]["settings"] = ServiceSettings.Format(new Dictionary<string, string> { ["password"] = "${absent};${absent}" });
 		manifest.Components[0]["digest"] = "sha256:" + new string('a', 64);
 		manifest.Prepare(_root);
 
@@ -314,7 +314,7 @@ public sealed class PlanningTests : IDisposable
 		var remake = ManifestFactory.Create(CreateContext(path));
 		var source = Assert.Single(ServicePlanner.Prepare(remake));
 
-		Assert.Contains("$(absent);%absent%", source.Plan.Command);
+		Assert.Contains("${absent};${absent}", source.Plan.Command);
 		Assert.Equal(manifest.Components[0]["digest"], remake.Components[0]["digest"]);
 		Assert.Equal(original, File.ReadAllBytes(manifest.ManifestPath));
 
@@ -337,7 +337,7 @@ public sealed class PlanningTests : IDisposable
 	[Theory]
 	[InlineData("127.0.0.1:6379", "password=127.0.0.1:6379")]
 	[InlineData("persistent", "password=persistent")]
-	[InlineData("$(redis_password)", "password=$(redis_password)")]
+	[InlineData("${redis_password}", "password=${redis_password}")]
 	[InlineData("a=b", "password=a=b")]
 	[InlineData("=abc==", "password==abc==")]
 	[InlineData("", "password=")]
@@ -383,7 +383,7 @@ public sealed class PlanningTests : IDisposable
 	public void RequiredBindingsWarnForEmptyVariablesAndAcceptExplicitEnvironment()
 	{
 		var manifest = this.Create("mysql");
-		manifest.Variables["mysql_root_password"] = "";
+		manifest.Evaluator.SetVariable("mysql:root_password", "");
 		Assert.Contains("root-password", TemplateCatalog.Read(manifest.Components[0], manifest).MissingSettings);
 
 		manifest.Components[0]["environment!MYSQL_ROOT_PASSWORD"] = "explicit";
@@ -418,7 +418,7 @@ public sealed class PlanningTests : IDisposable
 	}
 
 	private ContainerManifest Create(params string[] components) => ManifestFactory.Create(CreateContext([.. components, "--source:" + _root, "--name:example", "--version:1.0", "--distribution:debian"]), planning: true);
-	private static CommandContext CreateContext(params string[] arguments) => new(new CommandExecutor(), CommandLine.Parse(Utility.FormatCommand("containerize", arguments))[0], new ContainerizeCommand(), null);
+	private static CommandContext CreateContext(params string[] arguments) => new(new CommandExecutor(), CommandLine.Parse(Utility.FormatCommand("containerize", arguments.Select(argument => argument.Replace('\\', '/')).ToArray()))[0], new ContainerizeCommand(), null);
 	private string Write(string name, string content)
 	{
 		var path = Path.Combine(_root, name);

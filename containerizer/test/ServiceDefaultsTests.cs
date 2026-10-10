@@ -46,7 +46,7 @@ public sealed class ServiceDefaultsTests : IDisposable
 	[Fact]
 	public void BackfillPreservesExistingSettingsTagsCommentsAndOrder()
 	{
-		var original = "# reviewed\r\n[redis]\r\ntag=8.4\r\nsettings=password=$(secret)\r\n\r\n[rustfs]\r\n# keep\r\nrepository=docker.io/rustfs/rustfs\r\n";
+		var original = "# reviewed\r\n[redis]\r\ntag=8.4\r\nsettings=password=${secret}\r\n\r\n[rustfs]\r\n# keep\r\nrepository=docker.io/rustfs/rustfs\r\n";
 		var path = Path.Combine(_root, ".settings");
 		File.WriteAllText(path, original);
 		var manifest = new ContainerManifest();

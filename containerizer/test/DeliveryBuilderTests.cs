@@ -70,7 +70,7 @@ public sealed class DeliveryBuilderTests : IDisposable
 		Assert.Equal(_digest, component["digest"]);
 		Assert.Equal("2026-09-15T05:30:05Z", component["timestamp"]);
 		Assert.Equal("123456", component["size"]);
-		Assert.Equal("literal $(NOT_A_VARIABLE) %NOT_A_VARIABLE%", component["environment!LITERAL"]);
+		Assert.Equal("literal ${NOT_A_VARIABLE} ${NOT_A_VARIABLE}", component["environment!LITERAL"]);
 
 		var planFile = Path.Combine(unpacked, "containerizer.json");
 		Assert.Contains($"{Files.Hash(planFile)}  containerizer.json", File.ReadAllLines(Path.Combine(unpacked, "checksums.sha256")));
@@ -204,16 +204,16 @@ public sealed class DeliveryBuilderTests : IDisposable
 	public async Task ReplayUsesRecordedValuesWithoutTheOriginalBuildVariablesAsync()
 	{
 		var manifest = this.CreateManifest("offline");
-		File.WriteAllText(Path.Combine(_root, "custom.template"), "version=1\nimage=docker.io/library/redis\ncommand=[\"redis-server\"]\nhealth=[\"CMD\",\"redis-cli\",\"ping\"]\n[environment]\nDYNAMIC=$(only_at_build)\n[settings note]\nargument=--note\nvariable=only_at_build\ndefault=$(missing_default)\n");
+		File.WriteAllText(Path.Combine(_root, "custom.template"), "version=1\nimage=docker.io/library/redis\ncommand=[\"redis-server\"]\nhealth=[\"CMD\",\"redis-cli\",\"ping\"]\n[environment]\nDYNAMIC=${only_at_build}\n[settings note]\nargument=--note\nvariable=only_at_build\ndefault=${missing_default}\n");
 		manifest.Components[0]["template"] = "custom.template";
-		manifest.Variables["only_at_build"] = "$$(RUNTIME_VARIABLE)";
+		manifest.Evaluator.SetVariable("only_at_build", "\\${RUNTIME_VARIABLE}");
 		await this.CreateBuilder(new BuildRunner()).BuildAsync(manifest, CancellationToken.None);
 		var replay = ManifestFactory.Create(CreateContext(manifest.ManifestPath, "--output:replay"));
-		Assert.False(replay.Variables.ContainsKey("only_at_build"));
+		Assert.False(replay.Evaluator.TryGetVariable("only_at_build", out _));
 
 		var source = TemplateCatalog.Read(Assert.Single(replay.Components), replay);
-		Assert.Equal("$(RUNTIME_VARIABLE)", source.Environment["DYNAMIC"]);
-		Assert.Equal(["redis-server", "--note", "$(RUNTIME_VARIABLE)"], source.Plan.Command);
+		Assert.Equal("${RUNTIME_VARIABLE}", source.Environment["DYNAMIC"]);
+		Assert.Equal(["redis-server", "--note", "${RUNTIME_VARIABLE}"], source.Plan.Command);
 		await this.CreateBuilder(new BuildRunner()).BuildAsync(replay, CancellationToken.None);
 	}
 
@@ -479,7 +479,7 @@ public sealed class DeliveryBuilderTests : IDisposable
 		File.WriteAllText(Path.Combine(resources, "containerizer.resources.dll"), "localized executor resources");
 
 		var input = Path.Combine(_root, "input.container");
-		File.WriteAllText(input, "name=example\r\nversion=1.0\r\ndistribution=debian\r\nengine=podman\r\nimaging=" + mode + "\r\nbootstrap=" + mode + "\r\n[redis]\r\nenvironment!LITERAL=literal $$(NOT_A_VARIABLE) %%NOT_A_VARIABLE%%\r\n");
+		File.WriteAllText(input, "name=example\r\nversion=1.0\r\ndistribution=debian\r\nengine=podman\r\nimaging=" + mode + "\r\nbootstrap=" + mode + "\r\n[redis]\r\nenvironment!LITERAL=literal \\${NOT_A_VARIABLE} \\${NOT_A_VARIABLE}\r\n");
 
 		var imported = Path.Combine(_root, ".containerizer", "bootstrap", "debian@13_x64");
 		Directory.CreateDirectory(Path.Combine(imported, "packages"));
@@ -497,11 +497,11 @@ public sealed class DeliveryBuilderTests : IDisposable
 		}, ProtocolJson.Default.BootstrapPlan);
 
 		var result = ManifestFactory.Create(CreateContext("redis", "--name:example", "--version:1.0", "--distribution:debian", "--engine:podman", "--imaging:" + mode, "--bootstrap:" + mode, "--source:" + _root, "--output:delivery"));
-		result.Components[0]["environment!LITERAL"] = "literal $$(NOT_A_VARIABLE) %%NOT_A_VARIABLE%%";
+		result.Components[0]["environment!LITERAL"] = "literal \\${NOT_A_VARIABLE} \\${NOT_A_VARIABLE}";
 		return result;
 	}
 
-	private static CommandContext CreateContext(params string[] arguments) => new(new CommandExecutor(), CommandLine.Parse(Utility.FormatCommand("containerize", arguments))[0], new ContainerizeCommand(), null);
+	private static CommandContext CreateContext(params string[] arguments) => new(new CommandExecutor(), CommandLine.Parse(Utility.FormatCommand("containerize", arguments.Select(argument => argument.Replace('\\', '/')).ToArray()))[0], new ContainerizeCommand(), null);
 
 	private sealed class BuildRunner : IProcessRunner
 	{

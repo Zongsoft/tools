@@ -171,7 +171,7 @@ internal static class TemplateCatalog
 					else if(fields.TryGetValue("environment", out var binding) && component.Values.TryGetValue($"environment!{binding}", out var explicitValue))
 						value = manifest.ResolveValue(explicitValue);
 					else if(fields.TryGetValue("variable", out var variable))
-						value = manifest.IsPlanning ? $"$({variable})" : manifest.Variables.TryGetValue(variable, out var referenced) ? Resolve(referenced) : Resolve(fields.GetValueOrDefault("default"));
+						value = manifest.IsPlanning ? $"${{{variable}}}" : manifest.Evaluator.TryGetVariable(variable, out var referenced) ? Resolve(referenced?.ToString()) : Resolve(fields.GetValueOrDefault("default"));
 					else
 						value = Resolve(fields.GetValueOrDefault("default"));
 
@@ -180,8 +180,7 @@ internal static class TemplateCatalog
 						var missing = string.IsNullOrEmpty(value);
 						if(!missing && manifest.IsPlanning)
 						{
-							var evaluated = VariableEvaluator.Evaluate(value, manifest.Variables, allowEscapes: true);
-							missing = !evaluated.Succeed || string.IsNullOrEmpty(evaluated.Value);
+							missing = !manifest.Evaluator.TryEvaluate(value, out var evaluated, out _) || string.IsNullOrEmpty(evaluated);
 						}
 
 						if(missing)
@@ -266,7 +265,7 @@ internal static class TemplateCatalog
 		ServiceOptions.ApplyEnvironment(component, source, manifest);
 		return source;
 
-		string Resolve(string value) => value == null || manifest.IsPlanning ? value : ContainerManifest.Evaluate(value, manifest.Variables, allowEscapes: true);
+		string Resolve(string value) => value == null || manifest.IsPlanning ? value : ContainerManifest.Evaluate(value, manifest.Evaluator);
 		string[] ParseArguments(string value) => ParseArray(value)?.Select(Resolve).ToArray();
 	}
 

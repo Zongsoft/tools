@@ -44,14 +44,14 @@ Uninstall first when replacing the same version. Cake `pack` pushes to NuGet and
 From PowerShell in `D:/Zongsoft/hosting`, package the default scheme's migration inputs for daemon, Web, and other host installation packages:
 
 ```powershell
-dotnet-migrate --name:zongsoft --version:1.0.0 --platform:linux --architecture:x64 --scheme:default --output:.migration '.deploy/$(scheme)/migration/$(version)/*.migration'
+dotnet-migrate --name:zongsoft --version:1.0.0 --platform:linux --architecture:x64 --scheme:default --output:.migration '.deploy/${scheme}/migration/${version}/*.migration'
 ```
 
 ```text
 dotnet-migrate --name:<name> --platform:<platform> [options...] <input.migration|pattern> [more inputs...]
 ```
 
-The package command has no subcommands. Options accept `--key:value` or `--key=value`; quote values with spaces according to the shell. Explicit options override ancestor `.env` values, environment variables and descriptor defaults, in descending priority; version-file selection has the separate rules below.
+The package command has no subcommands. Options accept `--key:value` or `--key=value`; quote values with spaces according to the shell. For global variables, explicit options override ancestor `.env` values, environment variables and descriptor defaults, in descending priority; version-file selection has the separate rules below.
 Successful generation returns `0`; no arguments return `2`; invalid options, inputs, or generation failures return `1`.
 
 | Option | Required/default | Description |
@@ -75,7 +75,7 @@ At least one positional argument is required. Each argument supports variables, 
 
 ### Hosting script integration
 
-The hosting root's `migrate.cmd` is an interactive entry. Defaults are name `zongsoft`, platform `linux`, architecture `x64`, and scheme `default`. Edition is optional; a version number, version file, or directory must be entered. Empty input at the first path prompt selects `.deploy/$(scheme)/migration/$(version)/*.migration`. A filename receives this directory prefix; paths with directory separators resolve from the working directory. Enter multiple files and finish with empty input. Bare `*` is rejected; use `*.migration`. The script switches to the hosting root, giving it the same `.env` scope as the example above.
+The hosting root's `migrate.cmd` is an interactive entry. Defaults are name `zongsoft`, platform `linux`, architecture `x64`, and scheme `default`. Edition is optional; a version number, version file, or directory must be entered. Empty input at the first path prompt selects `.deploy/${scheme}/migration/${version}/*.migration`. A filename receives this directory prefix; paths with directory separators resolve from the working directory. Enter multiple files and finish with empty input. Bare `*` is rejected; use `*.migration`. The script switches to the hosting root, giving it the same `.env` scope as the example above.
 
 The example creates `.migration/zongsoft(migrate)@1.0.0_linux-x64.tar.gz` and a matching `.sh`. Current default inputs include MySQL SQL and Amazon S3 bucket declarations, with connection parameters in `.deploy/default/migration/*.ini`. The plan, internal launcher, and native executor sit at the archive root; SQL is under `.artifacts/mysql/`. The hosting output directory `.migration/` is not an inner archive directory. Creation does not contact target services or save source version files. The script does not overwrite existing outputs; invoke the tool directly with `--overwrite` to replace them.
 
@@ -83,13 +83,15 @@ Then enter `zongsoft` at the migration prompt in the host's `deploy.cmd` / `pack
 
 ### Variables and .env files
 
-Each invocation loads descriptor defaults, environment variables, direct `.env` files from the filesystem root down to the working directory, and explicit command options, in that order. Later values overwrite earlier case-insensitive names, including empty values. Child directories and individual input/version-file directories do not establish additional variable scopes. Variables remain local to the invocation and do not modify the process environment.
+The tool explicitly enables Core variable fallback: named references search their namespace, its parents and global, querying every source in priority order at each level before allowing declared option defaults. Unqualified references remain `${name}`, and a found null or empty value stops fallback.
 
-`framework` is available to variable references. An omitted or empty `--framework` uses a nonempty value from the merged variables; a nonempty option takes precedence. A missing or empty variable and whitespace-only option values keep their existing behavior. This variable does not select the native executor or RID.
+For global variables, each invocation queries explicit options, direct `.env` files from the working directory up to the filesystem root, then environment variables. Descriptor defaults are queried only after all sources miss. The first match wins, including empty values. Configuration and command-option names ignore case. Core `Variables.Environments()` reads system values live in the default namespace without rewriting names or values; names are case-insensitive on Windows and case-sensitive on Unix/Linux. Child directories and individual input/version-file directories do not establish additional variable scopes. Variables remain local to the invocation and do not modify the process environment.
 
-[Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) `Profile.Load` reads these INI files, including `#@import`. Root entries retain their names; section levels and entry names join with `_`. For example, `[mysql]` with `root_password=example` creates `mysql_root_password`, and `[io rustfs]` with `access_key=example` creates `io_rustfs_access_key`. Root `environment=Development` creates `environment`. Values expand lazily through `$(name)` or `%name%`, including references in command options and `.ini` connection parameters. Missing `.env` files are skipped; read or parse failures stop generation.
+All variables, including `framework`, use the first successful lookup: null, empty strings, false and zero never trigger fallback to a lower source. Only a missing value continues lookup. Operations requiring a valid value validate it and report an error when they cannot proceed. `framework` does not select the native executor or RID.
 
-`.env` supplies shared variables; `.ini` supplies migration connection configuration. Rename existing parameter files such as `mysql.env` and `main.env` to `mysql.ini` and `main.ini`, and update their import paths. Automatic parameter lookup no longer falls back to `*.env`; explicit imports keep [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core)'s existing rules. Version and Edition selection follow the separate rules below.
+[Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) `Profile.Load` reads these INI files, including `#@import`. Root entries use the default namespace; section levels form dot-separated namespaces and entry dots/hyphens become underscores. For example, `[mysql]` with `root_password=example` creates `mysql:root_password`, and `[io rustfs]` with `access_key=example` creates `io.rustfs:access_key`. Root `environment=Development` creates `environment`. Values expand lazily through `${name}`, including references in command options and `.ini` connection parameters. Missing `.env` files are skipped; read or parse failures stop generation.
+
+`.env` supplies shared variables; `.ini` supplies migration connection configuration. Parameter lookup selects `.ini` files and merges explicit imports. Version and Edition selection follow the separate rules below.
 
 ### Choose a version and Edition
 
@@ -99,22 +101,22 @@ Each invocation loads descriptor defaults, environment variables, direct `.env` 
 
 For a manifest, explicit Edition selects the matching entry case-insensitively and retains its spelling. Without explicit Edition, only the **version number** comes from Current, otherwise the sole Edition, or the top-level version when there are no named Editions. Multiple Editions without Current require an explicit choice or numeric `--version`. An identifier supplies only its version number; an explicit Edition can replace or add its Edition. `--name` remains required and independent of the source application's name. A literal version bypasses source files.
 
-For example, if `.edition` selects Enterprise with version `2.0.0`, omitting `--edition` generates `zongsoft(migrate)@2.0.0_linux-x64.tar.gz`; adding `--edition:enterprise` generates `zongsoft-Enterprise(migrate)@2.0.0_linux-x64.tar.gz`. Legacy multi-Edition `.version` files must be renamed to `.edition`; the identifier reader does not parse Edition sections.
+For example, if `.edition` selects Enterprise with version `2.0.0`, omitting `--edition` generates `zongsoft(migrate)@2.0.0_linux-x64.tar.gz`; adding `--edition:enterprise` generates `zongsoft-Enterprise(migrate)@2.0.0_linux-x64.tar.gz`.
 
 From `D:/Zongsoft/hosting`, these alternatives read the Web host's source version. The explicit manifest example requires an existing `.edition`; the directory form prefers `.edition` and falls back to `.version` when absent. Ensure the default scheme contains migration inputs for the selected version:
 
 ```powershell
-dotnet-migrate --name:zongsoft --version:web/default/.edition --platform:linux --scheme:default --output:.migration '.deploy/$(scheme)/migration/$(version)/*.migration'
-dotnet-migrate --name:zongsoft --version:web/default --platform:linux --scheme:default --output:.migration '.deploy/$(scheme)/migration/$(version)/*.migration'
+dotnet-migrate --name:zongsoft --version:web/default/.edition --platform:linux --scheme:default --output:.migration '.deploy/${scheme}/migration/${version}/*.migration'
+dotnet-migrate --name:zongsoft --version:web/default --platform:linux --scheme:default --output:.migration '.deploy/${scheme}/migration/${version}/*.migration'
 ```
 
 To omit `--version`, run from `D:/Zongsoft/hosting/web/default`:
 
 ```powershell
-dotnet-migrate --name:zongsoft --platform:linux --scheme:default --output:../../.migration '../../.deploy/$(scheme)/migration/$(version)/*.migration'
+dotnet-migrate --name:zongsoft --platform:linux --scheme:default --output:../../.migration '../../.deploy/${scheme}/migration/${version}/*.migration'
 ```
 
-Version paths support variables. Numeric values take precedence over paths; use `./1.0.0` for a file named `1.0.0`. Command options remain raw text until needed; after choosing the version source, values such as `architecture` and `overwrite` expand recursively before type conversion. A bare `--overwrite` still means true. Boolean values also accept `true/false`, `1/0`, `yes/no`, `on/off`, `enable/disable`, and `enabled/disabled`. Enum options follow [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) conversion rules without an additional check that the enum member is defined; callers must supply a valid member. Variable names are case-insensitive and may contain dots, hyphens, and indices; referenced missing, cyclic, or over-64-level values fail. The resolved version and Edition populate `$(version)`/`$(edition)`, plan identity and artifact names. Migration inputs and output paths stay relative to the working directory, even when the version file is elsewhere.
+Version paths support variables. Numeric values take precedence over paths; use `./1.0.0` for a file named `1.0.0`. Command options remain raw text until needed; after choosing the version source, values such as `architecture` and `overwrite` expand recursively before type conversion. A bare `--overwrite` still means true. Boolean values also accept `true/false`, `1/0`, `yes/no`, `on/off`, `enable/disable`, and `enabled/disabled`. Enum options follow [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) conversion rules without an additional check that the enum member is defined; callers must supply a valid member. Variable names use Core identifiers; configuration and command options ignore case, while environment names follow platform rules (case-insensitive on Windows, case-sensitive on Unix/Linux). Namespaces use dot-separated identifiers; referenced missing, cyclic, or over-64-level values fail. The resolved version and Edition populate `${version}`/`${edition}`, plan identity and artifact names. Migration inputs and output paths stay relative to the working directory, even when the version file is elsewhere.
 
 ### Migration inputs and ordering
 
@@ -156,7 +158,7 @@ Database=/var/lib/example/application.db
 
 Database common.ini files declare provider/database/user sections. Only the selected candidate and its explicit imports are merged; required parameters are not filled from another candidate. Amazon S3 retains its existing provider-named root-parameter shorthand.
 
-- Import paths are relative to the file containing the directive, or absolute. Separate paths with spaces, tabs or `|`. Quoted escaping, globs and variable expansion are not supported in import arguments. Imports merge the complete Profile; placing the directive inside a section does not move imported root entries into that section.
+- Import paths are relative to the file containing the directive, or absolute. Each directive imports one complete trimmed path. The tool evaluates `${...}` through `Directives.Processing`; spaces, tabs and `|` do not split files. Quotes are not removed and globs are not expanded. Use multiple directives for multiple files. Imports merge the complete Profile; placing the directive inside a section does not move imported root entries into that section.
 - Missing imports are skipped under [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core)'s optional import rules. Cycles and depths above 64 files, including the root, fail. Diamond and repeated imports are allowed and read again each time. Linked configuration files retain logical paths, so imports, SQL, and adjacent parameters resolve relative to the link location.
 - Each file is checked for duplicate sections, duplicate keys and syntax. Root entries, unknown providers and conflicting provider aliases in an effective migration INI remain errors, including in imported files.
 - Across files, the last declaration read wins for the same section/key, case insensitively. The effective collection retains the key's first position. Overridden SQL/bucket entries do not produce tasks. Use separate command-line INI inputs when same-named entries must execute independently.
@@ -191,7 +193,7 @@ These optional examples use existing hosting bucket names; they do not imply tha
 
 ```ini
 [amazon.s3]
-attachments=private,encryption:sse-s3,versioning:enabled,tag.application:zongsoft.web,tag.environment:$(environment)
+attachments=private,encryption:sse-s3,versioning:enabled,tag.application:zongsoft.web,tag.environment:${environment}
 learning=private,versioning:enabled
 ```
 
@@ -211,17 +213,17 @@ Configuration has three levels: provider, database, user.
 [mysql]
 Server=localhost
 Database=hosting
-Password=$(mysql_root_password)
+Password=${mysql:root_password}
 
 [mysql hosting application]
-Password=$(application_password)
+Password=${application_password}
 Permission=readwrite
 
 [mysql analytics]
 Collation=utf8mb4_bin
 
 [mysql analytics reporting]
-Password=$(reporting_password)
+Password=${reporting_password}
 Permission=readonly
 ```
 
@@ -230,10 +232,10 @@ In a provider-named file such as `mysql.ini`, the filename can supply the provid
 ```ini
 Server=localhost
 Database=hosting
-Password=$(mysql_root_password)
+Password=${mysql:root_password}
 
 [hosting application]
-Password=$(application_password)
+Password=${application_password}
 Permission=readwrite
 ```
 
@@ -346,7 +348,7 @@ SQLite and DuckDB reject user sections. Privileges/Roles are comma- or pipe-sepa
 
 ```ini
 [mysql automao program]
-Password=$(program_password)
+Password=${program_password}
 Permission=ReadWrite
 Privileges=CreateTable,CreateIndex,AlterTable
 ```

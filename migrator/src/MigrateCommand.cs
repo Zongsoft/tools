@@ -60,23 +60,23 @@ public sealed partial class MigrateCommand : CommandBase<CommandContext>
 	#region 执行方法
 	protected override ValueTask<object> OnExecuteAsync(CommandContext context, CancellationToken cancellation)
 	{
-		var values = Variables.From(context, Environment.CurrentDirectory);
-		values[Variables.SOURCE] = Environment.CurrentDirectory;
-		values.Remove(Variables.VERSION);
-		values[Variables.EDITION] = context.Options.GetValue<string>(Variables.EDITION);
-		var selected = VersionSource.Load(context.Options.GetValue<string>(Variables.VERSION), new Variables(values));
-		values[Variables.VERSION] = selected.Version.ToString();
-		values[Variables.EDITION] = selected.Edition;
-		var variables = new Variables(values);
-		var name = variables.Name;
-		var edition = variables.Edition;
+		var evaluator = Utility.CreateEvaluator(context, Environment.CurrentDirectory);
+		evaluator.SetVariable(MigrationOptions.SOURCE, Environment.CurrentDirectory.Replace('\\', '/'));
+		evaluator.SetVariable(MigrationOptions.VERSION, null);
+		evaluator.SetVariable(MigrationOptions.EDITION, context.Options.GetValue<string>(MigrationOptions.EDITION, null));
+		var selected = VersionSource.Load(context.Options.GetValue<string>(MigrationOptions.VERSION, null), new MigrationOptions(evaluator));
+		evaluator.SetVariable(MigrationOptions.VERSION, selected.Version.ToString());
+		evaluator.SetVariable(MigrationOptions.EDITION, selected.Edition);
+		var options = new MigrationOptions(evaluator);
+		var name = options.Name;
+		var edition = options.Edition;
 		var version = selected.Version;
 
 		if(string.IsNullOrWhiteSpace(name) || !Regex.IsMatch(name, @"^[A-Za-z0-9][A-Za-z0-9._+-]*$") ||
 			(!string.IsNullOrWhiteSpace(edition) && !Regex.IsMatch(edition, @"^[A-Za-z0-9][A-Za-z0-9._+-]*$")))
 			throw new InvalidOperationException(Properties.Resources.MigrationIdentityInvalid_Message);
 
-		var platform = variables[Variables.PLATFORM]?.ToLowerInvariant();
+		var platform = options[MigrationOptions.PLATFORM]?.ToLowerInvariant();
 		platform = platform switch
 		{
 			"win" or "windows" => "win",
@@ -85,36 +85,30 @@ public sealed partial class MigrateCommand : CommandBase<CommandContext>
 			"unix" => throw new InvalidOperationException(Properties.Resources.MigrateUnixAmbiguous_Message),
 			_ => throw new InvalidOperationException(Properties.Resources.MigrationPlatformInvalid_Message),
 		};
-		var runtime = platform + "-" + variables.Architecture.ToString().ToLowerInvariant();
+		var runtime = platform + "-" + options.Architecture.ToString().ToLowerInvariant();
 		MigrationRuntime.Validate(runtime);
 
 		if(context.Arguments.Count == 0)
 			throw new InvalidOperationException(Properties.Resources.MigrationPathsRequired_Message);
 
-		var output = Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, variables.Output ?? "."));
+		var output = Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, options.Output ?? "."));
 		var suffixed = HasSuffix(name);
 		var migrationName = (suffixed ? name : name + "-migrate") + (string.IsNullOrWhiteSpace(edition) ? "" : "-" + edition);
 		var prefix = name + (string.IsNullOrWhiteSpace(edition) ? "" : "-" + edition) + "(migrate)@" + version + "_" + runtime;
 		var archive = prefix + ".tar.gz";
 		var launcher = prefix + (platform == "win" ? ".cmd" : ".sh");
 		var cmdlet = new CommandLine.Cmdlet(context.Command.Name);
-		cmdlet.Options.Add(new(CommandLine.CmdletOptionKind.Fully, "overwrite", variables["overwrite"]));
+		cmdlet.Options.Add(new(CommandLine.CmdletOptionKind.Fully, "overwrite", options["overwrite"]));
 		var overwrite = new CommandContext(context.Executor, cmdlet, context.Command, null).Options.Switch("overwrite");
 		Generator.CheckMigrationOutputs(output, archive, launcher, overwrite);
 
-		var plan = new MigrationLoader(value =>
-		{
-			var result = Normalizer.Normalize(value, variables);
-			if(!result.Succeed)
-				throw new InvalidOperationException(string.Format(Properties.Resources.MigrationVariableUndefined_Message, result.Value));
-			return result.Value;
-		}).Load(context.Arguments, Environment.CurrentDirectory, migrationName, version.ToString(), runtime);
+		var plan = new MigrationLoader(options.Evaluator).Load(context.Arguments, Environment.CurrentDirectory, migrationName, version.ToString(), runtime);
 		if(plan == null)
 			throw new InvalidOperationException(Properties.Resources.MigrateInputsMissing_Message);
 
-		plan.Title = variables.Title ?? name;
-		plan.Summary = variables.Summary;
-		plan.Description = variables.Description;
+		plan.Title = options.Title ?? name;
+		plan.Summary = options.Summary;
+		plan.Description = options.Description;
 		using var bundle = MigrationBundle.Build(plan, null);
 		Generator.Migrate(bundle, output, archive, launcher, migrationName, platform == "win", overwrite);
 		Terminal.WriteLine(CommandOutletColor.DarkGreen, string.Format(Properties.Resources.MigrateGenerated, Path.Combine(output, archive), Path.Combine(output, launcher)));

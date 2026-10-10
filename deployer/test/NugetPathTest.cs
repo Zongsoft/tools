@@ -18,7 +18,7 @@ public class NugetPathTest
 		var source = Path.Combine(package, requested.Replace('/', Path.DirectorySeparatorChar));
 		var deployer = fixture.CreateDeployer();
 
-		var result = await deployer.DeployAsync(fixture.Manifest("path:" + source), fixture.Destination, TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((fixture.Manifest("path:" + source.Replace('\\', '/'))).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(1, result.Successes);
@@ -36,7 +36,7 @@ public class NugetPathTest
 		fixture.Write("packages/path.explicit/1.0.0/lib/net10.0/Path.Explicit.dll", "framework ten asset");
 		var deployer = fixture.CreateDeployer();
 
-		var result = await deployer.DeployAsync(fixture.Manifest("nuget:Path.Explicit@1.0.0/" + requested), fixture.Destination, TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((fixture.Manifest("nuget:Path.Explicit@1.0.0/" + requested)).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(1, result.Successes);
@@ -54,7 +54,7 @@ public class NugetPathTest
 		fixture.Variables["expansion"] = "true";
 		var requested = Path.Combine(fixture.Packages, "path.nested", "1.0.0", "lib", "net8.0", "sub?", "deep", "*.txt");
 
-		var files = DeploymentUtility.GetFiles(requested, fixture.Variables, cancellation: TestContext.Current.CancellationToken).OrderBy(file => file.Path, StringComparer.Ordinal).ToArray();
+		var files = DeploymentUtility.GetFiles(requested, fixture.Evaluator, cancellation: TestContext.Current.CancellationToken).OrderBy(file => file.Path, StringComparer.Ordinal).ToArray();
 
 		Assert.Equal([first, second], files.Select(file => file.Path).ToArray());
 		Assert.Equal([Path.Combine("sub1", "deep"), Path.Combine("sub2", "deep")], files.Select(file => file.Suffix).ToArray());
@@ -70,7 +70,7 @@ public class NugetPathTest
 		fixture.Write("packages/path.fallback/1.0.0/lib/net10.0/sub1/file.txt", "must not select newer framework");
 		var requested = Path.Combine(fixture.Packages, "path.fallback", "1.0.0", "lib", "net9.0", "sub?", "*.txt");
 
-		var files = DeploymentUtility.GetFiles(requested, fixture.Variables, cancellation: TestContext.Current.CancellationToken).ToArray();
+		var files = DeploymentUtility.GetFiles(requested, fixture.Evaluator, cancellation: TestContext.Current.CancellationToken).ToArray();
 
 		Assert.Equal(new[] { first, second }, files.Select(file => file.Path));
 		Assert.Equal(new[] { "sub1", "sub2" }, files.Select(file => file.Suffix));
@@ -87,7 +87,7 @@ public class NugetPathTest
 		fixture.Write("packages/path.framework/1.0.0/lib/other/sub1/file.txt", "not a matching framework name");
 		var requested = Path.Combine(fixture.Packages, "path.framework", "1.0.0", "lib", "net*", "sub?", "*.txt");
 
-		var files = DeploymentUtility.GetFiles(requested, fixture.Variables, cancellation: TestContext.Current.CancellationToken).ToArray();
+		var files = DeploymentUtility.GetFiles(requested, fixture.Evaluator, cancellation: TestContext.Current.CancellationToken).ToArray();
 
 		Assert.Equal(new[] { first, second, third }, files.Select(file => file.Path));
 		Assert.Equal(new[] { "net10.0/sub1", "net8.0/sub1", "net8.0/sub2" }, files.Select(file => file.Suffix.Replace('\\', '/')));
@@ -101,7 +101,7 @@ public class NugetPathTest
 		fixture.Write("packages/path.incompatible/1.0.0/lib/net10.0/file.dll", "incompatible asset");
 		var requested = Path.Combine(fixture.Packages, "path.incompatible", "1.0.0", "lib", "net8.0", "file.dll");
 
-		var file = Assert.Single(DeploymentUtility.GetFiles(requested, fixture.Variables, cancellation: TestContext.Current.CancellationToken));
+		var file = Assert.Single(DeploymentUtility.GetFiles(requested, fixture.Evaluator, cancellation: TestContext.Current.CancellationToken));
 
 		Assert.Equal(requested, file.Path);
 		Assert.False(file.Exists());
@@ -117,11 +117,11 @@ public class NugetPathTest
 		var directory = Path.Combine(fixture.Root, "packages-other", "path.outside", "1.0.0", "lib", "net9.0");
 		var requested = Path.Combine(directory, "file.dll");
 
-		var file = Assert.Single(DeploymentUtility.GetFiles(requested, fixture.Variables, cancellation: TestContext.Current.CancellationToken));
+		var file = Assert.Single(DeploymentUtility.GetFiles(requested, fixture.Evaluator, cancellation: TestContext.Current.CancellationToken));
 
 		Assert.Equal(requested, file.Path);
 		Assert.False(file.Exists());
-		Assert.Empty(DeploymentUtility.GetFiles(Path.Combine(directory, "*.dll"), fixture.Variables, cancellation: TestContext.Current.CancellationToken));
+		Assert.Empty(DeploymentUtility.GetFiles(Path.Combine(directory, "*.dll"), fixture.Evaluator, cancellation: TestContext.Current.CancellationToken));
 	}
 
 	[Fact]
@@ -129,10 +129,10 @@ public class NugetPathTest
 	{
 		using var fixture = new DeploymentFixture();
 		var expected = fixture.Write("lib/net10.0/cache/path.ancestor/1.0.0/lib/net8.0/file.dll", "package library asset");
-		fixture.Variables["NuGet_Packages"] = Path.Combine(fixture.Root, "lib", "net10.0", "cache");
-		var requested = Path.Combine(fixture.Variables["NuGet_Packages"], "path.ancestor", "1.0.0", "lib", "net9.0", "file.dll");
+		fixture.Variables["NuGet_Packages"] = (Path.Combine(fixture.Root, "lib", "net10.0", "cache")).Replace('\\', '/');
+		var requested = Path.Combine((string)fixture.Variables["NuGet_Packages"], "path.ancestor", "1.0.0", "lib", "net9.0", "file.dll");
 
-		var file = Assert.Single(DeploymentUtility.GetFiles(requested, fixture.Variables, cancellation: TestContext.Current.CancellationToken));
+		var file = Assert.Single(DeploymentUtility.GetFiles(requested, fixture.Evaluator, cancellation: TestContext.Current.CancellationToken));
 
 		Assert.Equal(expected, file.Path);
 		Assert.Equal("package library asset", File.ReadAllText(file.Path));
@@ -149,7 +149,7 @@ public class NugetPathTest
 		fixture.Write("packages/content.paths/1.0.0/content/lib/net9.0/file.txt", "framework nine content");
 		fixture.Variables["Framework"] = "net9.0";
 
-		var result = await fixture.CreateDeployer().DeployAsync(fixture.Manifest("nuget:Content.Paths@1.0.0"), fixture.Destination, TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Content.Paths@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(3, result.Successes);

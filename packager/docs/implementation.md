@@ -8,7 +8,7 @@ For installation, configuration, and release workflows, see the [packager README
 
 Application examples use the real [Zongsoft.Hosting.Web](https://github.com/Zongsoft/hosting/tree/main/web/default) host. Staging directories, the Bash working directory, and example versions follow the [README quick start](../README.md#quick-start). The host DLL is `Zongsoft.Hosting.Web.dll`; `--daemon:zongsoft.web` selects the package and service identity. Automatic Web configuration uses the host's web.profile; the root-alias section separately demonstrates ordinary payload with a user-supplied manual.conf.
 
-Current hosting scripts omit `--framework`; the tool resolves it from Variables, while `--compilation` supplies the build configuration. Daemon declares `Environment,DOTNET_ENVIRONMENT` for generated services; Web also declares `ASPNETCORE_ENVIRONMENT`. Terminal disables daemon support, so the variable list does not set an interactive process environment. Building, deploying, and creating migration artifacts happen outside this tool; standalone `pack.cmd` only collects existing payloads. See the [quick start](../README.md#quick-start) for script setup and commands.
+Current hosting scripts omit `--framework`; the tool resolves it from its variable providers, while `--compilation` supplies the build configuration. Daemon declares `Environment,DOTNET_ENVIRONMENT` for generated services; Web also declares `ASPNETCORE_ENVIRONMENT`. Terminal disables daemon support, so the variable list does not set an interactive process environment. Building, deploying, and creating migration artifacts happen outside this tool; standalone `pack.cmd` only collects existing payloads. See the [quick start](../README.md#quick-start) for script setup and commands.
 
 ## Design goals
 
@@ -46,9 +46,9 @@ The main design choices are:
 | `Web/Definition*.cs` | Collect [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Profile declarations and resolve replacement, inheritance, variables and validation. |
 | `Web/Configurator*.cs` | Configurator contract, Nginx directive model/validation, deterministic serialization and relocatable content. |
 | `Web/Installation*.cs` | Validate generated targets and provide delivery, relocation, activation and removal scripts. |
-| `Normalizer.cs` / `TextSource.cs` | Expand variables on demand and resolve files under the source directory or literal text. |
+| `Utility.cs` / `TextSource.cs` | Expand variables on demand and resolve files under the source directory or literal text. |
 | `Utility.Search` / `Generator.Entries.cs` | Match path segments, handle directory metadata, and manage temporary payload streams. |
-| `Variables.cs` | Variable collection and typed accessors for common variables. |
+| `PackageOptions.cs` | Typed packaging options, template evaluation and tool defaults; Core manages the variable providers. |
 | `Dependency.cs` | Parses uniform dependency intervals and alternative groups for native Debian/RPM relationship output. |
 | `Utility.cs` | RID, installation path, path normalization, Unix timestamps, and file permissions. |
 | `Dumper.cs` | Console splash, error, and warning output. |
@@ -90,7 +90,7 @@ flowchart TD
 `PackCommand<TPackage>` performs common work; subclasses create the concrete `Package`:
 
 ```csharp
-protected override Package.Deb CreatePackage(CommandContext context, Variables variables)
+protected override Package.Deb CreatePackage(CommandContext context, PackageOptions options)
 ```
 
 `RpmCommand` also reads:
@@ -102,7 +102,7 @@ These options are split on commas or semicolons and written into the RPM metadat
 
 ## Source and packaged versions
 
-`VersionFile` opens the source directory's direct `.edition` with `File.OpenRead` and `ApplicationManifest.Load(Stream)`. Only `FileNotFoundException` permits the fallback `.version`, parsed by `ApplicationIdentifier.Load(Stream)`; an empty identifier, corrupt file, directory placeholder or other I/O error stops the command. Neither parser searches other directories. Legacy multi-Edition `.version` files must be renamed to `.edition`.
+`VersionFile` opens the source directory's direct `.edition` with `File.OpenRead` and `ApplicationManifest.Load(Stream)`. Only `FileNotFoundException` permits the fallback `.version`, parsed by `ApplicationIdentifier.Load(Stream)`; an empty identifier, corrupt file, directory placeholder or other I/O error stops the command. Neither parser searches other directories.
 
 Manifest selection is explicit nonblank Edition, then Current, then the sole Edition. Multiple Editions without a selection fail; no named Editions means the top-level version. Explicit selection must exist and retains canonical spelling. Identifier fallback allows an explicit Edition to replace or add the identifier's Edition. Source names must match explicit names case-insensitively; the explicit version overrides the selected nonzero version. Identity options alone determine identity, with environment and `.env` available only through explicit variable references.
 
@@ -133,7 +133,7 @@ Common optional settings:
 | `--output` | `source` | Always an output directory; relative paths use `source`. A filename cannot be specified. |
 | `--exclude` | Empty | Comma- or semicolon-separated patterns skipped during entry collection. |
 | `--edition` | Current or the sole Edition | Product Edition, included in the package name. |
-| `--framework` | `framework` variable or empty | Optional .NET target framework used to locate the host under `bin/<compilation>/<framework>`; omitted or empty options use the merged variable. |
+| `--framework` | `framework` variable or empty | Optional .NET target framework used to locate the host under `bin/<compilation>/<framework>`; omitted command options defer to lower-priority providers; explicit empty values stop fallback. |
 | `--compilation` | `Release` | Optional .NET build configuration used for that host lookup and available as a variable. |
 | `--architecture` | `x64` | Target architecture. |
 | `--overwrite` | `false` | Replace existing output files. |
@@ -166,13 +166,21 @@ Systemd and lifecycle options:
 
 ### Variable sources
 
-`PackCommand<TPackage>.GetVariables(context, directory)` loads descriptor defaults, environment variables, ancestor `.env` files for the supplied directory, and explicit command options, including extra options. Omitting `directory` skips `.env` loading for the initial source resolution. After verifying and resolving the source directory to an absolute path, variables are reloaded and source is fixed; `.env` does not determine source retroactively. Names are case-insensitive. Precedence is explicit options > nearer `.env` > farther `.env` > environment > defaults.
+`PackCommand<TPackage>.CreateEvaluator(context, directory)` combines command options, ancestor `.env` files from the supplied directory upwards, and environment variables; the tool enables Fallback, and Core supplies defaults only after all ordinary values miss. Omitting `directory` skips `.env` loading for the initial source resolution. After verifying and resolving the source directory to an absolute path, variables are reloaded and source is fixed; `.env` does not determine source retroactively. Configuration and command-option names ignore case; system environment names follow platform rules. Precedence is explicit options > nearer `.env` > farther `.env` > environment > defaults.
 
-Shared `Utility.LoadEnvironmentVariables` reads each immediate `.env` from the filesystem root down to source, without searching child directories. `Profile.Load` preserves [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) empty-value and import semantics; section levels and entry names join with underscores. Read/parse failures stop packaging; only missing files are skipped. Process environment variables are not changed.
+Shared `Utility.LoadEnvironmentProfiles` reads each immediate `.env` from the filesystem root down to source, without searching child directories. `Profile.Load` preserves [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) empty-value and import semantics; section levels form dot-separated namespaces and entry dots/hyphens become underscores. Read/parse failures stop packaging; only missing files are skipped. Process environment variables are not changed.
 
-`Variables.From` declares `FRAMEWORK` in a case-insensitive set passed as `fallbackOptions` to shared `Utility.CreateVariables`. Both source bootstrap and final loading apply the rule directly in the existing option merge loop: only a declared option with a raw null/empty value preserves an existing nonempty variable. Without a nonempty fallback, the original assignment remains. Whitespace values, nonempty expressions that expand to empty, and nearer `.env` values that clear earlier values keep their existing behavior. This changes no source lookup scope or framework validation.
+The variable contract is `Zongsoft.Common.IVariables`. Command options use `context.Options` directly, while computed values use Core `Variables`; `.env` files remain `Profile.ToVariables()` views. System values are read live through `Variables.Environments()`, without copying or rewriting names or values. The environment provider exposes only the default namespace; Windows ignores name case and Unix/Linux preserves case sensitivity. Path values used in templates use `/`; other escaping follows Core. The tool explicitly sets `TemplateEvaluatorOptions.Fallback=true`. It searches every provider at each namespace before moving through parents to global, then allows source-declared defaults. The first match wins, including null. Directive evaluation inherits Fallback, Recursive, Culture and MaximumDepth from its evaluator; unqualified references need no extra syntax. Use `${name}` or `${io.rustfs:access_key}`. Section levels form dot-separated namespaces; entry and command-option dots/hyphens become underscores. Invalid configuration names supply no variable and ambiguous configuration names fail only when queried.
 
-`PackCommand` creates an invocation-local `Variables` view and passes it to packages, scripts, and text sources. It keeps no process-wide variable state. References expand recursively when accessed; unused unknown references do not prevent packaging. Unknown variables, cycles, and expansion deeper than 64 levels fail with a diagnostic naming the variable. Expansion itself does not read files.
+Register context.Options once before configuration and the environment. Core VariablesExtension.TryGetValue queries all sources at each namespace with false. Only after global ordinary queries also miss does it query global with true for declared defaults. Global precedence is explicit options, nearer .env, farther .env, environment, then option defaults. HasDefaultValue distinguishes omission from explicit null; omission does not synthesize a type's zero value. Raw reads, recursive templates and directive evaluation share the Fallback setting. Computed overrides use a leading Variables source.
+
+Templates use Core `TemplateEvaluator.Evaluate` / `TryEvaluate` directly, with `Recursive` enabled and the default depth limit of 64, counting the root and recursive strings. Every input follows Core escaping: `\${name}` emits a literal reference and `\\` emits a literal backslash. Prefer relative paths; use `/` in absolute paths, for example `../.shared/${product}.env` or `D:/deploy/${scheme}`. Missing variables, cycles and excessive depth follow the Core error contract.
+
+`.env` directive arguments are evaluated through `Directives.Processing`, looking up explicit options, already-read entries in the current file (including completed imports), previously loaded ancestor `.env` files, and environment/default values in that order. Later declarations are unavailable; an imported file does not implicitly search its parent's local entries. Maker manifest callbacks query actual invocation values before the current Profile, then descriptor defaults only if all sources miss. Each import uses its complete argument as one path. Source declarations and raw entries remain unchanged; tools explicitly request evaluation while Profile handles reading and imports.
+
+All variables, including `framework`, use the first successful lookup: null, empty strings, false and zero never trigger fallback to a lower source. Only a missing value continues lookup. Operations requiring a valid value validate it and report an error when they cannot proceed.
+
+`PackCommand` creates an invocation-local `PackageOptions` object and passes it to packages, scripts, and text sources. It keeps no process-wide variable state. References expand recursively when accessed; unused unknown references do not prevent packaging. Unknown variables, cycles, and expansion deeper than 64 levels fail with a diagnostic naming the variable. Expansion itself does not read files.
 
 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) command descriptors retain options that may contain variables as strings. `source` expands first using the complete raw variable set. Explicit `name`, `edition`, and `version` then expand; `version` is converted to `System.Version` to select the version from the source `.edition` manifest or `.version` identifier. After identity is finalized, `platform`, `architecture`, and `overwrite` expand and convert when used. Bare `--overwrite` remains true; omission defaults to false.
 
@@ -180,11 +188,11 @@ Identity still comes from the source `.edition` manifest or `.version` identifie
 
 ### Variable syntax
 
-`Normalizer` accepts:
+Core `TemplateEvaluator` accepts:
 
 ```text
-$(name)
-%name%
+${name}
+${namespace:name}
 ```
 
 Example:
@@ -206,13 +214,13 @@ dotnet-pack deb \
 
 Bash expands the identity options in this example. `--version` enters `OnExecuteAsync` as a string and becomes `System.Version` only after expansion; name and Edition are validated from supplied values. Packager expressions can also appear in subsequent paths, text, and migration configuration.
 
-Unknown variables in source paths, output, payload, exclusions, text, or migration input fail; unused variables remain unexpanded. The result of `Normalizer.Normalize` can indicate failure, and callers must not treat failed results as valid input.
+Unknown variables in source paths, output, payload, exclusions, text, or migration input fail; unused variables remain unexpanded. `TryEvaluate` returns the original Core error; callers must not continue with failed input.
 
 ### Text and files
 
-`TextSource.Read(source, value, variables, fileOnly)` handles summary, description, and lifecycle hooks:
+`TextSource.Read(source, value, options, fileOnly)` handles summary, description, and lifecycle hooks:
 
-- `text:` returns the following content literally, including shell `$(...)`, `%...%`, or path-like text.
+- `text:` returns the following content literally, including shell `${___}`, `${___}`, or path-like text.
 - `file:` expands the following path and reads it as an absolute path or relative to source; a missing file fails.
 - Without a prefix, expand variables first. Multiline values are text; existing files are read relative to source; clearly missing paths fail; other single-line values are text. Prefixes remove ambiguity.
 - File content is neither expanded nor interpreted again as another file path.
@@ -453,7 +461,7 @@ Environment=DOTNET_NOLOGO=true
 WantedBy=multi-user.target
 ```
 
-`Variables.Listen` supplies the bind value. Multiple complete URLs separated by semicolons are retained as one `--urls` value. HTTP and HTTPS can be combined; the host configures the default HTTPS server certificate. Omitting the option adds no `--urls`; an existing service's ExecStart is not rewritten.
+`PackageOptions.Listen` supplies the bind value. Multiple complete URLs separated by semicolons are retained as one `--urls` value. HTTP and HTTPS can be combined; the host configures the default HTTPS server certificate. Omitting the option adds no `--urls`; an existing service's ExecStart is not rewritten.
 
 A nonempty `--listen` produces:
 
@@ -500,7 +508,7 @@ See the [Web guide](web.md) for syntax and deployment requirements. Types remain
 
 Definition.cs provides the Load/Resolve entry points. Definition.Loader.cs collects declarations, arranges sections and validates structure. Definition.Resolver.cs merges declarations, evaluates values and builds the effective model, with regions for bindings/resources, backend policies, health checks, headers, native directives and basic value parsing. Value conversion belongs to Resolver rather than a separate Values file. Definition.Model.cs holds the model types.
 
-Loading uses [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Profile.Load with Directives = { ProfileDirectiveOptions.Import(ProfileDirectiveBehavior.Strict) }. Loading collects the referer before merging; Loaded collects every completed source, including the root. Both retain Profile instance identity. Backend pools replace whole groups by input instance rather than enumerating all final merged entries. Structure is validated first, selected-hoster overrides next, and only consumed values are expanded. Web explicitly enables shared VariableEvaluator.allowEscapes; other callers retain their existing mode.
+Loading uses [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Profile.Load with Directives = { ProfileDirectiveOptions.Import(ProfileDirectiveBehavior.Strict) }. Loading collects the referer before merging; Loaded collects every completed source, including the root. Both retain Profile instance identity. Backend pools replace whole groups by input instance rather than enumerating all final merged entries. Structure is validated first, selected-hoster overrides next, and only consumed values are expanded. Directive arguments and consumed values use the shared Core template evaluator and its escaping rules.
 
 Resolver produces immutable site, route and policy records. Nginx builds a directive tree, validates native context/cardinality, static listener conflicts and regex proxy_pass, then emits UTF-8, Tab and CRLF. Installation-root references are typed ContentPart values, not text placeholders that can collide with input. Common literal values never silently become runtime expressions; unrepresentable values fail.
 
@@ -521,10 +529,9 @@ Cleanup fragments are also generated when the new package has no Web result, so 
 
 Tests cover declarations/models, native output, actual three-format archive decoding and isolated Shell doubles. Shell fixtures replace system paths with temporary directories and use fake nginx/systemctl commands, without installing packages or touching real services. On Windows, `PACKAGER_TEST_GIT`, PATH, Git installation records, and common installation locations select Bash and cygpath from the same installation. The fixture sets `MSYS=winsymlinks:nativestrict` and converts Windows paths through `cygpath -u`, so mount aliases such as `/tmp` agree with resolved link targets. A temporary-directory probe checks required utilities and symbolic-link support before running shell tests; unsupported environments are reported as skipped rather than blocking the build or release. After that probe succeeds, script failures and assertion failures still fail tests. Regression tests cover mount mappings with spaces, portable installations, incomplete tool pairs, and unavailable tools. These tests do not establish real installation validation; target Linux, Nginx modules, certificate loading, and reload behavior require an isolated environment with actual dependencies. See the [Web configuration guide](web.md) for configuration contracts, module requirements, and deployment behavior.
 
-
 ## Application metadata
 
-The option and variable name for the home page is `homepage`; `Package.Homepage` supplies tar PAX `Homepage`, Debian `Homepage`, and RPM `URL` (1020). Tar PAX `Maintainer`, Debian `Maintainer`, and RPM `PACKAGER` (1015) retain the package maintainer independently of the generator identity. `manufacturer` supplies `Package.Manufacturer`, with the shared default `Zongsoft` when absent, null, or empty after expansion. The accessor preserves literal whitespace before the normalizer can turn it into an empty string. The default for the `maintainer` option is also `Zongsoft`; the two values remain independent.
+The option and variable name for the home page is `homepage`; `Package.Homepage` supplies tar PAX `Homepage`, Debian `Homepage`, and RPM `URL` (1020). Tar PAX `Maintainer`, Debian `Maintainer`, and RPM `PACKAGER` (1015) retain the package maintainer independently of the generator identity. `manufacturer` supplies `Package.Manufacturer`, with the shared default `Zongsoft` when absent, null, or empty after expansion. Whitespace-only values remain whitespace. The default for the `maintainer` option is also `Zongsoft`; the two values remain independent.
 
 Tar writes manufacturer as the PAX global attribute `Manufacturer`, Debian writes the custom control field `Manufacturer`, and RPM writes the standard `VENDOR` string tag (1011). Debian keeps its existing text normalization, including omission of a whitespace-only manufacturer field. These fields add no payload entries. See [Debian user-defined fields](https://www.debian.org/doc/debian-policy/ch-controlfields.html#user-defined-fields) and the [RPM tag reference](https://rpm.org/docs/latest/manual/tags.html).
 
@@ -1052,7 +1059,7 @@ Debian control/data gzip tars use separate controlled temporary files, and ar st
 
 ## Uniform dependencies
 
-`Variables.Dependencies` expands variables before `Dependency.Split` separates top-level comma/semicolon groups. Bracketed intervals and RPM capability parentheses retain their internal punctuation. `Package.Dependencies` remains a string array; both encoders use `Dependency.Parse` to obtain AND groups of OR alternatives, with a name, original minimum/maximum strings, and inclusion flags for each alternative.
+`PackageOptions.Dependencies` expands variables before `Dependency.Split` separates top-level comma/semicolon groups. Bracketed intervals and RPM capability parentheses retain their internal punctuation. `Package.Dependencies` remains a string array; both encoders use `Dependency.Parse` to obtain AND groups of OR alternatives, with a name, original minimum/maximum strings, and inclusion flags for each alternative.
 
 The grammar is `name[:range]`: a name alone is unversioned; a digit-starting bare version is an inclusive lower bound. Standard NuGet-style intervals are supported, plus `[v)` as an alias for `[v,)`. `[v]` is exact; `(v,)` is an exclusive lower bound, `(,v]` / `(,v)` are upper bounds, and `(,)` is unrestricted. Missing endpoints must use an open boundary. Package-name qualifiers such as `libc6:any` remain names; use brackets around native versions starting with letters. Versions retain native epoch, revision, and comparison semantics; no NuGet normalization, sorting, floating-version resolution, or contradictory-range merging is performed. Old comparison expressions, invalid brackets, floating `*`, empty alternatives, and control characters fail with localized diagnostics. Blank list items and repeated constraints retain the existing list behavior.
 

@@ -43,9 +43,9 @@ public sealed class MigrationDatabaseTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("main.migration", "[mysql]\n");
-		directory.Write("main.ini", "[mysql]\nServer=localhost\nDatabase=hosting\nPassword=$(root)\n[mysql hosting AppUser]\nPassword=$(app)\nPermission=READONLY\nPrivileges=createTABLE|SELECT\nRoles=Reporting,Audit\nHost=10.%\n");
-		var variables = new Dictionary<string, string> { ["root"] = "operator-secret", ["app"] = "app'quoted;secret" };
-		var loader = new MigrationLoader(value => Normalizer.Normalize(value, variables).Value);
+		directory.Write("main.ini", "[mysql]\nServer=localhost\nDatabase=hosting\nPassword=${root}\n[mysql hosting AppUser]\nPassword=${app}\nPermission=READONLY\nPrivileges=createTABLE|SELECT\nRoles=Reporting,Audit\nHost=10.%\n");
+		var variables = new global::Zongsoft.Common.Variables { ["root"] = "operator-secret", ["app"] = "app'quoted;secret" };
+		var loader = new MigrationLoader(Utility.CreateEvaluator(variables));
 
 		var database = Assert.Single(loader.Load("main.migration", directory.Path, "test", "1.0.0").Databases);
 
@@ -159,7 +159,7 @@ public sealed class MigrationDatabaseTest
 	public void Load_SameEmptyDatabaseInMultipleImports_ValidatesEverySourceAndRejectsConflicts()
 	{
 		using var directory = new MigrationTestDirectory();
-		directory.Write("main.migration", "#@import first/part.migration second/part.migration\n");
+		directory.Write("main.migration", "#@import first/part.migration\n#@import second/part.migration\n");
 		directory.Write("first/part.migration", "[mysql archive]\n");
 		directory.Write("first/part.ini", "[mysql]\nServer=localhost\nPassword=private-root\n[mysql archive]\nCollation=utf8mb4_bin\n");
 		directory.Write("second/part.migration", "[mysql archive]\n");
@@ -410,7 +410,7 @@ public sealed class MigrationDatabaseTest
 		directory.Write("first.migration", "[sqlite]\n");
 		directory.Write("first.ini", "[sqlite]\nDatabase=hosting\n[sqlite hosting]\nPath=C:/Data/hosting.db\nCharset=UTF-8\n");
 		directory.Write("second.migration", "[sqlite]\n");
-		directory.Write("second.ini", $"[sqlite]\nDatabase=hosting\n[sqlite hosting]\nPath={secondPath}\nCharset=UTF-16le\n");
+		directory.Write("second.ini", $"[sqlite]\nDatabase=hosting\n[sqlite hosting]\nPath={secondPath.Replace("\\", "\\\\")}\nCharset=UTF-16le\n");
 
 		var error = Assert.Throws<InvalidDataException>(() => new MigrationLoader(null).Load("first.migration;second.migration", directory.Path, "test", "1.0.0", "win-x64"));
 

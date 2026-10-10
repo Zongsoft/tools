@@ -26,7 +26,7 @@ public class NugetRuntimeTest
 
 		fixture.Variables["platform"] = platform;
 		fixture.Variables["architecture"] = architecture;
-		var result = await fixture.CreateDeployer().DeployAsync(fixture.Manifest("nuget:Graph.Root@1.0.0"), fixture.Destination, TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Graph.Root@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(2, result.Successes);
@@ -48,7 +48,7 @@ public class NugetRuntimeTest
 		fixture.Variables["platform"] = "linux-musl";
 		fixture.Variables["architecture"] = "x64";
 
-		var result = await fixture.CreateDeployer().DeployAsync(fixture.Manifest("nuget:Graph.Independent@1.0.0"), fixture.Destination, TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Graph.Independent@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(2, result.Successes);
@@ -69,7 +69,7 @@ public class NugetRuntimeTest
 		fixture.Variables["platform"] = "linux-musl";
 		fixture.Variables["architecture"] = "x64";
 
-		var result = await fixture.CreateDeployer().DeployAsync(fixture.Manifest("nuget:Graph.Reverse@1.0.0"), fixture.Destination, TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Graph.Reverse@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(2, result.Successes);

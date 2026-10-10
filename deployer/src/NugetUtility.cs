@@ -41,15 +41,17 @@ using System.Runtime.CompilerServices;
 
 using NuGet.Common;
 using NuGet.Protocol;
-using NuGet.Protocol.Core.Types;
 using NuGet.Packaging;
-using NuGet.Packaging.Core;
 using NuGet.Versioning;
+using NuGet.Packaging.Core;
+using NuGet.Protocol.Core.Types;
+
+using Zongsoft.Text.Templating;
 
 namespace Zongsoft.Tools.Deployer;
 
 /// <summary>提供 NuGet 包源、缓存目录、元数据、版本及下载操作，并计算部署锁定所需的包内容摘要。</summary>
-/// <remarks>包访问缓存按变量字典隔离；依赖求解、资产选择与 RID 回退分别由独立类型负责。</remarks>
+/// <remarks>包访问缓存按评估器实例隔离；依赖求解、资产选择与 RID 回退分别由独立类型负责。</remarks>
 public static class NugetUtility
 {
 	#region 常量定义
@@ -57,55 +59,55 @@ public static class NugetUtility
 
 	private const string USERPROFILE_ENVIRONMENT = "USERPROFILE";
 	private const string NUGET_SERVER_ENVIRONMENT = "NuGet_Server";
-	private const string NUGET_PACKAGES_ENVIRONMENT = "NuGet_Packages";
+	private const string NUGET_PACKAGES_ENVIRONMENT = "NUGET_PACKAGES";
 	#endregion
 
 	#region 私有变量
-	private static readonly ConditionalWeakTable<IDictionary<string, string>, PackageCache> _caches = new();
+	private static readonly ConditionalWeakTable<TemplateEvaluator, PackageCache> _caches = new();
 	#endregion
 
 	#region 静态属性
-	private static string DEFAULT_PACKAGES_DIRECTORY => Path.Combine(NuGetEnvironment.GetFolderPath(NuGetFolderPath.NuGetHome), "packages");
+	private static string DEFAULT_PACKAGES_DIRECTORY => Path.Combine(NuGetEnvironment.GetFolderPath(NuGetFolderPath.NuGetHome), "packages").Replace('\\', '/');
 	#endregion
 
 	#region 初始方法
 	/// <summary>清除指定变量上下文的包访问缓存，供新的部署调用重新读取包信息。</summary>
-	/// <param name="variables">标识本次部署会话的变量字典。</param>
-	internal static void ResetCache(IDictionary<string, string> variables) => _caches.Remove(variables);
+	/// <param name="evaluator">标识本次部署会话的评估器实例。</param>
+	internal static void ResetCache(TemplateEvaluator evaluator) => _caches.Remove(evaluator);
 
 	/// <summary>为部署变量补入缺少的包源、用户目录和包缓存目录。</summary>
-	/// <param name="variables">接收默认包源、用户目录及包缓存目录的部署变量。</param>
-	public static void Initialize(IDictionary<string, string> variables)
+	/// <param name="evaluator">接收默认包源、用户目录及包缓存目录的部署变量。</param>
+	public static void Initialize(TemplateEvaluator evaluator)
 	{
-		if(!variables.ContainsKey(NUGET_SERVER_ENVIRONMENT))
-			variables[NUGET_SERVER_ENVIRONMENT] = NUGET_SERVER_URL;
+		if(!evaluator.TryGetVariable(NUGET_SERVER_ENVIRONMENT, out _))
+			evaluator.SetVariable(NUGET_SERVER_ENVIRONMENT, NUGET_SERVER_URL);
 
-		if(!variables.ContainsKey(USERPROFILE_ENVIRONMENT))
-			variables[USERPROFILE_ENVIRONMENT] = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+		if(!evaluator.TryGetVariable(USERPROFILE_ENVIRONMENT, out _))
+			evaluator.SetVariable(USERPROFILE_ENVIRONMENT, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile).Replace('\\', '/'));
 
-		if(!variables.TryGetValue(NUGET_PACKAGES_ENVIRONMENT, out var directory) || string.IsNullOrWhiteSpace(directory))
-			variables[NUGET_PACKAGES_ENVIRONMENT] = DEFAULT_PACKAGES_DIRECTORY;
+		if(!evaluator.TryGetOption(NUGET_PACKAGES_ENVIRONMENT, out var directory) || string.IsNullOrWhiteSpace(directory))
+			evaluator.SetVariable(NUGET_PACKAGES_ENVIRONMENT, DEFAULT_PACKAGES_DIRECTORY);
 	}
 	#endregion
 
 	#region 包源路径
 	/// <summary>获取配置的 NuGet 包源；未指定时使用官方 V3 包源。</summary>
-	/// <param name="variables">包含包源地址的部署变量。</param>
+	/// <param name="evaluator">包含包源地址的部署变量。</param>
 	/// <returns>配置的包源地址；未指定时为官方 NuGet V3 地址。</returns>
-	public static string GetNugetServer(IDictionary<string, string> variables)
+	public static string GetNugetServer(TemplateEvaluator evaluator)
 	{
-		if(!variables.TryGetValue(NUGET_SERVER_ENVIRONMENT, out var server) || string.IsNullOrWhiteSpace(server))
+		if(!evaluator.TryGetOption(NUGET_SERVER_ENVIRONMENT, out var server) || string.IsNullOrWhiteSpace(server))
 			server = NUGET_SERVER_URL;
 
 		return server;
 	}
 
 	/// <summary>获取配置的包缓存目录；未指定时使用 NuGet 用户目录下的 packages 目录。</summary>
-	/// <param name="variables">包含包缓存及 NuGet 用户目录的部署变量。</param>
+	/// <param name="evaluator">包含包缓存及 NuGet 用户目录的部署变量。</param>
 	/// <returns>配置的包缓存目录；未指定时为 NuGet 用户目录下的 packages 目录。</returns>
-	public static string GetPackagesDirectory(IDictionary<string, string> variables)
+	public static string GetPackagesDirectory(TemplateEvaluator evaluator)
 	{
-		return variables.TryGetValue(NUGET_PACKAGES_ENVIRONMENT, out var directory) && !string.IsNullOrEmpty(directory) ? directory : DEFAULT_PACKAGES_DIRECTORY;
+		return evaluator.TryGetOption(NUGET_PACKAGES_ENVIRONMENT, out var directory) && !string.IsNullOrEmpty(directory) ? directory : DEFAULT_PACKAGES_DIRECTORY;
 	}
 
 	/// <summary>按 NuGet 缓存布局生成绝对目录；未指定版本时返回该包的版本列表目录，不执行文件系统访问。</summary>
@@ -122,20 +124,20 @@ public static class NugetUtility
 
 	#region 包访问
 	/// <summary>优先从本地读取包元数据，必要时访问包源；空版本或 latest 按预发布策略选择最高可用版本。</summary>
-	/// <param name="variables">包含包源、缓存和预发行选项的部署变量。</param>
+	/// <param name="evaluator">包含包源、缓存和预发行选项的部署变量。</param>
 	/// <param name="name">包名称。</param>
 	/// <param name="version">包版本文本，空值或 latest 表示选择最高可用版本。</param>
 	/// <param name="cancellation">用于取消元数据查询的令牌。</param>
 	/// <returns>找到的包元数据；版本格式无效或找不到对应包时返回空。</returns>
-	public static async Task<PackageMetadata> GetPackageMetadataAsync(IDictionary<string, string> variables, string name, string version, CancellationToken cancellation)
+	public static async Task<PackageMetadata> GetPackageMetadataAsync(TemplateEvaluator evaluator, string name, string version, CancellationToken cancellation)
 	{
 		cancellation.ThrowIfCancellationRequested();
 
 		if(string.IsNullOrWhiteSpace(name) || !NuGet.Packaging.PackageIdValidator.IsValidPackageId(name))
 			throw new FormatException(string.Format(Properties.Resources.Review_Missing, name));
 
-		var state = _caches.GetOrCreateValue(variables);
-		var key = ContextKey(variables) + "|" + GetCacheKey(name, version);
+		var state = _caches.GetOrCreateValue(evaluator);
+		var key = ContextKey(evaluator) + "|" + GetCacheKey(name, version);
 
 		if(state.Metadata.TryGetValue(key, out var cached))
 			return cached;
@@ -144,8 +146,8 @@ public static class NugetUtility
 
 		if(latest)
 		{
-			var versions = await GetVersionsAsync(variables, name, cancellation);
-			version = versions.Where(item => Deployer.Flag(variables, "prerelease") || !item.IsPrerelease).Max()?.ToNormalizedString();
+			var versions = await GetVersionsAsync(evaluator, name, cancellation);
+			version = versions.Where(item => Deployer.Flag(evaluator, "prerelease") || !item.IsPrerelease).Max()?.ToNormalizedString();
 
 			if(version == null)
 				return null;
@@ -154,15 +156,15 @@ public static class NugetUtility
 		if(!NuGetVersion.TryParse(version, out var parsed))
 			return null;
 
-		var result = GetLocalPackageMetadata(GetPackagesDirectory(variables), name, parsed);
+		var result = GetLocalPackageMetadata(GetPackagesDirectory(evaluator), name, parsed);
 
 		if(result == null)
 		{
-			if(Deployer.Flag(variables, "offline"))
+			if(Deployer.Flag(evaluator, "offline"))
 				return null;
 
 			using var cache = new SourceCacheContext();
-			var resource = await GetRepository(variables).GetResourceAsync<PackageMetadataResource>(cancellation);
+			var resource = await GetRepository(evaluator).GetResourceAsync<PackageMetadataResource>(cancellation);
 			result = PackageMetadata.Create(await resource.GetMetadataAsync(new PackageIdentity(name, parsed), cache, NullLogger.Instance, cancellation));
 		}
 
@@ -175,22 +177,22 @@ public static class NugetUtility
 	}
 
 	/// <summary>合并本地与包源中的版本并按升序返回；离线模式仅查询本地目录，预发布筛选由调用方决定。</summary>
-	/// <param name="variables">包含包源、缓存及离线选项的部署变量。</param>
+	/// <param name="evaluator">包含包源、缓存及离线选项的部署变量。</param>
 	/// <param name="name">包名称。</param>
 	/// <param name="cancellation">用于取消版本查询的令牌。</param>
 	/// <returns>返回合并并排序后的包版本数组的任务。</returns>
-	internal static async Task<NuGetVersion[]> GetVersionsAsync(IDictionary<string, string> variables, string name, CancellationToken cancellation)
+	internal static async Task<NuGetVersion[]> GetVersionsAsync(TemplateEvaluator evaluator, string name, CancellationToken cancellation)
 	{
 		cancellation.ThrowIfCancellationRequested();
 
-		var state = _caches.GetOrCreateValue(variables);
-		var key = ContextKey(variables) + "|" + name;
+		var state = _caches.GetOrCreateValue(evaluator);
+		var key = ContextKey(evaluator) + "|" + name;
 
 		if(state.Versions.TryGetValue(key, out var cached))
 			return cached;
 
 		var versions = new HashSet<NuGetVersion>();
-		var path = GetFolderPath(GetPackagesDirectory(variables), name);
+		var path = GetFolderPath(GetPackagesDirectory(evaluator), name);
 
 		if(Directory.Exists(path))
 		{
@@ -201,10 +203,10 @@ public static class NugetUtility
 			}
 		}
 
-		if(!Deployer.Flag(variables, "offline"))
+		if(!Deployer.Flag(evaluator, "offline"))
 		{
 			using var cache = new SourceCacheContext();
-			var resource = await GetRepository(variables).GetResourceAsync<FindPackageByIdResource>(cancellation);
+			var resource = await GetRepository(evaluator).GetResourceAsync<FindPackageByIdResource>(cancellation);
 			versions.UnionWith(await resource.GetAllVersionsAsync(name, cache, NullLogger.Instance, cancellation));
 		}
 
@@ -212,30 +214,30 @@ public static class NugetUtility
 	}
 
 	/// <summary>复用本地包或下载指定版本并返回缓存目录；离线缺包时报错。</summary>
-	/// <param name="variables">包含包源及本地缓存目录的部署变量。</param>
+	/// <param name="evaluator">包含包源及本地缓存目录的部署变量。</param>
 	/// <param name="name">包名称。</param>
 	/// <param name="version">要下载的包版本。</param>
 	/// <param name="cancellation">用于取消下载的令牌。</param>
 	/// <returns>包的本地目录；未提供包名或版本，或者下载结果不可用时返回空。</returns>
-	public static async Task<string> DownloadPackageAsync(IDictionary<string, string> variables, string name, NuGetVersion version, CancellationToken cancellation)
+	public static async Task<string> DownloadPackageAsync(TemplateEvaluator evaluator, string name, NuGetVersion version, CancellationToken cancellation)
 	{
 		cancellation.ThrowIfCancellationRequested();
 
 		if(string.IsNullOrEmpty(name) || version == null)
 			return null;
 
-		var directory = GetPackagesDirectory(variables);
+		var directory = GetPackagesDirectory(evaluator);
 		var path = GetFolderPath(directory, name, version);
 
 		if(GetLocalPackageMetadata(directory, name, version) != null)
 			return path;
 
-		if(Deployer.Flag(variables, "offline"))
+		if(Deployer.Flag(evaluator, "offline"))
 			throw new InvalidOperationException(string.Format(Properties.Resources.Review_Offline, $"{name}@{version}"));
 
 		using var cache = new SourceCacheContext();
 		var context = new PackageDownloadContext(cache);
-		var resource = await GetRepository(variables).GetResourceAsync<DownloadResource>(cancellation);
+		var resource = await GetRepository(evaluator).GetResourceAsync<DownloadResource>(cancellation);
 		using var result = await resource.GetDownloadResourceResultAsync(new PackageIdentity(name, version), context, directory, NullLogger.Instance, cancellation);
 
 		return result.Status == DownloadResourceResultStatus.Available || result.Status == DownloadResourceResultStatus.AvailableWithoutStream ? path : null;
@@ -244,12 +246,12 @@ public static class NugetUtility
 
 	#region 包校验
 	/// <summary>按固定顺序汇总包内相对路径和文件内容摘要，排除链接项、包归档和缓存记账文件。</summary>
-	/// <param name="variables">包含本地包缓存目录的部署变量。</param>
+	/// <param name="evaluator">包含本地包缓存目录的部署变量。</param>
 	/// <param name="metadata">标识待计算摘要的包及其版本的元数据。</param>
 	/// <returns>按固定顺序汇总包内路径与内容的 SHA-256 十六进制摘要。</returns>
-	internal static string PackageHash(IDictionary<string, string> variables, PackageMetadata metadata)
+	internal static string PackageHash(TemplateEvaluator evaluator, PackageMetadata metadata)
 	{
-		var root = GetFolderPath(GetPackagesDirectory(variables), metadata.Identity.Id, metadata.Identity.Version);
+		var root = GetFolderPath(GetPackagesDirectory(evaluator), metadata.Identity.Id, metadata.Identity.Version);
 		using var hash = System.Security.Cryptography.IncrementalHash.CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
 
 		foreach(var path in Directory.EnumerateFiles(root, "*", new EnumerationOptions
@@ -296,21 +298,21 @@ public static class NugetUtility
 		return PackageMetadata.Create(reader.NuspecReader);
 	}
 
-	private static string ContextKey(IDictionary<string, string> variables)
+	private static string ContextKey(TemplateEvaluator evaluator)
 	{
-		// 变量字典可在两次查询间修改；缓存键需同时区分包源、目录和解析策略。
-		var directory = Path.GetFullPath(GetPackagesDirectory(variables));
-		var offline = Deployer.Flag(variables, "offline");
-		var prerelease = Deployer.Flag(variables, "prerelease");
+		// 评估器实例可在两次查询间修改；缓存键需同时区分包源、目录和解析策略。
+		var directory = Path.GetFullPath(GetPackagesDirectory(evaluator));
+		var offline = Deployer.Flag(evaluator, "offline");
+		var prerelease = Deployer.Flag(evaluator, "prerelease");
 
-		return $"{GetNugetServer(variables)}|{directory}|{offline}|{prerelease}";
+		return $"{GetNugetServer(evaluator)}|{directory}|{offline}|{prerelease}";
 	}
 
-	private static SourceRepository GetRepository(IDictionary<string, string> variables) => Repository.Factory.GetCoreV3(NugetUtility.GetNugetServer(variables));
+	private static SourceRepository GetRepository(TemplateEvaluator evaluator) => Repository.Factory.GetCoreV3(NugetUtility.GetNugetServer(evaluator));
 	#endregion
 
 	#region 嵌套子类
-	/// <summary>保存一个变量字典对应的元数据与版本查询缓存，不延长该字典的生命周期。</summary>
+	/// <summary>保存一个评估器实例对应的元数据与版本查询缓存，不延长该字典的生命周期。</summary>
 	private sealed class PackageCache
 	{
 		public readonly Dictionary<string, PackageMetadata> Metadata = new(StringComparer.OrdinalIgnoreCase);

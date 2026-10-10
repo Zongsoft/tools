@@ -34,7 +34,8 @@
 using System;
 using System.IO;
 using System.Text.Json;
-using System.Collections.Generic;
+
+using Zongsoft.Common;
 
 namespace Zongsoft.Tools.Deployer;
 
@@ -42,8 +43,11 @@ namespace Zongsoft.Tools.Deployer;
 internal static class AppSettingsUtility
 {
 	#region 公共方法
-	public static void Load(IDictionary<string, string> variables) => Load(variables, Environment.CurrentDirectory);
-	public static void Load(IDictionary<string, string> variables, string directory)
+	/// <summary>读取指定目录的应用配置；文件缺失时不添加变量。</summary>
+	/// <param name="variables">接收扁平化配置值的集合；为空时不执行加载。</param>
+	/// <param name="directory">包含 <c>appsettings.json</c> 的目录。</param>
+	/// <remarks>显式 <see langword="null"/> 保留为已定义变量，以阻止查询时回退到较低优先级来源。</remarks>
+	public static void Load(Variables variables, string directory)
 	{
 		if(variables == null)
 			return;
@@ -69,7 +73,7 @@ internal static class AppSettingsUtility
 	#endregion
 
 	#region 私有方法
-	private static void Populate(IDictionary<string, string> variables, string path, JsonElement element)
+	private static void Populate(Variables variables, string path, JsonElement element)
 	{
 		switch(element.ValueKind)
 		{
@@ -82,11 +86,10 @@ internal static class AppSettingsUtility
 				foreach(var item in element.EnumerateArray())
 					Populate(variables, $"{path}[{index++}]", item);
 				break;
-			case JsonValueKind.Null:
 			case JsonValueKind.Undefined:
 				break;
 			default:
-				variables[path] = element.ToString();
+				variables[path.Replace('.', '_').Replace('-', '_').Replace("[", "_").Replace("]", "")] = element.ValueKind == JsonValueKind.Null ? null : element.ToString();
 				break;
 		}
 	}

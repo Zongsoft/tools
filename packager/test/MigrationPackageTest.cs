@@ -36,7 +36,7 @@ public sealed partial class MigrationPackageTest
 		var pair = Pair(directory, "releases/zongsoft.bootstrap", "Enterprise", "2.7.1", "linux-arm64");
 		Pair(directory, "releases/zongsoft.bootstrap", "Community", "1.0.0", "linux-x64");
 		CommandBase<CommandContext> command = format switch { "tar" => new TarCommand(), "deb" => new DebCommand(), _ => new RpmCommand() };
-		var arguments = new[] { format, "--source:" + directory.Path, "--output:out", "--platform:Linux", "--architecture:Arm64", "--framework:net10.0", "--edition:enterprise", "--daemon:disabled", "--install-path:/opt/zongsoft/web", "--migration:releases/zongsoft.bootstrap", "application.txt" };
+		var arguments = new[] { format, "--source:" + directory.Path.Replace('\\', '/'), "--output:out", "--platform:Linux", "--architecture:Arm64", "--framework:net10.0", "--edition:enterprise", "--daemon:disabled", "--install-path:/opt/zongsoft/web", "--migration:releases/zongsoft.bootstrap", "application.txt" };
 
 		if(!explicitEdition)
 			arguments = arguments.Where(argument => !argument.StartsWith("--edition:", StringComparison.Ordinal)).ToArray();
@@ -77,21 +77,21 @@ public sealed partial class MigrationPackageTest
 
 		try
 		{
-			Environment.SetEnvironmentVariable("zongsoft_pack_source", directory.Path);
+			Environment.SetEnvironmentVariable("zongsoft_pack_source", directory.Path.Replace('\\', '/'));
 			Environment.SetEnvironmentVariable("zongsoft_pack_name", "zongsoft.daemon");
-			Environment.SetEnvironmentVariable("zongsoft_pack_version", "$(zongsoft_pack_release)");
+			Environment.SetEnvironmentVariable("zongsoft_pack_version", "${zongsoft_pack_release}");
 			Environment.SetEnvironmentVariable("zongsoft_pack_release", "2.3.4");
 			Environment.SetEnvironmentVariable("zongsoft_pack_platform", "Linux");
 			Environment.SetEnvironmentVariable("zongsoft_pack_architecture", "Arm64");
 			Environment.SetEnvironmentVariable("zongsoft_pack_overwrite", "true");
 			Terminal.Default = DispatchProxy.Create<ITerminal, RecordingTerminal>();
 
-			var arguments = new[] { "tar", "--source:$(zongsoft_pack_source)", "--name:$(zongsoft_pack_name)", "--version:%zongsoft_pack_version%", "--platform:$(zongsoft_pack_platform)", "--architecture:$(zongsoft_pack_architecture)", "--overwrite:$(zongsoft_pack_overwrite)", "--framework:net10.0", "--daemon:disabled", "--output:out", "application.txt" };
+			var arguments = new[] { "tar", "--source:${zongsoft_pack_source}", "--name:${zongsoft_pack_name}", "--version:${zongsoft_pack_version}", "--platform:${zongsoft_pack_platform}", "--architecture:${zongsoft_pack_architecture}", "--overwrite:${zongsoft_pack_overwrite}", "--framework:net10.0", "--daemon:disabled", "--output:out", "application.txt" };
 			var command = new TarCommand();
 			var context = new CommandContext(new CommandExecutor(), CommandLine.Parse(CommandLine.Get(arguments))[0], command, null);
 			var path = Assert.IsType<string>(await ((ICommand)command).ExecuteAsync(context, TestContext.Current.CancellationToken));
 
-			Assert.Equal(existing, path);
+			Assert.Equal(existing, Path.GetFullPath(path));
 			var bytes = File.ReadAllBytes(path);
 			Assert.True(bytes.Length > 2);
 			Assert.Equal((byte)0x1f, bytes[0]);
@@ -115,7 +115,7 @@ public sealed partial class MigrationPackageTest
 			Assert.Equal((byte)0x1f, File.ReadAllBytes(path)[0]);
 
 			File.WriteAllText(path, "previous artifact");
-			var switchArguments = arguments.Select(argument => argument == "--overwrite:$(zongsoft_pack_overwrite)" ? "--overwrite" : argument).ToArray();
+			var switchArguments = arguments.Select(argument => argument == "--overwrite:${zongsoft_pack_overwrite}" ? "--overwrite" : argument).ToArray();
 			var switchCommand = new TarCommand();
 			var switchContext = new CommandContext(new CommandExecutor(), CommandLine.Parse(CommandLine.Get(switchArguments))[0], switchCommand, null);
 			Assert.Equal(path, Assert.IsType<string>(await ((ICommand)switchCommand).ExecuteAsync(switchContext, TestContext.Current.CancellationToken)));
@@ -149,7 +149,7 @@ public sealed partial class MigrationPackageTest
 
 		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
 		var previousTerminal = (ITerminal)terminalField.GetValue(null);
-		var arguments = new[] { format, "--source:" + directory.Path, "--output:out", "--platform:Linux", "--architecture:X64", "--framework:net10.0", "--daemon:disabled", "--overwrite:false", "application.txt" };
+		var arguments = new[] { format, "--source:" + directory.Path.Replace('\\', '/'), "--output:out", "--platform:Linux", "--architecture:X64", "--framework:net10.0", "--daemon:disabled", "--overwrite:false", "application.txt" };
 
 		try
 		{
@@ -166,7 +166,7 @@ public sealed partial class MigrationPackageTest
 
 			var second = CreateCommand();
 			var error = await Assert.ThrowsAsync<IOException>(async () => await ((ICommand)second.Command).ExecuteAsync(second.Context, TestContext.Current.CancellationToken));
-			Assert.Contains(conflict, error.Message);
+			Assert.Contains(Path.GetFullPath(conflict), error.Message);
 			Assert.Contains("--overwrite", error.Message);
 			Assert.Equal("existing artifact", File.ReadAllText(conflict));
 			Assert.Equal(version, File.ReadAllBytes(Path.Combine(directory.Path, ".version")));
@@ -214,7 +214,7 @@ public sealed partial class MigrationPackageTest
 
 			var context = new CommandContext(new CommandExecutor(), line, command, null);
 			var archive = Assert.IsType<string>(await ((ICommand)command).ExecuteAsync(context, TestContext.Current.CancellationToken));
-			Assert.Contains(Path.Combine("source with spaces", "out with spaces"), archive);
+			Assert.Contains(Path.Combine("source with spaces", "out with spaces"), Path.GetFullPath(archive));
 			Assert.Equal((byte)0x1f, File.ReadAllBytes(archive)[0]);
 
 			File.WriteAllText(archive, "existing artifact");
@@ -261,7 +261,7 @@ public sealed partial class MigrationPackageTest
 
 		var service = directory.Write("zongsoft.daemon.service", "[Unit]\nDescription=Hosting\n[Service]\nExecStart=/bin/true\n");
 		CommandBase<CommandContext> command = format switch { "tar" => new TarCommand(), "deb" => new DebCommand(), _ => new RpmCommand() };
-		var arguments = new[] { format, "--source:" + directory.Path, "--output:out", "--platform:Linux", "--architecture:X64", "--framework:net10.0", "--daemon:zongsoft.daemon.service", "--install-path:/opt/zongsoft/daemon", "application.txt" };
+		var arguments = new[] { format, "--source:" + directory.Path.Replace('\\', '/'), "--output:out", "--platform:Linux", "--architecture:X64", "--framework:net10.0", "--daemon:zongsoft.daemon.service", "--install-path:/opt/zongsoft/daemon", "application.txt" };
 		var context = new CommandContext(new CommandExecutor(), CommandLine.Parse(CommandLine.Get(arguments) + " " + option)[0], command, null);
 		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
 		var terminal = (ITerminal)terminalField.GetValue(null);
@@ -296,7 +296,7 @@ public sealed partial class MigrationPackageTest
 		var package = Create(format, directory, "Enterprise", Architecture.Arm64);
 		var pair = Pair(directory, "releases/zongsoft.bootstrap", "Enterprise", "2.7.1", "linux-arm64");
 		Pair(directory, "releases/zongsoft.bootstrap", null, "1.0.0", "linux-x64");
-		package.Migration = Migration.Load(package, "$(inputs)/zongsoft.bootstrap");
+		package.Migration = Migration.Load(package, "${inputs}/zongsoft.bootstrap");
 		Assert.Equal(pair.Archive, package.Migration.Archive);
 		Assert.Equal(pair.Script, package.Migration.Script);
 		package.Migration.Attach(package);
@@ -472,22 +472,22 @@ public sealed partial class MigrationPackageTest
 	{
 		directory.Write("zongsoft.daemon.service", "[Unit]\nDescription=Hosting\n[Service]\nExecStart=/bin/true\n");
 
-		var variables = new Variables(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+		var options = new PackageOptions(Utility.CreateEvaluator(new global::Zongsoft.Common.Variables
 		{
-			["source"] = directory.Path,
+			["source"] = directory.Path.Replace('\\', '/'),
 			["framework"] = "net10.0",
 			["daemon"] = daemon,
 			["inputs"] = "releases",
 			["version"] = "1.0.0",
 			["edition"] = "WrongEdition",
 			["installed"] = installed,
-		});
+		}));
 
 		Package package = format switch
 		{
-			"tar" => new Package.Tar("zongsoft.daemon", edition, new Version(2, 7, 1), Platform.Linux, architecture, variables),
-			"deb" => new Package.Deb("zongsoft.daemon", edition, new Version(2, 7, 1), Platform.Linux, architecture, variables),
-			"rpm" => new Package.Rpm("zongsoft.daemon", edition, new Version(2, 7, 1), Platform.Linux, architecture, variables),
+			"tar" => new Package.Tar("zongsoft.daemon", edition, new Version(2, 7, 1), Platform.Linux, architecture, options),
+			"deb" => new Package.Deb("zongsoft.daemon", edition, new Version(2, 7, 1), Platform.Linux, architecture, options),
+			"rpm" => new Package.Rpm("zongsoft.daemon", edition, new Version(2, 7, 1), Platform.Linux, architecture, options),
 			_ => throw new ArgumentOutOfRangeException(nameof(format)),
 		};
 

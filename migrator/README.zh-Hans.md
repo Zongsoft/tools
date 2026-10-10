@@ -44,14 +44,14 @@ dotnet tool install -g Zongsoft.Tools.Migrator --version "$toolVersion" --source
 从 `D:/Zongsoft/hosting` 的 PowerShell 制作默认方案的升迁输入，供 daemon、Web 等宿主安装包使用：
 
 ```powershell
-dotnet-migrate --name:zongsoft --version:1.0.0 --platform:linux --architecture:x64 --scheme:default --output:.migration '.deploy/$(scheme)/migration/$(version)/*.migration'
+dotnet-migrate --name:zongsoft --version:1.0.0 --platform:linux --architecture:x64 --scheme:default --output:.migration '.deploy/${scheme}/migration/${version}/*.migration'
 ```
 
 ```text
 dotnet-migrate --name:<名称> --platform:<平台> [选项...] <输入.migration|模式> [更多输入...]
 ```
 
-制作命令没有子命令。选项可写 `--key:value` 或 `--key=value`；含空格的值按终端语法加引号。优先级从高到低为显式选项、祖先链 `.env`、环境变量、描述符默认值；版本文件阶段另有下述规则。
+制作命令没有子命令。选项可写 `--key:value` 或 `--key=value`；含空格的值按终端语法加引号。全局变量优先级从高到低为显式选项、祖先链 `.env`、环境变量、描述符默认值；版本文件阶段另有下述规则。
 制作成功返回 `0`，无参数返回 `2`，参数、输入或制作失败返回 `1`。
 
 | 选项 | 必填/默认值 | 说明 |
@@ -75,7 +75,7 @@ dotnet-migrate --name:<名称> --platform:<平台> [选项...] <输入.migration
 
 ### hosting 脚本衔接
 
-hosting 根目录的 `migrate.cmd` 是交互入口：默认名称 `zongsoft`、平台 `linux`、架构 `x64`、方案 `default`，Edition 可空，但必须输入版本号、版本文件或目录。首次路径留空选择 `.deploy/$(scheme)/migration/$(version)/*.migration`；输入文件名时自动加上该目录，有目录分隔符的路径按工作目录定位。可连续输入多个文件，之后留空结束；裸 `*` 不接受，使用 `*.migration`。脚本自行切换到 hosting 根目录，所以其 `.env` 变量作用域与上例相同。
+hosting 根目录的 `migrate.cmd` 是交互入口：默认名称 `zongsoft`、平台 `linux`、架构 `x64`、方案 `default`，Edition 可空，但必须输入版本号、版本文件或目录。首次路径留空选择 `.deploy/${scheme}/migration/${version}/*.migration`；输入文件名时自动加上该目录，有目录分隔符的路径按工作目录定位。可连续输入多个文件，之后留空结束；裸 `*` 不接受，使用 `*.migration`。脚本自行切换到 hosting 根目录，所以其 `.env` 变量作用域与上例相同。
 
 上例生成 `.migration/zongsoft(migrate)@1.0.0_linux-x64.tar.gz` 和同名 `.sh`。当前默认输入包含 MySQL SQL 和 Amazon S3 桶定义，连接参数使用 `.deploy/default/migration/` 中的 `.ini`。归档内的计划、内部入口和原生执行器直接位于根部，SQL 在 `.artifacts/mysql/`；hosting 的输出目录 `.migration/` 不会作为归档内层目录。只制作时不连接目标服务，源版本文件不回写；脚本不覆盖已有同名产物，覆盖需直接调用工具并指定 `--overwrite`。
 
@@ -83,13 +83,15 @@ hosting 根目录的 `migrate.cmd` 是交互入口：默认名称 `zongsoft`、�
 
 ### 变量与 .env 文件
 
-每次调用依次加载描述符默认值、系统环境变量、从文件系统根目录到工作目录的各级直属 `.env`、显式命令选项。同名变量后加载覆盖先加载，空值也参与覆盖，名称不区分大小写。不搜索子目录，各个输入文件及版本文件的目录也不建立额外变量作用域。变量仅属于本次调用，不修改进程环境变量。
+工具明确启用 Core 的变量回退：具名变量按当前命名空间、各级父命名空间、全局的顺序查询；每一级先按来源优先级查询全部来源，最后才允许命令选项已声明的默认值。无命名空间的引用仍写作 `${name}`，命中空值也停止回退。
 
-`framework` 可用于变量引用。`--framework` 未指定或为空时，使用合并后变量集中的非空值；非空选项优先。变量未定义或为空、选项为纯空白时均沿用原有行为。该变量不参与原生执行器或 RID 选择。
+每次调用在全局命名空间按显式命令选项、从工作目录至文件系统根目录的各级直属 `.env`、系统环境变量的优先级查询；全部缺失后才查询描述符默认值。首个命中即生效，空值也终止查询。配置和命令选项名忽略大小写；系统环境通过 Core `Variables.Environments()` 实时读取，只提供默认命名空间，名称及原始值不改写，Windows 忽略大小写，Unix/Linux 区分大小写。不搜索子目录，各个输入文件及版本文件的目录也不建立额外变量作用域。变量仅属于本次调用，不修改进程环境变量。
 
-使用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) `Profile.Load` 读取 INI，支持 `#@import`。根条目保留原名，各级段落名与条目名以 `_` 拼接。例如 `[mysql]` 下的 `root_password=example` 生成 `mysql_root_password`，`[io rustfs]` 下的 `access_key=example` 生成 `io_rustfs_access_key`，根级 `environment=Development` 生成 `environment`。值按需通过 `$(name)` 或 `%name%` 展开，可用于命令选项和 `.ini` 连接参数。缺失的 `.env` 跳过，读取或解析失败终止制作。
+所有变量（包括 `framework`）统一遵循首个命中生效：null、空字符串、false 和 0 都不会触发下层回退。只有未提供该值时才继续查找；需要有效值的业务操作负责校验并在无法继续时报告错误。 `framework` 不参与原生执行器或 RID 选择。
 
-`.env` 提供共享变量，`.ini` 提供升迁连接配置。原有 `mysql.env`、`main.env` 等参数文件需要改名为 `mysql.ini`、`main.ini`，同时更新其导入路径。自动参数查找不再回退 `*.env`，显式导入沿用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 既有规则。版本与 Edition 选择遵循下述独立规则。
+使用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) `Profile.Load` 读取 INI，支持 `#@import`。根条目属于默认命名空间，章节层级以点号组成命名空间，条目名的点号和连字符改为下划线。例如 `[mysql]` 下的 `root_password=example` 生成 `mysql:root_password`，`[io rustfs]` 下的 `access_key=example` 生成 `io.rustfs:access_key`，根级 `environment=Development` 生成 `environment`。值按需通过 `${name}` 展开，可用于命令选项和 `.ini` 连接参数。缺失的 `.env` 跳过，读取或解析失败终止制作。
+
+`.env` 提供共享变量，`.ini` 提供升迁连接配置，例如 `mysql.ini`、`main.ini`。参数文件通过 `#@import` 组合；版本与 Edition 选择遵循下述独立规则。
 
 ### 选择版本与 Edition
 
@@ -99,22 +101,22 @@ hosting 根目录的 `migrate.cmd` 是交互入口：默认名称 `zongsoft`、�
 
 对于清单，显式 Edition 忽略大小写匹配并保留文件拼写；未显式指定时，只借用 Current 对应的**版本号**，无 Current 时取唯一 Edition，无具名 Edition 时取顶层版本。多个 Edition 且无 Current 时要求明确选择或传数字 `--version`。标识文件只提供版本号，显式 Edition 可以覆盖或补充其 Edition。`--name` 始终独立必填，不采用源应用名称；数字版本不读取源文件。
 
-例如 `.edition` 选中 Enterprise、版本为 `2.0.0`，省略 `--edition` 时生成 `zongsoft(migrate)@2.0.0_linux-x64.tar.gz`；添加 `--edition:enterprise` 时生成 `zongsoft-Enterprise(migrate)@2.0.0_linux-x64.tar.gz`。旧多 Edition `.version` 须改名为 `.edition`，标识读取器不解析 Edition 段落。
+例如 `.edition` 选中 Enterprise、版本为 `2.0.0`，省略 `--edition` 时生成 `zongsoft(migrate)@2.0.0_linux-x64.tar.gz`；添加 `--edition:enterprise` 时生成 `zongsoft-Enterprise(migrate)@2.0.0_linux-x64.tar.gz`。
 
 在 `D:/Zongsoft/hosting` 中，可以使用 Web 宿主源版本。显式清单示例要求 `.edition` 已存在；指定目录则优先读取 `.edition`，缺失时读取 `.version`。应确保默认方案下存在对应版本的升迁输入：
 
 ```powershell
-dotnet-migrate --name:zongsoft --version:web/default/.edition --platform:linux --scheme:default --output:.migration '.deploy/$(scheme)/migration/$(version)/*.migration'
-dotnet-migrate --name:zongsoft --version:web/default --platform:linux --scheme:default --output:.migration '.deploy/$(scheme)/migration/$(version)/*.migration'
+dotnet-migrate --name:zongsoft --version:web/default/.edition --platform:linux --scheme:default --output:.migration '.deploy/${scheme}/migration/${version}/*.migration'
+dotnet-migrate --name:zongsoft --version:web/default --platform:linux --scheme:default --output:.migration '.deploy/${scheme}/migration/${version}/*.migration'
 ```
 
 省略 `--version` 时，在 `D:/Zongsoft/hosting/web/default` 中执行：
 
 ```powershell
-dotnet-migrate --name:zongsoft --platform:linux --scheme:default --output:../../.migration '../../.deploy/$(scheme)/migration/$(version)/*.migration'
+dotnet-migrate --name:zongsoft --platform:linux --scheme:default --output:../../.migration '../../.deploy/${scheme}/migration/${version}/*.migration'
 ```
 
-版本路径支持变量；数字形式优先作为版本号，文件名为 `1.0.0` 时可用 `./1.0.0` 明确指定文件。命令选项先保留原始文本，版本来源确定后，`architecture`、`overwrite` 等值按需递归展开，再转换为对应类型；裸 `--overwrite` 仍表示 true。布尔值还支持 `true/false`、`1/0`、`yes/no`、`on/off`、`enable/disable`、`enabled/disabled`。枚举选项沿用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 的转换规则，不额外检查枚举成员是否已定义；调用方应提供有效枚举项。变量名不区分大小写，支持点号、连字符和索引；用到的值遇缺失、循环或超过 64 层会报错。最终版本和 Edition 用于 `$(version)`/`$(edition)`、计划身份及产物名称。升迁输入和输出的相对路径始终基于当前目录，不随版本文件目录改变。
+版本路径支持变量；数字形式优先作为版本号，文件名为 `1.0.0` 时可用 `./1.0.0` 明确指定文件。命令选项先保留原始文本，版本来源确定后，`architecture`、`overwrite` 等值按需递归展开，再转换为对应类型；裸 `--overwrite` 仍表示 true。布尔值还支持 `true/false`、`1/0`、`yes/no`、`on/off`、`enable/disable`、`enabled/disabled`。枚举选项沿用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 的转换规则，不额外检查枚举成员是否已定义；调用方应提供有效枚举项。配置和命令选项名忽略大小写，系统环境按平台规则查询（Windows 忽略大小写，Unix/Linux 区分大小写）；命名空间以 `:` 分隔；配置条目名及命令选项名中的点号、连字符以 `_` 引用。用到的值遇缺失、循环或超过 64 层（含根模板）时会报错。最终版本和 Edition 用于 `${version}`/`${edition}`、计划身份及产物名称。升迁输入和输出的相对路径始终基于当前目录，不随版本文件目录改变。
 
 ### 升迁输入与执行顺序
 
@@ -156,7 +158,7 @@ Database=/var/lib/example/application.db
 
 数据库 common.ini 声明 provider、数据库和用户段。只有选中的候选文件及其显式导入参与合并；缺少必需参数时报错，不从其他候选文件补齐。Amazon S3 保留 provider 命名文件的根参数简写。
 
-- 导入路径相对于包含该指令的文件，也可为绝对路径。多个路径用空格、Tab 或 `|` 分隔，不支持引号转义、通配符或变量展开。指令合并完整 Profile，即使位于段落内也不会把子文件根条目移入当前段落。
+- 导入路径相对于包含该指令的文件，也可为绝对路径。每条指令导入一个完整的去除首尾空白的路径。工具通过 `Directives.Processing` 求值 `${...}`；空格、Tab 和 `|` 不分隔文件，不移除引号，不展开通配符。多个文件使用多条指令。指令合并完整 Profile，即使位于段落内也不会把子文件根条目移入当前段落。
 - 缺失的导入文件按 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 可选导入规则跳过。循环导入或超过 64 层（含根文件）时失败；允许菱形及重复导入，每次重新读取。配置链接保留逻辑来源，导入、SQL 和旁侧参数以链接位置为基准。
 - 每个文件单独检查重复段落、重复键及语法。升迁 INI 的根条目、未知段落和同一有效配置中的升迁器别名冲突仍报错，导入文件也不例外。
 - 不同文件的同段同名条目按读取顺序覆盖，名称不区分大小写；有效集合中仍使用该键第一次出现的位置。被覆盖的 SQL/Bucket 条目不会生成任务。需要独立执行同名条目时，应使用多个命令行 INI 输入。
@@ -191,7 +193,7 @@ Amazon S3 的 `Server` 为完整的 `http://` 或 `https://` 端点，不能嵌�
 
 ```ini
 [amazon.s3]
-attachments=private,encryption:sse-s3,versioning:enabled,tag.application:zongsoft.web,tag.environment:$(environment)
+attachments=private,encryption:sse-s3,versioning:enabled,tag.application:zongsoft.web,tag.environment:${environment}
 learning=private,versioning:enabled
 ```
 
@@ -211,17 +213,17 @@ learning=private,versioning:enabled
 [mysql]
 Server=localhost
 Database=hosting
-Password=$(mysql_root_password)
+Password=${mysql:root_password}
 
 [mysql hosting application]
-Password=$(application_password)
+Password=${application_password}
 Permission=readwrite
 
 [mysql analytics]
 Collation=utf8mb4_bin
 
 [mysql analytics reporting]
-Password=$(reporting_password)
+Password=${reporting_password}
 Permission=readonly
 ```
 
@@ -230,10 +232,10 @@ Permission=readonly
 ```ini
 Server=localhost
 Database=hosting
-Password=$(mysql_root_password)
+Password=${mysql:root_password}
 
 [hosting application]
-Password=$(application_password)
+Password=${application_password}
 Permission=readwrite
 ```
 
@@ -346,7 +348,7 @@ SQLite、DuckDB 不接受用户段。Privileges、Roles 用逗号或 `|` 分隔�
 
 ```ini
 [mysql automao program]
-Password=$(program_password)
+Password=${program_password}
 Permission=ReadWrite
 Privileges=CreateTable,CreateIndex,AlterTable
 ```

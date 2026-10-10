@@ -55,8 +55,8 @@ internal class Program
 			foreach(var option in command.Options)
 				options[option.Name] = option.Value ?? "";
 
-			var variables = Deployer.CreateVariables(options);
-			var deployer = new Deployer(variables);
+			var evaluator = Deployer.CreateEvaluator(options);
+			var deployer = new Deployer(evaluator);
 			var paths = command.Arguments.Count == 0 ? new[] { ".deploy" } : [.. command.Arguments];
 			var result = await deployer.DeployManyAsync(paths, cancellation: cancellation.Token);
 

@@ -43,8 +43,8 @@ public class WebPolicyTest
 		using var files = new MigrationTestDirectory();
 		var definition = Definition.Load(files.Write("web.profile", "[api]\nbind!legacy=http://*\nserver!a=http://app weight=2147483648"));
 		var configurator = new Configurator.Nginx();
-		Assert.Equal("Capability", Assert.Throws<DefinitionException>(() => configurator.Configure(definition, new("example", "/opt/app", new Dictionary<string, string>(), architecture: Architecture.X86))).Diagnostic.Code);
-		Assert.Contains("weight=2147483648", configurator.Configure(definition, new("example", "/opt/app", new Dictionary<string, string>())).Files[0].Content.Render("/opt/app"));
+		Assert.Equal("Capability", Assert.Throws<DefinitionException>(() => configurator.Configure(definition, new("example", "/opt/app", Utility.CreateEvaluator(), architecture: Architecture.X86))).Diagnostic.Code);
+		Assert.Contains("weight=2147483648", configurator.Configure(definition, new("example", "/opt/app", Utility.CreateEvaluator())).Files[0].Content.Render("/opt/app"));
 	}
 
 	[Theory]
@@ -150,7 +150,7 @@ public class WebPolicyTest
 
 	[Theory]
 	[InlineData("header!X-Value=$host")]
-	[InlineData("header!X-Value=$$(missing)")]
+	[InlineData("header!X-Value=\\${missing}")]
 	[InlineData("header!X-Value=invalid\0text")]
 	public void UnsupportedLiteralDollarDoesNotBecomeARuntimeExpression(string value)
 	{
@@ -162,11 +162,11 @@ public class WebPolicyTest
 	public async Task ConcurrentCallsHaveNoSharedPoolOrVariableStateAsync()
 	{
 		using var files = new MigrationTestDirectory();
-		var definition = Definition.Load(files.Write("web.profile", "[api]\nbind!legacy=http://*\nserver!a=http://$(backend)\nserver-health=/"));
+		var definition = Definition.Load(files.Write("web.profile", "[api]\nbind!legacy=http://*\nserver!a=http://${backend}\nserver-health=/"));
 		var configurator = new Configurator.Nginx();
 		var tasks = Enumerable.Range(0, 8).Select(index => Task.Run(() =>
 		{
-			var context = new Configurator.Context("app" + index, "/opt/app" + index, new Dictionary<string, string> { ["backend"] = "backend" + index });
+			var context = new Configurator.Context("app" + index, "/opt/app" + index, Utility.CreateEvaluator(new global::Zongsoft.Common.Variables { ["backend"] = "backend" + index }));
 			var first = configurator.Configure(definition, context).Files[0].Content.Render(context.InstallPath);
 			Assert.Equal(first, configurator.Configure(definition, context).Files[0].Content.Render(context.InstallPath));
 			Assert.Contains("server backend" + index + ":80", first);

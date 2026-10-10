@@ -111,9 +111,6 @@
   <data name="CommandLineEmpty.Message" xml:space="preserve">
     <value>请指定 --name、--version、--platform 以及至少一个升迁输入路径。</value>
   </data>
-  <data name="MigrationVariableUndefined.Message" xml:space="preserve">
-    <value>升迁变量“{0}”未定义。</value>
-  </data>
   <data name="MigrationFileExtension.Message" xml:space="preserve">
     <value>升迁文件必须使用 .migration 扩展名（INI 格式内容）：{0}</value>
   </data>
@@ -197,12 +194,6 @@
   </data>
   <data name="MigrationFilesMissing" xml:space="preserve">
     <value>警告：未找到升迁文件 {0}，已跳过。</value>
-  </data>
-  <data name="VariableResolutionFailed.Message" xml:space="preserve">
-    <value>变量“{0}”未定义或包含循环引用。</value>
-  </data>
-  <data name="NormalizerNotInitialized.Message" xml:space="preserve">
-    <value>变量解析器尚未初始化。</value>
   </data>
   <data name="TextSourceMissing.Message" xml:space="preserve">
     <value>文本来源文件“{0}”不存在。</value>

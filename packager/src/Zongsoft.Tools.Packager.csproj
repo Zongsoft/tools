@@ -15,7 +15,6 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<Compile Include="..\..\.shared\VariableEvaluator.cs" Link="Shared\VariableEvaluator.cs" />
 		<Compile Include="..\..\.shared\Utility.cs" Link="Shared\Utility.cs" />
 		<Compile Include="..\..\.shared\ArtifactPublisher.cs" Link="Shared\ArtifactPublisher.cs" />
 		<InternalsVisibleTo Include="Zongsoft.Tools.Packager.Tests" />

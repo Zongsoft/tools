@@ -241,15 +241,6 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
-        ///   Looks up a localized string similar to The variable normalizer has not been initialized..
-        /// </summary>
-        internal static string NormalizerNotInitialized_Message {
-            get {
-                return ResourceManager.GetString("NormalizerNotInitialized.Message", resourceCulture);
-            }
-        }
-
-        /// <summary>
         ///   Looks up a localized string similar to The source file &apos;{0}&apos; conflicts with an existing package entry &apos;{1}&apos;..
         /// </summary>
         internal static string PackageEntryConflicted_Message {
@@ -300,15 +291,6 @@ namespace Zongsoft.Tools.Packager.Properties {
         internal static string PathNotExist_Message {
             get {
                 return ResourceManager.GetString("PathNotExist.Message", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Cannot resolve variable &quot;{0}&quot; in the source directory before application identity is determined. Specify the identity option or use a source path without it..
-        /// </summary>
-        internal static string SourceVariableUndefined_Message {
-            get {
-                return ResourceManager.GetString("SourceVariableUndefined.Message", resourceCulture);
             }
         }
 
@@ -408,15 +390,6 @@ namespace Zongsoft.Tools.Packager.Properties {
         internal static string TextSourceMissing_Message {
             get {
                 return ResourceManager.GetString("TextSourceMissing.Message", resourceCulture);
-            }
-        }
-
-        /// <summary>
-        ///   Looks up a localized string similar to Variable &quot;{0}&quot; is undefined or contains a cyclic reference..
-        /// </summary>
-        internal static string VariableResolutionFailed_Message {
-            get {
-                return ResourceManager.GetString("VariableResolutionFailed.Message", resourceCulture);
             }
         }
 

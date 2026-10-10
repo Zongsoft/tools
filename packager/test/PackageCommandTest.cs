@@ -27,7 +27,7 @@ public sealed class PackageCommandTest
 	[InlineData("tar", "--framework=")]
 	[InlineData("deb", "--framework=")]
 	[InlineData("rpm", "--framework=")]
-	public async Task Command_AncestorFrameworkVariableResolvesBuildHostAsync(string format, string option)
+	public async Task Command_FrameworkPresenceControlsBuildHostResolutionAsync(string format, string option)
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("hosting/.env", "framework=net9.0\n");
@@ -35,13 +35,13 @@ public sealed class PackageCommandTest
 		CommandBase<CommandContext> command = format switch { "tar" => new TarCommand(), "deb" => new DebCommand(), _ => new RpmCommand() };
 		var arguments = new List<string>
 		{
-			format, "--name:example", "--version:1.0.0", "--source:" + Path.Combine(directory.Path, "hosting", "daemon"),
+			format, "--name:example", "--version:1.0.0", "--source:" + Path.Combine(directory.Path, "hosting", "daemon").Replace('\\', '/'),
 			"--output:out", "--platform:Linux", "--install-path:/opt/example", "--compilation:Release",
 		};
 
 		if(option != null)
 			arguments.Add(option);
-		arguments.Add("bin/$(compilation)/$(framework):~");
+		arguments.Add("bin/${compilation}/${framework}:~");
 		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);
 		var terminal = (ITerminal)terminalField.GetValue(null);
 
@@ -56,8 +56,18 @@ public sealed class PackageCommandTest
 			var application = Assert.Single(entries, entry => entry.Name.EndsWith("example.dll", StringComparison.Ordinal));
 			Assert.Equal("net9.0 application", Encoding.UTF8.GetString(application.Content));
 			Assert.DoesNotContain("bin/", application.Name);
-			var service = Encoding.UTF8.GetString(Assert.Single(entries, entry => entry.Name.EndsWith("example.service", StringComparison.Ordinal)).Content);
-			Assert.Contains("ExecStart=dotnet /opt/example/example.dll", service);
+
+			if(option == null)
+			{
+				Assert.DoesNotContain("net9.0/", application.Name);
+				var service = Encoding.UTF8.GetString(Assert.Single(entries, entry => entry.Name.EndsWith("example.service", StringComparison.Ordinal)).Content);
+				Assert.Contains("ExecStart=dotnet /opt/example/example.dll", service);
+			}
+			else
+			{
+				Assert.EndsWith("net9.0/example.dll", application.Name, StringComparison.Ordinal);
+				Assert.DoesNotContain(entries, entry => entry.Name.EndsWith(".service", StringComparison.Ordinal));
+			}
 		}
 		finally
 		{
@@ -94,7 +104,7 @@ public sealed class PackageCommandTest
 			directory.Write(sourceKind == "build" ? "bin/Release/net10.0/example.dll" : "example.dll", "published application");
 
 		CommandBase<CommandContext> command = format switch { "tar" => new TarCommand(), "deb" => new DebCommand(), _ => new RpmCommand() };
-		var arguments = new List<string> { format, "--name:example", "--version:1.0.0", "--source:" + directory.Path, "--output:out", "--platform:Linux", "--install-path:/opt/example" };
+		var arguments = new List<string> { format, "--name:example", "--version:1.0.0", "--source:" + directory.Path.Replace('\\', '/'), "--output:out", "--platform:Linux", "--install-path:/opt/example" };
 
 		if(sourceKind == "files")
 			arguments.Add("--daemon:none");
@@ -103,7 +113,7 @@ public sealed class PackageCommandTest
 		else if(sourceKind == "build")
 		{
 			arguments.Add("--framework:net10.0");
-			arguments.Add("bin/$(compilation)/$(framework):~");
+			arguments.Add("bin/${compilation}/${framework}:~");
 		}
 
 		var framework = Environment.GetEnvironmentVariable("framework");
@@ -172,7 +182,7 @@ public sealed class PackageCommandTest
 		CommandBase<CommandContext> command = format switch { "tar" => new TarCommand(), "deb" => new DebCommand(), _ => new RpmCommand() };
 		var arguments = new[]
 		{
-			"--edition:community", "--version:2.0.0", "--source:" + directory.Path, "--output:out",
+			"--edition:community", "--version:2.0.0", "--source:" + directory.Path.Replace('\\', '/'), "--output:out",
 			"--platform:Linux", "--architecture:X64", "--install-path:/opt/example", "--daemon:none", "application.txt",
 		};
 		var terminalField = typeof(Terminal).GetField("_default", BindingFlags.NonPublic | BindingFlags.Static);

@@ -513,17 +513,17 @@ public sealed class PackageArtifactTest
 
 	private static Package CreatePackage(string format, string source)
 	{
-		var variables = new Variables(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+		var options = new PackageOptions(Utility.CreateEvaluator(new global::Zongsoft.Common.Variables
 		{
-			["source"] = source,
+			["source"] = source.Replace('\\', '/'),
 			["framework"] = "net10.0",
 			["daemon"] = "disabled",
-		});
+		}));
 		Package package = format switch
 		{
-			"tar" => new Package.Tar("zongsoft.web", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, variables),
-			"deb" => new Package.Deb("zongsoft.web", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, variables),
-			_ => new Package.Rpm("zongsoft.web", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, variables),
+			"tar" => new Package.Tar("zongsoft.web", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, options),
+			"deb" => new Package.Deb("zongsoft.web", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, options),
+			_ => new Package.Rpm("zongsoft.web", null, new Version(1, 0, 0), Platform.Linux, Architecture.X64, options),
 		};
 		package.InstallPath = "/opt/zongsoft/web";
 		package.Scripts = new(":", ":", ":", ":");

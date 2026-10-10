@@ -122,7 +122,7 @@ public class DefinitionResolutionTest
 	public void NativeCertificateRequiresBothPartsAndSkipsCommonDefaults()
 	{
 		using var files = new MigrationTestDirectory();
-		var profile = "[api]\nbind!secure=https://*\nserver=http://app\ncertificate=$(absent)\nnginx:ssl_certificate=/tls/native.pem";
+		var profile = "[api]\nbind!secure=https://*\nserver=http://app\ncertificate=${absent}\nnginx:ssl_certificate=/tls/native.pem";
 		Assert.Equal("Required", Assert.Throws<DefinitionException>(() => NginxConfiguratorTest.Configure(files, profile)).Diagnostic.Code);
 		var result = NginxConfiguratorTest.Configure(files, profile + "\nnginx:ssl_certificate_key=/tls/native.key");
 		Assert.False(result.Files[0].Content.Relocatable);

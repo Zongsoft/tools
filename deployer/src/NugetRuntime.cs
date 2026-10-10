@@ -37,6 +37,8 @@ using System.Collections.Generic;
 
 using NuGet.RuntimeModel;
 
+using Zongsoft.Text.Templating;
+
 namespace Zongsoft.Tools.Deployer;
 
 /// <summary>使用内嵌的固定 RID 图谱，将部署平台和架构转换为有序的运行时回退链。</summary>
@@ -53,12 +55,12 @@ internal static class NugetRuntime
 
 	#region 公共方法
 	/// <summary>根据部署平台和架构获取有序 RID 回退链；缺少任一配置时不选择运行时专属资产。</summary>
-	/// <param name="variables">包含目标平台和架构的部署变量。</param>
+	/// <param name="evaluator">包含目标平台和架构的部署变量。</param>
 	/// <returns>从最具体到回退项排列的运行时标识符；未指定平台或架构时为空集合。</returns>
-	public static IEnumerable<string> GetIdentifiers(IDictionary<string, string> variables)
+	public static IEnumerable<string> GetIdentifiers(TemplateEvaluator evaluator)
 	{
-		if(variables == null || !variables.TryGetValue("platform", out var platform) || string.IsNullOrWhiteSpace(platform)
-			|| !variables.TryGetValue("architecture", out var architecture) || string.IsNullOrWhiteSpace(architecture))
+		if(evaluator == null || !evaluator.TryGetOption("platform", out var platform) || string.IsNullOrWhiteSpace(platform)
+			|| !evaluator.TryGetOption("architecture", out var architecture) || string.IsNullOrWhiteSpace(architecture))
 			return [];
 
 		return GetRuntimeIdentifiers(platform.Trim(), architecture.Trim());

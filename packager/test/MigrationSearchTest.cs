@@ -16,7 +16,7 @@ public sealed partial class MigrationPackageTest
 	[InlineData("hosting/web", "bootstrap")]
 	[InlineData("hosting", "bootstrap")]
 	[InlineData("", "bootstrap")]
-	[InlineData("hosting", "$(migrationName)")]
+	[InlineData("hosting", "${migrationName}")]
 	public void AncestorSearch_UsesClosestCompletePair(string selectedDirectory, string input)
 	{
 		using var directory = new MigrationTestDirectory();
@@ -38,7 +38,7 @@ public sealed partial class MigrationPackageTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var package = Create("tar", directory);
-		package.Variables["source"] = Directory.CreateDirectory(Path.Combine(directory.Path, "hosting", "web", "default")).FullName;
+		package.Options["source"] = Directory.CreateDirectory(Path.Combine(directory.Path, "hosting", "web", "default")).FullName.Replace('\\', '/');
 		var rootMigration = Pair(directory, ".migration/zongsoft", null, "2.7.1", "linux-x64");
 		var hostingMigration = Pair(directory, "hosting/.migration/zongsoft", null, "2.7.1", "linux-x64");
 		var hosting = Pair(directory, "hosting/zongsoft", null, "2.7.1", "linux-x64");
@@ -160,11 +160,11 @@ public sealed partial class MigrationPackageTest
 
 	[Theory]
 	[InlineData("./bootstrap")]
-	[InlineData(".\\bootstrap")]
+	[InlineData(".\\\\bootstrap")]
 	[InlineData("absolute")]
-	[InlineData("$(migrationDirectory)/bootstrap")]
-	[InlineData("$(migrationDirectory)\\bootstrap")]
-	[InlineData("$(qualifiedMigration)")]
+	[InlineData("${migrationDirectory}/bootstrap")]
+	[InlineData("${migrationDirectory}\\\\bootstrap")]
+	[InlineData("${qualifiedMigration}")]
 	public void AncestorSearch_ExplicitDirectoryNeverAscends(string input)
 	{
 		using var directory = new MigrationTestDirectory();
@@ -173,7 +173,7 @@ public sealed partial class MigrationPackageTest
 		Pair(directory, "hosting/bootstrap", null, "2.7.1", "linux-x64");
 
 		if(input == "absolute")
-			input = Path.Combine(source, "bootstrap");
+			input = Path.Combine(source, "bootstrap").Replace('\\', '/');
 
 		if(!OperatingSystem.IsWindows() && input.Contains('\\'))
 		{
@@ -231,10 +231,10 @@ public sealed partial class MigrationPackageTest
 	private static string SetSearchSource(MigrationTestDirectory directory, Package package)
 	{
 		var source = Directory.CreateDirectory(Path.Combine(directory.Path, "hosting", "web")).FullName;
-		package.Variables["source"] = source;
-		package.Variables["migrationName"] = "bootstrap";
-		package.Variables["migrationDirectory"] = ".";
-		package.Variables["qualifiedMigration"] = "./bootstrap";
+		package.Options["source"] = source.Replace('\\', '/');
+		package.Options["migrationName"] = "bootstrap";
+		package.Options["migrationDirectory"] = ".";
+		package.Options["qualifiedMigration"] = "./bootstrap";
 		return source;
 	}
 

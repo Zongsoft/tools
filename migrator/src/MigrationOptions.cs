@@ -32,16 +32,16 @@
  */
 
 using System;
-using System.Linq;
-using System.Collections;
-using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
-using Zongsoft.Components;
+using Zongsoft.Text.Templating;
 
 namespace Zongsoft.Tools.Migrator;
 
-public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variables = null) : IReadOnlyDictionary<string, string>, IReadOnlyCollection<KeyValuePair<string, string>>
+/// <summary>提供升迁包制作选项的类型化访问、模板求值及工具默认值。</summary>
+/// <remarks>选项值由评估器的变量来源提供；此类型不实现变量字典或变量提供程序。</remarks>
+/// <param name="evaluator">本次命令的模板评估器；为空时创建带有内存变量来源的递归评估器。</param>
+public sealed class MigrationOptions(TemplateEvaluator evaluator = null)
 {
 	#region 常量定义
 	internal const string NAME = "name";
@@ -53,30 +53,18 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 	internal const string EDITION = "edition";
 	internal const string VERSION = "version";
 	internal const string PLATFORM = "platform";
-	internal const string FRAMEWORK = "framework";
 	internal const string ARCHITECTURE = "architecture";
 	#endregion
 
-	#region 成员字段
-	private static readonly HashSet<string> _fallbackOptions = new(StringComparer.OrdinalIgnoreCase) { FRAMEWORK };
-	private readonly Dictionary<string, string> _variables = new(variables ?? [], StringComparer.OrdinalIgnoreCase);
-	#endregion
-
 	#region 公共属性
+	/// <summary>获取负责本次命令原始变量来源及模板评估的 Core 评估器。</summary>
+	public TemplateEvaluator Evaluator { get; } = evaluator ?? Utility.CreateEvaluator();
+	/// <summary>获取求值后的选项或设置原始选项；未找到的选项返回空值。</summary>
+	/// <param name="name">选项名称，其中的点号和连字符映射为下划线。</param>
 	public string this[string name]
 	{
-		get
-		{
-			if(!_variables.TryGetValue(name, out var value))
-				return null;
-
-			var result = Normalizer.Normalize(value, _variables);
-			if(!result.Succeed)
-				throw new InvalidOperationException(string.Format(Properties.Resources.VariableResolutionFailed_Message, result.Value));
-
-			return value == null ? null : result.Value;
-		}
-		set => _variables[name] = value;
+		get => this.Evaluator.GetOption(name);
+		set => this.Evaluator.SetVariable(name, value);
 	}
 
 	public string Name => this[NAME];
@@ -86,37 +74,21 @@ public sealed class Variables(IEnumerable<KeyValuePair<string, string>> variable
 	public string Source => this[SOURCE];
 	public string Output => this[OUTPUT];
 	public string Edition => this[EDITION];
-	public Version Version => _variables.TryGetValue(VERSION, out var value) ? Version.Parse(this[VERSION]) : null;
-	public Architecture Architecture => !_variables.ContainsKey(ARCHITECTURE) ? Architecture.X64 : Zongsoft.Common.Convert.ConvertValue<Architecture>(this[ARCHITECTURE]);
-	#endregion
-
-	#region 内部属性
-	internal IReadOnlyDictionary<string, string> Raw => _variables;
+	/// <summary>获取解析后的应用版本；没有版本选项时为空。</summary>
+	public Version Version => this.Evaluator.TryGetVariable(VERSION, out _) ? Version.Parse(this[VERSION]) : null;
+	/// <summary>获取目标架构；没有架构选项时为 X64。</summary>
+	public Architecture Architecture => !this.Contains(ARCHITECTURE) ? Architecture.X64 : Zongsoft.Common.Convert.ConvertValue<Architecture>(this[ARCHITECTURE]);
 	#endregion
 
 	#region 公共方法
-	public bool Contains(string name) => name != null && _variables.ContainsKey(name);
-	public bool TryGetValue(string name, out string value)
-	{
-		value = name == null ? null : this[name];
-		return name != null && _variables.ContainsKey(name);
-	}
+	/// <summary>判断是否存在指定选项，不对其值进行模板求值。</summary>
+	/// <param name="name">选项名称；为空时返回假。</param>
+	/// <returns>是否存在该选项，值为空也视为存在。</returns>
+	public bool Contains(string name) => name != null && this.Evaluator.TryGetVariable(Utility.NormalizeVariableName(name), out _);
 	#endregion
 
-	#region 内部方法
-	private string GetRaw(string name) => _variables.GetValueOrDefault(name);
-	internal static Dictionary<string, string> From(CommandContext context, string directory = null) => Utility.CreateVariables(context, directory, _fallbackOptions);
+	#region 私有方法
+	private string GetRaw(string name) => this.Evaluator.GetVariable(Utility.NormalizeVariableName(name))?.ToString();
 	#endregion
 
-	#region 显式实现
-	int IReadOnlyCollection<KeyValuePair<string, string>>.Count => _variables.Count;
-	IEnumerable<string> IReadOnlyDictionary<string, string>.Keys => _variables.Keys;
-	IEnumerable<string> IReadOnlyDictionary<string, string>.Values => _variables.Values;
-	bool IReadOnlyDictionary<string, string>.ContainsKey(string key) => key != null && _variables.ContainsKey(key);
-	#endregion
-
-	#region 枚举遍历
-	IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
-	public IEnumerator<KeyValuePair<string, string>> GetEnumerator() => _variables.GetEnumerator();
-	#endregion
 }

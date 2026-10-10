@@ -15,10 +15,10 @@ public sealed class LocalSearchTest
 		File.CreateSymbolicLink(first, target);
 		File.CreateSymbolicLink(second, target);
 		var report = Path.Combine(fixture.Root, "report.json");
-		fixture.Variables["report"] = report;
+		fixture.Variables["report"] = (report).Replace('\\', '/');
 		var deployer = fixture.CreateDeployer();
 
-		var result = await deployer.DeployAsync(fixture.Manifest("*.txt"), fixture.Destination, TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((fixture.Manifest("*.txt")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(2, result.Successes);
@@ -43,7 +43,7 @@ public sealed class LocalSearchTest
 		File.CreateSymbolicLink(link, target);
 		var deployer = fixture.CreateDeployer();
 
-		var result = await deployer.DeployAsync(fixture.Manifest("nuget:Linked.Source@1.0.0/payload.txt"), fixture.Destination, TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((fixture.Manifest("nuget:Linked.Source@1.0.0/payload.txt")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(1, result.Successes);
@@ -63,7 +63,7 @@ public sealed class LocalSearchTest
 		fixture.Package("Linked.Source");
 		var outside = fixture.Write("packages/linked.source/outside.txt", "must not deploy");
 
-		var result = await fixture.CreateDeployer().DeployAsync(fixture.Manifest("nuget:Linked.Source@1.0.0/../outside.txt"), fixture.Destination, TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Linked.Source@1.0.0/../outside.txt")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.True(result.Failures > 0);
 		Assert.Equal(0, result.Successes);
@@ -83,7 +83,7 @@ public sealed class LocalSearchTest
 		Directory.CreateSymbolicLink(Path.Combine(fixture.Root, "physical/assets/nested"), Path.Combine(fixture.Root, "physical/hidden"));
 		File.CreateSymbolicLink(Path.Combine(fixture.Root, "physical/assets/visible.txt"), file);
 
-		var result = await fixture.CreateDeployer().DeployAsync(fixture.Manifest("[assets]\nassets"), fixture.Destination, TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("[assets]\nassets")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(2, result.Successes);
@@ -101,7 +101,7 @@ public sealed class LocalSearchTest
 		Directory.CreateDirectory(Path.Combine(fixture.Root, "source/assets"));
 		Directory.CreateSymbolicLink(Path.Combine(fixture.Root, "source/assets/visible"), Path.Combine(fixture.Root, "physical/content"));
 
-		var result = await fixture.CreateDeployer().DeployAsync(fixture.Manifest("assets/*"), fixture.Destination, TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("assets/*")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(1, result.Successes);
@@ -117,7 +117,7 @@ public sealed class LocalSearchTest
 		fixture.Write("physical/hidden/secret.txt", "must not deploy");
 		Directory.CreateSymbolicLink(Path.Combine(fixture.Root, "source/linked"), Path.Combine(fixture.Root, "physical/hidden"));
 
-		var result = await fixture.CreateDeployer().DeployAsync(fixture.Manifest("**/*.txt"), fixture.Destination, TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("**/*.txt")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(1, result.Successes);
@@ -138,7 +138,7 @@ public sealed class LocalSearchTest
 		var link = Path.Combine(fixture.Root, "source/linked.deploy");
 		File.CreateSymbolicLink(link, physical);
 
-		var result = await fixture.CreateDeployer().DeployAsync(fixture.Manifest("linked.deploy"), fixture.Destination, TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("linked.deploy")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(2, result.Successes);
@@ -159,16 +159,16 @@ public sealed class LocalSearchTest
 		File.CreateSymbolicLink(link, original);
 		var manifest = fixture.Manifest("payload.txt");
 		var lockFile = Path.Combine(fixture.Root, "deployment.lock.json");
-		fixture.Variables["lockFile"] = lockFile;
+		fixture.Variables["lockFile"] = (lockFile).Replace('\\', '/');
 		fixture.Variables["overwrite"] = "alway";
-		Assert.Equal(0, (await fixture.CreateDeployer().DeployAsync(manifest, fixture.Destination, TestContext.Current.CancellationToken)).Failures);
+		Assert.Equal(0, (await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken)).Failures);
 		var lockBytes = File.ReadAllBytes(lockFile);
 		var destination = fixture.Write("target/payload.txt", "must remain untouched");
 		File.Delete(link);
 		File.CreateSymbolicLink(link, replacement);
 		fixture.Variables["locked"] = "true";
 
-		var result = await fixture.CreateDeployer().DeployAsync(manifest, fixture.Destination, TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.True(result.Failures > 0);
 		Assert.Equal(0, result.Successes);
@@ -197,9 +197,9 @@ public sealed class LocalSearchTest
 			File.CreateSymbolicLink(link, replacement);
 			changed = true;
 		});
-		var deployer = new Deployer(fixture.Variables, writer);
+		var deployer = new Deployer(fixture.Evaluator, writer);
 
-		var result = await deployer.DeployAsync(fixture.Manifest("first.txt\npayload.txt"), fixture.Destination, TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((fixture.Manifest("first.txt\npayload.txt")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.True(changed);
 		Assert.Equal(1, result.Successes);
@@ -217,7 +217,7 @@ public sealed class LocalSearchTest
 		fixture.Write("source/ordinary.txt", "would copy first");
 		File.CreateSymbolicLink(Path.Combine(fixture.Root, "source/missing.txt"), Path.Combine(fixture.Root, "physical/absent.dat"));
 
-		var result = await fixture.CreateDeployer().DeployAsync(fixture.Manifest("ordinary.txt\nmissing.txt"), fixture.Destination, TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("ordinary.txt\nmissing.txt")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.True(result.Failures > 0);
 		Assert.Equal(0, result.Successes);
@@ -236,7 +236,7 @@ public sealed class LocalSearchTest
 		if(expansion)
 			fixture.Variables["expansion"] = "true";
 
-		var match = Assert.Single(DeploymentUtility.GetFiles(Path.Combine(fixture.Root, "source/plugins/*/assets/**/*.json"), fixture.Variables, cancellation: TestContext.Current.CancellationToken));
+		var match = Assert.Single(DeploymentUtility.GetFiles(Path.Combine(fixture.Root, "source/plugins/*/assets/**/*.json"), fixture.Evaluator, cancellation: TestContext.Current.CancellationToken));
 
 		Assert.Equal(selected, match.Path);
 		Assert.Equal(suffix, match.Suffix.Replace('\\', '/'));
@@ -252,7 +252,7 @@ public sealed class LocalSearchTest
 		Directory.CreateSymbolicLink(Path.Combine(fixture.Root, "source/linked"), physical);
 		var deployer = fixture.CreateDeployer();
 
-		var result = await deployer.DeployAsync(fixture.Manifest("linked/missing.txt\nordinary.txt"), fixture.Destination, TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((fixture.Manifest("linked/missing.txt\nordinary.txt")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(1, result.Skipped);
@@ -273,7 +273,7 @@ public sealed class LocalSearchTest
 		var manifest = fixture.Manifest(manifestArgument ? "ordinary.txt" : "ordinary.txt\nlinked/missing.txt");
 		var paths = manifestArgument ? new[] { manifest, Path.Combine(fixture.Root, "source/linked/.deploy") } : [manifest];
 
-		var result = await deployer.DeployManyAsync(paths, fixture.Destination, TestContext.Current.CancellationToken);
+		var result = await deployer.DeployManyAsync(paths, (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(1, result.Failures);
 		Assert.Equal(0, result.Successes);

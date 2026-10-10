@@ -5,6 +5,8 @@ using System.Runtime.InteropServices;
 
 using Xunit;
 
+using Zongsoft.Text.Templating;
+
 using Zongsoft.Components;
 
 namespace Zongsoft.Tools.Packager.Tests;
@@ -13,7 +15,7 @@ public sealed class PackageInputTest
 {
 	#region 变量展开
 	[Fact]
-	public void GetVariables_ExplicitThenEnvironmentThenDefaults_PreservesPriority()
+	public void CreateEvaluator_ExplicitThenEnvironmentThenDefaults_PreservesPriority()
 	{
 		var architecture = Environment.GetEnvironmentVariable("architecture");
 		var compilation = Environment.GetEnvironmentVariable("compilation");
@@ -31,16 +33,16 @@ public sealed class PackageInputTest
 			var command = new DebCommand();
 			var context = new CommandContext(new CommandExecutor(), CommandLine.Parse("deb --architecture:X64 --platform:Linux --framework:net10.0")[0], command, null);
 
-			var values = PackCommand<Package.Deb>.GetVariables(context);
-			var variables = new Variables(values);
+			var evaluator = PackCommand<Package.Deb>.CreateEvaluator(context);
+			var options = new PackageOptions(evaluator);
 
-			Assert.Equal("X64", values["architecture"]);
-			Assert.Equal("Debug", values["compilation"]);
-			Assert.Equal("https://github.com/Zongsoft", values["homepage"]);
-			Assert.Equal("Zongsoft", variables.Maintainer);
-			Assert.Equal("Zongsoft", variables.Manufacturer);
-			Assert.Equal(System.Runtime.InteropServices.Architecture.X64, variables.Architecture);
-			Assert.Equal("Debug", variables.Compilation);
+			Assert.Equal("X64", evaluator.GetVariable("architecture"));
+			Assert.Equal("Debug", evaluator.GetVariable("compilation"));
+			Assert.Equal("https://github.com/Zongsoft", evaluator.GetVariable("homepage"));
+			Assert.Equal("Zongsoft", options.Maintainer);
+			Assert.Equal("Zongsoft", options.Manufacturer);
+			Assert.Equal(System.Runtime.InteropServices.Architecture.X64, options.Architecture);
+			Assert.Equal("Debug", options.Compilation);
 		}
 		finally
 		{
@@ -53,167 +55,163 @@ public sealed class PackageInputTest
 	}
 
 	[Fact]
-	public void Variables_UnusedInvalidVariables_DoesNotBlockUsedValues()
+	public void Options_UnusedInvalidVariables_DoesNotBlockUsedValues()
 	{
-		var variables = new Variables(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+		var options = new PackageOptions(Utility.CreateEvaluator(new global::Zongsoft.Common.Variables
 		{
 			["name"] = "zongsoft.daemon",
-			["payload"] = "$(name)/bin",
-			["unused"] = "$(missing)",
-			["loop"] = "$(loop)",
-		});
+			["payload"] = "${name}/bin",
+			["unused"] = "${missing}",
+			["loop"] = "${loop}",
+		}));
 
-		Assert.Equal("zongsoft.daemon/bin", variables["payload"]);
-		Assert.Equal("zongsoft.daemon", variables.Name);
-		Assert.Throws<InvalidOperationException>(() => variables["unused"]);
-		Assert.Throws<InvalidOperationException>(() => variables["loop"]);
+		Assert.Equal("zongsoft.daemon/bin", options["payload"]);
+		Assert.Equal("zongsoft.daemon", options.Name);
+		Assert.Throws<TemplateEvaluationException>(() => options["unused"]);
+		Assert.Throws<TemplateEvaluationException>(() => options["loop"]);
 	}
 
 	[Fact]
-	public void Normalize_NestedAndRepeatedReferences_ExpandsBothSyntaxes()
+	public void Evaluate_NestedAndRepeatedReferences_ExpandsTemplates()
 	{
-		var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+		var variables = new global::Zongsoft.Common.Variables()
 		{
 			["name"] = "zongsoft.daemon",
 			["scheme"] = "default",
-			["root"] = "$(scheme)/%NAME%",
+			["root"] = "${scheme}/${NAME}",
 		};
 
-		var result = Normalizer.Normalize("$(root)/$(name)-%name%", variables);
-
-		Assert.True(result.Succeed);
-		Assert.Equal("default/zongsoft.daemon/zongsoft.daemon-zongsoft.daemon", result.Value);
-		Assert.Equal("$(scheme)/%NAME%", variables["root"]);
+		var result = Utility.CreateEvaluator(variables).Evaluate("${root}/${name}-${name}");
+		Assert.Equal("default/zongsoft.daemon/zongsoft.daemon-zongsoft.daemon", result);
+		Assert.Equal("${scheme}/${NAME}", variables["root"]);
 	}
 
 	[Fact]
-	public void Normalize_OrdinaryDictionaryIgnoresVariableNameCase()
+	public void Evaluate_CoreVariablesIgnoreVariableNameCase()
 	{
-		var variables = new Dictionary<string, string>
+		var variables = new global::Zongsoft.Common.Variables
 		{
-			["Root"] = "$(service.name)",
-			["Service.Name"] = "worker",
+			["Root"] = "${service_name}",
+			["Service_Name"] = "worker",
 		};
 
-		var result = Normalizer.Normalize("$(ROOT)/%SERVICE.NAME%", variables);
-		Assert.True(result.Succeed);
-		Assert.Equal("worker/worker", result.Value);
+		var result = Utility.CreateEvaluator(variables).Evaluate("${ROOT}/${SERVICE_NAME}");
+		Assert.Equal("worker/worker", result);
 	}
 
 	[Fact]
-	public void Variables_WinPlatformAliasMapsToWindows()
+	public void Options_WinPlatformAliasMapsToWindows()
 	{
-		var variables = new Variables(new Dictionary<string, string> { ["platform"] = "win" });
-		Assert.Equal(Platform.Windows, variables.Platform);
+		var options = new PackageOptions(Utility.CreateEvaluator(new global::Zongsoft.Common.Variables { ["platform"] = "win" }));
+		Assert.Equal(Platform.Windows, options.Platform);
 	}
 
 	[Theory]
 	[InlineData("0", (Architecture)0)]
 	[InlineData("999", (Architecture)999)]
-	public void Variables_NumericArchitectureUsesCoreConversionAfterExpansion(string architecture, Architecture expected)
+	public void Options_NumericArchitectureUsesCoreConversionAfterExpansion(string architecture, Architecture expected)
 	{
-		var variables = new Variables(new Dictionary<string, string>
+		var options = new PackageOptions(Utility.CreateEvaluator(new global::Zongsoft.Common.Variables
 		{
-			["architecture"] = "$(target)",
+			["architecture"] = "${target}",
 			["target"] = architecture,
-		});
-		Assert.Equal(expected, variables.Architecture);
+		}));
+		Assert.Equal(expected, options.Architecture);
 	}
 
 	[Theory]
-	[InlineData("$(missing)", "resolved", "missing")]
-	[InlineData("$(first)", "resolved", "first")]
-	[InlineData("$(second)", "%first%", "second")]
-	public void Variables_InvalidReference_ThrowsWhenRead(string first, string second, string failedVariable)
+	[InlineData("${missing}", "resolved")]
+	[InlineData("${first}", "resolved")]
+	[InlineData("${second}", "${first}")]
+	public void Options_InvalidReference_ThrowsWhenRead(string first, string second)
 	{
-		var variables = new Variables(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+		var options = new PackageOptions(Utility.CreateEvaluator(new global::Zongsoft.Common.Variables
 		{
 			["first"] = first,
 			["second"] = second,
 			["valid"] = "unaffected",
-		});
+		}));
 
-		var error = Assert.Throws<InvalidOperationException>(() => variables["first"]);
+		Assert.Throws<TemplateEvaluationException>(() => options["first"]);
 
-		Assert.Contains(failedVariable, error.Message, StringComparison.OrdinalIgnoreCase);
-		Assert.Equal("unaffected", variables["valid"]);
+		Assert.Equal("unaffected", options["valid"]);
 	}
 
 	[Theory]
-	[InlineData("$(missing)", "valid", "missing")]
-	[InlineData("$(first)", "valid", "first")]
-	[InlineData("$(second)", "%first%", "first")]
-	public void Normalize_InvalidReference_ReturnsFailure(string first, string second, string failedVariable)
+	[InlineData("${missing}", "valid", "MissingVariable")]
+	[InlineData("${first}", "valid", "DepthExceeded")]
+	[InlineData("${second}", "${first}", "DepthExceeded")]
+	public void Evaluate_InvalidReference_ReturnsFailure(string first, string second, string code)
 	{
-		var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+		var variables = new global::Zongsoft.Common.Variables()
 		{
 			["first"] = first,
 			["second"] = second,
 		};
 
-		var result = Normalizer.Normalize("$(first)", variables);
+		var evaluator = Utility.CreateEvaluator(variables);
 
-		Assert.False(result.Succeed);
-		Assert.Equal(failedVariable, result.Value);
+		Assert.False(evaluator.TryEvaluate("${first}", out var result, out var error));
+		Assert.Null(result);
+		Assert.Equal(code, error.Code);
 		Assert.Equal(first, variables["first"]);
 	}
 
 	[Fact]
-	public void Variables_ChangedDependency_UpdatesResolvedValue()
+	public void Options_ChangedDependency_UpdatesResolvedValue()
 	{
-		var variables = new Variables(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+		var options = new PackageOptions(Utility.CreateEvaluator(new global::Zongsoft.Common.Variables
 		{
 			["version"] = "1.0.0",
-			["migration"] = ".deploy/default/migration/$(version)/*.migration",
-		});
-		Assert.Equal(".deploy/default/migration/1.0.0/*.migration", variables["migration"]);
+			["migration"] = ".deploy/default/migration/${version}/*.migration",
+		}));
+		Assert.Equal(".deploy/default/migration/1.0.0/*.migration", options["migration"]);
 
-		variables["version"] = "1.1.0";
+		options["version"] = "1.1.0";
 
-		Assert.Equal(".deploy/default/migration/1.1.0/*.migration", variables["migration"]);
-		Assert.Equal(new Version(1, 1, 0), variables.Version);
+		Assert.Equal(".deploy/default/migration/1.1.0/*.migration", options["migration"]);
+		Assert.Equal(new Version(1, 1, 0), options.Version);
 	}
 
 	[Fact]
-	public void Normalize_DepthLimit_AllowsSixtyFourReferencesAndRejectsNext()
+	public void Evaluate_DepthLimit_AllowsSixtyFourLevelsIncludingRootAndRejectsNext()
 	{
-		var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-		for(var index = 0; index < 63; index++)
-			variables["step" + index] = "$(step" + (index + 1) + ")";
+		var variables = new global::Zongsoft.Common.Variables();
+		for(var index = 0; index < 62; index++)
+			variables["step" + index] = "${step" + (index + 1) + "}";
+		variables["step62"] = "resolved";
+
+		var evaluator = Utility.CreateEvaluator(variables);
+		Assert.Equal("resolved", evaluator.Evaluate("${step0}"));
+
+		variables["step62"] = "${step63}";
 		variables["step63"] = "resolved";
-
-		var withinLimit = Normalizer.Normalize("$(step0)", variables);
-		Assert.True(withinLimit.Succeed);
-		Assert.Equal("resolved", withinLimit.Value);
-
-		variables["step63"] = "$(step64)";
-		variables["step64"] = "resolved";
-		var beyondLimit = Normalizer.Normalize("$(step0)", variables);
-		Assert.False(beyondLimit.Succeed);
-		Assert.Equal("step64", beyondLimit.Value);
+		Assert.False(evaluator.TryEvaluate("${step0}", out var result, out var error));
+		Assert.Null(result);
+		Assert.Equal("DepthExceeded", error.Code);
 	}
 
 	[Fact]
-	public void Variables_StructuredNamesAndSameKeysRemainInstanceScoped()
+	public void Options_StructuredNamesAndSameKeysRemainInstanceScoped()
 	{
-		var first = new Variables(new Dictionary<string, string>
+		var first = new PackageOptions(Utility.CreateEvaluator(new global::Zongsoft.Common.Variables
 		{
-			["channel.name"] = "alpha",
-			["settings[0]"] = "one",
-			["profile-key"] = "primary",
-			["route"] = "$(channel.name)/%settings[0]%/$(profile-key)",
-		});
-		var second = new Variables(new Dictionary<string, string>
+			["channel_name"] = "alpha",
+			["settings_0"] = "one",
+			["profile_key"] = "primary",
+			["route"] = "${channel_name}/${settings_0}/${profile_key}",
+		}));
+		var second = new PackageOptions(Utility.CreateEvaluator(new global::Zongsoft.Common.Variables
 		{
-			["channel.name"] = "beta",
-			["settings[0]"] = "two",
-			["profile-key"] = "secondary",
-			["route"] = "$(channel.name)/%settings[0]%/$(profile-key)",
-		});
+			["channel_name"] = "beta",
+			["settings_0"] = "two",
+			["profile_key"] = "secondary",
+			["route"] = "${channel_name}/${settings_0}/${profile_key}",
+		}));
 
 		Assert.Equal("alpha/one/primary", first["route"]);
 		Assert.Equal("beta/two/secondary", second["route"]);
-		first["channel.name"] = "updated";
+		first["channel_name"] = "updated";
 		Assert.Equal("updated/one/primary", first["route"]);
 		Assert.Equal("beta/two/secondary", second["route"]);
 	}
@@ -227,14 +225,14 @@ public sealed class PackageInputTest
 		const string FILE_NAME = "install.sh";
 		directory.Write("working/" + FILE_NAME, "working-directory-content");
 		directory.Write("source/" + FILE_NAME, "source-only-content");
-		var variables = new Variables();
+		var options = new PackageOptions();
 		var previous = Environment.CurrentDirectory;
 
 		try
 		{
 			Environment.CurrentDirectory = Path.Combine(directory.Path, "working");
 
-			Assert.Equal("source-only-content", TextSource.Read(Path.Combine(directory.Path, "source"), FILE_NAME, variables));
+			Assert.Equal("source-only-content", TextSource.Read(Path.Combine(directory.Path, "source"), FILE_NAME, options));
 			Assert.Equal("working-directory-content", File.ReadAllText(FILE_NAME));
 		}
 		finally
@@ -249,9 +247,9 @@ public sealed class PackageInputTest
 	public void Read_EmptyExplicitFile_DoesNotBecomeLiteralText(string value)
 	{
 		using var directory = new MigrationTestDirectory();
-		var variables = new Variables();
+		var options = new PackageOptions();
 
-		Assert.Throws<FileNotFoundException>(() => TextSource.Read(directory.Path, value, variables));
+		Assert.Throws<FileNotFoundException>(() => TextSource.Read(directory.Path, value, options));
 	}
 
 	[Theory]
@@ -262,10 +260,10 @@ public sealed class PackageInputTest
 		using var directory = new MigrationTestDirectory();
 		const string CONTENT = "echo source-specific-content";
 		directory.Write("scripts/setup script.sh", CONTENT);
-		var variables = new Variables();
+		var options = new PackageOptions();
 
 		Assert.NotEqual(Environment.CurrentDirectory, directory.Path);
-		Assert.Equal(CONTENT, TextSource.Read(directory.Path, value, variables));
+		Assert.Equal(CONTENT, TextSource.Read(directory.Path, value, options));
 	}
 
 	[Fact]
@@ -273,9 +271,9 @@ public sealed class PackageInputTest
 	{
 		using var directory = new MigrationTestDirectory();
 		var file = directory.Write("scripts/install.sh", "echo absolute-file");
-		var variables = new Variables();
+		var options = new PackageOptions();
 
-		Assert.Equal("echo absolute-file", TextSource.Read(Path.Combine(directory.Path, "another-source"), file, variables));
+		Assert.Equal("echo absolute-file", TextSource.Read(Path.Combine(directory.Path, "another-source"), file.Replace('\\', '/'), options));
 	}
 
 	[Fact]
@@ -283,18 +281,18 @@ public sealed class PackageInputTest
 	{
 		using var directory = new MigrationTestDirectory();
 		const string CONTENT = "  echo $(name) %name% ${HOME}\n echo /opt/zongsoft/web  ";
-		var variables = new Variables(new Dictionary<string, string> { ["name"] = "zongsoft.web" });
+		var options = new PackageOptions(Utility.CreateEvaluator(new global::Zongsoft.Common.Variables { ["name"] = "zongsoft.web" }));
 
-		Assert.Equal(CONTENT, TextSource.Read(directory.Path, "text:" + CONTENT, variables));
+		Assert.Equal(CONTENT, TextSource.Read(directory.Path, "text:" + CONTENT, options));
 	}
 
 	[Fact]
 	public void Read_SingleLineShellCommand_IsLiteralText()
 	{
 		using var directory = new MigrationTestDirectory();
-		var variables = new Variables();
+		var options = new PackageOptions();
 
-		Assert.Equal("echo /opt/zongsoft/web", TextSource.Read(directory.Path, "echo /opt/zongsoft/web", variables));
+		Assert.Equal("echo /opt/zongsoft/web", TextSource.Read(directory.Path, "echo /opt/zongsoft/web", options));
 	}
 
 	[Theory]
@@ -305,9 +303,9 @@ public sealed class PackageInputTest
 		using var directory = new MigrationTestDirectory();
 		directory.Write("scripts/first.sh", content);
 		directory.Write("scripts/second.sh", "echo must-not-be-read");
-		var variables = new Variables(new Dictionary<string, string> { ["name"] = "zongsoft.web" });
+		var options = new PackageOptions(Utility.CreateEvaluator(new global::Zongsoft.Common.Variables { ["name"] = "zongsoft.web" }));
 
-		Assert.Equal(content, TextSource.Read(directory.Path, "scripts/first.sh", variables));
+		Assert.Equal(content, TextSource.Read(directory.Path, "scripts/first.sh", options));
 	}
 
 	[Theory]
@@ -316,9 +314,9 @@ public sealed class PackageInputTest
 	public void Read_MissingFile_ReportsResolvedPath(string value)
 	{
 		using var directory = new MigrationTestDirectory();
-		var variables = new Variables();
+		var options = new PackageOptions();
 
-		var error = Assert.Throws<FileNotFoundException>(() => TextSource.Read(directory.Path, value, variables));
+		var error = Assert.Throws<FileNotFoundException>(() => TextSource.Read(directory.Path, value, options));
 
 		Assert.Equal(Path.Combine(directory.Path, "scripts", "missing.sh"), error.FileName);
 	}
@@ -327,9 +325,9 @@ public sealed class PackageInputTest
 	public void Read_FileOnly_DoesNotAcceptLiteralText()
 	{
 		using var directory = new MigrationTestDirectory();
-		var variables = new Variables();
+		var options = new PackageOptions();
 
-		Assert.Throws<FileNotFoundException>(() => TextSource.Read(directory.Path, "echo installed", variables, true));
+		Assert.Throws<FileNotFoundException>(() => TextSource.Read(directory.Path, "echo installed", options, true));
 	}
 
 	[Fact]
@@ -337,9 +335,9 @@ public sealed class PackageInputTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("scripts/installed", "echo installed");
-		var variables = new Variables();
+		var options = new PackageOptions();
 
-		Assert.Equal("echo installed", TextSource.Read(directory.Path, "scripts/installed", variables, true));
+		Assert.Equal("echo installed", TextSource.Read(directory.Path, "scripts/installed", options, true));
 	}
 	#endregion
 }

@@ -34,6 +34,8 @@
 using System;
 using System.Collections.Generic;
 
+using Zongsoft.Text.Templating;
+
 namespace Zongsoft.Tools.Deployer;
 
 /// <summary>提供当前描述文件的部署环境，包括部署器、目标目录、变量及共享计数。</summary>
@@ -57,7 +59,8 @@ public class DeploymentContext
 	public DeploymentCounter Counter { get; }
 	public string DestinationDirectory { get; }
 	public Configuration.Profiles.Profile Profile { get; }
-	public IDictionary<string, string> Variables => this.Deployer.Variables;
+	/// <summary>获取当前部署器的模板评估器。</summary>
+	public TemplateEvaluator Evaluator => this.Deployer.Evaluator;
 	#endregion
 }
 
@@ -65,5 +68,5 @@ public class DeploymentContext
 public static class DeploymentContextUtility
 {
 	public static bool IsVerbosity(this Deployer deployer, Verbosity verbosity) =>
-		deployer.Variables.TryGetValue(Deployer.VERBOSITY_OPTION, out var variable) && Zongsoft.Common.Convert.TryConvertValue<Verbosity>(variable, out var value) && verbosity == value;
+		deployer.Evaluator.TryGetOption(Deployer.VERBOSITY_OPTION, out var variable) && Zongsoft.Common.Convert.TryConvertValue<Verbosity>(variable, out var value) && verbosity == value;
 }

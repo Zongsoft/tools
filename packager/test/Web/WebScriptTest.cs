@@ -207,9 +207,9 @@ public class WebScriptTest
 	{
 		using var fixture = new ScriptFixture();
 		var package = fixture.CreatePackage(true);
-		package.Variables["preinstalled"] = fixture.Write("pre.sh", "printf 'pre\\n' >> \"$MOCK_LOG\"");
-		package.Variables["installed"] = "text:printf 'main\\n' >> \"$MOCK_LOG\"" + (failMain ? "; exit 19" : "");
-		package.Variables["postinstalled"] = fixture.Write("post.sh", "printf 'post\\n' >> \"$MOCK_LOG\"");
+		package.Options["preinstalled"] = fixture.Write("pre.sh", "printf 'pre\\n' >> \"$MOCK_LOG\"").Replace('\\', '/');
+		package.Options["installed"] = "text:printf 'main\\n' >> \"$MOCK_LOG\"" + (failMain ? "; exit 19" : "");
+		package.Options["postinstalled"] = fixture.Write("post.sh", "printf 'post\\n' >> \"$MOCK_LOG\"").Replace('\\', '/');
 		package.Scriptor.Script();
 
 		var result = await fixture.RunAsync(package.Scripts.Delivered + "\n" + package.Scripts.Installed, "1");
@@ -317,7 +317,7 @@ public class WebScriptTest
 
 		internal Package CreatePackage(bool web)
 		{
-			return new Package.Tar("example", null, new Version(1, 0), Platform.Linux, Architecture.X64, new Variables(new Dictionary<string, string> { ["source"] = _files.Path, ["daemon"] = "none" }))
+			return new Package.Tar("example", null, new Version(1, 0), Platform.Linux, Architecture.X64, new PackageOptions(Utility.CreateEvaluator(new global::Zongsoft.Common.Variables { ["source"] = _files.Path.Replace('\\', '/'), ["daemon"] = "none" })))
 			{
 				InstallPath = "/opt/default",
 				Web = web ? this.Result : null,

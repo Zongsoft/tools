@@ -40,7 +40,14 @@ partial class Package
 {
 	public sealed class Rpm : Package
 	{
-		public Rpm(string name, string edition, Version version, Platform platform, Architecture architecture, Variables variables = null) : base(name, edition, version, platform, architecture, variables)
+		/// <summary>根据应用身份、目标平台及制作选项初始化RPM 安装包。</summary>
+		/// <param name="name">应用名称，不能为空。</param>
+		/// <param name="edition">应用发行版；为空时不附加发行版标识。</param>
+		/// <param name="version">非零的应用版本。</param>
+		/// <param name="platform">目标操作系统平台。</param>
+		/// <param name="architecture">目标处理器架构。</param>
+		/// <param name="options">本次制作的类型化选项；为空时使用独立的默认选项。</param>
+		public Rpm(string name, string edition, Version version, Platform platform, Architecture architecture, PackageOptions options = null) : base(name, edition, version, platform, architecture, options)
 		{
 			this.Scriptor = new Scriptor.Systemd(this);
 			this.InstallPath = Utility.Unix.GetInstallPath(this.PackageIdentity);

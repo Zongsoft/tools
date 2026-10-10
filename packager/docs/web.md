@@ -74,7 +74,7 @@ Syntax: `--web:<hoster[:filepath]>`. Hoster names are case-insensitive. Only the
 | `nginx`, `nginx:` | Read final source/web.profile. |
 | `nginx:config/web.profile` | Relative to final source. |
 | `nginx:../shared/web.production.profile` | May be outside source; no ancestor search. |
-| `nginx:D:\config\web.profile` | Absolute path on the build platform; only the first colon is split. |
+| `nginx:D:/config/web.profile` | Absolute path on the build platform; only the first colon is split. |
 | `:web.profile`, `none:web.profile` | Error: a nonempty path needs an enabled hoster. |
 | `iis`, `iis:...` | Unimplemented, with no Nginx fallback. |
 | Other name | Unknown hoster error. |
@@ -168,13 +168,14 @@ The result uses local and retains the shared binding/header. Imports run at thei
 
 Paths are relative to **the declaring file**. An import of backend.profile from shared/common.profile means shared/backend.profile. Imports merge at the Profile root, not inside the current section, and never automatically rename sites.
 
-Separate multiple import targets with whitespace, Tabs, or |:
+Use separate directives for multiple files:
 
 ```ini
-#@import shared/common.profile|shared/sites.profile
+#@import shared/common.profile
+#@import shared/sites.profile
 ```
 
-Import paths do not support variable evaluation, enclosing quotes, wildcards, or filenames containing spaces. Use a path without spaces; top-level --web quoting does not change this rule. Prefer / in cross-platform imports.
+Directive arguments use Core template evaluation. Each argument is one complete path, including internal spaces; quotes are not stripped and globs are not expanded. Prefer `/` in cross-platform paths.
 
 All direct and recursive imports must exist and be readable. Cycles fail; default maximum depth is 64 including the root. Reimporting a completed file is allowed. Diagnostics preserve source file, section, entry, line, and underlying details.
 
@@ -1096,37 +1097,35 @@ Completely overridden common values with no other consumers are not evaluated or
 <a id="variables"></a>
 ## Variables and escaping
 
-Values accept &#36;(name) and %name% using this command's fixed variable view: defaults, environment, .env files from filesystem root to final source, then explicit options. Source and identity follow general packaging rules; Web input cannot redefine them.
+Values accept &#36;(name) and ${name} using this command's fixed variable view: defaults, environment, .env files from filesystem root to final source, then explicit options. Source and identity follow general packaging rules; Web input cannot redefine them.
 
 ```ini
 [api]
-host = $(Environment).api.example.com
+host = ${Environment}.api.example.com
 bind!legacy = http://*
-server = http://%BackendHost%:8069
-header!X-Environment = $(Environment)
+server = http://${BackendHost}:8069
+header!X-Environment = ${Environment}
 ```
 
 Only effective values need evaluation. Missing effective variables fail; replaced backends are not evaluated. Known unselected iis values are not evaluated, but a misspelled prefix such as ngnix fails.
 
-Section names, common field names, member identifiers, and import paths are not evaluated. Native ! suffixes represent actual parameters and are evaluated as native parameters; this does not enable variables in common keys.
+Section names, common field names and member identifiers are not evaluated. Directive arguments are evaluated in `Directives.Processing`; native `!` suffixes are evaluated as actual parameters.
 
 | Text | Behavior |
 | --- | --- |
-| <code>&#36;(name)</code>, `%name%` | Packaging variables. |
-| <code>&#36;&#36;(name)</code>, `%%name%%` | Literal &#36;(name)/%name%; remain protected during recursive expansion. |
-| <code>&#36;host</code>, <code>&#36;{host}</code>, <code>&#36;remote_addr</code> | Not packaging variable forms; retained for Nginx in native settings. |
+| `${name}`, `${namespace:name}` | Packaging variables. |
+| `\${name}` | Literal `${name}`, also protected during recursive evaluation. |
+| `$host`, `$remote_addr` | Nginx runtime variables. Write `\${host}` for the braced form. |
 
-Profile quotes do not prevent evaluation. Escaping protects variable evaluation, not target encoding. Common fixed headers containing &#36; cannot currently be safely represented by the Nginx writer and explicitly fail; header!X-Template=&#36;&#36;(name) is therefore not a valid fixed Nginx header example. header!X-Template=%%Environment%% can represent literal %Environment%.
+Profile quotes do not prevent template evaluation. Escaping does not replace target encoding: the Nginx writer rejects `$` in common fixed headers when it cannot preserve literal semantics. Put runtime variables in native Nginx directives.
 
-Choose an environment-specific top-level file through the command. Bash/PowerShell single quotes prevent shell interpretation of &#36;():
+Use single quotes in Bash/PowerShell to protect command templates; Windows cmd accepts double quotes:
 
 ```shell
-dotnet-pack deb '--web:nginx:web.$(Environment).profile'
+dotnet-pack deb '--web:nginx:web.${Environment}.profile'
 ```
 
-Windows cmd can use double quotes. The selected file imports shared content using fixed relative paths; do not write #@import web.&#36;(Environment).profile.
-
-Build-time #@import reads Profile files; runtime nginx:include merely emits a Nginx reference and does not copy its target.
+Shared files can select an environment through `#@import web.${Environment}.profile`. Each directive imports one file; internal spaces belong to its name and require no enclosing quotes. Build-time `#@import` reads Profile files; runtime `nginx:include` only emits a Nginx reference and does not copy the file.
 
 <a id="example"></a>
 ## Complete configuration example
@@ -1348,7 +1347,7 @@ DESTDIR is excluded from default references. Path resolution still occurs with a
 | Symptom | Check/action |
 | --- | --- |
 | web.profile missing | Default lookup is directly under final source; correct source or use an explicit file. |
-| Missing/incorrect import | Resolve from the declaring file; import paths cannot contain variables, quotes, or spaces. |
+| Missing/incorrect import | Resolve the evaluated full path from the declaring file; check variables and the target file, and do not enclose the path in quotes. |
 | Mixed server forms | Pick scalar or named members per file/scope; changing forms is allowed across imported files. |
 | ~ cannot resolve | Require a generated service and one usable listen address, or specify server explicitly. |
 | Route not selected | Check match, case, slash, regex order, and explicit root fallback. |

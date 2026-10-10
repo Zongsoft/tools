@@ -22,7 +22,7 @@ public sealed partial class MigrationPackageTest
 		directory.Write("working/.env", "zongsoft_env_payload=wrong.txt\n");
 		directory.Write("source/.version", "zongsoft.daemon@1.0.0");
 		directory.Write("source/.env", "source=../wrong\nzongsoft_env_source=../wrong\nname=wrong\nversion=9.9.9\n#@import settings/defaults.ini\n");
-		directory.Write("source/settings/defaults.ini", "zongsoft_env_payload=application.txt\nzongsoft_env_output=$(source)/out/$(name)/$(version)\n");
+		directory.Write("source/settings/defaults.ini", "zongsoft_env_payload=application.txt\nzongsoft_env_output=${source}/out/${name}/${version}\n");
 		directory.Write("source/application.txt", "selected source payload");
 		directory.Write("wrong/.version", "wrong@9.9.9");
 		directory.Write("wrong/application.txt", "wrong source payload");
@@ -39,12 +39,12 @@ public sealed partial class MigrationPackageTest
 			Terminal.Default = DispatchProxy.Create<ITerminal, RecordingTerminal>();
 
 			var command = new TarCommand();
-			var arguments = new[] { "tar", "--source:$(zongsoft_env_source)", "--output:$(zongsoft_env_output)", "--platform:Linux", "--architecture:X64", "--framework:net10.0", "--daemon:disabled", "$(zongsoft_env_payload)" };
+			var arguments = new[] { "tar", "--source:${zongsoft_env_source}", "--output:${zongsoft_env_output}", "--platform:Linux", "--architecture:X64", "--framework:net10.0", "--daemon:disabled", "${zongsoft_env_payload}" };
 			var context = new CommandContext(new CommandExecutor(), CommandLine.Parse(CommandLine.Get(arguments))[0], command, null);
 
 			var path = Assert.IsType<string>(await ((ICommand)command).ExecuteAsync(context, TestContext.Current.CancellationToken));
 
-			Assert.Equal(Path.Combine(directory.Path, "source", "out", "zongsoft.daemon", "1.0.0", "zongsoft.daemon@1.0.0-x64.tar.gz"), path);
+			Assert.Equal(Path.Combine(directory.Path, "source", "out", "zongsoft.daemon", "1.0.0", "zongsoft.daemon@1.0.0-x64.tar.gz"), Path.GetFullPath(path));
 			Assert.Equal("selected source payload", Encoding.UTF8.GetString(Assert.Single(ReadPayload(Path.GetDirectoryName(path), "tar"), entry => entry.Key.EndsWith("application.txt", StringComparison.Ordinal)).Value));
 			Assert.False(Directory.Exists(Path.Combine(directory.Path, "working", "out")));
 			Assert.False(Directory.Exists(Path.Combine(directory.Path, "wrong", "out")));
@@ -78,10 +78,10 @@ public sealed partial class MigrationPackageTest
 			Terminal.Default = DispatchProxy.Create<ITerminal, RecordingTerminal>();
 
 			var command = new TarCommand();
-			var context = new CommandContext(new CommandExecutor(), CommandLine.Parse("tar --source:$(zongsoft_env_only_source) --output:out --platform:Linux --architecture:X64 --daemon:disabled application.txt")[0], command, null);
-			var error = await Assert.ThrowsAsync<InvalidOperationException>(async () => await ((ICommand)command).ExecuteAsync(context, TestContext.Current.CancellationToken));
+			var context = new CommandContext(new CommandExecutor(), CommandLine.Parse("tar --source:${zongsoft_env_only_source} --output:out --platform:Linux --architecture:X64 --daemon:disabled application.txt")[0], command, null);
+			var error = await Assert.ThrowsAsync<Zongsoft.Text.Templating.TemplateEvaluationException>(async () => await ((ICommand)command).ExecuteAsync(context, TestContext.Current.CancellationToken));
 
-			Assert.Contains("zongsoft_env_only_source", error.Message, StringComparison.Ordinal);
+			Assert.Equal("zongsoft_env_only_source", error.Expression);
 			Assert.False(Directory.Exists(Path.Combine(directory.Path, "source", "out")));
 			Assert.Equal("zongsoft.daemon@1.0.0", File.ReadAllText(Path.Combine(directory.Path, "source", ".version")));
 		}
@@ -109,7 +109,7 @@ public sealed partial class MigrationPackageTest
 		{
 			Terminal.Default = DispatchProxy.Create<ITerminal, RecordingTerminal>();
 			var command = new TarCommand();
-			var arguments = new[] { "tar", "--source:" + directory.Path, "--output:out", "--platform:Linux", "--architecture:X64", "--framework:net10.0", "--daemon:disabled", "--overwrite", "application.txt" };
+			var arguments = new[] { "tar", "--source:" + directory.Path.Replace('\\', '/'), "--output:out", "--platform:Linux", "--architecture:X64", "--framework:net10.0", "--daemon:disabled", "--overwrite", "application.txt" };
 			var context = new CommandContext(new CommandExecutor(), CommandLine.Parse(CommandLine.Get(arguments))[0], command, null);
 
 			await Assert.ThrowsAsync<ProfileException>(async () => await ((ICommand)command).ExecuteAsync(context, TestContext.Current.CancellationToken));

@@ -78,17 +78,17 @@ public sealed class PackageVersionTest
 		var sourceBytes = File.ReadAllBytes(original);
 		var output = Path.Combine(directory.Path, "output");
 		Directory.CreateDirectory(output);
-		var variables = new Variables(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+		var options = new PackageOptions(Utility.CreateEvaluator(new global::Zongsoft.Common.Variables
 		{
-			["source"] = source,
+			["source"] = source.Replace('\\', '/'),
 			["framework"] = "net10.0",
 			["daemon"] = "disabled",
-		});
+		}));
 		Package package = format switch
 		{
-			"tar" => new Package.Tar("Zongsoft.Hosting.Web", "Community", new Version(2, 3, 4), Platform.Linux, Architecture.X64, variables),
-			"deb" => new Package.Deb("Zongsoft.Hosting.Web", "Community", new Version(2, 3, 4), Platform.Linux, Architecture.X64, variables),
-			"rpm" => new Package.Rpm("Zongsoft.Hosting.Web", "Community", new Version(2, 3, 4), Platform.Linux, Architecture.X64, variables),
+			"tar" => new Package.Tar("Zongsoft.Hosting.Web", "Community", new Version(2, 3, 4), Platform.Linux, Architecture.X64, options),
+			"deb" => new Package.Deb("Zongsoft.Hosting.Web", "Community", new Version(2, 3, 4), Platform.Linux, Architecture.X64, options),
+			"rpm" => new Package.Rpm("Zongsoft.Hosting.Web", "Community", new Version(2, 3, 4), Platform.Linux, Architecture.X64, options),
 			_ => throw new ArgumentOutOfRangeException(nameof(format)),
 		};
 		package.InstallPath = "/opt/zongsoft/web";

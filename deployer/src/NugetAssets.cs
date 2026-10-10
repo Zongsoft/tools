@@ -41,6 +41,8 @@ using NuGet.Packaging;
 using NuGet.Frameworks;
 using NuGet.Packaging.Core;
 
+using Zongsoft.Text.Templating;
+
 namespace Zongsoft.Tools.Deployer;
 
 /// <summary>根据目标框架、RID 和内容规则选择包内部署文件，并适配显式 NuGet 缓存路径。</summary>
@@ -50,14 +52,14 @@ internal static class NugetAssets
 	#region 框架路径
 	/// <summary>调整包缓存中的库目录；无需调整或没有适用框架时返回原路径。</summary>
 	/// <param name="directory">包含目标框架子目录的库目录。</param>
-	/// <param name="variables">包含目标框架配置的部署变量。</param>
+	/// <param name="evaluator">包含目标框架配置的部署变量。</param>
 	/// <returns>调整后的目标框架路径；无需调整或没有适用框架时为原路径。</returns>
-	internal static string ResolveLibraryPath(string directory, IDictionary<string, string> variables)
+	internal static string ResolveLibraryPath(string directory, TemplateEvaluator evaluator)
 	{
-		if(string.IsNullOrEmpty(directory) || !Utility.TryGetTargetFramework(variables, out var framework))
+		if(string.IsNullOrEmpty(directory) || !Utility.TryGetTargetFramework(evaluator, out var framework))
 			return directory;
 
-		var packagesDirectory = Path.GetFullPath(NugetUtility.GetPackagesDirectory(variables));
+		var packagesDirectory = Path.GetFullPath(NugetUtility.GetPackagesDirectory(evaluator));
 		var relative = Path.GetRelativePath(packagesDirectory, Path.GetFullPath(directory));
 
 		if(Path.IsPathRooted(relative) || relative == ".." || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
@@ -99,10 +101,10 @@ internal static class NugetAssets
 	/// <summary>展开已选资产组并应用内容复制规则，按目标相对路径合并同一包的文件。</summary>
 	/// <param name="path">已解包的本地包目录。</param>
 	/// <param name="framework">选择资产时使用的目标框架。</param>
-	/// <param name="variables">包含平台、架构及资产选择配置的部署变量。</param>
+	/// <param name="evaluator">包含平台、架构及资产选择配置的部署变量。</param>
 	/// <param name="cancellation">用于取消资产遍历的令牌。</param>
 	/// <returns>应用资产选择和内容复制规则后的路径项。</returns>
-	internal static IEnumerable<DeploymentUtility.PathToken> GetPackageFiles(string path, string framework, IDictionary<string, string> variables, CancellationToken cancellation)
+	internal static IEnumerable<DeploymentUtility.PathToken> GetPackageFiles(string path, string framework, TemplateEvaluator evaluator, CancellationToken cancellation)
 	{
 		cancellation.ThrowIfCancellationRequested();
 
@@ -110,10 +112,10 @@ internal static class NugetAssets
 		var nuspec = Directory.EnumerateFiles(path, "*.nuspec").FirstOrDefault();
 		var contentRules = nuspec == null ? [] : new NuspecReader(nuspec).GetContentFiles().ToArray();
 
-		foreach(var asset in GetAssetPaths(path, framework, variables))
+		foreach(var asset in GetAssetPaths(path, framework, evaluator))
 		{
 			//资产目录已按目标框架选定，直接展开文件。
-			foreach(var file in DeploymentUtility.GetFiles(Path.Combine(asset, "*"), variables, resolveLibrary: false, cancellation: cancellation))
+			foreach(var file in DeploymentUtility.GetFiles(Path.Combine(asset, "*"), evaluator, resolveLibrary: false, cancellation: cancellation))
 			{
 				var relative = Path.GetRelativePath(path, file.Path).Replace('\\', '/');
 
@@ -138,14 +140,14 @@ internal static class NugetAssets
 	#endregion
 
 	#region 资产目录
-	private static IEnumerable<string> GetAssetPaths(string path, string framework, IDictionary<string, string> variables)
+	private static IEnumerable<string> GetAssetPaths(string path, string framework, TemplateEvaluator evaluator)
 	{
 		var target = NuGetFramework.Parse(framework);
 		string library = null;
 		string native = null;
 
 		// 托管和原生资产独立选择最先适用的 RID，不能因其中一组命中而停止另一组回退。
-		foreach(var runtime in NugetRuntime.GetIdentifiers(variables))
+		foreach(var runtime in NugetRuntime.GetIdentifiers(evaluator))
 		{
 			var runtimePath = Path.Combine(path, "runtimes", runtime);
 			library ??= GetNearestFrameworkPath(Path.Combine(runtimePath, "lib"), target);

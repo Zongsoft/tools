@@ -19,6 +19,29 @@ public sealed class ContainerManifestTests : IDisposable
 	public ContainerManifestTests() => Directory.CreateDirectory(_root);
 	public void Dispose() => Directory.Delete(_root, true);
 
+	[Fact]
+	public void RootChangesRemainVisibleToTemplateEvaluation()
+	{
+		var manifest = ManifestFactory.Create(CreateContext("redis", "--name:example", "--tag:original", "--version:1.0", "--distribution:debian", "--source:" + _root));
+		var evaluator = manifest.Evaluator;
+
+		Assert.Equal("example/original@1.0", evaluator.Evaluate("${name}/${tag}@${version}"));
+
+		manifest.Root["name"] = "updated";
+		manifest.Root["tag"] = null;
+		manifest.Root["custom_value"] = "added";
+
+		Assert.Equal("updated/@1.0/added", evaluator.Evaluate("${name}/${tag}@${version}/${custom_value}"));
+		Assert.True(evaluator.TryGetVariable("tag", out var tag));
+		Assert.Null(tag);
+
+		manifest.Root["tag"] = "next";
+		manifest.Root.Remove("custom_value");
+
+		Assert.Equal("updated/next@1.0", evaluator.Evaluate("${name}/${tag}@${version}"));
+		Assert.False(evaluator.TryGetVariable("custom_value", out _));
+	}
+
 	[Theory]
 	[InlineData(2026, 10, 4, "26.10.4")]
 	[InlineData(2126, 1, 2, "126.1.2")]
@@ -157,8 +180,8 @@ public sealed class ContainerManifestTests : IDisposable
 		var result = ManifestFactory.Create(CreateContext(input, "--version:2.0"));
 		Assert.Equal("2.0", result["version"]);
 		Assert.Equal("x64", result["architecture"]);
-		Assert.Equal(Path.Combine(source, "out"), result["output"]);
-		Assert.Equal(source, result["source"]);
+		Assert.Equal(Path.Combine(source, "out"), Path.GetFullPath(result["output"]));
+		Assert.Equal(source, Path.GetFullPath(result["source"]));
 		Assert.Contains("version=1.0", File.ReadAllText(input), StringComparison.Ordinal);
 	}
 
@@ -168,7 +191,7 @@ public sealed class ContainerManifestTests : IDisposable
 		Directory.CreateDirectory(Path.Combine(_root, "redis"));
 		var manifest = ManifestFactory.Create(CreateContext("redis", "--name:example", "--distribution:debian", "--source:" + _root));
 		Assert.Equal("redis", Assert.Single(manifest.Components).Name);
-		Assert.Equal(_root, manifest["output"]);
+		Assert.Equal(_root, Path.GetFullPath(manifest["output"]));
 		Assert.Throws<ContainerizationException>(() => ManifestFactory.Create(CreateContext("./redis", "--name:example", "--distribution:debian", "--source:" + _root)));
 	}
 
@@ -186,7 +209,7 @@ public sealed class ContainerManifestTests : IDisposable
 		Assert.Equal(Path.GetRelativePath(manifest["output"], source), ContainerManifest.Read(path)["source"]);
 		Assert.Equal(Path.GetRelativePath(source, manifest["output"]), ContainerManifest.Read(path)["output"]);
 		var restored = ManifestFactory.Create(CreateContext(path));
-		Assert.Equal(source, restored["source"]);
+		Assert.Equal(source, Path.GetFullPath(restored["source"]));
 		this.Save(restored);
 		Assert.Equal(original, File.ReadAllBytes(path));
 	}
@@ -310,7 +333,7 @@ public sealed class ContainerManifestTests : IDisposable
 	[Fact]
 	public void MysqlRootPasswordUsesSourceVariablesAndExplicitOverrides()
 	{
-		this.Write(".env", "[mysql]\nroot_password=$(test_password)\n[]\ntest_password=example-only\n");
+		this.Write(".env", "[mysql]\nroot_password=${test_password}\n[]\ntest_password=example-only\n");
 		var manifest = ManifestFactory.Create(CreateContext("mysql", "--name:example", "--distribution:debian", "--source:" + _root));
 		var component = Assert.Single(manifest.Components);
 		var source = TemplateCatalog.Read(component, manifest);
@@ -320,7 +343,7 @@ public sealed class ContainerManifestTests : IDisposable
 		Assert.Equal("/var/lib/mysql", mount.Target);
 		Assert.Empty(source.MissingSettings);
 
-		manifest.Variables["mysql_root_password"] = "$(unused_missing_variable)";
+		manifest.Evaluator.SetVariable("mysql:root_password", "${unused_missing_variable}");
 		component["settings"] = "root-password=explicit-setting";
 		source = TemplateCatalog.Read(component, manifest);
 		Assert.Equal("explicit-setting", source.Environment["MYSQL_ROOT_PASSWORD"]);
@@ -333,7 +356,7 @@ public sealed class ContainerManifestTests : IDisposable
 	public void MysqlMissingSourceVariableStillRequiresPasswordAndAllowsExplicitEnvironment()
 	{
 		var manifest = ManifestFactory.Create(CreateContext("mysql", "--name:example", "--distribution:debian", "--source:" + _root));
-		manifest.Variables.Remove("mysql_root_password");
+		Assert.False(manifest.Evaluator.TryGetVariable("mysql:root_password", out _));
 		var component = Assert.Single(manifest.Components);
 		var source = TemplateCatalog.Read(component, manifest);
 		Assert.Contains("root-password", source.MissingSettings);
@@ -349,30 +372,30 @@ public sealed class ContainerManifestTests : IDisposable
 	{
 		this.Write("custom.template", "version=1\nimage=docker.io/library/mysql\n[settings root-password]\nenvironment=MYSQL_ROOT_PASSWORD\nvariable=custom_password\ndefault=fallback\nrequired=true\n");
 		var manifest = ManifestFactory.Create(CreateContext("mysql", "--name:example", "--distribution:debian", "--source:" + _root));
-		manifest.Variables.Remove("custom_password");
+		Assert.False(manifest.Evaluator.TryGetVariable("custom_password", out _));
 		var component = Assert.Single(manifest.Components);
 		component["template"] = "custom.template";
 		Assert.Equal("fallback", TemplateCatalog.Read(component, manifest).Environment["MYSQL_ROOT_PASSWORD"]);
 
-		manifest.Variables["custom_password"] = "";
+		manifest.Evaluator.SetVariable("custom_password", "");
 		Assert.Equal("", TemplateCatalog.Read(component, manifest).Environment["MYSQL_ROOT_PASSWORD"]);
 
-		manifest.Variables["custom_password"] = "referenced";
+		manifest.Evaluator.SetVariable("custom_password", "referenced");
 		Assert.Equal("referenced", TemplateCatalog.Read(component, manifest).Environment["MYSQL_ROOT_PASSWORD"]);
 	}
 
 	[Fact]
 	public void TemplateValuesUseSourceVariablesAndPreserveArgumentBoundaries()
 	{
-		this.Write(".env", "[build]\nbind=127.0.0.1\nport=16379\nmessage=two \"quotes\" C:\\tmp\n");
+		this.Write(".env", "[build]\nbind=127.0.0.1\nport=16379\nmessage=two \"quotes\" C:\\\\tmp\n");
 		var configuration = this.Write("templates/config/redis.conf", "protected-mode yes\n");
-		this.Write("templates/redis.template", "version=1\nimage=docker.io/library/redis\nplatforms=x64\nCommand=[\"redis-server\",\"$(build_message)\",\"%build_port%\",\"$$(RUNTIME_COMMAND)\"]\nhealth=[\"CMD-SHELL\",\"echo $$TOKEN\"]\n[environment]\nTOKEN=$(build_message)\nRELEASE=$(name)@$(version)\n[ports]\ndefault=$(build_bind):%build_port%:6379\n[data]\ndata=$(data_path)\n[configuration]\n/etc/redis.conf=$(config_path)\n[settings message]\nenvironment=MESSAGE\ndefault=$(build_message)\n");
+		this.Write("templates/redis.template", "version=1\nimage=docker.io/library/redis\nplatforms=x64\nCommand=[\"redis-server\",\"${build:message}\",\"${build:port}\",\"\\\\${RUNTIME_COMMAND}\"]\nhealth=[\"CMD-SHELL\",\"echo $TOKEN\"]\n[environment]\nTOKEN=${build:message}\nRELEASE=${name}@${version}\n[ports]\ndefault=${build:bind}:${build:port}:6379\n[data]\ndata=${data_path}\n[configuration]\n/etc/redis.conf=${config_path}\n[settings message]\nenvironment=MESSAGE\ndefault=${build:message}\n");
 		var input = this.Write("input.container", "name=example\nversion=1.0\ndistribution=debian\n[redis]\n\ntemplate=templates/redis.template\nenvironment!TOKEN=explicit\n");
 		var manifest = ManifestFactory.Create(CreateContext(input, "--source:" + _root));
-		manifest.Variables["data_path"] = "/cache";
-		manifest.Variables["config_path"] = "config/redis.conf";
+		manifest.Evaluator.SetVariable("data_path", "/cache");
+		manifest.Evaluator.SetVariable("config_path", "config/redis.conf");
 		var source = TemplateCatalog.Read(Assert.Single(manifest.Components), manifest);
-		Assert.Equal(["redis-server", "two \"quotes\" C:\\tmp", "16379", "$(RUNTIME_COMMAND)"], source.Plan.Command);
+		Assert.Equal(["redis-server", "two \"quotes\" C:\\tmp", "16379", "${RUNTIME_COMMAND}"], source.Plan.Command);
 		Assert.Equal(["CMD-SHELL", "echo $TOKEN"], source.Plan.Health.Test);
 		Assert.Equal("explicit", source.Environment["TOKEN"]);
 		Assert.Equal("two \"quotes\" C:\\tmp", source.Environment["MESSAGE"]);
@@ -384,12 +407,11 @@ public sealed class ContainerManifestTests : IDisposable
 	}
 
 	[Theory]
-	[InlineData("$(missing)")]
-	[InlineData("%missing%")]
-	[InlineData("$(loop)")]
+	[InlineData("${missing}")]
+	[InlineData("${loop}")]
 	public void TemplatesRejectUnresolvedOrCyclicVariables(string value)
 	{
-		this.Write(".env", "loop=$(loop)\n");
+		this.Write(".env", "loop=${loop}\n");
 		this.Write("custom.template", "version=1\nimage=docker.io/library/redis\n[environment]\nVALUE=" + value + "\n");
 		var input = this.Write("input.container", "name=example\ndistribution=debian\n[redis]\n\ntemplate=custom.template\n");
 		var manifest = ManifestFactory.Create(CreateContext(input, "--source:" + _root));
@@ -433,5 +455,5 @@ public sealed class ContainerManifestTests : IDisposable
 		File.WriteAllText(path[..^7] + ".sh", "#!/bin/sh\nexit 0\n");
 		return path;
 	}
-	private static CommandContext CreateContext(params string[] arguments) => new(new CommandExecutor(), CommandLine.Parse(Utility.FormatCommand("containerize", arguments))[0], new ContainerizeCommand(), null);
+	private static CommandContext CreateContext(params string[] arguments) => new(new CommandExecutor(), CommandLine.Parse(Utility.FormatCommand("containerize", arguments.Select(argument => argument.Replace('\\', '/')).ToArray()))[0], new ContainerizeCommand(), null);
 }
