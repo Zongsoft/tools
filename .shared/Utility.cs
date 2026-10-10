@@ -154,24 +154,25 @@ internal static partial class Utility
 	internal static bool TryGetVariable(this TemplateEvaluator evaluator, string name, out object value)
 	{
 		var index = name.IndexOf(':');
-
 		return evaluator.Providers.TryGetValue(index < 0 ? null : name[..index], name[(index + 1)..], evaluator.Options.Fallback, out value);
 	}
 
-	internal static object GetVariable(this TemplateEvaluator evaluator, string name) => evaluator.TryGetVariable(name, out var value) ? value : null;
+	internal static string GetOption(this TemplateEvaluator evaluator, string name) => evaluator.TryGetOption(name, out var value) ? value : null;
 	internal static bool TryGetOption(this TemplateEvaluator evaluator, string name, out string value)
 	{
 		var found = evaluator.TryGetVariable(NormalizeVariableName(name), out var raw);
 		value = raw == null ? null : evaluator.Evaluate(raw.ToString());
 		return found;
 	}
-	internal static string GetOption(this TemplateEvaluator evaluator, string name) => evaluator.TryGetOption(name, out var value) ? value : null;
+
+	internal static object GetVariable(this TemplateEvaluator evaluator, string name) => evaluator.TryGetVariable(name, out var value) ? value : null;
 	internal static void SetVariable(this TemplateEvaluator evaluator, string name, object value)
 	{
 		if(evaluator.Providers.Count == 0 || evaluator.Providers[0] is not global::Zongsoft.Common.Variables)
 			evaluator.Providers.Insert(0, new global::Zongsoft.Common.Variables());
 		((global::Zongsoft.Common.Variables)evaluator.Providers[0])[NormalizeVariableName(name)] = value;
 	}
+
 	internal static string NormalizeVariableName(string name)
 	{
 		var index = name.IndexOf(':');
