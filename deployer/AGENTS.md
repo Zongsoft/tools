@@ -11,8 +11,8 @@
 
 ## 高风险契约
 
-- 章节指定目标目录，条目格式为 `resolver:argument = destination <filter>`；源路径支持通配符，过滤条件支持逻辑组合和目标框架版本比较。
-- 变量采用 Core 模板及命名空间规则，配置与命令选项查询不区分大小写，系统环境按平台规则比较。启用回退后逐级查询当前命名空间、父级及全局；每级按命令选项、目标应用 `appsettings.json`、由近到远的祖先 `.env`、系统环境顺序查找，首个命中即生效，包括 JSON null。`.env` 通过共享 Utility 和 Core Profile.Load 读取，章节层级以点号连接为命名空间，条目名中的点号和连字符改为下划线，不按各清单目录重新加载。用全部选项、环境变量和 `.env` 先定位 destination；其他值按需递归展开，先展开再转换。
+- 章节指定目标目录，条目格式为 `resolver:argument = output <filter>`；源路径支持通配符，过滤条件支持逻辑组合和目标框架版本比较。
+- 变量采用 Core 模板及命名空间规则，配置与命令选项查询不区分大小写，系统环境按平台规则比较。启用回退后逐级查询当前命名空间、父级及全局；每级按命令选项、目标应用 `appsettings.json`、由近到远的祖先 `.env`、系统环境顺序查找，首个命中即生效，包括 JSON null。`.env` 通过共享 Utility 和 Core Profile.Load 读取，章节层级以点号连接为命名空间，条目名中的点号和连字符改为下划线，不按各 `.deploy` 所在目录重新加载。用全部选项、环境变量和 `.env` 先定位 output；其他值按需递归展开，先展开再转换。
 - NuGet 解析器会访问包源、解析依赖、选择最适用的框架资产并可能递归执行包内 `.deploy`；修改时检查循环、路径越界和依赖忽略规则。
 - `delete`/`remove`、覆盖策略和目标规范化可破坏现有文件。所有测试目标必须是已确认的临时目录。
 - 命令、选项或消息变化时同步 `README.md`、`README.zh-Hans.md` 和 `.resx`；中性资源 `Resources.resx` 使用 `ResXFileCodeGenerator` 重新生成 `Resources.Designer.cs`，业务代码通过生成属性取资源，不使用字符串键动态查询；生成属性不手工维护。
@@ -43,3 +43,14 @@
 本地通配搜索统一复用 Core Searcher，链接以逻辑名称匹配，内容取实际目标。独立选中的目录链接可展开，载荷内部目录链接跳过，文件链接保留名称并读取目标。INI/.deploy 按逻辑来源解析相对路径。详细规则见[本地搜索与源链接](docs/implementation.zh-Hans.md#本地搜索与源链接)。
 
 代码规范采用 `Zongsoft.CodeAnalysis`，版本由仓库根 `Directory.Packages.props` 管理，检查方法与 SDK 要求见 [仓库规范](../AGENTS.md#代码规范检查)。
+
+## 源目录与配置模板
+
+- 输出目录参数与上下文统一使用 outputDirectory/OutputDirectory；条目、操作及报告中的输出路径使用 Output。Deployer.Output 是诊断流，不是文件路径。
+
+- `--source` 自身相对于调用目录，只用命令选项及系统变量定位；存在性验证后固定为本次工作源。共享 Utility 只加载该 source 的祖先 `.env`。
+- `--output` 及命令行本地相对输入、report、lockFile、previous、NuGet 缓存/本地包源相对于 source；`.deploy` 内部及 import 引用基准保持声明文件目录。
+- scheme/environment/network 是用户变量；方案导入顺序由 `.env` 的 `#@import` 和声明顺序决定，工具不得固化方案层级。导入文件的目录不建立额外祖先链。
+- `template:` 复用文件源搜索及 Core TemplateEvaluator，在计划阶段生成 UTF-8 内容；默认文件名去掉末尾 `.template`，可显式重命名。`.env` 不部署。
+- 显式模板源缺失或求值失败阻止写入；普通可选路径保持跳过。newest 对 Render 比较内容，其他文件按时间。生成内容摘要参与锁比较，Render/Unchanged 纳入 previous/prune 所有权；载荷字节不写入报告。
+- XML 注释按类保持公共成员完整，不能仅注释新增属性；遵循 `D:/Zongsoft/guidelines`。

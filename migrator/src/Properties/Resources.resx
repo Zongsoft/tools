@@ -224,4 +224,7 @@ Launcher: {1}</value>
   <data name="MigrateVersionFileInvalid.Message" xml:space="preserve">
     <value>The selected version in &quot;{0}&quot; must be nonzero.</value>
   </data>
+  <data name="Output.Elapsed" xml:space="preserve">
+    <value>  → {0}: {1} s</value>
+  </data>
 </root>

@@ -31,8 +31,6 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-using System;
-
 using Zongsoft.Terminals;
 using Zongsoft.Components;
 
@@ -55,17 +53,11 @@ internal class Dumper
 		Terminal.WriteLine(SPLASH);
 	}
 
-	public static void UndefinedVariable(string variable, string expression) => UndefinedVariable(CommandOutletColor.Red, variable, expression);
-	public static void UndefinedVariable(CommandOutletColor color, string variable, string expression) => Terminal.WriteLine(color, string.Format(Properties.Resources.VariableUndefined_Message, variable, expression));
-	public static void HostLocateFailed(CommandOutletColor color = CommandOutletColor.Red) => Terminal.WriteLine(color, Properties.Resources.HostLocateFailed_Message);
-	public static void InvalidVersion(CommandOutletColor color = CommandOutletColor.Red) => Terminal.WriteLine(color, Properties.Resources.InvalidVersion_Message);
+	public static void HostLocateFailed(CommandOutletColor color = CommandOutletColor.DarkRed) => Terminal.WriteLine(color, Properties.Resources.HostLocateFailed_Message);
 	public static void PathNotExist(string path) => PathNotExist(CommandOutletColor.DarkYellow, path);
-	public static void PathNotExist(CommandOutletColor color, string path) => Terminal.WriteLine(color, string.Format(Properties.Resources.PathNotExist_Message, path));
-	public static void FileNotExist(string path) => FileNotExist(CommandOutletColor.DarkYellow, path);
-	public static void FileNotExist(CommandOutletColor color, string path) => Terminal.WriteLine(color, string.Format(Properties.Resources.FileNotExist_Message, path));
-	public static void DirectoryNotExist(string path) => DirectoryNotExist(CommandOutletColor.DarkYellow, path);
-	public static void DirectoryNotExist(CommandOutletColor color, string path) => Terminal.WriteLine(color, string.Format(Properties.Resources.DirectoryNotExist_Message, path));
+	public static void PathNotExist(CommandOutletColor color, string path) => Terminal.WriteLine(Utility.FormatOutput(Properties.Resources.PathNotExist_Message, color, path));
+	public static void DirectoryNotExist(CommandOutletColor color, string path) => Terminal.WriteLine(Utility.FormatOutput(Properties.Resources.DirectoryNotExist_Message, color, path));
 	public static void PackageEntryConflicted(string path, string entry) => PackageEntryConflicted(CommandOutletColor.DarkYellow, path, entry);
-	public static void PackageEntryConflicted(CommandOutletColor color, string path, string entry) => Terminal.WriteLine(color, string.Format(Properties.Resources.PackageEntryConflicted_Message, path, entry));
+	public static void PackageEntryConflicted(CommandOutletColor color, string path, string entry) => Terminal.WriteLine(Utility.FormatOutput(Properties.Resources.PackageEntryConflicted_Message, color, path, entry));
 	#endregion
 }

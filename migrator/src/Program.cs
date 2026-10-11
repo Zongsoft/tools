@@ -48,6 +48,16 @@ internal class Program
 	#region 入口方法
 	public static async Task<int> Main(string[] args)
 	{
+		if(args is ["--help" or "-h"])
+		{
+			Utility.WriteOutput(Console.Out, Utility.FormatHelp("dotnet-migrate", "<input.migration> ... --name:<name> --platform:linux|windows [options]",
+				"[--version:<version-or-path>] [--edition:<edition>]",
+				"[--architecture:x64|arm64] [--output:<directory>] [--overwrite:true|false]",
+				"[--title:<text>] [--summary:<text>] [--description:<text>]",
+				"[--<variable>:<value>]"));
+			return 0;
+		}
+
 		if(args == null || args.Length == 0)
 		{
 			Terminal.WriteLine(CommandOutletColor.DarkRed, Properties.Resources.CommandLineEmpty_Message);
@@ -68,12 +78,16 @@ internal class Program
 		catch(Exception ex)
 		{
 			//打印异常消息
-			Terminal.WriteLine(CommandOutletColor.DarkRed, ex.Message + Environment.NewLine + ex.StackTrace);
+			Terminal.WriteLine(Utility.FormatError(ex, includeStackTrace: true));
 			return 1;
 		}
 		finally { Executor.Failed -= OnFailed; }
 
-		void OnFailed(object sender, CommandExecutorFailureEventArgs e) => failed = true;
+		void OnFailed(object sender, CommandExecutorFailureEventArgs e)
+		{
+			failed = true;
+			Utility.HandleFailure(e);
+		}
 	}
 	#endregion
 

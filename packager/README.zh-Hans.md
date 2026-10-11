@@ -7,6 +7,10 @@
 
 [English](README.md) | [简体中文](README.zh-Hans.md)
 
+终端警告使用暗黄色正文和粗体青色参数；错误使用暗红色正文和粗体紫色参数；成功提示使用绿色正文。异常类型以紫色标示，异常消息保留原文。四个工具共用仓库 `.shared/Utility.Output.cs`：`FormatOutput` 和 `FormatError` 构造 Core `CommandOutletContent`；`WriteOutput` 和 `WriteError` 统一终端与文本写入器的输出；使用命令执行器的工具通过 `HandleFailure` 输出异常并标记已处理，退出码由各工具决定。颜色由 Terminals 渲染。重定向的输出以及调用方提供的错误写入器保留纯文本和原通道。
+
+运行 `dotnet-pack --help` 或 `dotnet-pack -h` 查看常用选项：命令名为粗体青色，选项名为青色，占位符及候选值为绿色。帮助直接返回 `0`，不读取 `.env` 或处理输入文件。 也支持 `dotnet-pack tar --help`、`dotnet-pack deb --help` 和 `dotnet-pack rpm --help`，各子命令同样支持 `-h`。 打包流程开始后，结束时显示一行总耗时，命令名称和秒数以粗体青色突出；失败退出也显示已用时间，耗时本身不表示成功。
+
 `dotnet-pack` 是一个 .NET 全局工具，把应用文件目录（如纯前端 `dist` 或已发布的 .NET 应用）制作成可在 Linux 上分发和安装的 **`.tar.gz`**、**`.deb`**、**`.rpm`** 安装包，并按需生成 systemd 服务、安装/卸载脚本和 Nginx 站点配置。
 
 包格式由 .NET 直接写出，不依赖外部的 `tar`、`dpkg-deb`、`rpmbuild` 或 `cpio` 命令，因此在 Windows 上同样可以制作 Linux 安装包。
@@ -134,18 +138,17 @@ dotnet tool uninstall -g Zongsoft.Tools.Packager
 
 ### 第 1 步：准备应用
 
-按宿主的[部署流程](https://github.com/Zongsoft/hosting/blob/main/web/default/deploy.cmd)准备应用及其插件。在 hosting 根目录 `.env` 的根层定义 `framework=net10.0`，并在当前 Windows 控制台设置同值的 `framework` 环境变量供 Cake 构建使用。脚本已不再询问目标框架；将远程调试设为 `off`（Release），然后选择 Linux、x64。如果只准备宿主，在打包提示处输入 `exit`（当前脚本此分支返回 `1`，不代表前面的部署失败）：
+通过 hosting 根目录的 [deploy.cmd](https://github.com/Zongsoft/hosting/blob/main/deploy.cmd) 准备应用及插件，源目录选择 `web/default`。选择一个方案、环境和网络，将调试设为 `off`（Release），然后选择 Linux、x64。填写框架覆盖值时，deploy.cmd 将同一值传给 Cake 和 deployer，pack.cmd 须输入相同值；留空时须保持 `.env` 的框架与 Cake 默认值一致。deploy.cmd 完成构建与部署后退出，打包请另行运行 pack.cmd：
 
 ```cmd
-set "framework=net10.0"
 set "Environment=production"
-cd /d D:/Zongsoft/hosting/web/default
-deploy.cmd
+cd /d D:/Zongsoft/hosting
+deploy.cmd web/default
 ```
 
 ### 第 2 步：生成安装包
 
-直接在宿主目录中制包，未指定 `--source` 时源目录就是当前目录，位置参数从中挑选载荷。也可运行宿主 [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd)：独立脚本默认 tar、Release、x64，只打包已有文件。以下示例选择 `deb`、版本 `1.0.0`、环境 `production`，升迁提示留空。下面是对应的核心制包命令（省略空的 `--edition` 和 `--migration` 选项）：
+直接在宿主目录中制包，未指定 `--source` 时源目录就是当前目录，位置参数从中挑选载荷。也可运行 hosting 根目录的 [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/pack.cmd)，源目录选择 `web/default`，方案、环境和网络与部署时一致。独立脚本默认 tar、Release、x64，只打包已有文件。以下示例选择 `deb`、版本 `1.0.0`、环境 `production`，升迁提示留空。下面是在 `hosting/web/default` 中执行的核心制包命令（省略空的 `--edition` 和 `--migration` 选项）：
 
 ```cmd
 dotnet-pack deb ^
@@ -190,7 +193,7 @@ dotnet-pack deb ^
 
 > 💡 提示：把 `deb` 换成 `tar` 或 `rpm` 即可生成其他格式。重复生成同一格式时，请更换输出目录或添加 `--overwrite`。
 
-daemon 的脚本生成 `zongsoft.daemon.service`，传入 `Environment` 和 `DOTNET_ENVIRONMENT`；terminal 的脚本传入相同变量但使用 `--daemon:disabled`，不会为交互式终端设置进程环境。三个宿主的打包脚本均可选择收录已有升迁产物，不会自动制作它们；先在 hosting 根目录运行 `migrate.cmd`，再在宿主的升迁提示中填写 `zongsoft`。完整脚本参数见 [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.zh-Hans.md#安装包与升迁包)，工具行为以本 README 为准。
+根脚本选择 daemon 时生成 `zongsoft.daemon.service`，传入 `Environment` 和 `DOTNET_ENVIRONMENT`；选择 terminal 时传入相同变量但使用 `--daemon:disabled`，不会为交互式终端设置进程环境。根打包脚本支持三个宿主，均可选择收录已有升迁产物，不会自动制作它们；先在 hosting 根目录运行 `migrate.cmd`，再在根脚本的升迁提示中填写 `zongsoft`。完整脚本参数见 [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.zh-Hans.md#安装包与升迁包)，工具行为以本 README 为准。
 
 ### 第 3 步：检查产物
 
@@ -530,7 +533,7 @@ dotnet-pack deb \
   --output:../../../.packages
 ```
 
-**显式选择**：提供位置参数时，只包含所列文件或目录。以下示例与宿主 [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd) 相同，选择 MIME 定义、应用设置、宿主配置、静态文件、插件，并用目录别名 `~` 把编译输出放到安装根目录：
+**显式选择**：提供位置参数时，只包含所列文件或目录。以下示例与宿主 [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/pack.cmd) 相同，选择 MIME 定义、应用设置、宿主配置、静态文件、插件，并用目录别名 `~` 把编译输出放到安装根目录：
 
 ```bash
 dotnet-pack deb \
@@ -669,7 +672,7 @@ HTTPS 需要在宿主中配置可用的默认服务器证书，打包器不生�
 
 ### 服务环境变量
 
-`--daemon-environments` 列出的变量值会写入生成服务的 `Environment=`。Web 宿主的 [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd) 用它写入 `Environment`、`DOTNET_ENVIRONMENT` 和 `ASPNETCORE_ENVIRONMENT`。下面的 Bash 示例显式指定框架；宿主脚本则从变量来源读取框架：
+`--daemon-environments` 列出的变量值会写入生成服务的 `Environment=`。Web 宿主的 [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/pack.cmd) 用它写入 `Environment`、`DOTNET_ENVIRONMENT` 和 `ASPNETCORE_ENVIRONMENT`。下面的 Bash 示例显式指定框架；根脚本接受显式覆盖或从变量来源读取框架：
 
 ```bash
 dotnet-pack deb \

@@ -206,12 +206,36 @@ public sealed class ContainerManifestTests : IDisposable
 		this.Save(manifest);
 		var path = Path.Combine(_root, "delivery", "example@1.0-x64.container");
 		var original = File.ReadAllBytes(path);
-		Assert.Equal(Path.GetRelativePath(manifest["output"], source), ContainerManifest.Read(path)["source"]);
-		Assert.Equal(Path.GetRelativePath(source, manifest["output"]), ContainerManifest.Read(path)["output"]);
+		Assert.Equal(Path.GetRelativePath(manifest["output"], source).Replace(Path.DirectorySeparatorChar, '/'), ContainerManifest.Read(path)["source"]);
+		Assert.Equal(Path.GetRelativePath(source, manifest["output"]).Replace(Path.DirectorySeparatorChar, '/'), ContainerManifest.Read(path)["output"]);
 		var restored = ManifestFactory.Create(CreateContext(path));
 		Assert.Equal(source, Path.GetFullPath(restored["source"]));
 		this.Save(restored);
 		Assert.Equal(original, File.ReadAllBytes(path));
+	}
+
+	[Fact]
+	public void SavedPlanResolvesNestedPathsWhenMakingDelivery()
+	{
+		var source = Path.Combine(_root, "workspace", "source");
+		var package = this.WriteTarPackage("workspace/source/app/.packages/example@1.0.tar.gz", "example", "x64");
+		var template = this.Write("workspace/source/templates/cache.template", "version=1\nimage=docker.io/library/redis\n");
+		var migration = this.Write("workspace/source/.migration/example(migrate)@1.0_linux-x64.tar.gz", "not unpacked while planning");
+		this.Write("workspace/source/.migration/example(migrate)@1.0_linux-x64.sh", "never executed");
+		var manifest = ManifestFactory.Create(CreateContext(package, "redis", "--name:example", "--distribution:debian", "--source:" + source, "--output:../../releases/delivery", "--version:1.0"), planning: true);
+		manifest.Components.Single(component => component.Name == "redis")["template"] = template;
+		manifest.Migrations.Add(migration);
+
+		Directory.CreateDirectory(manifest["output"]);
+		var path = manifest.Prepare(manifest["output"], planning: true);
+		var restored = ManifestFactory.Create(CreateContext(path), make: true);
+
+		Assert.False(restored.IsComplete);
+		Assert.Equal(source, Path.GetFullPath(restored["source"]));
+		Assert.Equal(Path.Combine(_root, "releases", "delivery"), Path.GetFullPath(restored["output"]));
+		Assert.Equal(Path.GetFullPath(package), restored.Components.Single(component => component.IsApplication)["package"]);
+		Assert.Equal(Path.GetFullPath(template), restored.ResolvePath(restored.Components.Single(component => component.Name == "redis")["template"]));
+		Assert.Equal(Path.GetFullPath(migration), Assert.Single(restored.Migrations));
 	}
 
 	[Fact]

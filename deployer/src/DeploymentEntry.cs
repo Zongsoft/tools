@@ -40,32 +40,41 @@ namespace Zongsoft.Tools.Deployer;
 public sealed class DeploymentEntry
 {
 	#region 私有构造
-	private DeploymentEntry(Configuration.Profiles.Profile profile, string name, Target source, Target destination, string requisition = null)
+	private DeploymentEntry(Configuration.Profiles.Profile profile, string name, Target source, Target output, string requisition = null)
 	{
 		this.Profile = profile;
 		this.Name = name?.Trim();
 		this.Source = source;
-		this.Destination = destination;
+		this.Output = output;
 		this.Requisition = requisition?.Trim();
 	}
 	#endregion
 
 	#region 公共属性
+	/// <summary>获取解析器名称。</summary>
 	public string Name { get; }
+	/// <summary>获取源路径信息。</summary>
 	public Target Source { get; }
-	public Target Destination { get; }
+	/// <summary>获取输出路径信息。</summary>
+	public Target Output { get; }
+	/// <summary>获取过滤表达式，未指定时为空。</summary>
 	public string Requisition { get; }
+	/// <summary>获取声明本条目的 .deploy 文件。</summary>
 	public Configuration.Profiles.Profile Profile { get; }
 	#endregion
 
 	#region 静态方法
+	/// <summary>从 Profile 条目解析部署源、输出目标及过滤条件。</summary>
+	/// <param name="context">本次部署的变量和输出上下文。</param>
+	/// <param name="entry">待解析的 .deploy 条目。</param>
+	/// <returns>源和目标均已求值的部署条目。</returns>
 	public static DeploymentEntry Get(DeploymentContext context, Configuration.Profiles.ProfileEntry entry)
 	{
 		var source = Utility.Requisition.GetRequisites(entry.Name, out var sourceRequisite).ToString();
-		var destination = Utility.Requisition.GetRequisites(entry.Value, out var destinationRequisite).ToString();
+		var output = Utility.Requisition.GetRequisites(entry.Value, out var outputRequisite).ToString();
 		var requisition = sourceRequisite.IsEmpty ?
-			(destinationRequisite.IsEmpty ? null : destinationRequisite.ToString()) :
-			(destinationRequisite.IsEmpty ? sourceRequisite.ToString() : $"{sourceRequisite} & {destinationRequisite}");
+			(outputRequisite.IsEmpty ? null : outputRequisite.ToString()) :
+			(outputRequisite.IsEmpty ? sourceRequisite.ToString() : $"{sourceRequisite} & {outputRequisite}");
 
 		var index = source.IndexOf(':');
 		if(index >= 0 && source.AsSpan(0, index).Contains("${", StringComparison.Ordinal))
@@ -86,28 +95,35 @@ public sealed class DeploymentEntry
 		var sourceName = context.Deployer.Normalize(source);
 		var sourcePath = Path.IsPathRooted(sourceName) ? Path.GetDirectoryName(sourceName) : Path.GetDirectoryName(entry.Profile.FilePath);
 
-		var destinationName = string.IsNullOrWhiteSpace(destination) ? string.Empty : context.Deployer.Normalize(destination);
-		var destinationPath = entry.Section == null ? context.DestinationDirectory : Path.Combine(context.DestinationDirectory,
-				context.Deployer.Normalize(entry.Section.FullName.Replace(' ', Path.DirectorySeparatorChar)));
+		var outputName = string.IsNullOrWhiteSpace(output) ? string.Empty : context.Deployer.Normalize(output);
+		//Profile 章节是目录层级，不支持模板表达式；拼接后的文件系统路径不能再次作为模板解析。
+		var outputPath = entry.Section == null ? context.OutputDirectory :
+			Path.Combine(context.OutputDirectory, entry.Section.FullName.Replace(' ', Path.DirectorySeparatorChar));
 
-		return new(entry.Profile, name, new Target(sourceName, sourcePath), new Target(destinationName, destinationPath), requisition);
+		return new(entry.Profile, name, new Target(sourceName, sourcePath), new Target(outputName, outputPath), requisition);
 	}
 	#endregion
 
 	#region 重写方法
+	/// <summary>获取条目的文本表示。</summary>
+	/// <returns>源、目标及过滤条件组成的文本。</returns>
 	public override string ToString()
 	{
-		if(this.Destination.IsEmpty)
+		if(this.Output.IsEmpty)
 			return string.IsNullOrEmpty(this.Requisition) ? $"{this.Source}" : $"{this.Source}\t<{this.Requisition}>";
 		else
-			return string.IsNullOrEmpty(this.Requisition) ? $"{this.Source}={this.Destination}" : $"{this.Source}={this.Destination}\t<{this.Requisition}>";
+			return string.IsNullOrEmpty(this.Requisition) ? $"{this.Source}={this.Output}" : $"{this.Source}={this.Output}\t<{this.Requisition}>";
 	}
 	#endregion
 
 	#region 嵌套结构
+	/// <summary>表示逻辑名称及其路径基准。</summary>
 	public readonly struct Target
 	{
 		#region 构造函数
+		/// <summary>使用逻辑名称和目录创建路径信息。</summary>
+		/// <param name="name">文件名或相对路径；允许为空。</param>
+		/// <param name="path">路径基准。</param>
 		public Target(string name, string path)
 		{
 			this.Name = name?.Trim();
@@ -116,16 +132,22 @@ public sealed class DeploymentEntry
 		#endregion
 
 		#region 公共字段
+		/// <summary>保存逻辑名称。</summary>
 		public readonly string Name;
+		/// <summary>保存路径基准。</summary>
 		public readonly string Path;
 		#endregion
 
 		#region 公共属性
+		/// <summary>获取一个值，指示逻辑名称是否为空。</summary>
 		public bool IsEmpty => string.IsNullOrEmpty(this.Name);
+		/// <summary>获取合并后的路径。</summary>
 		public string FullPath => System.IO.Path.Combine(this.Path, this.Name);
 		#endregion
 
 		#region 重写方法
+		/// <summary>获取逻辑名称。</summary>
+		/// <returns>逻辑名称。</returns>
 		public override string ToString() => this.Name;
 		#endregion
 	}

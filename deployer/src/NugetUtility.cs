@@ -99,7 +99,8 @@ public static class NugetUtility
 		if(!evaluator.TryGetOption(NUGET_SERVER_ENVIRONMENT, out var server) || string.IsNullOrWhiteSpace(server))
 			server = NUGET_SERVER_URL;
 
-		return server;
+		return Uri.TryCreate(server, UriKind.Absolute, out _) ? server :
+			Path.GetFullPath(server, evaluator.GetOption(Deployer.SOURCE_OPTION) ?? Environment.CurrentDirectory);
 	}
 
 	/// <summary>获取配置的包缓存目录；未指定时使用 NuGet 用户目录下的 packages 目录。</summary>
@@ -107,7 +108,10 @@ public static class NugetUtility
 	/// <returns>配置的包缓存目录；未指定时为 NuGet 用户目录下的 packages 目录。</returns>
 	public static string GetPackagesDirectory(TemplateEvaluator evaluator)
 	{
-		return evaluator.TryGetOption(NUGET_PACKAGES_ENVIRONMENT, out var directory) && !string.IsNullOrEmpty(directory) ? directory : DEFAULT_PACKAGES_DIRECTORY;
+		var directory = evaluator.GetOption(NUGET_PACKAGES_ENVIRONMENT);
+		if(string.IsNullOrEmpty(directory))
+			directory = evaluator.Evaluate(DEFAULT_PACKAGES_DIRECTORY);
+		return Path.GetFullPath(directory, evaluator.GetOption(Deployer.SOURCE_OPTION) ?? Environment.CurrentDirectory);
 	}
 
 	/// <summary>按 NuGet 缓存布局生成绝对目录；未指定版本时返回该包的版本列表目录，不执行文件系统访问。</summary>
@@ -315,7 +319,9 @@ public static class NugetUtility
 	/// <summary>保存一个评估器实例对应的元数据与版本查询缓存，不延长该字典的生命周期。</summary>
 	private sealed class PackageCache
 	{
+		/// <summary>保存当前包源和离线选项对应的包元数据。</summary>
 		public readonly Dictionary<string, PackageMetadata> Metadata = new(StringComparer.OrdinalIgnoreCase);
+		/// <summary>保存当前包源和离线选项对应的可用版本。</summary>
 		public readonly Dictionary<string, NuGetVersion[]> Versions = new(StringComparer.OrdinalIgnoreCase);
 	}
 
@@ -328,10 +334,18 @@ public static class NugetUtility
 			this.DependencySets = dependencySets?.ToArray() ?? [];
 		}
 
+		/// <summary>获取包的名称和版本。</summary>
 		public PackageIdentity Identity { get; }
+		/// <summary>获取包的框架依赖组。</summary>
 		public IEnumerable<PackageDependencyGroup> DependencySets { get; }
 
+		/// <summary>从包源搜索结果创建统一元数据视图。</summary>
+		/// <param name="metadata">包源元数据。</param>
+		/// <returns>统一元数据视图；输入为空时返回 null。</returns>
 		public static PackageMetadata Create(IPackageSearchMetadata metadata) => metadata == null ? null : new PackageMetadata(metadata.Identity, metadata.DependencySets);
+		/// <summary>从本地包描述读取统一元数据视图。</summary>
+		/// <param name="reader">包描述读取器，由调用方管理。</param>
+		/// <returns>统一元数据视图；输入为空时返回 null。</returns>
 		public static PackageMetadata Create(NuspecReader reader) => reader == null ? null : new PackageMetadata(reader.GetIdentity(), reader.GetDependencyGroups());
 	}
 	#endregion

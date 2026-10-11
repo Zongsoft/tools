@@ -60,9 +60,9 @@ public partial class ContainerizeCommand : CommandBase<CommandContext>
 	protected override async ValueTask<object> OnExecuteAsync(CommandContext context, CancellationToken cancellation)
 	{
 		var manifest = this.CreateManifest(context);
-		context.Output.WriteLine(Output.FormatMessage("{0}@{1} ({2})", manifest["name"], manifest["version"], manifest["architecture"]));
-		context.Output.WriteLine(Output.FormatMessage("  distribution={0}  engine={1}  bootstrap={2}  imaging={3}", manifest["distribution"], manifest["engine"], manifest["bootstrap"], manifest["imaging"]));
-		var builder = new DeliveryBuilder(new ProcessRunner(), refresh: context.Options.Switch("refresh"), output: context.Output.WriteLine, error: context.Error.WriteLine);
+		context.Output.WriteLine(Utility.FormatOutput("{0}@{1} ({2})", manifest["name"], manifest["version"], manifest["architecture"]));
+		context.Output.WriteLine(Utility.FormatOutput("  distribution={0}  engine={1}  bootstrap={2}  imaging={3}", manifest["distribution"], manifest["engine"], manifest["bootstrap"], manifest["imaging"]));
+		var builder = new DeliveryBuilder(new ProcessRunner(), refresh: context.Options.Switch("refresh"), output: context.Output.WriteLine, error: content => Utility.WriteOutput(context.Error, content));
 		var path = await this.BuildAsync(builder, manifest, cancellation);
 
 		context.Output.WriteLine(CommandOutletStyles.Bold, CommandOutletColor.Green, path);

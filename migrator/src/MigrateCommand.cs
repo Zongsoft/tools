@@ -60,6 +60,7 @@ public sealed partial class MigrateCommand : CommandBase<CommandContext>
 	#region 执行方法
 	protected override ValueTask<object> OnExecuteAsync(CommandContext context, CancellationToken cancellation)
 	{
+		using var timing = Utility.MeasureOutput(context.Output.WriteLine, Properties.Resources.Output_Elapsed, "dotnet-migrate");
 		var evaluator = Utility.CreateEvaluator(context, Environment.CurrentDirectory);
 		evaluator.SetVariable(MigrationOptions.SOURCE, Environment.CurrentDirectory.Replace('\\', '/'));
 		evaluator.SetVariable(MigrationOptions.VERSION, null);
@@ -111,7 +112,7 @@ public sealed partial class MigrateCommand : CommandBase<CommandContext>
 		plan.Description = options.Description;
 		using var bundle = MigrationBundle.Build(plan, null);
 		Generator.Migrate(bundle, output, archive, launcher, migrationName, platform == "win", overwrite);
-		Terminal.WriteLine(CommandOutletColor.DarkGreen, string.Format(Properties.Resources.MigrateGenerated, Path.Combine(output, archive), Path.Combine(output, launcher)));
+		Terminal.WriteLine(Utility.FormatOutput(Properties.Resources.MigrateGenerated, CommandOutletColor.DarkGreen, Path.Combine(output, archive), Path.Combine(output, launcher)));
 		return ValueTask.FromResult<object>(Path.Combine(output, archive));
 	}
 	#endregion

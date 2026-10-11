@@ -41,12 +41,12 @@ using System.Collections.Generic;
 using System.Globalization;
 
 using Zongsoft.Common;
-using Zongsoft.Terminals;
+using Zongsoft.Components;
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer;
 
-internal sealed class ContainerEngine(string executable, IProcessRunner runner, Action<string> error = null)
+internal sealed class ContainerEngine(string executable, IProcessRunner runner, Action<CommandOutletContent> error = null)
 {
 	#region 常量定义
 	internal const string AUTO = "auto";
@@ -83,7 +83,7 @@ internal sealed class ContainerEngine(string executable, IProcessRunner runner, 
 		return result.Output;
 	}
 
-	public static async Task<ContainerEngine> ConnectAsync(string choice, IProcessRunner runner, CancellationToken cancellation, bool requireCompose = true, Action<string> error = null)
+	public static async Task<ContainerEngine> ConnectAsync(string choice, IProcessRunner runner, CancellationToken cancellation, bool requireCompose = true, Action<CommandOutletContent> error = null)
 	{
 		var failures = new List<string>();
 		string[] candidates = choice == AUTO ? [DOCKER, PODMAN] : [choice];
@@ -202,7 +202,7 @@ internal sealed class ContainerEngine(string executable, IProcessRunner runner, 
 
 				sourceRepository = candidate;
 				return pulled.Value;
-			}, cancellation, (candidate, exception) => (error ?? Terminal.Default.Error.WriteLine)(string.Format(Properties.Resources.Mirrors_SourceFailed, candidate, exception.Message)));
+			}, cancellation, (candidate, exception) => (error ?? Utility.WriteError)(Utility.FormatOutput(Properties.Resources.Mirrors_SourceFailed, CommandOutletColor.DarkYellow, candidate, exception.Message)));
 		}
 		else if(sourceRepository == repository && !HasRepositoryDigest(cached.Value, repository, actual))
 		{

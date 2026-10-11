@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 
 using Xunit;
+using Zongsoft.Components;
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
@@ -19,7 +20,7 @@ public sealed class BuildResourcesTests
 	{
 		var runner = new CleanupRunner(arguments => arguments[1] == "rm" ? new(1, "", "not found") : new(0, "", ""));
 		var errors = new List<string>();
-		var resources = new BuildResources(new ContainerEngine(engine, runner), errors.Add);
+		var resources = new BuildResources(new ContainerEngine(engine, runner), content => errors.Add(CommandOutletContent.GetFullText(content)));
 		resources.RegisterImage();
 		resources.RegisterContainer();
 
@@ -37,7 +38,7 @@ public sealed class BuildResourcesTests
 		string blocked = null;
 		var runner = new CleanupRunner(arguments => arguments[^1].Contains(blocked, StringComparison.Ordinal) ? throw new IOException("engine unavailable") : new(0, "", ""));
 		var errors = new List<string>();
-		var resources = new BuildResources(new ContainerEngine(engine, runner), errors.Add);
+		var resources = new BuildResources(new ContainerEngine(engine, runner), content => errors.Add(CommandOutletContent.GetFullText(content)));
 		var removable = resources.RegisterImage();
 		blocked = resources.RegisterContainer();
 
@@ -64,7 +65,7 @@ public sealed class BuildResourcesTests
 		string builder = null;
 		var runner = new CleanupRunner(arguments => arguments[1] == "rm" ? new(1, "", "builder removal failed") : new(0, builder + "-other\n" + (retained ? builder : ""), ""));
 		var errors = new List<string>();
-		var resources = new BuildResources(new ContainerEngine("docker", runner), errors.Add);
+		var resources = new BuildResources(new ContainerEngine("docker", runner), content => errors.Add(CommandOutletContent.GetFullText(content)));
 		builder = resources.RegisterBuilder();
 
 		await resources.DisposeAsync();

@@ -17,14 +17,14 @@ public class NugetTest
 		fixture.Package("Shared.Common");
 		fixture.Variables["overwrite"] = "alway";
 		var deployer = fixture.CreateDeployer();
-		var result = await deployer.DeployAsync((fixture.Manifest("nuget:Shared.Left@1.0.0\nnuget:Shared.Right@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((fixture.Manifest("nuget:Shared.Left@1.0.0\nnuget:Shared.Right@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(3, result.Successes);
 		Assert.Equal(1, result.Skipped);
-		Assert.Equal(3, Directory.GetFiles(fixture.Destination).Length);
-		Assert.Equal("Shared.Common@1.0.0", File.ReadAllText(Path.Combine(fixture.Destination, "Shared.Common.dll")));
+		Assert.Equal(3, Directory.GetFiles(fixture.OutputDirectory).Length);
+		Assert.Equal("Shared.Common@1.0.0", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Shared.Common.dll")));
 		var duplicate = Assert.Single(deployer.Plan.Operations, operation => operation.Status == "Duplicate");
-		Assert.Equal(Path.Combine(fixture.Destination, "Shared.Common.dll"), duplicate.Destination);
+		Assert.Equal(Path.Combine(fixture.OutputDirectory, "Shared.Common.dll"), duplicate.Output);
 		Assert.False(string.IsNullOrWhiteSpace(duplicate.Reason));
 	}
 
@@ -35,12 +35,12 @@ public class NugetTest
 		fixture.Package("Repeated.Root");
 		fixture.Variables["overwrite"] = "alway";
 		var deployer = fixture.CreateDeployer();
-		var result = await deployer.DeployAsync((fixture.Manifest("nuget:Repeated.Root@1.0.0\ndelete:Repeated.Root.dll\nnuget:Repeated.Root@latest")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((fixture.Manifest("nuget:Repeated.Root@1.0.0\ndelete:Repeated.Root.dll\nnuget:Repeated.Root@latest")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(2, result.Successes);
 		Assert.Equal(1, result.Deleted);
 		Assert.Equal(0, result.Skipped);
-		Assert.Equal("Repeated.Root@1.0.0", File.ReadAllText(Path.Combine(fixture.Destination, "Repeated.Root.dll")));
+		Assert.Equal("Repeated.Root@1.0.0", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Repeated.Root.dll")));
 		Assert.Equal(["Copied", "Deleted", "Copied"], deployer.Plan.Operations.Select(operation => operation.Status).ToArray());
 	}
 
@@ -59,15 +59,15 @@ public class NugetTest
 		spec.Root.Element("metadata").Add(new XElement("contentFiles", new XElement("files", new XAttribute("include", "any/net10.0/**/*.txt"),
 			new XAttribute("exclude", "**/excluded.txt"), new XAttribute("copyToOutput", copy), new XAttribute("flatten", flatten))));
 		spec.Save(specPath);
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Content.Root@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Content.Root@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(0, result.Failures);
-		var path = Path.Combine(fixture.Destination, flatten ? "config.txt" : "nested/config.txt");
+		var path = Path.Combine(fixture.OutputDirectory, flatten ? "config.txt" : "nested/config.txt");
 		Assert.Equal(exists, File.Exists(path));
 
 		if(exists)
 			Assert.Equal("selected content", File.ReadAllText(path));
-		Assert.DoesNotContain(Directory.GetFiles(fixture.Destination, "*", SearchOption.AllDirectories), file => Path.GetFileName(file) == "excluded.txt");
-		Assert.Equal("Content.Root@1.0.0", File.ReadAllText(Path.Combine(fixture.Destination, "Content.Root.dll")));
+		Assert.DoesNotContain(Directory.GetFiles(fixture.OutputDirectory, "*", SearchOption.AllDirectories), file => Path.GetFileName(file) == "excluded.txt");
+		Assert.Equal("Content.Root@1.0.0", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Content.Root.dll")));
 	}
 
 	[Fact]
@@ -76,9 +76,9 @@ public class NugetTest
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Content.Default");
 		fixture.Write("packages/content.default/1.0.0/contentFiles/any/net10.0/config.txt", "not opted in");
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Content.Default@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Content.Default@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(0, result.Failures);
-		Assert.False(File.Exists(Path.Combine(fixture.Destination, "config.txt")));
+		Assert.False(File.Exists(Path.Combine(fixture.OutputDirectory, "config.txt")));
 		Assert.Equal(1, result.Successes);
 	}
 
@@ -89,10 +89,10 @@ public class NugetTest
 		fixture.Package("Content.Legacy");
 		fixture.Write("packages/content.legacy/1.0.0/content/root.txt", "root");
 		fixture.Write("packages/content.legacy/1.0.0/content/nested/child.txt", "child");
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Content.Legacy@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Content.Legacy@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(0, result.Failures);
-		Assert.Equal("root", File.ReadAllText(Path.Combine(fixture.Destination, "root.txt")));
-		Assert.Equal("child", File.ReadAllText(Path.Combine(fixture.Destination, "nested", "child.txt")));
+		Assert.Equal("root", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "root.txt")));
+		Assert.Equal("child", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "nested", "child.txt")));
 	}
 
 	[Theory]
@@ -107,10 +107,10 @@ public class NugetTest
 		fixture.Write($"packages/aliases.root/1.0.0/runtimes/{runtime}/lib/net10.0/Aliases.Root.dll", "runtime selected");
 		fixture.Variables["platform"] = platform;
 		fixture.Variables["architecture"] = architecture;
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Aliases.Root@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Aliases.Root@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(0, result.Failures);
-		Assert.Equal("runtime selected", File.ReadAllText(Path.Combine(fixture.Destination, "Aliases.Root.dll")));
-		Assert.False(File.Exists(Path.Combine(fixture.Destination, "PortableOnly.dll")));
+		Assert.Equal("runtime selected", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Aliases.Root.dll")));
+		Assert.False(File.Exists(Path.Combine(fixture.OutputDirectory, "PortableOnly.dll")));
 	}
 
 	[Fact]
@@ -144,13 +144,13 @@ public class NugetTest
 		fixture.Variables["Framework"] = framework;
 		var deployer = fixture.CreateDeployer();
 
-		var result = await deployer.DeployAsync((fixture.Manifest("nuget:Group.Root@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((fixture.Manifest("nuget:Group.Root@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(2, result.Successes);
 		var dependency = Assert.Single(deployer.Plan.Packages, package => package.Id != "Group.Root");
 		Assert.Equal(expected, dependency.Id.ToLowerInvariant());
-		Assert.Equal(dependency.Id + "@1.0.0", File.ReadAllText(Path.Combine(fixture.Destination, dependency.Id + ".dll")));
+		Assert.Equal(dependency.Id + "@1.0.0", File.ReadAllText(Path.Combine(fixture.OutputDirectory, dependency.Id + ".dll")));
 	}
 
 	[Fact]
@@ -159,10 +159,10 @@ public class NugetTest
 		using var fixture = new DeploymentFixture();
 		fixture.Package("Explicit.Root", dependencies: [("Unavailable.Child", "[1.0.0]")]);
 		fixture.Write("packages/explicit.root/1.0.0/content/requested.txt", "explicit content");
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Explicit.Root@1.0.0/content/requested.txt")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Explicit.Root@1.0.0/content/requested.txt")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(1, result.Successes);
-		Assert.Equal("explicit content", File.ReadAllText(Path.Combine(fixture.Destination, "requested.txt")));
+		Assert.Equal("explicit content", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "requested.txt")));
 		Assert.False(Directory.Exists(Path.Combine(fixture.Packages, "unavailable.child")));
 	}
 
@@ -173,9 +173,9 @@ public class NugetTest
 		fixture.Package("Manifest.Root", dependencies: [("Unavailable.Child", "[1.0.0]")]);
 		fixture.Write("packages/manifest.root/1.0.0/content/requested.txt", "manifest content");
 		fixture.Write("packages/manifest.root/1.0.0/.deploy", "content/requested.txt");
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Manifest.Root@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Manifest.Root@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(0, result.Failures);
-		Assert.Equal("manifest content", File.ReadAllText(Path.Combine(fixture.Destination, "requested.txt")));
+		Assert.Equal("manifest content", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "requested.txt")));
 		Assert.False(Directory.Exists(Path.Combine(fixture.Packages, "unavailable.child")));
 	}
 
@@ -187,10 +187,10 @@ public class NugetTest
 		fixture.Package("Roots.Second", dependencies: [("Roots.Shared", "[2.0.0]")]);
 		fixture.Package("Roots.Shared");
 		fixture.Package("Roots.Shared", "2.0.0");
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Roots.First@1.0.0\nnuget:Roots.Second@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Roots.First@1.0.0\nnuget:Roots.Second@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.True(result.Failures > 0);
 		Assert.Equal(0, result.Successes);
-		Assert.Empty(Directory.GetFiles(fixture.Destination));
+		Assert.Empty(Directory.GetFiles(fixture.OutputDirectory));
 		Assert.Contains("Roots.Shared", fixture.Log.ToString(), StringComparison.OrdinalIgnoreCase);
 	}
 
@@ -205,11 +205,11 @@ public class NugetTest
 		fixture.Variables["ignoreDependentPrefix"] = " ;EXTRA., | Another.;";
 		var deployer = fixture.CreateDeployer();
 
-		var result = await deployer.DeployAsync((fixture.Manifest("nuget:Review.Root@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((fixture.Manifest("nuget:Review.Root@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(["Retained.Child", "Review.Root"], deployer.Plan.Packages.Select(package => package.Id).Order(StringComparer.Ordinal).ToArray());
-		Assert.Equal(["Retained.Child.dll", "Review.Root.dll"], Directory.GetFiles(fixture.Destination).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray());
+		Assert.Equal(["Retained.Child.dll", "Review.Root.dll"], Directory.GetFiles(fixture.OutputDirectory).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray());
 	}
 
 	[Fact]
@@ -218,9 +218,9 @@ public class NugetTest
 		using var fixture = new DeploymentFixture();
 		fixture.Package("System.Explicit");
 		fixture.Variables["ignoreDependentPrefix"] = "System.";
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:System.Explicit@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:System.Explicit@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(0, result.Failures);
-		Assert.Equal("System.Explicit@1.0.0", File.ReadAllText(Path.Combine(fixture.Destination, "System.Explicit.dll")));
+		Assert.Equal("System.Explicit@1.0.0", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "System.Explicit.dll")));
 	}
 
 	[Theory]
@@ -236,12 +236,12 @@ public class NugetTest
 		fixture.Variables["Framework"] = framework;
 		var deployer = fixture.CreateDeployer();
 
-		var result = await deployer.DeployAsync((fixture.Manifest("nuget:Chain.Root@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((fixture.Manifest("nuget:Chain.Root@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(3, result.Successes);
 		Assert.Equal(["Chain.Child", "Chain.Grandchild", "Chain.Root"], deployer.Plan.Packages.Select(package => package.Id).Order(StringComparer.Ordinal).ToArray());
-		Assert.Equal("Chain.Grandchild@1.0.0", File.ReadAllText(Path.Combine(fixture.Destination, "Chain.Grandchild.dll")));
+		Assert.Equal("Chain.Grandchild@1.0.0", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Chain.Grandchild.dll")));
 	}
 
 	[Theory]
@@ -257,11 +257,11 @@ public class NugetTest
 			fixture.Package("Range.Child", version);
 		var deployer = fixture.CreateDeployer();
 
-		var result = await deployer.DeployAsync((fixture.Manifest("nuget:Range.Root@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((fixture.Manifest("nuget:Range.Root@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(expected, Assert.Single(deployer.Plan.Packages, package => package.Id == "Range.Child").Version);
-		Assert.Equal($"Range.Child@{expected}", File.ReadAllText(Path.Combine(fixture.Destination, "Range.Child.dll")));
+		Assert.Equal($"Range.Child@{expected}", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Range.Child.dll")));
 	}
 
 	[Fact]
@@ -275,13 +275,13 @@ public class NugetTest
 		fixture.Package("Diamond.Shared", "2.0.0");
 		var deployer = fixture.CreateDeployer();
 
-		var result = await deployer.DeployAsync((fixture.Manifest("nuget:Diamond.Root@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((fixture.Manifest("nuget:Diamond.Root@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(4, result.Successes);
 		Assert.Equal(4, deployer.Plan.Packages.Count);
 		Assert.Equal("2.0.0", Assert.Single(deployer.Plan.Packages, package => package.Id == "Diamond.Shared").Version);
-		Assert.Equal("Diamond.Shared@2.0.0", File.ReadAllText(Path.Combine(fixture.Destination, "Diamond.Shared.dll")));
+		Assert.Equal("Diamond.Shared@2.0.0", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Diamond.Shared.dll")));
 	}
 
 	[Fact]
@@ -291,11 +291,11 @@ public class NugetTest
 		fixture.Package("Unsolvable.Root", dependencies: [("Unsolvable.Child", "(1.0.0,2.0.0)")]);
 		fixture.Package("Unsolvable.Child", "1.0.0");
 		fixture.Package("Unsolvable.Child", "2.0.0");
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Unsolvable.Root@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Unsolvable.Root@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.True(result.Failures > 0);
 		Assert.Equal(0, result.Successes);
-		Assert.Empty(Directory.GetFiles(fixture.Destination));
+		Assert.Empty(Directory.GetFiles(fixture.OutputDirectory));
 		Assert.Contains("Unsolvable.Child", fixture.Log.ToString(), StringComparison.OrdinalIgnoreCase);
 	}
 
@@ -308,11 +308,11 @@ public class NugetTest
 		fixture.Package("Conflict.Right", dependencies: [("Conflict.Shared", "[2.0.0]")]);
 		fixture.Package("Conflict.Shared");
 		fixture.Package("Conflict.Shared", "2.0.0");
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Conflict.Root@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Conflict.Root@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.True(result.Failures > 0);
 		Assert.Equal(0, result.Successes);
-		Assert.Empty(Directory.GetFiles(fixture.Destination));
+		Assert.Empty(Directory.GetFiles(fixture.OutputDirectory));
 		Assert.Contains("Conflict.Shared", fixture.Log.ToString(), StringComparison.OrdinalIgnoreCase);
 	}
 
@@ -323,12 +323,12 @@ public class NugetTest
 		fixture.Package("Cycle.Root", dependencies: [("Cycle.Child", "[1.0.0]")]);
 		fixture.Package("Cycle.Child", dependencies: [("Cycle.Root", "[1.0.0]")]);
 		using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Cycle.Root@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), cancellation.Token);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Cycle.Root@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), cancellation.Token);
 
 		Assert.True(result.Failures > 0);
 		Assert.False(cancellation.IsCancellationRequested);
 		Assert.Equal(0, result.Successes);
-		Assert.Empty(Directory.GetFiles(fixture.Destination));
+		Assert.Empty(Directory.GetFiles(fixture.OutputDirectory));
 		Assert.Contains("Cycle.Root", fixture.Log.ToString(), StringComparison.OrdinalIgnoreCase);
 	}
 
@@ -364,17 +364,17 @@ public class NugetTest
 		fixture.Package("Policy.Child");
 		var manifest = fixture.Manifest("nuget:Policy.Root@1.0.0");
 		var deployer = fixture.CreateDeployer();
-		Assert.Equal(0, (await deployer.DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken)).Failures);
+		Assert.Equal(0, (await deployer.DeployAsync((manifest).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken)).Failures);
 		Assert.Equal(["Policy.Child", "Policy.Root"], deployer.Plan.Packages.Select(package => package.Id).Order(StringComparer.Ordinal).ToArray());
 
 		((global::Zongsoft.Common.Variables)deployer.Evaluator.Providers[0])["ignoreDependentPrefix"] = "Policy.Child";
-		var secondDestination = Path.Combine(fixture.Root, "second-target");
-		var result = await deployer.DeployAsync((manifest).Replace('\\', '/'), (secondDestination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var secondOutput = Path.Combine(fixture.Root, "second-target");
+		var result = await deployer.DeployAsync((manifest).Replace('\\', '/'), (secondOutput).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal("Policy.Root", Assert.Single(deployer.Plan.Packages).Id);
-		Assert.Equal("Policy.Root.dll", Path.GetFileName(Assert.Single(Directory.GetFiles(secondDestination))));
-		Assert.Equal("Policy.Child@1.0.0", File.ReadAllText(Path.Combine(fixture.Destination, "Policy.Child.dll")));
+		Assert.Equal("Policy.Root.dll", Path.GetFileName(Assert.Single(Directory.GetFiles(secondOutput))));
+		Assert.Equal("Policy.Child@1.0.0", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Policy.Child.dll")));
 	}
 
 	[Theory]
@@ -390,11 +390,11 @@ public class NugetTest
 		fixture.Variables["Framework"] = requested;
 		var deployer = fixture.CreateDeployer();
 
-		var result = await deployer.DeployAsync((fixture.Manifest("nuget:Nearest.Asset@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((fixture.Manifest("nuget:Nearest.Asset@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(Path.Combine(package, "lib", expected, "Nearest.Asset.dll"), Assert.Single(deployer.Plan.Operations).Source);
-		Assert.Equal(expected == "net10.0" ? "ten" : "eight", File.ReadAllText(Path.Combine(fixture.Destination, "Nearest.Asset.dll")));
+		Assert.Equal(expected == "net10.0" ? "ten" : "eight", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Nearest.Asset.dll")));
 	}
 
 	[Theory]
@@ -411,11 +411,11 @@ public class NugetTest
 		fixture.Write("packages/runtime.root/1.0.0/runtimes/other-x86/native/wrong.native", "wrong architecture");
 		fixture.Variables["platform"] = platform;
 		fixture.Variables["architecture"] = architecture;
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Runtime.Root@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Runtime.Root@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(0, result.Failures);
-		Assert.Equal("runtime implementation", File.ReadAllText(Path.Combine(fixture.Destination, "Runtime.Root.dll")));
-		Assert.Equal("native implementation", File.ReadAllText(Path.Combine(fixture.Destination, "library.native")));
-		Assert.False(File.Exists(Path.Combine(fixture.Destination, "wrong.native")));
+		Assert.Equal("runtime implementation", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Runtime.Root.dll")));
+		Assert.Equal("native implementation", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "library.native")));
+		Assert.False(File.Exists(Path.Combine(fixture.OutputDirectory, "wrong.native")));
 	}
 
 	[Fact]
@@ -426,7 +426,7 @@ public class NugetTest
 		fixture.Package("Assets.Child");
 		fixture.Write("packages/assets.root/1.0.0/lib/net10.0/Shared.dll", "root implementation");
 		fixture.Write("packages/assets.child/1.0.0/lib/net10.0/Shared.dll", "child implementation");
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Assets.Root@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Assets.Root@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.True(result.Failures > 0);
 		Assert.Contains("Shared.dll", fixture.Log.ToString());
 		Assert.Contains("Assets.Root", fixture.Log.ToString(), StringComparison.OrdinalIgnoreCase);
@@ -447,12 +447,12 @@ public class NugetTest
 		fixture.Variables["Framework"] = framework;
 		var deployer = fixture.CreateDeployer();
 
-		var result = await deployer.DeployAsync((fixture.Manifest($"nuget:Filter.Root@1.0.0 = <framework:{filter}>")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((fixture.Manifest($"nuget:Filter.Root@1.0.0 = <framework:{filter}>")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(selected ? 1 : 0, result.Successes);
 		Assert.Equal(selected ? new[] { "Filter.Root" } : [], deployer.Plan.Packages.Select(package => package.Id).ToArray());
-		Assert.Equal(selected ? new[] { "Filter.Root.dll" } : [], Directory.GetFiles(fixture.Destination).Select(Path.GetFileName).ToArray());
+		Assert.Equal(selected ? new[] { "Filter.Root.dll" } : [], Directory.GetFiles(fixture.OutputDirectory).Select(Path.GetFileName).ToArray());
 	}
 
 	[Fact]
@@ -469,24 +469,24 @@ public class NugetTest
 		var manifest = fixture.Manifest("nuget:Backtrack.Root@1.0.0");
 		var deployer = fixture.CreateDeployer();
 
-		var initial = await deployer.DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var initial = await deployer.DeployAsync((manifest).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, initial.Failures);
 		Assert.Equal(4, initial.Successes);
 		Assert.Equal("2.0.0", Assert.Single(deployer.Plan.Packages, package => package.Id == "Backtrack.Choice").Version);
 		Assert.Equal("2.0.0", Assert.Single(deployer.Plan.Packages, package => package.Id == "Backtrack.Leaf").Version);
-		Assert.Equal("Backtrack.Choice@2.0.0", File.ReadAllText(Path.Combine(fixture.Destination, "Backtrack.Choice.dll")));
+		Assert.Equal("Backtrack.Choice@2.0.0", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Backtrack.Choice.dll")));
 		var lockBytes = File.ReadAllBytes((string)fixture.Variables["lockFile"]);
 
 		// 新增更低且可解的候选；锁定重跑仍必须使用原求解结果。
 		fixture.Package("Backtrack.Choice", "1.5.0", dependencies: [("Backtrack.Leaf", "[2.0.0]")]);
 		((global::Zongsoft.Common.Variables)deployer.Evaluator.Providers[0])["locked"] = "true";
-		var locked = await deployer.DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var locked = await deployer.DeployAsync((manifest).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, locked.Failures);
 		Assert.Equal(4, deployer.Plan.Packages.Count);
 		Assert.Equal("2.0.0", Assert.Single(deployer.Plan.Packages, package => package.Id == "Backtrack.Choice").Version);
-		Assert.Equal("Backtrack.Leaf@2.0.0", File.ReadAllText(Path.Combine(fixture.Destination, "Backtrack.Leaf.dll")));
+		Assert.Equal("Backtrack.Leaf@2.0.0", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Backtrack.Leaf.dll")));
 		Assert.Equal(lockBytes, File.ReadAllBytes((string)fixture.Variables["lockFile"]));
 	}
 
@@ -526,14 +526,14 @@ public class NugetTest
 		using var cancellation = new CancellationTokenSource();
 		cancellation.Cancel();
 
-		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => deployer.DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), cancellation.Token));
-		Assert.Empty(Directory.GetFiles(fixture.Destination));
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => deployer.DeployAsync((manifest).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), cancellation.Token));
+		Assert.Empty(Directory.GetFiles(fixture.OutputDirectory));
 
-		var result = await deployer.DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((manifest).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(2, result.Successes);
 		Assert.Equal(["Cancelled.Child", "Cancelled.Root"], deployer.Plan.Packages.Select(package => package.Id).Order(StringComparer.Ordinal).ToArray());
-		Assert.Equal("Cancelled.Child@1.0.0", File.ReadAllText(Path.Combine(fixture.Destination, "Cancelled.Child.dll")));
+		Assert.Equal("Cancelled.Child@1.0.0", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Cancelled.Child.dll")));
 	}
 }

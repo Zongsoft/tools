@@ -67,14 +67,14 @@ partial class ContainerizeCommand
 		];
 
 		foreach(var option in options)
-			Terminal.WriteLine(Output.HighlightSyntax($"\t{option}"));
+			Terminal.WriteLine(Utility.HighlightSyntax($"\t{option}"));
 
 		Terminal.WriteLine();
 		Terminal.WriteLine(Properties.Resources.Run_Help);
 		Terminal.WriteLine(Properties.Resources.RuntimeCache_Help);
 
 		static void WriteSyntax(string command, string arguments) => Terminal.WriteLine(
-			CommandOutletContent.Create(CommandOutletStyles.Bold, CommandOutletColor.Cyan, command).Append(Output.HighlightSyntax(arguments)));
+			CommandOutletContent.Create(CommandOutletStyles.Bold, CommandOutletColor.Cyan, command).Append(Utility.HighlightSyntax(arguments)));
 	}
 	#endregion
 }

@@ -50,7 +50,7 @@ public sealed partial class MigrationLoader(TemplateEvaluator evaluator, Action<
 {
 	#region 成员字段
 	private readonly TemplateEvaluator _evaluator = evaluator ?? Utility.CreateEvaluator();
-	private readonly Action<string> _warning = warning ?? (message => Terminal.WriteLine(CommandOutletColor.DarkYellow, message));
+	private readonly Action<string> _warning = warning;
 	#endregion
 
 	#region 公共方法
@@ -224,7 +224,11 @@ public sealed partial class MigrationLoader(TemplateEvaluator evaluator, Action<
 
 			if(files.Length == 0)
 			{
-				_warning(string.Format(Properties.Resources.MigrationFilesMissing, path));
+				if(_warning == null)
+					Terminal.WriteLine(Utility.FormatOutput(Properties.Resources.MigrationFilesMissing, CommandOutletColor.DarkYellow, path));
+				else
+					_warning(string.Format(Properties.Resources.MigrationFilesMissing, path));
+
 				continue;
 			}
 

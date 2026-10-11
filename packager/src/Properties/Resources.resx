@@ -225,4 +225,7 @@
   <data name="DependencyTooComplex.Message" xml:space="preserve">
     <value>The dependency alternatives expand to more than 1024 Debian relationship groups.</value>
   </data>
+  <data name="Output.Elapsed" xml:space="preserve">
+    <value>  → {0}: {1} s</value>
+  </data>
 </root>

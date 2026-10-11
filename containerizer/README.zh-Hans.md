@@ -7,6 +7,8 @@
 
 [English](README.md) | [简体中文](README.zh-Hans.md)
 
+终端警告使用暗黄色正文和粗体青色参数；错误使用暗红色正文和粗体紫色参数；成功提示使用绿色正文。异常类型以紫色标示，异常消息保留原文。四个工具共用仓库 `.shared/Utility.Output.cs`：`FormatOutput` 和 `FormatError` 构造 Core `CommandOutletContent`；`WriteOutput` 和 `WriteError` 统一终端与文本写入器的输出；使用命令执行器的工具通过 `HandleFailure` 输出异常并标记已处理，退出码由各工具决定。颜色由 Terminals 渲染。重定向的输出以及调用方提供的错误写入器保留纯文本和原通道。 同一共享文件还提供帮助文本高亮 `HighlightSyntax` 和阶段计时 `MeasureOutput`。计时由调用方提供本地化格式与阶段名称，在首次释放时输出，阶段失败时也保留耗时信息。
+
 `dotnet-containerize` 把应用和基础服务打包成**面向单台 Linux 主机**的容器交付物：一个 `.tar.gz` 归档，内含 Compose 配置、所需镜像以及自带的原生执行器。现场安装、升级、停止、恢复和卸载整栈各只需一条命令，目标主机既不需要 .NET SDK，也不需要本工具。
 
 制作端可运行于 Windows 或 Linux，使用 Docker 或 Podman。交付物面向 Ubuntu 22.04、Debian 12/13 或 RHEL 系列 9，架构为 x64 或 ARM64。
@@ -127,7 +129,7 @@ dotnet tool install Zongsoft.Tools.Containerizer --tool-path ./.cache/tool --ver
 
 ### 步骤 1：准备应用包和升迁包
 
-按 [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.zh-Hans.md#安装包与升迁包) 编译、部署并打包宿主。在每个宿主目录中，`deploy.cmd` 在其格式提示处输入 `deb` 即可打包刚部署的内容，[pack.cmd](https://github.com/Zongsoft/hosting/blob/main/daemon/pack.cmd) 则只打包已有文件。两种方式都会得到：
+按 [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.zh-Hans.md#安装包与升迁包) 编译、部署并打包宿主。在 hosting 根目录运行 [deploy.cmd](https://github.com/Zongsoft/hosting/blob/main/deploy.cmd)，构建并部署所选宿主；再单独运行 [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/pack.cmd)，选择 `deb` 打包已有输出。结果为：
 
 ```text
 daemon/.packages/zongsoft.daemon@1.0.0-x64.deb
@@ -142,6 +144,8 @@ web/default/.packages/zongsoft.web@1.0.0-x64.deb
 ```
 
 容器化工具不编译宿主、也不制作升迁，只消费这些产物。
+
+容器化交付由 Containerizer 在基础服务就绪后执行升迁，因此应用打包时不要通过 Packager 的 `--migration` 嵌入同一升迁；hosting 的 `pack.cmd` 中将 Migration 留空，在 `containerize.cmd` 中选择 `.migration`。直接安装应用包时，才由 Packager 集成并执行升迁。
 
 ### 步骤 2：声明共享的服务默认值
 
@@ -205,7 +209,7 @@ source=..
 output=.containerized
 bootstrap=offline
 imaging=offline
-migration#1=.migration\zongsoft(migrate)@1.0.0_linux-x64.tar.gz
+migration#1=.migration/zongsoft(migrate)@1.0.0_linux-x64.tar.gz
 
 [redis]
 tag=8.10.2
@@ -223,10 +227,10 @@ repository=docker.io/rustfs/rustfs
 settings=storage=persistent;access-key=${rustfs:access_key};secret-key=${rustfs:secret_key}
 
 [zongsoft.daemon]
-package=daemon\.packages\zongsoft.daemon@1.0.0-x64.deb
+package=daemon/.packages/zongsoft.daemon@1.0.0-x64.deb
 
 [zongsoft.web]
-package=web\default\.packages\zongsoft.web@1.0.0-x64.deb
+package=web/default/.packages/zongsoft.web@1.0.0-x64.deb
 
 [nginx]
 tag=1.30.5
@@ -401,7 +405,7 @@ source=.
 output=.containerized
 bootstrap=offline
 imaging=offline
-migration#1=.migration\example(migrate)@1.0.0_linux-x64.tar.gz
+migration#1=.migration/example(migrate)@1.0.0_linux-x64.tar.gz
 
 [redis]
 tag=latest
@@ -432,7 +436,7 @@ nginx 端口来自包内绑定，默认按同端口发布；用 `容器端口:�
 
 ```ini
 [zongsoft.web]
-package=web\default\.packages\zongsoft.web@1.0.0-x64.deb
+package=web/default/.packages/zongsoft.web@1.0.0-x64.deb
 
 [nginx]
 settings=port=80:18080,443:none
@@ -591,7 +595,7 @@ mcr.microsoft.com=mirror.example.com/mcr
 	- [`.containerized/.mirrors`](https://github.com/Zongsoft/hosting/blob/main/.containerized/.mirrors) —— 制作与预演使用的镜像源
 	- [`.env`](https://github.com/Zongsoft/hosting/blob/main/.env) —— 服务默认值引用的变量
 	- [`migrate.cmd`](https://github.com/Zongsoft/hosting/blob/main/migrate.cmd) —— 升迁归档制作
-	- [`daemon/pack.cmd`](https://github.com/Zongsoft/hosting/blob/main/daemon/pack.cmd) 与 [`web/default/pack.cmd`](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd) —— 应用安装包
+	- [`pack.cmd`](https://github.com/Zongsoft/hosting/blob/main/pack.cmd) —— 应用安装包
 	- [Web 宿主](https://github.com/Zongsoft/hosting/tree/main/web/default) —— `.web/nginx` 交接资产与 `web.profile`
 
 - 相关工具

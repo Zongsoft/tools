@@ -144,3 +144,5 @@ git status --short
 ```
 
 保留任务开始时的未提交修改；不重置、覆盖或提交用户工作。报告本次变更、已验证范围及实际限制，不把未执行的验收写成通过。
+
+输出逻辑统一复用仓库 `.shared/Utility.Output.cs`：FormatOutput/FormatError 负责格式化，WriteOutput/WriteError 负责终端与文本写入器分流，HandleFailure 负责命令异常输出和已处理标记；HighlightSyntax 统一帮助语法高亮，MeasureOutput 统一阶段计时，计时的本地化格式和阶段名称由调用方提供；各工具只决定退出码和业务诊断，不另建相同的包装层。用 Core CommandOutletContent 分段保存正文和参数：警告为暗黄色正文配粗体青色参数，错误为暗红色正文配粗体紫色参数。追加内容时从 Last 节点追加。Terminals 负责颜色；重定向和调用方提供的错误写入器保留原通道及纯文本；不要把 ANSI 序列写入报告或诊断回调。

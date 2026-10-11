@@ -25,12 +25,12 @@ description: 修改或审查 Zongsoft tools/deployer 的 .deploy 描述语法、
 - `DeploymentEntry.Get` 在首个模板之前识别解析器前缀，`${...}` 中的命名空间冒号不作为解析器分隔符；没有冒号时名称为 `path`。GetResolver 对 null、空字符串和纯空白名称返回默认路径解析器，这是功能约定；未知名称返回 null。Windows 字面绝对路径使用 `path:D:/...` 或 `path:D:/dir/files.ext`，也可用变量/相对路径，不要把盘符误当解析器。
 - 条目过滤支持变量存在、否定、候选值、`&`/`|` 组合以及目标框架版本比较。
 - 变量支持 `${name}`，名称按 Core 标识符规则解析，配置及命令选项查询不区分大小写，系统环境通过 `Variables.Environments()` 实时读取且按平台规则比较；每一级命名空间按命令选项、`appsettings.json`、由近到远的 `.env`、环境变量顺序查询，首个命中即生效，JSON null 也会阻止回退。共享 Utility 使用 Profile.Load 读取直属 `.env`，章节层级以点号连接为命名空间，条目名中的点号和连字符改为下划线；同次命令所有清单共用变量，不搜索子目录。
-- 变量值按需递归展开，循环、缺失及超过 64 层失败；`destination` 先用全部命令选项、环境变量及 `.env` 定位，再加载目标配置，不受选项遍历顺序影响。
+- 变量值按需递归展开，循环、缺失及超过 64 层失败；`output` 先用全部命令选项、环境变量及 `.env` 定位，再加载目标配置，不受选项遍历顺序影响。
 - 所有变量（包括 `framework`）统一遵循首个命中生效：null、空字符串、false 和 0 都不会触发下层回退。只有未提供该值时才继续查找；需要有效值的业务操作负责校验并在无法继续时报告错误。
 - 未指定 NuGet 包内路径时优先处理根 `.deploy`；否则先统一求解普通根包依赖闭包，再选择目标 RID/TFM 的托管、原生和内容资产。默认/自定义依赖忽略前缀不区分大小写，明确根请求不受过滤。
 - 普通 NuGet 根请求在一次命令内统一求解，根版本固定，依赖选择满足全部范围的最低可用版本；无解与循环失败。同目标同内容的包资产去重，不同内容报冲突；显式 delete 保留顺序。该求解不等于完整 MSBuild restore。用最终文件版本和宿主首次调用验证。
-- `overwrite` 支持 `alway`（始终覆盖）、`never`（仅复制目标不存在的文件）、`newest`（源文件修改时间不早于目标时复制），默认值为 `newest`。
-- 缺失源文件和部署清单属于可选输入，计入跳过并输出警告，quiet 模式也输出，报告保留诊断；继续处理其余文件，不因缺失项返回失败。覆盖命令行清单、默认 `.deploy`、目录参数和包内清单引用的可选文件。NuGet 包缺失、无效变量/语法、失效链接、访问错误及计划生成后的源变化仍须失败。
+- `overwrite` 支持 `alway`（始终覆盖）、`never`（仅复制目标不存在的文件）、`newest`（普通文件按源修改时间判断，模板按生成内容判断），默认值为 `newest`。
+- 缺失的普通路径源文件和 `.deploy` 文件属于可选输入，计入跳过并输出警告，quiet 模式也输出，报告保留诊断；继续处理其余文件，不因缺失项返回失败。覆盖命令行清单、默认 `.deploy`、目录参数和包内清单引用的可选文件。NuGet 包缺失、无效变量/语法、失效链接、访问错误及计划生成后的源变化仍须失败。
 
 ## 安全验证
 
@@ -48,7 +48,7 @@ description: 修改或审查 Zongsoft tools/deployer 的 .deploy 描述语法、
 
 命令支持管道与重定向，输出使用 TextWriter。失败返回非零退出码；预检查失败时不写目标，执行阶段失败停止后续操作。默认覆盖为 newest，正常跳过/删除单独统计。
 
-部署会话持有计划和活动清单栈；包缓存以变量上下文隔离，每次会话重置。目标写入须位于 destination 内，拒绝链接路径；本地读取源可以位于根外。嵌套 .deploy 和 #@import 均检测循环。
+部署会话持有计划和活动清单栈；包缓存以变量上下文隔离，每次会话重置。目标写入须位于 output 内，拒绝链接路径；本地读取源可以位于根外。嵌套 .deploy 和 #@import 均检测循环。
 
 dry-run/offline/explain/report、lockFile/locked、previous/prune 的行为见双语 README。只在用户指定 prune 且有前次成功报告时清理未修改的自有文件；Duplicate 是无操作记录，Copy→Delete 的最后有效操作会撤销所有权。dry-run 不写目标，但显式报告可写，在线解析可写缓存。日志、错误原因和报告保留原文，不执行脱敏替换；主命令的 explain/detail 输出操作及其来源。
 
@@ -70,3 +70,18 @@ RID 资源使用 src/Resources/ 中固定的 dotnet/runtime v10.0.0 图谱，禁
 本地通配搜索统一调用 Core Searcher.Search，以 Searcher.Target 指定 Files、Directories 或 Both（默认），链接以逻辑名称匹配，内容取实际目标。独立选中的目录链接可展开，载荷内部目录链接跳过，文件链接保留名称并读取目标。INI/.deploy 按逻辑来源解析相对路径。详细规则见[本地搜索与源链接](docs/implementation.zh-Hans.md#本地搜索与源链接)。
 
 代码规范采用 `Zongsoft.CodeAnalysis`，版本由仓库根 `Directory.Packages.props` 管理，检查方法与 SDK 要求见 [仓库规范](../AGENTS.md#代码规范检查)。
+
+## 源目录与配置模板
+
+- 输出目录参数与上下文统一使用 outputDirectory/OutputDirectory；条目、操作及报告中的输出路径使用 Output。Deployer.Output 是诊断流，不是文件路径。
+
+- `--source` 自身相对于调用目录，只用命令选项及系统变量定位；存在性验证后固定为本次工作源。共享 Utility 只加载该 source 的祖先 `.env`。
+- `--output` 及命令行本地相对输入、report、lockFile、previous、NuGet 缓存/本地包源相对于 source；`.deploy` 内部及 import 引用基准保持声明文件目录。
+- scheme/environment/network 是用户变量；方案导入顺序由 `.env` 的 `#@import` 和声明顺序决定，工具不得固化方案层级。导入文件的目录不建立额外祖先链。
+- `template:` 复用文件源搜索及 Core TemplateEvaluator，在计划阶段生成 UTF-8 内容；默认文件名去掉末尾 `.template`，可显式重命名。`.env` 不部署。
+- 显式模板源缺失或求值失败阻止写入；普通可选路径保持跳过。newest 对 Render 比较内容，其他文件按时间。生成内容摘要参与锁比较，Render/Unchanged 纳入 previous/prune 所有权；载荷字节不写入报告。
+- XML 注释按类保持公共成员完整，不能仅注释新增属性；遵循 `D:/Zongsoft/guidelines`。
+
+输出逻辑统一复用仓库 `.shared/Utility.Output.cs`：FormatOutput/FormatError 负责格式化，WriteOutput/WriteError 负责终端与文本写入器分流，HandleFailure 负责命令异常输出和已处理标记；各工具只决定退出码和业务诊断，不另建相同的包装层。用 Core CommandOutletContent 分段保存正文和参数：警告为暗黄色正文配粗体青色参数，错误为暗红色正文配粗体紫色参数。追加内容时从 Last 节点追加。Terminals 负责颜色；重定向和调用方提供的错误写入器保留原通道及纯文本；不要把 ANSI 序列写入报告或诊断回调。
+
+帮助语法统一使用共享 FormatHelp/HighlightSyntax，计时统一使用 MeasureOutput，不在各工具复制正则、计时器或颜色拼接。帮助入口在业务解析之前处理，返回 0 且不读取 .env、不写入产物；测试须验证重定向为纯文本、所有语法片段保留，以及耗时仅输出一次。计时文案由各工具资源提供，资源访问属性通过 ResXFileCodeGenerator 生成。

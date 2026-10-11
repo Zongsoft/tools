@@ -20,13 +20,13 @@ public sealed class ProgramEntryTest
 		{
 			Environment.CurrentDirectory = fixture.Root;
 			Environment.SetEnvironmentVariable("overwrite", "alway");
-			var destination = "--destination=" + Path.GetDirectoryName(target).Replace('\\', '/');
+			var output = "--output=" + Path.GetDirectoryName(target).Replace('\\', '/');
 
-			Assert.Equal(1, await RunAsync([destination, fixture.Manifest("unknown:input", "source/invalid.deploy").Replace('\\', '/')]));
-			Assert.Equal(0, await RunAsync([destination, "missing.deploy"]));
-			Assert.Equal(0, await RunAsync(["--overwrite=never", destination, manifest]));
+			Assert.Equal(1, await RunAsync([output, fixture.Manifest("unknown:input", "source/invalid.deploy").Replace('\\', '/')]));
+			Assert.Equal(0, await RunAsync([output, "missing.deploy"]));
+			Assert.Equal(0, await RunAsync(["--overwrite=never", output, manifest]));
 			Assert.Equal("original content", File.ReadAllText(target));
-			Assert.Equal(0, await RunAsync([destination, "--overwrite=alway", manifest]));
+			Assert.Equal(0, await RunAsync([output, "--overwrite=alway", manifest]));
 			Assert.Equal("source content", File.ReadAllText(target));
 		}
 		finally

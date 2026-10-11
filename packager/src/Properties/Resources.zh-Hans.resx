@@ -245,4 +245,7 @@
   <data name="DependencyTooComplex.Message" xml:space="preserve">
     <value>依赖替代项展开后超过 1024 个 Debian 关系组。</value>
   </data>
+  <data name="Output.Elapsed" xml:space="preserve">
+    <value>  → {0}：{1} 秒</value>
+  </data>
 </root>

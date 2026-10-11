@@ -103,27 +103,27 @@ internal sealed partial class RunContext
 			await this.ValidateArchitectureAsync(cancellation);
 			string image;
 
-			using(Output.Measure(_output, Properties.Resources.Run_StageBase))
+			using(Utility.MeasureOutput(_output, Properties.Resources.Run_Elapsed, Properties.Resources.Run_StageBase))
 				image = await this.PrepareBaseImageAsync(cancellation);
 
 			_imageCache = new ImageCache(_engine, _bundle.Plan, _sessionId);
 
-			using(Output.Measure(_output, Properties.Resources.Run_StageCache))
+			using(Utility.MeasureOutput(_output, Properties.Resources.Run_Elapsed, Properties.Resources.Run_StageCache))
 				await _imageCache.PrepareAsync(image, cancellation);
 
 			await this.StartContainerAsync(image, cancellation);
 
-			_output(Output.FormatMessage(Properties.Resources.Run_Container, this.Name, _engine.Executable, BootstrapPlan.ENGINE));
+			_output(Utility.FormatOutput(Properties.Resources.Run_Container, this.Name, _engine.Executable, BootstrapPlan.ENGINE));
 
-			using(Output.Measure(_output, Properties.Resources.Run_StageInstall))
+			using(Utility.MeasureOutput(_output, Properties.Resources.Run_Elapsed, Properties.Resources.Run_StageInstall))
 				await this.InstallDeliveryAsync(cancellation);
 
-			using(Output.Measure(_output, Properties.Resources.Run_StageForward))
+			using(Utility.MeasureOutput(_output, Properties.Resources.Run_Elapsed, Properties.Resources.Run_StageForward))
 				await this.ForwardEndpointsAsync(cancellation);
 
-			_output(Output.FormatMessage(string.Empty));
-			_output(Output.FormatMessage(Properties.Resources.Run_Ready, CommandOutletColor.Green, _bundle.Plan.Name));
-			_output(Output.FormatMessage(Properties.Resources.Run_ReadyHint, "Ctrl+C"));
+			_output(Utility.FormatOutput(string.Empty));
+			_output(Utility.FormatOutput(Properties.Resources.Run_Ready, CommandOutletColor.Green, _bundle.Plan.Name));
+			_output(Utility.FormatOutput(Properties.Resources.Run_ReadyHint, "Ctrl+C"));
 			code = 0;
 			await Task.Delay(Timeout.Infinite, cancellation);
 		}
@@ -131,7 +131,7 @@ internal sealed partial class RunContext
 		catch(Exception exception) when(_containerCreated)
 		{
 			code = exception is ContainerizationException failure ? failure.Code : 4;
-			_output(Output.FormatMessage(Properties.Resources.Run_Failed, CommandOutletColor.Magenta, exception.Message, this.Name));
+			_output(Utility.FormatOutput(Properties.Resources.Run_Failed, CommandOutletColor.DarkRed, exception.Message, this.Name));
 
 			try
 			{
@@ -144,11 +144,11 @@ internal sealed partial class RunContext
 			try
 			{
 				await this.CleanupAsync();
-				_output(Output.FormatMessage(Properties.Resources.Run_Cleaned, this.Name));
+				_output(Utility.FormatOutput(Properties.Resources.Run_Cleaned, this.Name));
 			}
 			catch(Exception exception)
 			{
-				_output(Output.FormatMessage(Properties.Resources.Run_CleanupFailed, CommandOutletColor.Magenta, this.Name, exception.Message));
+				_output(Utility.FormatOutput(Properties.Resources.Run_CleanupFailed, CommandOutletColor.DarkRed, this.Name, exception.Message));
 
 				if(code == 0)
 					code = 4;
@@ -187,7 +187,7 @@ internal sealed partial class RunContext
 			}
 			catch(Exception exception)
 			{
-				_output(Output.FormatMessage(Properties.Resources.Run_CacheDiscarded, CommandOutletColor.Magenta, _imageCache.Name, exception.Message));
+				_output(Utility.FormatOutput(Properties.Resources.Run_CacheDiscarded, CommandOutletColor.DarkYellow, _imageCache.Name, exception.Message));
 			}
 		}
 

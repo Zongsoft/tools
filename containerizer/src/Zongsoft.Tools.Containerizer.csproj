@@ -24,6 +24,7 @@
 
 	<ItemGroup>
 		<Compile Include="..\..\.shared\Utility.cs" Link="Shared\Utility.cs" />
+		<Compile Include="..\..\.shared\Utility.Output.cs" Link="Shared\Utility.Output.cs" />
 	</ItemGroup>
 
 	<Choose>

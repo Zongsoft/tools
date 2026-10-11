@@ -38,9 +38,12 @@ using System.Threading.Tasks;
 
 namespace Zongsoft.Tools.Deployer;
 
-/// <summary>按名称选择本地路径、NuGet 或删除解析器；空名称使用默认路径解析器。</summary>
+/// <summary>按名称选择本地路径、模板、NuGet 或删除解析器；空名称使用默认路径解析器。</summary>
 public static class DeploymentResolverManager
 {
+	/// <summary>按不区分大小写的名称查询解析器。</summary>
+	/// <param name="name">解析器名称；null、空字符串或纯空白选择默认路径解析器。</param>
+	/// <returns>匹配的解析器；未知名称返回 null。</returns>
 	public static IDeploymentResolver GetResolver(string name)
 	{
 		if(string.IsNullOrWhiteSpace(name))
@@ -50,6 +53,7 @@ public static class DeploymentResolverManager
 		{
 			"nuget" => NugetResolver.Instance,
 			"path" => DefaultResolver.Instance,
+			"template" => TemplateResolver.Instance,
 			"delete" or "remove" => DeleteResolver.Instance,
 			_ => null,
 		};
@@ -59,6 +63,7 @@ public static class DeploymentResolverManager
 	public class DeleteResolver : IDeploymentResolver
 	{
 		#region 单例字段
+		/// <summary>获取删除解析器实例。</summary>
 		public static readonly DeleteResolver Instance = new();
 		#endregion
 
@@ -67,22 +72,28 @@ public static class DeploymentResolverManager
 		#endregion
 
 		#region 公共属性
+		/// <summary>获取删除解析器的名称。</summary>
 		public string Name => "Delete";
 		#endregion
 
 		#region 公共方法
+		/// <summary>校验删除目标并将删除操作加入部署计划。</summary>
+		/// <param name="context">本次部署上下文。</param>
+		/// <param name="deployment">已经求值的删除条目。</param>
+		/// <param name="cancellation">部署取消令牌。</param>
+		/// <returns>表示计划登记完成的任务，不立即删除文件。</returns>
 		public Task ResolveAsync(DeploymentContext context, DeploymentEntry deployment, CancellationToken cancellation)
 		{
 			cancellation.ThrowIfCancellationRequested();
 
-			if(!string.IsNullOrEmpty(deployment.Destination.Name))
-				throw new FormatException(string.Format(Properties.Resources.Review_InvalidOption, "delete", "destination"));
+			if(!string.IsNullOrEmpty(deployment.Output.Name))
+				throw new FormatException(string.Format(Properties.Resources.Review_InvalidOption, "delete", "output"));
 
-			var path = context.Deployer.Session.Validate(Path.Combine(deployment.Destination.Path, deployment.Source.Name));
+			var path = context.Deployer.Session.Validate(Path.Combine(deployment.Output.Path, deployment.Source.Name));
 			context.Deployer.Session.Add(new DeploymentOperation
 			{
 				Kind = "Delete",
-				Destination = path,
+				Output = path,
 				Manifest = deployment.Profile.FilePath,
 			});
 
@@ -95,6 +106,7 @@ public static class DeploymentResolverManager
 	public class DefaultResolver : DeploymentResolverBase
 	{
 		#region 单例字段
+		/// <summary>获取默认路径解析器实例。</summary>
 		public static readonly DefaultResolver Instance = new();
 		#endregion
 

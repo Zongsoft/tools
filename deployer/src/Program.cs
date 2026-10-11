@@ -44,6 +44,19 @@ internal class Program
 {
 	public static async Task<int> Main(string[] args)
 	{
+		if(args is ["--help" or "-h"])
+		{
+			Utility.WriteOutput(Console.Out, Utility.FormatHelp("dotnet deploy", "[<file.deploy> ...] [options]",
+				"[--source:<directory>] [--output:<directory>]",
+				"[--framework:<framework>] [--platform:<platform>] [--architecture:x64|arm64]",
+				"[--overwrite:alway|never|newest] [--verbosity:quiet|normal|detail]",
+				"[--dry-run] [--offline] [--explain] [--report:<file>]",
+				"[--lockFile:<file>] [--locked] [--previous:<file>] [--prune]",
+				"[--scheme:<name>] [--environment:<name>] [--network:<name>]",
+				"[--<variable>:<value>]"));
+			return 0;
+		}
+
 		using var cancellation = new CancellationTokenSource();
 		Console.CancelKeyPress += Handler;
 
@@ -57,10 +70,11 @@ internal class Program
 
 			var evaluator = Deployer.CreateEvaluator(options);
 			var deployer = new Deployer(evaluator);
+			using var timing = Utility.MeasureOutput(deployer.Write, Properties.Resources.Output_Elapsed, "dotnet-deploy");
 			var paths = command.Arguments.Count == 0 ? new[] { ".deploy" } : [.. command.Arguments];
 			var result = await deployer.DeployManyAsync(paths, cancellation: cancellation.Token);
 
-			Console.WriteLine(string.Format(Properties.Resources.Review_Summary, result.Successes, result.Skipped, result.Deleted, result.Failures));
+			deployer.Write(Utility.FormatOutput(Properties.Resources.Review_Summary, result.Failures == 0 ? CommandOutletColor.DarkGreen : CommandOutletColor.DarkRed, result.Successes, result.Skipped, result.Deleted, result.Failures));
 			return result.Failures == 0 ? 0 : 1;
 		}
 		catch(OperationCanceledException)
@@ -69,7 +83,7 @@ internal class Program
 		}
 		catch(Exception exception)
 		{
-			Console.Error.WriteLine(exception.Message);
+			Utility.WriteOutput(Console.Error, Utility.FormatError(exception));
 			return 1;
 		}
 		finally

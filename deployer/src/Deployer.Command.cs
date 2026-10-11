@@ -44,7 +44,7 @@ partial class Deployer
 	#region 变量加载
 	/// <summary>组合命令参数、目标应用配置、逐级 .env 视图和系统环境，并解析部署目标目录。</summary>
 	/// <param name="options">原始命令选项；变量名称中的点号和连字符映射为下划线。</param>
-	/// <param name="currentDirectory">搜索 .env 及解析相对目标路径的起始目录；为空时使用进程当前目录。</param>
+	/// <param name="currentDirectory">解析 source 的调用目录；为空时使用进程当前目录。</param>
 	/// <returns>按优先级组织变量来源并启用递归求值的评估器。</returns>
 	public static TemplateEvaluator CreateEvaluator(IDictionary<string, string> options, string currentDirectory = null)
 	{
@@ -56,13 +56,20 @@ partial class Deployer
 
 		var evaluator = Utility.CreateEvaluator(commands);
 		evaluator.Providers.Add(global::Zongsoft.Common.Variables.Environments());
-		Utility.LoadEnvironmentProfiles(evaluator, currentDirectory);
-		var target = Path.GetFullPath(evaluator.GetOption(DESTINATION_OPTION) ?? currentDirectory, currentDirectory);
+		// 源目录只使用命令参数和进程变量定位，随后加载的配置不能改变它。
+		var source = Path.GetFullPath(evaluator.GetOption(SOURCE_OPTION) ?? currentDirectory, currentDirectory);
+
+		if(!Directory.Exists(source))
+			throw new DirectoryNotFoundException(source);
+
+		evaluator.SetVariable(SOURCE_OPTION, source.Replace('\\', '/'));
+		Utility.LoadEnvironmentProfiles(evaluator, source);
+		var outputDirectory = Path.GetFullPath(evaluator.GetOption(OUTPUT_OPTION) ?? source, source);
 
 		var settings = new global::Zongsoft.Common.Variables();
-		AppSettingsUtility.Load(settings, target);
+		AppSettingsUtility.Load(settings, outputDirectory);
 		evaluator.Providers.Insert(1, settings);
-		evaluator.SetVariable(DESTINATION_OPTION, target.Replace('\\', '/'));
+		evaluator.SetVariable(OUTPUT_OPTION, outputDirectory.Replace('\\', '/'));
 		NugetUtility.Initialize(evaluator);
 		return evaluator;
 	}

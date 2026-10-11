@@ -135,6 +135,7 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	{
 		//显示启动画面
 		Dumper.Splash();
+		using var timing = Utility.MeasureOutput(context.Output.WriteLine, Properties.Resources.Output_Elapsed, "dotnet-pack " + this.Name);
 
 		//仅使用已知变量解析源目录，身份信息随后由源版本文件补全。
 		var evaluator = CreateEvaluator(context);
@@ -148,7 +149,7 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 
 		if(!Directory.Exists(source))
 		{
-			Dumper.DirectoryNotExist(CommandOutletColor.Red, source);
+			Dumper.DirectoryNotExist(CommandOutletColor.DarkRed, source);
 			return ValueTask.FromResult<object>(null);
 		}
 
@@ -212,7 +213,16 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 			Web.Installation.Attach(package, result);
 
 			foreach(var diagnostic in result.Diagnostics)
-				Terminal.WriteLine(CommandOutletColor.Yellow, diagnostic.ToString());
+			{
+				var color = diagnostic.Level == Web.Diagnostic.Severity.Error ? CommandOutletColor.DarkRed : CommandOutletColor.DarkYellow;
+				var content = Utility.FormatOutput("{0}: {1}: ", color, diagnostic.Source, diagnostic.Code)
+					.Last.Append(color, diagnostic.Message);
+
+				if(diagnostic.Related is { } related)
+					content.Append(Utility.FormatOutput(" ({0})", color, related));
+
+				Terminal.WriteLine(content);
+			}
 		}
 
 		//交付、应用服务、升迁和 Web 步骤按各格式的生命周期组合。
@@ -232,7 +242,7 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		versionFile.Save(Path.Combine(output, package.FileName));
 
 		//输出安装包制作成功
-		Terminal.WriteLine(CommandOutletColor.DarkGreen, string.Format(Properties.Resources.PackageGeneratedSuccessfully_Message, Path.Combine(output, package.FileName)));
+		Terminal.WriteLine(Utility.FormatOutput(Properties.Resources.PackageGeneratedSuccessfully_Message, CommandOutletColor.DarkGreen, Path.Combine(output, package.FileName)));
 		//返回安装包的文件路径
 		return ValueTask.FromResult<object>(Path.Combine(output, package.FileName));
 

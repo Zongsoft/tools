@@ -317,13 +317,13 @@ internal sealed partial class ContainerManifest(bool planning = false)
 
 		foreach(var key in RootKeys)
 		{
-			var value = key == "stage" ? planning ? "plan" : "complete" : key == "source" ? Path.GetRelativePath(this["output"], this["source"]) : key == "output" ? Path.GetRelativePath(this["source"], this["output"]) : this[key];
+			var value = key == "stage" ? planning ? "plan" : "complete" : key == "source" ? GetRelativePath(this["output"], this["source"]) : key == "output" ? GetRelativePath(this["source"], this["output"]) : this[key];
 			if(!string.IsNullOrEmpty(value))
 				text.Append(key).Append('=').AppendLine(value);
 		}
 
 		for(int index = 0; index < this.Migrations.Count; index++)
-			text.Append("migration#").Append(index + 1).Append('=').AppendLine(Path.GetRelativePath(this["source"], this.Migrations[index]));
+			text.Append("migration#").Append(index + 1).Append('=').AppendLine(GetRelativePath(this["source"], this.Migrations[index]));
 
 		foreach(var component in this.Components)
 		{
@@ -331,7 +331,7 @@ internal sealed partial class ContainerManifest(bool planning = false)
 
 			foreach(var pair in component.Values)
 			{
-				var value = pair.Key == "package" || pair.Key == "template" && !TemplateCatalog.Contains(pair.Value) ? Path.GetRelativePath(this["source"], this.ResolvePath(pair.Value)) : pair.Value;
+				var value = pair.Key == "package" || pair.Key == "template" && !TemplateCatalog.Contains(pair.Value) ? GetRelativePath(this["source"], this.ResolvePath(pair.Value)) : pair.Value;
 				if(value != null || pair.Key == "settings" || pair.Key.StartsWith("environment!", StringComparison.OrdinalIgnoreCase))
 					text.Append(pair.Key).Append('=').AppendLine(value);
 			}
@@ -340,6 +340,8 @@ internal sealed partial class ContainerManifest(bool planning = false)
 		return text.ToString().Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", "\r\n", StringComparison.Ordinal);
 	}
 
+	// 生成的路径还会经过模板求值，统一使用目录分隔符 /，避免把 Windows 分隔符当作转义字符。
+	private static string GetRelativePath(string relativeTo, string path) => Path.GetRelativePath(relativeTo, path).Replace(Path.DirectorySeparatorChar, '/');
 	private static bool IsComponentKey(string key) => _componentKeys.Contains(key, StringComparer.OrdinalIgnoreCase) || key.StartsWith("environment!", StringComparison.OrdinalIgnoreCase) || key.StartsWith("file!", StringComparison.OrdinalIgnoreCase) || key.StartsWith("probe-host!", StringComparison.OrdinalIgnoreCase);
 	private string GetImageIdentity(Component component) => Files.HashText(string.Join("\n", component["repository"] ?? "", component["tag"] ?? "", "linux", this["architecture"] ?? ""));
 	private static ContainerizationException CreateException(ProfileItem item, string message) => new(2, string.Format(Properties.Resources.Manifest_16_Message, item.Profile.FilePath, item.LineNumber + 1, message));

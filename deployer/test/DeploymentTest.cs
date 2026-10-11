@@ -19,15 +19,15 @@ public class DeploymentTest
 		var argument = absoluteSource ? source.Replace('\\', '/') : "default.txt";
 		var deployer = fixture.CreateDeployer();
 
-		var result = await deployer.DeployAsync((fixture.Manifest($"ordinary.txt\n:{argument}")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((fixture.Manifest($"ordinary.txt\n:{argument}")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(2, result.Successes);
 		Assert.Equal(0, result.Skipped);
 		Assert.True(deployer.Plan.Succeeded);
-		Assert.Equal("ordinary source", File.ReadAllText(Path.Combine(fixture.Destination, "ordinary.txt")));
-		Assert.Equal("default resolver source", File.ReadAllText(Path.Combine(fixture.Destination, "default.txt")));
-		Assert.Equal(2, Directory.GetFiles(fixture.Destination).Length);
+		Assert.Equal("ordinary source", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "ordinary.txt")));
+		Assert.Equal("default resolver source", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "default.txt")));
+		Assert.Equal(2, Directory.GetFiles(fixture.OutputDirectory).Length);
 		Assert.Empty(deployer.Plan.Diagnostics);
 	}
 
@@ -54,12 +54,12 @@ public class DeploymentTest
 		}
 
 		var deployer = fixture.CreateDeployer();
-		var result = await deployer.DeployAsync((fixture.Manifest(prefix + argument)).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((fixture.Manifest(prefix + argument)).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(1, result.Successes);
 		Assert.Equal(0, result.Skipped);
-		Assert.Equal("path resolver content", File.ReadAllText(Path.Combine(fixture.Destination, "file.txt")));
+		Assert.Equal("path resolver content", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "file.txt")));
 		Assert.Equal(source, Assert.Single(deployer.Plan.Operations).Source);
 		Assert.Empty(deployer.Plan.Diagnostics);
 	}
@@ -80,7 +80,7 @@ public class DeploymentTest
 			var manifest = Path.Combine(fixture.Root, "missing-localization.deploy");
 			var deployer = fixture.CreateDeployer();
 
-			var result = await deployer.DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+			var result = await deployer.DeployAsync((manifest).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 			Assert.Equal(0, result.Failures);
 			Assert.Equal(0, result.Successes);
@@ -88,7 +88,7 @@ public class DeploymentTest
 			Assert.True(deployer.Plan.Succeeded);
 			Assert.Equal(expectedPrefix + manifest, Assert.Single(deployer.Plan.Diagnostics));
 			Assert.Equal(expectedPrefix + manifest + Environment.NewLine, fixture.Log.ToString());
-			Assert.Empty(Directory.GetFiles(fixture.Destination));
+			Assert.Empty(Directory.GetFiles(fixture.OutputDirectory));
 		}
 		finally
 		{
@@ -106,10 +106,10 @@ public class DeploymentTest
 		fixture.Write("source/file.txt", "source");
 		using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
 		cancellation.CancelAfter(TimeSpan.FromSeconds(10));
-		var result = await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), cancellation.Token);
+		var result = await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), cancellation.Token);
 		Assert.True(result.Failures > 0);
 		Assert.Equal(0, result.Successes);
-		Assert.Empty(Directory.GetFiles(fixture.Destination));
+		Assert.Empty(Directory.GetFiles(fixture.OutputDirectory));
 		Assert.Contains("child.deploy", fixture.Log.ToString());
 	}
 
@@ -121,11 +121,11 @@ public class DeploymentTest
 		fixture.Write("source/local.txt", "local source");
 		fixture.Manifest("[plugins]\nimported.txt", "source/child.deploy");
 		var manifest = fixture.Manifest("#@import child.deploy\n#@import missing.deploy\n[plugins]\nlocal.txt");
-		var result = await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(2, result.Successes);
-		Assert.Equal("imported source", File.ReadAllText(Path.Combine(fixture.Destination, "plugins", "imported.txt")));
-		Assert.Equal("local source", File.ReadAllText(Path.Combine(fixture.Destination, "plugins", "local.txt")));
+		Assert.Equal("imported source", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "plugins", "imported.txt")));
+		Assert.Equal("local source", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "plugins", "local.txt")));
 	}
 
 	[Fact]
@@ -136,15 +136,15 @@ public class DeploymentTest
 		fixture.Write("target/obsolete.txt", "original content");
 		fixture.Variables["dry_run"] = "true";
 		var deployer = fixture.CreateDeployer();
-		var result = await deployer.DeployAsync((fixture.Manifest("file.txt\ndelete:obsolete.txt")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((fixture.Manifest("file.txt\ndelete:obsolete.txt")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(0, result.Successes);
 		Assert.Equal(0, result.Deleted);
-		Assert.False(File.Exists(Path.Combine(fixture.Destination, "file.txt")));
-		Assert.Equal("original content", File.ReadAllText(Path.Combine(fixture.Destination, "obsolete.txt")));
+		Assert.False(File.Exists(Path.Combine(fixture.OutputDirectory, "file.txt")));
+		Assert.Equal("original content", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "obsolete.txt")));
 		Assert.Equal(2, deployer.Plan.Operations.Count);
-		Assert.Contains(deployer.Plan.Operations, operation => operation.Destination == Path.Combine(fixture.Destination, "file.txt"));
-		Assert.Contains(deployer.Plan.Operations, operation => operation.Destination == Path.Combine(fixture.Destination, "obsolete.txt"));
+		Assert.Contains(deployer.Plan.Operations, operation => operation.Output == Path.Combine(fixture.OutputDirectory, "file.txt"));
+		Assert.Contains(deployer.Plan.Operations, operation => operation.Output == Path.Combine(fixture.OutputDirectory, "obsolete.txt"));
 	}
 
 	[Fact]
@@ -152,14 +152,14 @@ public class DeploymentTest
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "source");
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("file.txt\nunknown:missing")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("file.txt\nunknown:missing")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.True(result.Failures > 0);
 		Assert.Equal(0, result.Successes);
-		Assert.Empty(Directory.GetFiles(fixture.Destination));
+		Assert.Empty(Directory.GetFiles(fixture.OutputDirectory));
 	}
 
 	[Fact]
-	public void CreateEvaluator_LoadsConfigurationFromDestinationAndOptionsWin()
+	public void CreateEvaluator_LoadsConfigurationFromOutputAndOptionsWin()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/appsettings.json", "{\"ApplicationName\":\"WrongApplication\"}");
@@ -168,7 +168,7 @@ public class DeploymentTest
 			""");
 		var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
 		{
-			["destination"] = fixture.Destination.Replace('\\', '/'),
+			["output"] = fixture.OutputDirectory.Replace('\\', '/'),
 			["DATABASE_NAME"] = "option-database",
 		};
 		var variables = Deployer.CreateEvaluator(options, Path.Combine(fixture.Root, "source"));
@@ -179,19 +179,19 @@ public class DeploymentTest
 		Assert.Equal("admin", variables.Evaluate("${Database_Groups_0}"));
 		Assert.Equal("nested", variables.Evaluate("${Items_0_Name}"));
 		Assert.Equal("option-database-admin-nested", variables.Evaluate("${database_name}-${Database_Groups_0}-${Items_0_Name}"));
-		using var exclusive = File.Open(Path.Combine(fixture.Destination, "appsettings.json"), FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+		using var exclusive = File.Open(Path.Combine(fixture.OutputDirectory, "appsettings.json"), FileMode.Open, FileAccess.ReadWrite, FileShare.None);
 		Assert.True(exclusive.CanWrite);
 	}
 
 	[Fact]
-	public void CreateEvaluator_DestinationForwardMultiHop_UsesTargetAppSettings()
+	public void CreateEvaluator_OutputForwardMultiHop_UsesTargetAppSettings()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/appsettings.json", "{\"ApplicationName\":\"WrongApplication\"}");
 		fixture.Write("target/appsettings.json", "{\"ApplicationName\":\"TargetApplication\",\"Nested\":\"${tool_label}\"}");
 		var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
 		{
-			["destination"] = "${tool_root}/${tool_stage}",
+			["output"] = "${tool_root}/${tool_stage}",
 			["tool_root"] = "${tool_workspace}",
 			["tool_stage"] = "target",
 			["tool_workspace"] = fixture.Root.Replace('\\', '/'),
@@ -200,7 +200,7 @@ public class DeploymentTest
 
 		var variables = Deployer.CreateEvaluator(options, Path.Combine(fixture.Root, "source"));
 
-		Assert.Equal(fixture.Destination, Path.GetFullPath(variables.Evaluate("${destination}")));
+		Assert.Equal(fixture.OutputDirectory, Path.GetFullPath(variables.Evaluate("${output}")));
 		Assert.Equal("TargetApplication", variables.Evaluate("${application}"));
 		Assert.Equal("TargetApplication-target", variables.Evaluate("${Nested}"));
 		Assert.Equal("TargetApplication-target", variables.Evaluate("${Nested}"));
@@ -212,7 +212,7 @@ public class DeploymentTest
 		using var fixture = new DeploymentFixture();
 		var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
 		{
-			["destination"] = fixture.Destination.Replace('\\', '/'),
+			["output"] = fixture.OutputDirectory.Replace('\\', '/'),
 			["tool_value"] = "${tool_middle}/${tool_suffix}",
 			["tool_middle"] = "${tool_leaf}",
 			["tool_leaf"] = "first",
@@ -240,7 +240,7 @@ public class DeploymentTest
 		var manifest = Path.Combine(fixture.Root, "token=synthetic-token", "password=synthetic-password", "missing.deploy");
 		var deployer = fixture.CreateDeployer();
 
-		var result = await deployer.DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((manifest).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(0, result.Successes);
@@ -251,7 +251,8 @@ public class DeploymentTest
 		var saved = DeploymentPlan.Load(report);
 		Assert.True(saved.Succeeded);
 		Assert.Equal([diagnostic], saved.Diagnostics);
-		Assert.Empty(Directory.GetFiles(fixture.Destination));
+		Assert.DoesNotContain("\u001b", fixture.Log.ToString(), StringComparison.Ordinal);
+		Assert.Empty(Directory.GetFiles(fixture.OutputDirectory));
 	}
 
 	[Fact]
@@ -263,13 +264,13 @@ public class DeploymentTest
 		var manifest = fixture.Manifest("file.txt", "source/token=synthetic-token/.deploy");
 		var deployer = fixture.CreateDeployer();
 
-		var result = await deployer.DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((manifest).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(1, result.Successes);
 		Assert.Contains(source, fixture.Log.ToString(), StringComparison.Ordinal);
 		Assert.Equal(source, Assert.Single(deployer.Plan.Operations).Source);
-		Assert.Equal("synthetic log fixture", File.ReadAllText(Path.Combine(fixture.Destination, "file.txt")));
+		Assert.Equal("synthetic log fixture", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "file.txt")));
 		Assert.Empty(deployer.Plan.Diagnostics);
 	}
 
@@ -291,7 +292,7 @@ public class DeploymentTest
 
 		if(overwrite != null)
 			fixture.Variables["overwrite"] = overwrite;
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("file.txt")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("file.txt")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(expected, File.ReadAllText(target));
 		Assert.Equal(copies, result.Successes);
 		Assert.Equal(skipped, result.Skipped);
@@ -305,9 +306,9 @@ public class DeploymentTest
 		fixture.Write("source/file.txt", "source");
 		fixture.Write("target/file.txt", "target");
 		fixture.Variables["overwrite"] = "typo";
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("file.txt")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("file.txt")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.True(result.Failures > 0);
-		Assert.Equal("target", File.ReadAllText(Path.Combine(fixture.Destination, "file.txt")));
+		Assert.Equal("target", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "file.txt")));
 	}
 
 	[Theory]
@@ -318,7 +319,7 @@ public class DeploymentTest
 	[InlineData("<application & x>", false, false)]
 	[InlineData("<application & x>", true, true)]
 	[InlineData("<preview:a,b & x>", true, true)]
-	public async Task Deploy_FilterOnlyDestinationAndSingleCharacterConditionAsync(string condition, bool hasX, bool copies)
+	public async Task Deploy_FilterOnlyOutputAndSingleCharacterConditionAsync(string condition, bool hasX, bool copies)
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "filtered source");
@@ -327,11 +328,11 @@ public class DeploymentTest
 
 		if(hasX)
 			fixture.Variables["x"] = "";
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest($"file.txt = {condition}")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest($"file.txt = {condition}")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(copies ? 1 : 0, result.Successes);
-		Assert.Equal(copies, File.Exists(Path.Combine(fixture.Destination, "file.txt")));
-		Assert.Equal(copies ? ["file.txt"] : [], Directory.GetFiles(fixture.Destination).Select(Path.GetFileName).ToArray());
+		Assert.Equal(copies, File.Exists(Path.Combine(fixture.OutputDirectory, "file.txt")));
+		Assert.Equal(copies ? ["file.txt"] : [], Directory.GetFiles(fixture.OutputDirectory).Select(Path.GetFileName).ToArray());
 	}
 
 	[Theory]
@@ -342,9 +343,9 @@ public class DeploymentTest
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "source");
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest($"file.txt = {condition}")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest($"file.txt = {condition}")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.True(result.Failures > 0);
-		Assert.Empty(Directory.GetFiles(fixture.Destination));
+		Assert.Empty(Directory.GetFiles(fixture.OutputDirectory));
 	}
 
 	[Theory]
@@ -352,10 +353,10 @@ public class DeploymentTest
 	public async Task Deploy_UnknownResolverCountsFailureAsync(string entry, string diagnostic)
 	{
 		using var fixture = new DeploymentFixture();
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest(entry)).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest(entry)).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(1, result.Failures);
 		Assert.Equal(0, result.Successes);
-		Assert.Empty(Directory.GetFiles(fixture.Destination));
+		Assert.Empty(Directory.GetFiles(fixture.OutputDirectory));
 		Assert.Contains(diagnostic, fixture.Log.ToString(), StringComparison.OrdinalIgnoreCase);
 	}
 
@@ -372,7 +373,7 @@ public class DeploymentTest
 		var missing = Path.Combine(fixture.Root, "absent.deploy");
 		var deployer = fixture.CreateDeployer();
 
-		var result = await deployer.DeployManyAsync([missing.Replace('\\', '/'), fixture.Manifest("file.txt").Replace('\\', '/'), emptyDirectory.Replace('\\', '/')], (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await deployer.DeployManyAsync([missing.Replace('\\', '/'), fixture.Manifest("file.txt").Replace('\\', '/'), emptyDirectory.Replace('\\', '/')], (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(dryRun ? 0 : 1, result.Successes);
@@ -383,7 +384,7 @@ public class DeploymentTest
 		Assert.Equal(2, deployer.Plan.Diagnostics.Count);
 		Assert.Contains(missing, fixture.Log.ToString(), StringComparison.Ordinal);
 		Assert.Contains(Path.Combine(emptyDirectory, ".deploy"), fixture.Log.ToString(), StringComparison.Ordinal);
-		Assert.Equal(!dryRun, File.Exists(Path.Combine(fixture.Destination, "file.txt")));
+		Assert.Equal(!dryRun, File.Exists(Path.Combine(fixture.OutputDirectory, "file.txt")));
 	}
 
 	[Theory]
@@ -400,14 +401,14 @@ public class DeploymentTest
 		fixture.Variables["report"] = (report).Replace('\\', '/');
 		var deployer = fixture.CreateDeployer();
 
-		var result = await deployer.DeployAsync((fixture.Manifest($"before.txt\n{missing} = retained.txt\nafter.txt")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((fixture.Manifest($"before.txt\n{missing} = retained.txt\nafter.txt")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(2, result.Successes);
 		Assert.Equal(1, result.Skipped);
-		Assert.Equal("before", File.ReadAllText(Path.Combine(fixture.Destination, "before.txt")));
-		Assert.Equal("after", File.ReadAllText(Path.Combine(fixture.Destination, "after.txt")));
-		Assert.Equal("preserved", File.ReadAllText(Path.Combine(fixture.Destination, "retained.txt")));
+		Assert.Equal("before", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "before.txt")));
+		Assert.Equal("after", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "after.txt")));
+		Assert.Equal("preserved", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "retained.txt")));
 		var plan = DeploymentPlan.Load(report);
 		Assert.True(plan.Succeeded);
 		Assert.Equal(2, plan.Operations.Count);
@@ -423,13 +424,13 @@ public class DeploymentTest
 		fixture.Manifest("artifacts/optional.option\nlib/${Framework}/Optional.Assets.dll", "packages/optional.assets/1.0.0/.deploy");
 		var deployer = fixture.CreateDeployer();
 
-		var result = await deployer.DeployAsync((fixture.Manifest("nuget:Optional.Assets@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((fixture.Manifest("nuget:Optional.Assets@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(1, result.Successes);
 		Assert.Equal(1, result.Skipped);
 		Assert.True(deployer.Plan.Succeeded);
-		Assert.Equal("Optional.Assets@1.0.0", File.ReadAllText(Path.Combine(fixture.Destination, "Optional.Assets.dll")));
+		Assert.Equal("Optional.Assets@1.0.0", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Optional.Assets.dll")));
 		Assert.Contains("optional.option", Assert.Single(deployer.Plan.Diagnostics), StringComparison.Ordinal);
 	}
 
@@ -441,7 +442,7 @@ public class DeploymentTest
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "source");
 		var outside = fixture.Write("outside.txt", "untouched");
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest(entry)).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest(entry)).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal("untouched", File.ReadAllText(outside));
 		Assert.True(result.Failures > 0);
 		Assert.Equal(0, result.Successes);
@@ -452,7 +453,7 @@ public class DeploymentTest
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "source");
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("[../outside]\nfile.txt")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("[../outside]\nfile.txt")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.True(result.Failures > 0);
 		Assert.False(Directory.Exists(Path.Combine(fixture.Root, "outside")));
 	}
@@ -462,11 +463,11 @@ public class DeploymentTest
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "source");
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("file.txt\ndelete:file.txt")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("file.txt\ndelete:file.txt")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(1, result.Successes);
 		Assert.Equal(1, result.Deleted);
 		Assert.Equal(0, result.Failures);
-		Assert.False(File.Exists(Path.Combine(fixture.Destination, "file.txt")));
+		Assert.False(File.Exists(Path.Combine(fixture.OutputDirectory, "file.txt")));
 	}
 
 	[Fact]
@@ -476,7 +477,7 @@ public class DeploymentTest
 		var manifest = fixture.Manifest("second.deploy");
 		fixture.Manifest("[deeper]\n.deploy", "source/second.deploy");
 		using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-		var result = await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), cancellation.Token);
+		var result = await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), cancellation.Token);
 		Assert.True(result.Failures > 0);
 		Assert.Equal(0, result.Successes);
 		Assert.Contains(".deploy", fixture.Log.ToString());
@@ -489,11 +490,11 @@ public class DeploymentTest
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "shared");
 		fixture.Manifest("file.txt", "source/child.deploy");
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("[first]\nchild.deploy\n[second]\nchild.deploy")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("[first]\nchild.deploy\n[second]\nchild.deploy")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(2, result.Successes);
-		Assert.Equal("shared", File.ReadAllText(Path.Combine(fixture.Destination, "first", "file.txt")));
-		Assert.Equal("shared", File.ReadAllText(Path.Combine(fixture.Destination, "second", "file.txt")));
+		Assert.Equal("shared", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "first", "file.txt")));
+		Assert.Equal("shared", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "second", "file.txt")));
 	}
 
 	[Fact]
@@ -503,7 +504,7 @@ public class DeploymentTest
 		fixture.Write("source/file.txt", "source");
 		using var cancellation = new CancellationTokenSource();
 		cancellation.Cancel();
-		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => fixture.CreateDeployer().DeployAsync((fixture.Manifest("file.txt")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), cancellation.Token));
-		Assert.Empty(Directory.GetFiles(fixture.Destination));
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => fixture.CreateDeployer().DeployAsync((fixture.Manifest("file.txt")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), cancellation.Token));
+		Assert.Empty(Directory.GetFiles(fixture.OutputDirectory));
 	}
 }

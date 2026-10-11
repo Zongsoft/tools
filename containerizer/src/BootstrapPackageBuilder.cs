@@ -37,11 +37,13 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Zongsoft.Components;
+
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer;
 
-internal sealed class BootstrapPackageBuilder(ContainerEngine engine, string cacheRoot = null, Action<string> error = null)
+internal sealed class BootstrapPackageBuilder(ContainerEngine engine, string cacheRoot = null, Action<CommandOutletContent> error = null)
 {
 	#region 公共方法
 	public static string GetBaseImage(string distribution) => distribution switch

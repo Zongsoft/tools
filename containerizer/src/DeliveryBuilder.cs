@@ -47,11 +47,11 @@ using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer;
 
-internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cacheRoot = null, string executorPath = null, bool refresh = false, Action<CommandOutletContent> output = null, Action<string> error = null)
+internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cacheRoot = null, string executorPath = null, bool refresh = false, Action<CommandOutletContent> output = null, Action<CommandOutletContent> error = null)
 {
 	#region 成员字段
 	private readonly Action<CommandOutletContent> _output = output ?? Terminal.WriteLine;
-	private readonly Action<string> _error = error ?? Terminal.Default.Error.WriteLine;
+	private readonly Action<CommandOutletContent> _error = error ?? Utility.WriteError;
 	#endregion
 
 	#region 公共方法
@@ -64,7 +64,7 @@ internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cach
 			foreach(var site in source.Plan.Web)
 			{
 				var ports = source.Plan.Ports.Where(port => site.Bindings.Any(binding => binding.Publication == port.Name));
-				_output(Output.FormatMessage(Properties.Resources.Web_Plan, source.Plan.Id, $"{site.Application}/{site.Name}",
+				_output(Utility.FormatOutput(Properties.Resources.Web_Plan, source.Plan.Id, $"{site.Application}/{site.Name}",
 					string.Join(", ", site.Bindings.Select(WebPackage.GetAddress)), string.Join(", ", site.Hosts),
 					string.Join(", ", ports.Select(port => $"{port.Container}:{port.Host}"))));
 			}
@@ -92,7 +92,7 @@ internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cach
 
 	public async Task<string> BuildAsync(ContainerManifest manifest, CancellationToken cancellation)
 	{
-		using var timing = Output.Measure(_output, Properties.Resources.Build_Total);
+		using var timing = Utility.MeasureOutput(_output, Properties.Resources.Run_Elapsed, Properties.Resources.Build_Total);
 		var sources = ServicePlanner.Prepare(manifest, _output);
 		var executor = FindExecutor(manifest["architecture"], executorPath);
 		var workspace = Path.Combine(Path.GetTempPath(), $"containerizer-build-{Guid.NewGuid().ToString("N")}");
@@ -131,8 +131,8 @@ internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cach
 					continue;
 
 				var pinned = component["digest"] != null;
-				_output(Output.FormatMessage(Properties.Resources.NodeBuilder_ResolveImage, component.Name));
-				using var resolveTiming = Output.Measure(_output, string.Format(Properties.Resources.NodeBuilder_ResolveImage, component.Name));
+				_output(Utility.FormatOutput(Properties.Resources.NodeBuilder_ResolveImage, component.Name));
+				using var resolveTiming = Utility.MeasureOutput(_output, Properties.Resources.Run_Elapsed, string.Format(Properties.Resources.NodeBuilder_ResolveImage, component.Name));
 				source.Plan.Image = await engine.ResolveAsync(source.ImageRepository, component["digest"], manifest.Defaults.SelectTag(component), node.Architecture, cancellation);
 				source.Plan.Image.Reference = CreateImageReference(node, source.Plan.Id);
 				source.Plan.Image.Mode = component["imaging"] ?? manifest["imaging"];
@@ -160,13 +160,13 @@ internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cach
 
 			foreach(var source in sources)
 			{
-				_output(Output.FormatMessage(Properties.Resources.NodeBuilder_PrepareImage, source.Plan.Id));
+				_output(Utility.FormatOutput(Properties.Resources.NodeBuilder_PrepareImage, source.Plan.Id));
 
 				if(source.Component.IsApplication)
 					await new ApplicationImageBuilder(engine, buildResources, environments, _output, _error).BuildAsync(source, manifest, workspace, delivery, CreateImageReference(node, source.Plan.Id), cancellation);
 				else if(source.Plan.Image.Mode == "offline")
 				{
-					using var exportTiming = Output.Measure(_output, string.Format(Properties.Resources.NodeBuilder_PrepareImage, source.Plan.Id));
+					using var exportTiming = Utility.MeasureOutput(_output, Properties.Resources.Run_Elapsed, string.Format(Properties.Resources.NodeBuilder_PrepareImage, source.Plan.Id));
 					source.Plan.Image.Archive = $"images/{source.Plan.Id}.tar";
 					await engine.ExportAsync(source.Plan.Image.Id, Path.Combine(delivery, source.Plan.Image.Archive), cancellation);
 				}
@@ -189,9 +189,9 @@ internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cach
 				UpdateConfigurationHash(source, delivery);
 			}
 
-			_output(Output.FormatMessage(Properties.Resources.NodeBuilder_ResolveBootstrap));
+			_output(Utility.FormatOutput(Properties.Resources.NodeBuilder_ResolveBootstrap));
 
-			using(Output.Measure(_output, Properties.Resources.NodeBuilder_ResolveBootstrap))
+			using(Utility.MeasureOutput(_output, Properties.Resources.Run_Elapsed, Properties.Resources.NodeBuilder_ResolveBootstrap))
 				node.Bootstrap = await new BootstrapPackageBuilder(engine, cacheRoot, _error).BuildAsync(manifest, workspace, delivery, cancellation);
 
 			foreach(var path in manifest.Migrations)
@@ -233,7 +233,7 @@ internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cach
 				service.Health.Test = null;
 			}
 
-			using(Output.Measure(_output, Properties.Resources.Build_Checksums))
+			using(Utility.MeasureOutput(_output, Properties.Resources.Run_Elapsed, Properties.Resources.Build_Checksums))
 				node.Files = Directory.EnumerateFiles(delivery, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal).Select(path => new FileRecord { Path = Path.GetRelativePath(delivery, path).Replace('\\', '/'), Hash = Files.Hash(path), Length = new FileInfo(path).Length }).ToList();
 
 			Files.Save(Path.Combine(delivery, DeliveryPlan.FileName), node, ProtocolJson.Default.DeliveryPlan);
@@ -241,14 +241,14 @@ internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cach
 
 			var archivePath = Path.Combine(workspace, $"{manifest.ReleaseName}.tar.gz");
 
-			using(Output.Measure(_output, Properties.Resources.Build_Compression))
+			using(Utility.MeasureOutput(_output, Properties.Resources.Run_Elapsed, Properties.Resources.Build_Compression))
 				Files.Archive(delivery, archivePath);
 
 			cancellation.ThrowIfCancellationRequested();
 			using var publishLock = BuildStorage.AcquireLock(manifest["output"], cacheRoot);
 			var defaults = ServiceDefaults.Prepare(manifest, workspace);
 
-			using(Output.Measure(_output, Properties.Resources.Build_Publish))
+			using(Utility.MeasureOutput(_output, Properties.Resources.Run_Elapsed, Properties.Resources.Build_Publish))
 				BuildStorage.Publish(manifest, prepared, archivePath, defaults);
 			return Path.Combine(manifest["output"], Path.GetFileName(archivePath));
 		}
@@ -263,7 +263,7 @@ internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cach
 			}
 			catch(Exception exception)
 			{
-				_error(string.Format(Properties.Resources.NodeBuilder_FailedBuild_Message, workspace, exception.Message));
+				_error(Utility.FormatOutput(Properties.Resources.NodeBuilder_FailedBuild_Message, CommandOutletColor.DarkRed, workspace, exception.Message));
 			}
 		}
 	}

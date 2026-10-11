@@ -413,6 +413,15 @@ namespace Zongsoft.Tools.Migrator.Properties {
         }
 
         /// <summary>
+        ///   Looks up a localized string similar to   → {0}: {1} s.
+        /// </summary>
+        internal static string Output_Elapsed {
+            get {
+                return ResourceManager.GetString("Output.Elapsed", resourceCulture);
+            }
+        }
+
+        /// <summary>
         ///   Looks up a localized string similar to Repeated GO batches are not supported..
         /// </summary>
         internal static string SqlServerGoRepeatUnsupported_Message {

@@ -26,13 +26,13 @@ public class NugetRuntimeTest
 
 		fixture.Variables["platform"] = platform;
 		fixture.Variables["architecture"] = architecture;
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Graph.Root@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Graph.Root@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(2, result.Successes);
-		Assert.Equal("managed:" + expected, File.ReadAllText(Path.Combine(fixture.Destination, "Graph.Root.dll")));
-		Assert.Equal("native:" + expected, File.ReadAllText(Path.Combine(fixture.Destination, "graph.native")));
-		Assert.Equal(["Graph.Root.dll", "graph.native"], Directory.GetFiles(fixture.Destination).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray());
+		Assert.Equal("managed:" + expected, File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Graph.Root.dll")));
+		Assert.Equal("native:" + expected, File.ReadAllText(Path.Combine(fixture.OutputDirectory, "graph.native")));
+		Assert.Equal(["Graph.Root.dll", "graph.native"], Directory.GetFiles(fixture.OutputDirectory).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray());
 	}
 
 	[Fact]
@@ -48,13 +48,13 @@ public class NugetRuntimeTest
 		fixture.Variables["platform"] = "linux-musl";
 		fixture.Variables["architecture"] = "x64";
 
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Graph.Independent@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Graph.Independent@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(2, result.Successes);
-		Assert.Equal("compatible managed fallback", File.ReadAllText(Path.Combine(fixture.Destination, "Graph.Independent.dll")));
-		Assert.Equal("exact native asset", File.ReadAllText(Path.Combine(fixture.Destination, "graph.native")));
-		Assert.Equal(2, Directory.GetFiles(fixture.Destination).Length);
+		Assert.Equal("compatible managed fallback", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Graph.Independent.dll")));
+		Assert.Equal("exact native asset", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "graph.native")));
+		Assert.Equal(2, Directory.GetFiles(fixture.OutputDirectory).Length);
 	}
 
 	[Fact]
@@ -69,12 +69,12 @@ public class NugetRuntimeTest
 		fixture.Variables["platform"] = "linux-musl";
 		fixture.Variables["architecture"] = "x64";
 
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Graph.Reverse@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Graph.Reverse@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(2, result.Successes);
-		Assert.Equal("exact managed asset", File.ReadAllText(Path.Combine(fixture.Destination, "Graph.Reverse.dll")));
-		Assert.Equal("compatible native fallback", File.ReadAllText(Path.Combine(fixture.Destination, "graph.native")));
-		Assert.Equal(["Graph.Reverse.dll", "graph.native"], Directory.GetFiles(fixture.Destination).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray());
+		Assert.Equal("exact managed asset", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Graph.Reverse.dll")));
+		Assert.Equal("compatible native fallback", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "graph.native")));
+		Assert.Equal(["Graph.Reverse.dll", "graph.native"], Directory.GetFiles(fixture.OutputDirectory).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray());
 	}
 }

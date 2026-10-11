@@ -235,4 +235,7 @@
   <data name="MigrateVersionFileInvalid.Message" xml:space="preserve">
     <value>版本文件“{0}”中选中的版本号必须为非零值。</value>
   </data>
+  <data name="Output.Elapsed" xml:space="preserve">
+    <value>  → {0}：{1} 秒</value>
+  </data>
 </root>

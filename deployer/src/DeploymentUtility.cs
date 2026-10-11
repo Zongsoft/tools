@@ -131,6 +131,11 @@ public static class DeploymentUtility
 		}
 	}
 
+	/// <summary>展开目录路径中的通配符并保留输出目录后缀。</summary>
+	/// <param name="directory">待展开的目录路径。</param>
+	/// <param name="expansion">是否保留通配目录的完整相对层级。</param>
+	/// <param name="cancellation">取消目录搜索的令牌。</param>
+	/// <returns>匹配的目录及其输出后缀。</returns>
 	public static IEnumerable<PathToken> GetDirectories(string directory, bool expansion, CancellationToken cancellation = default) => GetDirectories(directory, expansion, cancellation, null);
 	private static IEnumerable<PathToken> GetDirectories(string directory, bool expansion, CancellationToken cancellation, string sourceDirectory)
 	{
@@ -203,33 +208,31 @@ public static class DeploymentUtility
 
 	private static string CombineSuffix(string first, string second) => string.IsNullOrEmpty(first) ? second : string.IsNullOrEmpty(second) ? first : Path.Combine(first, second);
 
-	public static bool CopyFile(string source, string destination, Overwrite overwrite)
+	/// <summary>按覆盖策略将源文件原子复制到输出路径。</summary>
+	/// <param name="source">源文件路径。</param>
+	/// <param name="output">输出文件路径。</param>
+	/// <param name="overwrite">控制已有文件的覆盖方式。</param>
+	/// <returns>是否完成复制；路径为空或策略跳过时为假。</returns>
+	public static bool CopyFile(string source, string output, Overwrite overwrite)
 	{
-		if(string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(destination))
+		if(string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(output))
 			return false;
 
 		var copyRequired = true;
 
-		if(File.Exists(destination))
+		if(File.Exists(output))
 		{
 			copyRequired = overwrite switch
 			{
 				Overwrite.Alway => true,
 				Overwrite.Never => false,
-				Overwrite.Newest => File.GetLastWriteTime(source) >= File.GetLastWriteTime(destination),
+				Overwrite.Newest => File.GetLastWriteTime(source) >= File.GetLastWriteTime(output),
 				_ => true,
 			};
 		}
 
 		if(copyRequired)
-		{
-			var directory = Path.GetDirectoryName(destination);
-
-			if(!Directory.Exists(directory))
-				Directory.CreateDirectory(directory);
-
-			ArtifactPublisher.Copy(source, destination);
-		}
+			ArtifactPublisher.Copy(source, output);
 
 		return copyRequired;
 	}
@@ -239,17 +242,27 @@ public static class DeploymentUtility
 	/// <summary>保存逻辑源文件路径、部署目标的相对目录后缀及可选包来源。</summary>
 	public class PathToken
 	{
+		/// <summary>创建源路径及输出后缀信息。</summary>
+		/// <param name="path">逻辑源路径。</param>
+		/// <param name="suffix">相对于输出目录的路径后缀。</param>
 		public PathToken(string path, string suffix = null)
 		{
 			this.Path = path;
 			this.Suffix = string.IsNullOrEmpty(suffix) || suffix == "." ? null : suffix.Trim(Utility.PATH_SEPARATORS);
 		}
 
+		/// <summary>保存来源包标识；本地文件为空。</summary>
 		public string Package;
+		/// <summary>保存逻辑源路径。</summary>
 		public string Path;
+		/// <summary>保存输出目录的相对后缀。</summary>
 		public string Suffix;
 
+		/// <summary>判断逻辑路径是否指向存在的文件。</summary>
+		/// <returns>文件存在时为真。</returns>
 		public bool Exists() => !string.IsNullOrEmpty(this.Path) && File.Exists(this.Path);
+		/// <summary>获取路径及输出后缀的文本表示。</summary>
+		/// <returns>用于识别源和输出后缀组合的文本。</returns>
 		public override string ToString() => string.IsNullOrEmpty(this.Suffix) ? this.Path : $"{this.Path}?{this.Suffix}";
 	}
 	#endregion

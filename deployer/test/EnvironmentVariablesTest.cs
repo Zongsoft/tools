@@ -31,7 +31,7 @@ public sealed class EnvironmentVariablesTest
 				fixture.Write("source/.env", "FRAMEWORK=net9.0\n");
 			}
 
-			var options = new Dictionary<string, string> { ["destination"] = "${framework}" };
+			var options = new Dictionary<string, string> { ["output"] = "${framework}" };
 			if(specified)
 				options["FrAmEwOrK"] = option;
 
@@ -39,7 +39,7 @@ public sealed class EnvironmentVariablesTest
 			var variables = Deployer.CreateEvaluator(options, source);
 
 			Assert.Equal(expected, variables.Evaluate("${framework}"));
-			Assert.Equal(Path.GetFullPath(string.IsNullOrWhiteSpace(expected) ? source : Path.Combine(source, expected)), Path.GetFullPath(variables.Evaluate("${destination}")));
+			Assert.Equal(Path.GetFullPath(string.IsNullOrWhiteSpace(expected) ? source : Path.Combine(source, expected)), Path.GetFullPath(variables.Evaluate("${output}")));
 			Assert.Equal("net8.0", Environment.GetEnvironmentVariable("framework"));
 		}
 		finally
@@ -58,7 +58,7 @@ public sealed class EnvironmentVariablesTest
 		fixture.Write("target/appsettings.json", "{\"Framework\":\"net9.0\"}");
 		var options = new Dictionary<string, string>
 		{
-			["destination"] = fixture.Destination.Replace('\\', '/'),
+			["output"] = fixture.OutputDirectory.Replace('\\', '/'),
 			["framework"] = option,
 		};
 
@@ -128,14 +128,14 @@ public sealed class EnvironmentVariablesTest
 			fixture.Write("target/appsettings.json", "{\"zongsoft_env_priority\":\"configuration\",\"zongsoft_env_configuration\":\"target-only\"}");
 			var options = new Dictionary<string, string>
 			{
-				["destination"] = "${zongsoft_env_target}",
+				["output"] = "${zongsoft_env_target}",
 				["zongsoft_env_stage"] = "target",
 			};
 			var source = Path.Combine(fixture.Root, "source");
 			var environment = Deployer.CreateEvaluator(new Dictionary<string, string>(), source);
 			Assert.Equal("source", environment.Evaluate("${" + KEY + "}"));
 			var configured = Deployer.CreateEvaluator(options, source);
-			Assert.Equal(fixture.Destination, Path.GetFullPath(configured.Evaluate("${destination}")));
+			Assert.Equal(fixture.OutputDirectory, Path.GetFullPath(configured.Evaluate("${output}")));
 			Assert.Equal("configuration", configured.Evaluate("${" + KEY + "}"));
 			Assert.Equal("target-only", configured.Evaluate("${zongsoft_env_configuration}"));
 
@@ -156,7 +156,7 @@ public sealed class EnvironmentVariablesTest
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/.env", "zongsoft_json_value=environment\nzongsoft_json_label=environment-label\n");
 		fixture.Write("target/appsettings.json", "{\"Zongsoft_Json\":{\"Value\":null,\"Label\":\"configuration\"}}");
-		var options = new Dictionary<string, string> { ["destination"] = fixture.Destination.Replace('\\', '/') };
+		var options = new Dictionary<string, string> { ["output"] = fixture.OutputDirectory.Replace('\\', '/') };
 		var source = Path.Combine(fixture.Root, "source");
 
 		var configured = Deployer.CreateEvaluator(options, source);
@@ -214,7 +214,7 @@ public sealed class EnvironmentVariablesTest
 			Assert.Throws<UnauthorizedAccessException>(() => Deployer.CreateEvaluator(new Dictionary<string, string>(), fixture.Root));
 		else
 			Assert.Throws<ProfileException>(() => Deployer.CreateEvaluator(new Dictionary<string, string>(), fixture.Root));
-		Assert.Empty(Directory.GetFiles(fixture.Destination));
+		Assert.Empty(Directory.GetFiles(fixture.OutputDirectory));
 	}
 
 	[Fact]
@@ -323,7 +323,7 @@ public sealed class EnvironmentVariablesTest
 		var error = Assert.Throws<TemplateEvaluationException>(() => Deployer.CreateEvaluator(new Dictionary<string, string>(), Path.Combine(fixture.Root, "source")));
 
 		Assert.Equal("MissingVariable", error.Code);
-		Assert.Empty(Directory.GetFiles(fixture.Destination));
+		Assert.Empty(Directory.GetFiles(fixture.OutputDirectory));
 	}
 
 	[Fact]

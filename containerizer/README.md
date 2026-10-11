@@ -7,6 +7,8 @@
 
 [English](README.md) | [简体中文](README.zh-Hans.md)
 
+Terminal warnings use dark-yellow text with bold cyan parameters; errors use dark-red text with bold magenta parameters; success messages use green text. Exception types are highlighted in magenta and messages retain their original text. All four tools share the repository’s `.shared/Utility.Output.cs`: `FormatOutput` and `FormatError` construct Core `CommandOutletContent`; `WriteOutput` and `WriteError` route terminal and text-writer output; tools using the command executor call `HandleFailure` to display exceptions and mark them handled, while retaining their own exit codes. Terminals renders the colors. Redirected output and caller-provided error writers preserve plain text and their original streams. The same shared file provides `HighlightSyntax` for help text and `MeasureOutput` for stage timing. Timing messages use the caller's localized format and stage name and are emitted on first disposal, including when a stage fails.
+
 `dotnet-containerize` packs applications and infrastructure services into a **container delivery for one Linux host**: a single `.tar.gz` that carries its Compose configuration, its images and its own native executor. Installing, upgrading, stopping, recovering and uninstalling the whole stack on the target is then one command per step — and the host needs neither the .NET SDK nor this tool.
 
 The maker runs on Windows or Linux and uses Docker or Podman. A delivery targets Ubuntu 22.04, Debian 12/13 or RHEL-family 9, on x64 or ARM64.
@@ -127,7 +129,7 @@ This walkthrough uses the real [Zongsoft hosting](https://github.com/Zongsoft/ho
 
 ### Step 1: Prepare applications and migrations
 
-Build, deploy and package the hosts as described in the [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.md#installation-and-migration-packages). In each host directory, `deploy.cmd` packages what it just deployed when you answer `deb` at its format prompt, and [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/daemon/pack.cmd) packages existing files only. Either way the result is:
+Build, deploy and package the hosts as described in the [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.md#installation-and-migration-packages). From the hosting root, [deploy.cmd](https://github.com/Zongsoft/hosting/blob/main/deploy.cmd) builds and deploys the selected host; then run [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/pack.cmd) separately and choose `deb` to package its existing output. The result is:
 
 ```text
 daemon/.packages/zongsoft.daemon@1.0.0-x64.deb
@@ -142,6 +144,8 @@ Then create the migration archive from the hosting root with [migrate.cmd](https
 ```
 
 Containerizer never compiles hosts or generates migrations; it consumes these artifacts.
+
+For a container delivery, Containerizer runs migrations after infrastructure is ready. Do not embed the same migration through Packager's `--migration`: leave Migration empty in hosting's `pack.cmd` and select `.migration` in `containerize.cmd`. Use Packager-integrated migrations when installing the application package directly.
 
 ### Step 2: Declare shared service defaults
 
@@ -205,7 +209,7 @@ source=..
 output=.containerized
 bootstrap=offline
 imaging=offline
-migration#1=.migration\zongsoft(migrate)@1.0.0_linux-x64.tar.gz
+migration#1=.migration/zongsoft(migrate)@1.0.0_linux-x64.tar.gz
 
 [redis]
 tag=8.10.2
@@ -223,10 +227,10 @@ repository=docker.io/rustfs/rustfs
 settings=storage=persistent;access-key=${rustfs:access_key};secret-key=${rustfs:secret_key}
 
 [zongsoft.daemon]
-package=daemon\.packages\zongsoft.daemon@1.0.0-x64.deb
+package=daemon/.packages/zongsoft.daemon@1.0.0-x64.deb
 
 [zongsoft.web]
-package=web\default\.packages\zongsoft.web@1.0.0-x64.deb
+package=web/default/.packages/zongsoft.web@1.0.0-x64.deb
 
 [nginx]
 tag=1.30.5
@@ -401,7 +405,7 @@ source=.
 output=.containerized
 bootstrap=offline
 imaging=offline
-migration#1=.migration\example(migrate)@1.0.0_linux-x64.tar.gz
+migration#1=.migration/example(migrate)@1.0.0_linux-x64.tar.gz
 
 [redis]
 tag=latest
@@ -432,7 +436,7 @@ Nginx ports come from the packaged bindings and are published on the same host p
 
 ```ini
 [zongsoft.web]
-package=web\default\.packages\zongsoft.web@1.0.0-x64.deb
+package=web/default/.packages/zongsoft.web@1.0.0-x64.deb
 
 [nginx]
 settings=port=80:18080,443:none
@@ -591,7 +595,7 @@ Shared application runtime environments are cached under `%LOCALAPPDATA%/Zongsof
 	- [`.containerized/.mirrors`](https://github.com/Zongsoft/hosting/blob/main/.containerized/.mirrors) — registry mirrors used by builds and preview
 	- [`.env`](https://github.com/Zongsoft/hosting/blob/main/.env) — variables referenced by service defaults
 	- [`migrate.cmd`](https://github.com/Zongsoft/hosting/blob/main/migrate.cmd) — migration archive generation
-	- [`daemon/pack.cmd`](https://github.com/Zongsoft/hosting/blob/main/daemon/pack.cmd) and [`web/default/pack.cmd`](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd) — application packages
+	- [`pack.cmd`](https://github.com/Zongsoft/hosting/blob/main/pack.cmd) — application packages
 	- [The Web host](https://github.com/Zongsoft/hosting/tree/main/web/default) — `.web/nginx` handoff assets and `web.profile`
 
 - Related tools

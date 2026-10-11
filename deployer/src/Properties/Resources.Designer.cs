@@ -61,6 +61,15 @@ namespace Zongsoft.Tools.Deployer.Properties {
         }
 
         /// <summary>
+        ///   查找类似   → {0}: {1} s 的本地化字符串。
+        /// </summary>
+        internal static string Output_Elapsed {
+            get {
+                return ResourceManager.GetString("Output.Elapsed", resourceCulture);
+            }
+        }
+
+        /// <summary>
         ///   查找类似 A deployment is already running on this instance: {0} 的本地化字符串。
         /// </summary>
         internal static string Review_Busy {
@@ -187,7 +196,7 @@ namespace Zongsoft.Tools.Deployer.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Copied {0}, skipped {1}, deleted {2}, failed {3}. 的本地化字符串。
+        ///   查找类似 Written {0}, skipped {1}, deleted {2}, failed {3}. 的本地化字符串。
         /// </summary>
         internal static string Review_Summary {
             get {

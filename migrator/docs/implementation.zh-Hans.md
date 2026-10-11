@@ -64,3 +64,7 @@ MigrationPlan 使用 Name 保存规范升迁名称，状态文件对应 name；�
 MigrationPrivileges 将 20 项统一能力规范化，并在指纹之前将 Permission 展开为计划中的有效权限数组。驱动合并原生权限并补齐连接、schema、序列依赖，新增授权限定目标数据库。MySQL 检查角色 SHOW GRANTS；PostgreSQL 通过 pg_shdepend 验证角色范围，并检查 DDL 对象所有权；SQL Server 直接授予数据库、schema、对象权限。执行器仅对内部构造的 MigrationPrivilegeException 输出安全的能力上下文，服务端异常仍只输出类型。未来对象和原生粒度限制见[数据库配置参考](../README.zh-Hans.md#database-configuration)。
 
 `MigrationProfile` 使用 `ProfileOptions.Loading` 校验根文件和每个实际导入的文件，使用 `Loaded` 校验解析结果；两类回调都包含根文件。来源栈在读取前入栈、成功完成后出栈，使失败诊断保留实际来源。导入使用内置默认行为，缺失文件跳过，最大深度为 64（包含根文件）。
+
+终端警告使用暗黄色正文和粗体青色参数；错误使用暗红色正文和粗体紫色参数；成功提示使用绿色正文。异常类型以紫色标示，异常消息保留原文。四个工具共用仓库 `.shared/Utility.Output.cs`：`FormatOutput` 和 `FormatError` 构造 Core `CommandOutletContent`；`WriteOutput` 和 `WriteError` 统一终端与文本写入器的输出；使用命令执行器的工具通过 `HandleFailure` 输出异常并标记已处理，退出码由各工具决定。颜色由 Terminals 渲染。重定向的输出以及调用方提供的错误写入器保留纯文本和原通道。
+
+帮助入口在解析业务命令之前匹配独立的 `--help`/`-h`，通过共享 `FormatHelp` 和 `HighlightSyntax` 组织显示；不会加载变量文件或进入文件处理流程。总耗时通过共享 `MeasureOutput` 统计，由工具提供本地化 `Output.Elapsed` 资源及输出回调，首次释放时输出一次；退出码和成功/失败判断仍由业务流程决定。

@@ -46,6 +46,20 @@ internal class Program
 
 	public static async Task<int> Main(string[] args)
 	{
+		if(args is ["--help" or "-h"] or ["tar" or "deb" or "rpm", "--help" or "-h"])
+		{
+			Utility.WriteOutput(Console.Out, Utility.FormatHelp("dotnet-pack", "<tar|deb|rpm> [<input> ...] --platform:linux [options]",
+				"[--source:<directory>] [--output:<directory>]",
+				"[--name:<name>] [--edition:<edition>] [--version:<version>]",
+				"[--compilation:Release|Debug] [--framework:<framework>] [--architecture:x64|arm64]",
+				"[--exclude:<patterns>] [--overwrite:true|false]",
+				"[--daemon:<name>] [--listen:<address>] [--install-path:<directory>]",
+				"[--web:nginx] [--migration:<name-or-path>]",
+				"[--title:<text>] [--summary:<text>] [--description:<text>]",
+				"[--dependencies:<dependencies>] [--<variable>:<value>]"));
+			return 0;
+		}
+
 		if(args == null || args.Length == 0)
 		{
 			Terminal.WriteLine(CommandOutletColor.DarkRed, Properties.Resources.CommandLineEmpty_Message);
@@ -68,11 +82,15 @@ internal class Program
 		catch(Exception ex)
 		{
 			//打印异常消息
-			Terminal.WriteLine(CommandOutletColor.DarkRed, ex.Message + Environment.NewLine + ex.StackTrace);
+			Terminal.WriteLine(Utility.FormatError(ex, includeStackTrace: true));
 			return 1;
 		}
 		finally { Executor.Failed -= OnFailed; }
 
-		void OnFailed(object sender, CommandExecutorFailureEventArgs e) => failed = true;
+		void OnFailed(object sender, CommandExecutorFailureEventArgs e)
+		{
+			failed = true;
+			Utility.HandleFailure(e);
+		}
 	}
 }

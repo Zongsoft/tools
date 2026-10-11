@@ -7,6 +7,10 @@
 
 [English](README.md) | [简体中文](README.zh-Hans.md)
 
+Terminal warnings use dark-yellow text with bold cyan parameters; errors use dark-red text with bold magenta parameters; success messages use green text. Exception types are highlighted in magenta and messages retain their original text. All four tools share the repository’s `.shared/Utility.Output.cs`: `FormatOutput` and `FormatError` construct Core `CommandOutletContent`; `WriteOutput` and `WriteError` route terminal and text-writer output; tools using the command executor call `HandleFailure` to display exceptions and mark them handled, while retaining their own exit codes. Terminals renders the colors. Redirected output and caller-provided error writers preserve plain text and their original streams. Custom TextWriter output and deployment reports also remain plain text.
+
+Run `dotnet deploy --help` or `dotnet deploy -h` for common options: the command name is bold cyan, option names are cyan, and placeholders and candidate values are green. Help returns `0` without reading `.env` or processing input files. Once deployment starts, it ends with one elapsed-time line, with the command name and seconds in bold cyan. Failed operations also report elapsed time; timing alone does not indicate success.
+
 -----
 
 ## Abstraction
@@ -19,16 +23,16 @@ It is recommended to define a default deployment file named `.deploy` in the dep
 
 The deployment file is a plain text file in `.ini` format, and its content consists of **Section**(`Paragraph`) and **Entry**(`Entry`) enclosed in square brackets, the **Section** part represents the destination directory of deployment.
 
-The **Section** and **Entry** values support Core `${...}` template expressions; variables come from command options, environment variables, ancestor `.env` files and destination appsettings.
+Sections specify structural directory levels. Entry source and output paths support Core `${...}` template expressions; variables come from command options, environment variables, ancestor `.env` files and output appsettings.
 
 Each entry consists of **KEY** and **VALUE** parts separated by an equal sign _(`=`)_, and the **VALUE** part is optional.
 
 - The **KEY** part consists of _Parser-Name_ and _Parser-Argument_, separated by a colon _(`:`)_;
-	- **_Parser-Name_**: Omit it, leave it empty, or specify `path` to use the default path parser. Other parsers are `nuget` and `delete`/`remove`. Parser names are case-insensitive.
+	- **_Parser-Name_**: Omit it, leave it empty, or specify `path` to use the default path parser. Other parsers are `template`, `nuget`, and `delete`/`remove`. Parser names are case-insensitive.
 	- **_Parser-Argument_**: Parsed by the specified parser, please refer to _**P**arser **A**rgument_ below for details.
 
-- The **VALUE** part consists of _Destination_ and _Filtering_.
-	- **_Destination_**: Indicates the destination path for deployment. If missing, the destination directory is specified by the **Section**, and the destination file name is the same as the source file.
+- The **VALUE** part consists of _Output_ and _Filtering_.
+	- **_Output_**: Indicates the destination path for deployment. If missing, the destination directory is specified by the **Section**, and the destination file name is the same as the source file.
 	- **_Filtering_**: Indicates the preconditions for parsing, please refer to _**F**iltering_ below for details.
 
 ### Parser Argument
@@ -53,13 +57,37 @@ The `path:` prefix selects the default path resolver; the source path starts aft
 
 > 💡 **Tip:** You should generally avoid absolute paths in `.deploy` files. Source paths are resolved relative to the directory containing the deployment file, while destination paths are resolved relative to the host directory or the target directory specified by the deployment options. See the deployment files in [framework](https://github.com/Zongsoft/framework), such as [Zongsoft.Data.deploy](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Data/src/Zongsoft.Data.deploy), for examples.
 
+#### Template Parser
+
+`template:` reads text and evaluates it with this deployment's Core `TemplateEvaluator`. It uses the same relative paths, glob search, section destinations, and filters as `path:`. An explicit destination name wins; otherwise the final `.template` suffix is removed. Ordinary path copies do not evaluate file content.
+
+```ini
+# hosting/daemon/.deploy
+template:../.deploy/.shared/app.option.template = Zongsoft.Hosting.Daemon.option
+
+[plugins zongsoft externals aliyun]
+template:../.deploy/.shared/Zongsoft.Externals.Aliyun.option.template
+```
+
+Templates use Core syntax, with no separate variable or conditional language. `${mysql:server}` inserts raw text; `${mysql:server#xml}` escapes XML text and attributes. `${title#json}` produces a complete JSON value, including quotes for strings; do not add surrounding quotes. `.env` values are strings and `#json` does not infer numeric or Boolean types. There is no general INI/YAML escaping: structure content for the target format. `\${runtime}` emits literal `${runtime}` and `\\` emits one backslash.
+
+```xml
+<connection value="${mysql:connection#xml}" />
+```
+
+Templates are read as UTF-8 with UTF BOM detection and written as UTF-8 without BOM, preserving line endings. All templates are evaluated before any write or deletion. A missing explicit template, undefined variable, cycle, invalid expression, or changed source prevents execution. A glob with no matches produces no operation.
+
+For templates, default `newest` compares generated content: different content is updated regardless of destination timestamps; identical content is `Unchanged` and keeps its timestamp. `never` preserves existing targets and `alway` writes every time. Ordinary copies still use modification time for `newest`.
+
+`.env` supplies variables only and is excluded from file payloads, including directory searches. Use `*.template` as the template suffix.
+
 #### Delete Parser
 
 The parser name is `delete` or `remove`, which means delete the specified destination file.
 
 The _Parser-Argument_ represents the destination file to be deleted, and the full path of the destination file is a combination of the directory specified in the **Section** and the _Parser-Argument_.
 
-> 🚨 **Note:** This parser does not support the _Destination_ part, so this part cannot be defined.
+> 🚨 **Note:** This parser does not support the _Output_ part, so this part cannot be defined.
 
 ##### Examples
 
@@ -158,13 +186,13 @@ ${NUGET_PACKAGES}/mysql.data/6.10.9/lib/netstandard2.0/*.dll    <framework:net5.
 
 The tool explicitly enables Core variable fallback: named references search their namespace, its parents and global, querying every source in priority order at each level. A missing variable is reported after all levels miss. Unqualified references remain `${name}`, and a found null or empty value stops fallback.
 
-At each namespace, query command options, the destination application's `appsettings.json`, `.env` files from the working directory up to the filesystem root, then environment variables. The first match wins; an explicit null in `appsettings.json` also stops fallback to lower-priority sources. Configuration and command-option names ignore case. Core `Variables.Environments()` reads system values live in the default namespace without rewriting names or values; names are case-insensitive on Windows and case-sensitive on Unix/Linux.
+At each namespace, query command options, the destination application's `appsettings.json`, `.env` files from source up to the filesystem root, then environment variables. The first match wins; an explicit null in `appsettings.json` also stops fallback to lower-priority sources. Configuration and command-option names ignore case. Core `Variables.Environments()` reads system values live in the default namespace without rewriting names or values; names are case-insensitive on Windows and case-sensitive on Unix/Linux.
 
 All variables, including `framework`, use the first successful lookup: null, empty strings, false and zero never trigger fallback to a lower source. Only a missing value continues lookup. Operations requiring a valid value validate it and report an error when they cannot proceed.
 
 Each directory contributes only its direct `.env`; child directories and individual manifest directories are not searched. All manifests in one invocation share the resulting variables. Core `Profile.Load` reads these INI files, including `#@import`. Root entries use the default namespace; section levels form dot-separated namespaces and entry dots/hyphens become underscores: `[io rustfs]` with `access_key=example` creates `io.rustfs:access_key=example`. A root `environment=Development` creates `environment`. Missing `.env` files are skipped; read or parse failures stop initialization. Values expand only when used, and process environment variables are not modified.
 
-Variable values may reference other values recursively, regardless of command-option order. Values expand when used; missing references, cycles, and chains longer than 64 levels fail. `destination` may reference command options, environment variables and loaded `.env` values; its `appsettings.json` is loaded afterward.
+Variable values may reference other values recursively, regardless of command-option order. Values expand when used; missing references, cycles, and chains longer than 64 levels fail. `output` may reference command options, environment variables and loaded `.env` values; its `appsettings.json` is loaded afterward.
 
 - If a property named `ApplicationName` is defined in `appsettings.json`, you can use `application` as a variable alias for that property.
 - The variable named `Framework` represents the .NET *TargetFramework* identity, which is defined in https://learn.microsoft.com/en-us/dotnet/standard/frameworks
@@ -173,17 +201,30 @@ NuGet-related parameters can be specified via command options, environment varia
 - `NuGet_Server` indicates the NuGet server information, the default value is: `https://api.nuget.org/v3/index.json`.
 - `NuGet_Packages` indicates the directory of NuGet packages, the default value is: `%USERPROFILE%/.nuget/packages`.
 
-### Framework and variables in hosting scripts
+### Source paths, imports, and hosting
 
-The hosting `deploy.cmd` scripts omit the deployment command's `--framework`. Define root-level `framework=net10.0` in the hosting root's `.env`. The deployer reads it from its variable providers, querying the global namespace in this order: command options → destination application `appsettings.json` → nearest-to-farthest ancestor `.env` → environment variables. Omitted options continue to subsequent sources; explicit null/empty values stop fallback, as with every other variable.
+`--source` itself is relative to the invocation directory and cannot depend on `.env` files that have not yet been loaded. Once source is fixed, its ancestor `.env` files are loaded and `--output` is evaluated. Relative local `.deploy` arguments, output, report, lockFile, previous, NuGet_Packages, and local NuGet_Server paths resolve against source, including `./` and `../`; absolute paths keep their meaning. Source paths inside `.deploy` and `#@import` paths remain relative to their declaring file.
 
-From the daemon host directory, a deployment command can be:
+Deployment APIs name the output-directory argument `outputDirectory`; `DeploymentContext.OutputDirectory` carries the current `.deploy` output directory. Entries and operations expose `Output`; report and lock JSON use `Operations[].Output` for the output path.
 
-```cmd
-dotnet deploy --verbosity:quiet --overwrite:newest --prerelease:true --host:daemon --site:daemon --scheme:default --environment:development --debug:off --edition:Release --platform:linux --architecture:x64 --destination:bin/${edition}/${framework} .deploy ../.deploy/default/${host}.deploy ../.deploy/default/${site}.deploy
+The tool gives scheme, environment, and network no special meaning. For example, `hosting/daemon/.env` explicitly selects a scheme:
+
+```ini
+#@import ../.deploy/${scheme}/.env
+
+name=Zongsoft.Hosting.Daemon
+title=Zongsoft Daemon
 ```
 
-In this deployment workflow, `--edition:Release` selects the build-configuration directory; an installation package's Edition is a separate identity parameter. This command deploys plugins without building the host or creating installation/migration packages. The current hosting `deploy.cmd` scripts also omit Cake's `--framework`, so each host's `build.cake` uses its `Argument("framework", "net10.0")` default; the Cake scripts do not read `.env` or the `framework` process variable. Keep that build value consistent with deployment and packaging variables. To change the build framework, pass `--framework` to Cake explicitly or update its default. See the [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.md#installation-and-migration-packages) for script parameters and standalone packaging.
+`hosting/.deploy/default/.env` may import `../.env` to reuse `hosting/.deploy/.env`. Importing a file does not create another ancestor search chain. Later declarations of the same key in one Profile override earlier ones, so `.env` declarations control project/scheme precedence. Import arguments may use command options, previously read entries, and visible ancestors, but not later declarations. All `.deploy` files and templates share the invocation's variables; template directories do not reload variables.
+
+From the hosting root, deploy daemon configuration and plugins:
+
+```powershell
+dotnet deploy --source:daemon --output:'bin/${edition}/${framework}' --scheme:default --environment:production --network:internal --edition:Release --platform:linux --architecture:x64 --prerelease:true
+```
+
+Root `deploy.cmd`/`pack.cmd` prompt for the host source directory. With no framework override, deployment and packaging use `.env`, while Cake uses its build.cake default; keep them aligned. deploy.cmd only builds and deploys; pack.cmd packages independently. Use the same explicit framework override in both scripts. Deployment edition selects the compilation directory; installation-package Edition is a separate identity. See [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.md#deployment).
 
 ## Setup
 
@@ -261,18 +302,19 @@ dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:
 
 The command supports redirected or piped output. Exit codes are 0 for success, 1 for validation/dependency/I/O failure, and 130 for cancellation. The complete plan is validated before target writes; skipped copies and deletions have separate counts.
 
-Missing source files (including optional files referenced by package manifests) and missing deployment manifests are warnings: each is counted as skipped, and remaining inputs continue. This also applies to the default `.deploy`, explicit manifest arguments, and a directory without `.deploy`, so scripts can pass the same optional inputs across environments. Warnings are printed even with `--verbosity:quiet` and retained in report diagnostics; they do not cause a nonzero exit code. Missing NuGet packages, invalid variables or syntax, broken source links, access errors, and files lost after planning remain failures.
+Missing ordinary source files (including optional files referenced by package .deploy files) and missing deployment manifests are warnings: each is counted as skipped, and remaining inputs continue. This also applies to the default `.deploy`, explicit manifest arguments, and a directory without `.deploy`, so scripts can pass the same optional inputs across environments. Warnings are printed even with `--verbosity:quiet` and retained in report diagnostics; they do not cause a nonzero exit code. Missing NuGet packages, invalid variables or syntax, broken source links, access errors, and files lost after planning remain failures.
 
 ```text
 dotnet deploy [--option:value ...] [manifest-or-directory ...]
 dotnet-deploy [--option:value ...] [manifest-or-directory ...]
 ```
 
-The two entry points are equivalent and have no subcommands. With no positional arguments, the tool reads `.deploy` in the current directory. Multiple manifests are processed in order; a directory selects its immediate `.deploy`. Relative manifest paths use the working directory, sources inside a manifest use that manifest's directory, and destinations use `destination`. `--key=value` also works; quote values with spaces according to the shell. Any other `--name:value` becomes a user variable for manifests and configuration. The table lists only options interpreted by the tool. Manifest `path`, `nuget`, and `delete`/`remove` entries are resolvers, not subcommands.
+The two entry points are equivalent and have no subcommands. With no positional arguments, the tool reads `.deploy` in source. Multiple manifests are processed in order; a directory selects its immediate `.deploy`. Relative .deploy arguments use source, sources inside a manifest use that manifest's directory, and destinations use `output`. `--key=value` also works; quote values with spaces according to the shell. Any other `--name:value` becomes a user variable for manifests and configuration. The table lists only options interpreted by the tool. Manifest `path`, `template`, `nuget`, and `delete`/`remove` entries are resolvers, not subcommands.
 
 | Option | Default | Purpose |
 | --- | --- | --- |
-| `--destination:<directory>` | Current directory | Target root; resolve using command options, environment variables and `.env` values before loading its `appsettings.json`. |
+| `--source:<directory>` | Invocation directory | Existing working source; resolved against the invocation directory using command options and system variables only. |
+| `--output:<directory>` | source | Target root; resolve using command options, environment variables and `.env` values before loading its `appsettings.json`. |
 | `--verbosity:<level>` | `normal` | `quiet`, `normal`, or `detail`; unconvertible values fail. |
 | `--overwrite:<policy>` | `newest` | `alway` (the existing enum spelling), `never`, or `newest`. This is not a Boolean switch. |
 | `--expansion[:boolean]` | `false` | Preserve matched relative directory levels in target paths for directory wildcards; `false` keeps only wildcard captures. |
@@ -293,7 +335,7 @@ Boolean options accept a bare switch, `true/false`, `1/0`, `yes/no`, `on/off`, o
 `NuGet_Server` and `NuGet_Packages` may be supplied as command options, environment variables or `.env` entries. `Framework`, `Platform`, `Architecture`, and `edition` are ordinary variables used by resolvers and manifests. Example:
 
 ```powershell
-dotnet deploy --destination:'bin/${edition}/${framework}' --edition:Release --framework:net10.0 --dry-run --report:deploy-plan.json .deploy extra.deploy
+dotnet deploy --output:'bin/${edition}/${framework}' --edition:Release --framework:net10.0 --dry-run --report:deploy-plan.json .deploy extra.deploy
 ```
 
 ### NuGet Packages
@@ -341,7 +383,7 @@ ${NUGET_PACKAGES}/mysql.data/8.3.0/lib/net8.0/*.dll
 
 ### Plans, locks, and cleanup
 
-The default overwrite policy is `newest`. Unconvertible overwrite values, invalid filters, and undefined variables in active paths cause errors. Writes must stay within `destination`, and linked write paths are rejected. Both nested manifests and `#@import` detect cycles. Combined filters use left-to-right evaluation. `**` matches zero or more directory levels; directory copies preserve their internal relative structure.
+The default overwrite policy is `newest`. Unconvertible overwrite values, invalid filters, and undefined variables in active paths cause errors. Writes must stay within `output`, and linked write paths are rejected. Both nested manifests and `#@import` detect cycles. Combined filters use left-to-right evaluation. `**` matches zero or more directory levels; directory copies preserve their internal relative structure.
 
 | Option | Behavior |
 | --- | --- |

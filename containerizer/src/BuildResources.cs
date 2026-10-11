@@ -37,11 +37,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-using Zongsoft.Terminals;
+using Zongsoft.Components;
 
 namespace Zongsoft.Tools.Containerizer;
 
-internal sealed class BuildResources(ContainerEngine engine, Action<string> error = null) : IAsyncDisposable
+internal sealed class BuildResources(ContainerEngine engine, Action<CommandOutletContent> error = null) : IAsyncDisposable
 {
 	private readonly List<(ResourceKind Kind, string Name)> _resources = [];
 
@@ -85,7 +85,7 @@ internal sealed class BuildResources(ContainerEngine engine, Action<string> erro
 				}
 				catch(Exception) { }
 
-				(error ?? Terminal.Default.Error.WriteLine)(string.Format(Properties.Resources.BuildResources_Cleanup_Message, resource.Name, engine.Executable, exception.Message));
+				(error ?? Utility.WriteError)(Utility.FormatOutput(Properties.Resources.BuildResources_Cleanup_Message, CommandOutletColor.DarkRed, resource.Name, engine.Executable, exception.Message));
 			}
 		}
 

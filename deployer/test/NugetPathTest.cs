@@ -18,11 +18,11 @@ public class NugetPathTest
 		var source = Path.Combine(package, requested.Replace('/', Path.DirectorySeparatorChar));
 		var deployer = fixture.CreateDeployer();
 
-		var result = await deployer.DeployAsync((fixture.Manifest("path:" + source.Replace('\\', '/'))).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((fixture.Manifest("path:" + source.Replace('\\', '/'))).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(1, result.Successes);
-		Assert.Equal("Path.Source@1.0.0", File.ReadAllText(Path.Combine(fixture.Destination, "Path.Source.dll")));
+		Assert.Equal("Path.Source@1.0.0", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Path.Source.dll")));
 		Assert.Equal(Path.Combine(package, "lib", "net8.0", "Path.Source.dll"), Assert.Single(deployer.Plan.Operations).Source);
 	}
 
@@ -36,11 +36,11 @@ public class NugetPathTest
 		fixture.Write("packages/path.explicit/1.0.0/lib/net10.0/Path.Explicit.dll", "framework ten asset");
 		var deployer = fixture.CreateDeployer();
 
-		var result = await deployer.DeployAsync((fixture.Manifest("nuget:Path.Explicit@1.0.0/" + requested)).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((fixture.Manifest("nuget:Path.Explicit@1.0.0/" + requested)).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(1, result.Successes);
-		Assert.Equal("Path.Explicit@1.0.0", File.ReadAllText(Path.Combine(fixture.Destination, "Path.Explicit.dll")));
+		Assert.Equal("Path.Explicit@1.0.0", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Path.Explicit.dll")));
 		Assert.Equal(Path.Combine(package, "lib", "net8.0", "Path.Explicit.dll"), Assert.Single(deployer.Plan.Operations).Source);
 	}
 
@@ -149,15 +149,15 @@ public class NugetPathTest
 		fixture.Write("packages/content.paths/1.0.0/content/lib/net9.0/file.txt", "framework nine content");
 		fixture.Variables["Framework"] = "net9.0";
 
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Content.Paths@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Content.Paths@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(3, result.Successes);
-		Assert.Equal("framework eight content", File.ReadAllText(Path.Combine(fixture.Destination, "lib", "net8.0", "file.txt")));
-		Assert.Equal("framework nine content", File.ReadAllText(Path.Combine(fixture.Destination, "lib", "net9.0", "file.txt")));
+		Assert.Equal("framework eight content", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "lib", "net8.0", "file.txt")));
+		Assert.Equal("framework nine content", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "lib", "net9.0", "file.txt")));
 		Assert.Equal(["Content.Paths.dll", "lib/net8.0/file.txt", "lib/net9.0/file.txt"],
-			Directory.GetFiles(fixture.Destination, "*", SearchOption.AllDirectories).Select(file => Path.GetRelativePath(fixture.Destination, file).Replace('\\', '/')).Order(StringComparer.Ordinal).ToArray());
-		Assert.False(File.Exists(Path.Combine(fixture.Destination, "lib", "file.txt")));
+			Directory.GetFiles(fixture.OutputDirectory, "*", SearchOption.AllDirectories).Select(file => Path.GetRelativePath(fixture.OutputDirectory, file).Replace('\\', '/')).Order(StringComparer.Ordinal).ToArray());
+		Assert.False(File.Exists(Path.Combine(fixture.OutputDirectory, "lib", "file.txt")));
 	}
 	#endregion
 }

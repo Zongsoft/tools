@@ -49,7 +49,7 @@ namespace Zongsoft.Tools.Containerizer;
 
 /// <summary>Shares verified public runtime files, never application build layers or inputs.</summary>
 internal sealed partial class RuntimeEnvironmentCache(ContainerEngine engine, string cacheRoot = null, bool refresh = false,
-	Action<CommandOutletContent> output = null, Action<string> error = null)
+	Action<CommandOutletContent> output = null, Action<CommandOutletContent> error = null)
 {
 	#region 成员字段
 	private readonly Action<CommandOutletContent> _output = output ?? Terminal.WriteLine;
@@ -68,7 +68,7 @@ internal sealed partial class RuntimeEnvironmentCache(ContainerEngine engine, st
 		Files.CreatePrivateDirectory(root);
 
 		using var cacheLock = await BuildStorage.AcquireLockAsync(root, cacheRoot, cancellation);
-		using var timing = Output.Measure(_output, profile);
+		using var timing = Utility.MeasureOutput(_output, Properties.Resources.Run_Elapsed, profile);
 		var baselineKey = $"{distribution}/{architecture}";
 
 		if(!_baseImages.TryGetValue(baselineKey, out var baseline))
@@ -86,10 +86,10 @@ internal sealed partial class RuntimeEnvironmentCache(ContainerEngine engine, st
 		var rebuild = refresh && !_refreshedProfiles.Contains(profile);
 
 		if(cached != null && !rebuild)
-			_output(Output.FormatMessage(Properties.Resources.RuntimeCache_Hit, profile));
+			_output(Utility.FormatOutput(Properties.Resources.RuntimeCache_Hit, profile));
 		else
 		{
-			_output(Output.FormatMessage(rebuild ? Properties.Resources.RuntimeCache_Refresh : Properties.Resources.RuntimeCache_Prepare, profile));
+			_output(Utility.FormatOutput(rebuild ? Properties.Resources.RuntimeCache_Refresh : Properties.Resources.RuntimeCache_Prepare, profile));
 			cached = await this.CreateEnvironmentAsync(root, baseline, recipe, signature, runtime, cancellation);
 			_refreshedProfiles.Add(profile);
 		}

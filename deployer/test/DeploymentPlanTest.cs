@@ -13,11 +13,11 @@ public class DeploymentPlanTest
 		Directory.CreateDirectory(reportDirectory);
 		fixture.Variables["report"] = (reportDirectory).Replace('\\', '/');
 		var deployer = fixture.CreateDeployer();
-		var result = await deployer.DeployAsync((fixture.Manifest("file.txt")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((fixture.Manifest("file.txt")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.True(result.Failures > 0);
 		Assert.False(deployer.Plan.Succeeded);
 		Assert.Equal(1, result.Successes);
-		Assert.Equal("deployed before report failure", File.ReadAllText(Path.Combine(fixture.Destination, "file.txt")));
+		Assert.Equal("deployed before report failure", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "file.txt")));
 		Assert.Contains(deployer.Plan.Diagnostics, diagnostic => diagnostic.Contains(reportDirectory, StringComparison.OrdinalIgnoreCase));
 		Assert.True(Directory.Exists(reportDirectory));
 	}
@@ -33,7 +33,7 @@ public class DeploymentPlanTest
 		var lockFile = Path.Combine(fixture.Root, "deployment.lock.json");
 		fixture.Variables["lockFile"] = (lockFile).Replace('\\', '/');
 		fixture.Variables["overwrite"] = "alway";
-		Assert.Equal(0, (await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken)).Failures);
+		Assert.Equal(0, (await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken)).Failures);
 		var originalLock = File.ReadAllBytes(lockFile);
 		fixture.Variables["report"] = (lockFile).Replace('\\', '/');
 		fixture.Variables["locked"] = "true";
@@ -41,12 +41,12 @@ public class DeploymentPlanTest
 		if(invalidManifest)
 			manifest = fixture.Manifest("unknown:input", "source/invalid.deploy");
 		var deployer = fixture.CreateDeployer();
-		var result = await deployer.DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((manifest).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.True(result.Failures > 0);
 		Assert.False(deployer.Plan.Succeeded);
 		Assert.Equal(0, result.Successes);
 		Assert.Equal(originalLock, File.ReadAllBytes(lockFile));
-		Assert.Equal("locked content", File.ReadAllText(Path.Combine(fixture.Destination, "file.txt")));
+		Assert.Equal("locked content", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "file.txt")));
 	}
 
 	[Fact]
@@ -57,7 +57,7 @@ public class DeploymentPlanTest
 		fixture.Variables["overwrite"] = "alway";
 		var report = Path.Combine(fixture.Root, "previous.json");
 		fixture.Variables["report"] = (report).Replace('\\', '/');
-		var initial = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Owned.Root@1.0.0\nnuget:Owned.Root@latest")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var initial = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Owned.Root@1.0.0\nnuget:Owned.Root@latest")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(0, initial.Failures);
 		Assert.Equal(1, initial.Successes);
 		Assert.Equal(1, initial.Skipped);
@@ -65,10 +65,10 @@ public class DeploymentPlanTest
 		fixture.Variables.Remove("report");
 		fixture.Variables["previous"] = report.Replace('\\', '/');
 		fixture.Variables["prune"] = "true";
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("", "source/empty.deploy")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("", "source/empty.deploy")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(1, result.Deleted);
-		Assert.False(File.Exists(Path.Combine(fixture.Destination, "Owned.Root.dll")));
+		Assert.False(File.Exists(Path.Combine(fixture.OutputDirectory, "Owned.Root.dll")));
 	}
 
 	[Fact]
@@ -80,18 +80,18 @@ public class DeploymentPlanTest
 		var manifest = fixture.Manifest("nuget:Locked.Root@latest");
 		var lockFile = Path.Combine(fixture.Root, "deployment.lock.json");
 		fixture.Variables["lockFile"] = (lockFile).Replace('\\', '/');
-		Assert.Equal(0, (await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken)).Failures);
+		Assert.Equal(0, (await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken)).Failures);
 		var lockBytes = File.ReadAllBytes(lockFile);
 		fixture.Package("Locked.Root", "2.0.0", dependencies: [("Locked.Child", "[2.0.0,)")]);
 		fixture.Package("Locked.Child", "2.0.0");
 		fixture.Variables["locked"] = "true";
 		var deployer = fixture.CreateDeployer();
-		var result = await deployer.DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await deployer.DeployAsync((manifest).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(0, result.Failures);
 		Assert.Equal("1.0.0", Assert.Single(deployer.Plan.Packages, package => package.Id == "Locked.Root").Version);
 		Assert.Equal("1.0.0", Assert.Single(deployer.Plan.Packages, package => package.Id == "Locked.Child").Version);
-		Assert.Equal("Locked.Root@1.0.0", File.ReadAllText(Path.Combine(fixture.Destination, "Locked.Root.dll")));
-		Assert.Equal("Locked.Child@1.0.0", File.ReadAllText(Path.Combine(fixture.Destination, "Locked.Child.dll")));
+		Assert.Equal("Locked.Root@1.0.0", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Locked.Root.dll")));
+		Assert.Equal("Locked.Child@1.0.0", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Locked.Child.dll")));
 		Assert.Equal(lockBytes, File.ReadAllBytes(lockFile));
 	}
 
@@ -104,14 +104,14 @@ public class DeploymentPlanTest
 		var manifest = fixture.Manifest("nuget:Integrity.Root@1.0.0");
 		var lockFile = Path.Combine(fixture.Root, "deployment.lock.json");
 		fixture.Variables["lockFile"] = (lockFile).Replace('\\', '/');
-		Assert.Equal(0, (await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken)).Failures);
-		Assert.False(File.Exists(Path.Combine(fixture.Destination, "readme.txt")));
+		Assert.Equal(0, (await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken)).Failures);
+		Assert.False(File.Exists(Path.Combine(fixture.OutputDirectory, "readme.txt")));
 		File.WriteAllText(unused, "changed documentation");
 		fixture.Variables["locked"] = "true";
-		var result = await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.True(result.Failures > 0);
 		Assert.Equal(0, result.Successes);
-		Assert.Equal("Integrity.Root@1.0.0", File.ReadAllText(Path.Combine(fixture.Destination, "Integrity.Root.dll")));
+		Assert.Equal("Integrity.Root@1.0.0", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Integrity.Root.dll")));
 	}
 
 	[Theory]
@@ -123,13 +123,13 @@ public class DeploymentPlanTest
 		var report = Path.Combine(fixture.Root, "failed.json");
 		fixture.Variables["report"] = (report).Replace('\\', '/');
 		var manifest = fixture.Manifest(entry);
-		var result = await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.True(result.Failures > 0);
 		var plan = DeploymentPlan.Load(report);
 		Assert.False(plan.Succeeded);
 		Assert.NotEmpty(plan.Diagnostics);
 		Assert.Contains(plan.Diagnostics, message => message.Contains(diagnostic, StringComparison.OrdinalIgnoreCase));
-		Assert.Empty(Directory.GetFiles(fixture.Destination));
+		Assert.Empty(Directory.GetFiles(fixture.OutputDirectory));
 	}
 
 	[Fact]
@@ -139,7 +139,7 @@ public class DeploymentPlanTest
 		var manifest = fixture.Manifest("unknown:input");
 		fixture.Variables["report"] = (manifest).Replace('\\', '/');
 		var original = File.ReadAllBytes(manifest);
-		var result = await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.True(result.Failures > 0);
 		Assert.Equal(original, File.ReadAllBytes(manifest));
 	}
@@ -151,12 +151,12 @@ public class DeploymentPlanTest
 		fixture.Write("source/file.txt", "same content");
 		var report = Path.Combine(fixture.Root, "previous.json");
 		fixture.Variables["report"] = (report).Replace('\\', '/');
-		Assert.Equal(0, (await fixture.CreateDeployer().DeployAsync((fixture.Manifest("file.txt\ndelete:file.txt")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken)).Failures);
+		Assert.Equal(0, (await fixture.CreateDeployer().DeployAsync((fixture.Manifest("file.txt\ndelete:file.txt")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken)).Failures);
 		var target = fixture.Write("target/file.txt", "same content");
 		fixture.Variables.Remove("report");
 		fixture.Variables["previous"] = report.Replace('\\', '/');
 		fixture.Variables["prune"] = "true";
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("", "source/next.deploy")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("", "source/next.deploy")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(0, result.Deleted);
 		Assert.Equal("same content", File.ReadAllText(target));
@@ -171,33 +171,33 @@ public class DeploymentPlanTest
 		var report = Path.Combine(fixture.Root, "previous.json");
 		fixture.Variables["report"] = (report).Replace('\\', '/');
 		fixture.Variables["overwrite"] = "never";
-		Assert.Equal(0, (await fixture.CreateDeployer().DeployAsync((fixture.Manifest("file.txt")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken)).Failures);
+		Assert.Equal(0, (await fixture.CreateDeployer().DeployAsync((fixture.Manifest("file.txt")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken)).Failures);
 		fixture.Variables.Remove("report");
 		fixture.Variables["previous"] = report.Replace('\\', '/');
 		fixture.Variables["prune"] = "true";
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("", "source/next.deploy")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("", "source/next.deploy")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(0, result.Deleted);
 		Assert.Equal("user content", File.ReadAllText(target));
 	}
 
 	[Fact]
-	public async Task Deploy_DryRunCanSaveReportWithoutCreatingDestinationAsync()
+	public async Task Deploy_DryRunCanSaveReportWithoutCreatingOutputAsync()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write("source/file.txt", "source");
 		fixture.Variables["dry_run"] = "true";
 		var report = Path.Combine(fixture.Root, "reports", "preview.json");
 		fixture.Variables["report"] = (report).Replace('\\', '/');
-		var destination = Path.Combine(fixture.Root, "preview-target");
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("[nested]\nfile.txt")).Replace('\\', '/'), (destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var output = Path.Combine(fixture.Root, "preview-target");
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("[nested]\nfile.txt")).Replace('\\', '/'), (output).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(0, result.Failures);
-		Assert.False(Directory.Exists(destination));
+		Assert.False(Directory.Exists(output));
 		var plan = DeploymentPlan.Load(report);
 		Assert.True(plan.Succeeded);
-		Assert.Equal(destination, plan.Root);
+		Assert.Equal(output, plan.Root);
 		var operation = Assert.Single(plan.Operations);
-		Assert.Equal(Path.Combine(destination, "nested", "file.txt"), operation.Destination);
+		Assert.Equal(Path.Combine(output, "nested", "file.txt"), operation.Output);
 		Assert.Equal(Path.Combine(fixture.Root, "source", "file.txt"), operation.Source);
 	}
 
@@ -209,7 +209,7 @@ public class DeploymentPlanTest
 		fixture.Package("Report.Child");
 		var report = Path.Combine(fixture.Root, "completed.json");
 		fixture.Variables["report"] = (report).Replace('\\', '/');
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Report.Root@1.0.0")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("nuget:Report.Root@1.0.0")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(0, result.Failures);
 		var plan = DeploymentPlan.Load(report);
 		Assert.True(plan.Succeeded);
@@ -217,8 +217,8 @@ public class DeploymentPlanTest
 		var child = Assert.Single(plan.Packages, package => package.Id == "Report.Child");
 		Assert.Equal("1.0.0", child.Version);
 		Assert.Contains(child.RequiredBy, parent => parent.Contains("Report.Root", StringComparison.OrdinalIgnoreCase));
-		var operation = Assert.Single(plan.Operations, operation => operation.Destination.EndsWith("Report.Child.dll"));
-		Assert.Equal(Hash(operation.Destination), operation.Hash);
+		var operation = Assert.Single(plan.Operations, operation => operation.Output.EndsWith("Report.Child.dll"));
+		Assert.Equal(Hash(operation.Output), operation.Hash);
 		Assert.Equal(Hash(operation.Source), operation.SourceHash);
 		Assert.Contains("Report.Child", operation.Package, StringComparison.OrdinalIgnoreCase);
 	}
@@ -231,14 +231,14 @@ public class DeploymentPlanTest
 		var manifest = fixture.Manifest("file.txt");
 		var lockFile = Path.Combine(fixture.Root, "deployment.lock.json");
 		fixture.Variables["lockFile"] = (lockFile).Replace('\\', '/');
-		Assert.Equal(0, (await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken)).Failures);
+		Assert.Equal(0, (await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken)).Failures);
 		var originalLock = File.ReadAllBytes(lockFile);
 		fixture.Variables["locked"] = "true";
-		Assert.Equal(0, (await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken)).Failures);
+		Assert.Equal(0, (await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken)).Failures);
 		File.WriteAllText(source, "changed");
-		var result = await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((manifest).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.True(result.Failures > 0);
-		Assert.Equal("original", File.ReadAllText(Path.Combine(fixture.Destination, "file.txt")));
+		Assert.Equal("original", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "file.txt")));
 		Assert.Equal(originalLock, File.ReadAllBytes(lockFile));
 	}
 
@@ -254,22 +254,22 @@ public class DeploymentPlanTest
 		fixture.Write("target/user.txt", "user owned");
 		var report = Path.Combine(fixture.Root, "previous.json");
 		fixture.Variables["report"] = (report).Replace('\\', '/');
-		Assert.Equal(0, (await fixture.CreateDeployer().DeployAsync((fixture.Manifest("old.txt")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken)).Failures);
-		var oldPath = Path.Combine(fixture.Destination, "old.txt");
+		Assert.Equal(0, (await fixture.CreateDeployer().DeployAsync((fixture.Manifest("old.txt")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken)).Failures);
+		var oldPath = Path.Combine(fixture.OutputDirectory, "old.txt");
 
 		if(modified)
 			File.WriteAllText(oldPath, "user modified");
 		fixture.Variables.Remove("report");
 		fixture.Variables["previous"] = report.Replace('\\', '/');
 		fixture.Variables["prune"] = prune.ToString();
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("current.txt", "source/next.deploy")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("current.txt", "source/next.deploy")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(retained, File.Exists(oldPath));
 
 		if(retained)
 			Assert.Equal(modified ? "user modified" : "owned content", File.ReadAllText(oldPath));
-		Assert.Equal("user owned", File.ReadAllText(Path.Combine(fixture.Destination, "user.txt")));
-		Assert.Equal("current content", File.ReadAllText(Path.Combine(fixture.Destination, "current.txt")));
+		Assert.Equal("user owned", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "user.txt")));
+		Assert.Equal("current content", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "current.txt")));
 		Assert.Equal(retained ? 0 : 1, result.Deleted);
 	}
 
@@ -281,13 +281,13 @@ public class DeploymentPlanTest
 		var report = Path.Combine(fixture.Root, "forged.json");
 		new DeploymentPlan
 		{
-			Root = fixture.Destination,
+			Root = fixture.OutputDirectory,
 			Succeeded = true,
-			Operations = [new DeploymentOperation { Kind = "Copy", Destination = outside, Hash = Hash(outside), Status = "Copied" }],
+			Operations = [new DeploymentOperation { Kind = "Copy", Output = outside, Hash = Hash(outside), Status = "Copied" }],
 		}.Save(report);
 		fixture.Variables["previous"] = report.Replace('\\', '/');
 		fixture.Variables["prune"] = "true";
-		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("")).Replace('\\', '/'), (fixture.Destination).Replace('\\', '/'), TestContext.Current.CancellationToken);
+		var result = await fixture.CreateDeployer().DeployAsync((fixture.Manifest("")).Replace('\\', '/'), (fixture.OutputDirectory).Replace('\\', '/'), TestContext.Current.CancellationToken);
 		Assert.True(result.Failures > 0);
 		Assert.Equal("must remain", File.ReadAllText(outside));
 		Assert.Equal(0, result.Deleted);

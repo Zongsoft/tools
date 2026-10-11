@@ -2,6 +2,10 @@
 
 [English](README.md) | [简体中文](README.zh-Hans.md)
 
+终端警告使用暗黄色正文和粗体青色参数；错误使用暗红色正文和粗体紫色参数；成功提示使用绿色正文。异常类型以紫色标示，异常消息保留原文。四个工具共用仓库 `.shared/Utility.Output.cs`：`FormatOutput` 和 `FormatError` 构造 Core `CommandOutletContent`；`WriteOutput` 和 `WriteError` 统一终端与文本写入器的输出；使用命令执行器的工具通过 `HandleFailure` 输出异常并标记已处理，退出码由各工具决定。颜色由 Terminals 渲染。重定向的输出以及调用方提供的错误写入器保留纯文本和原通道。
+
+运行 `dotnet-migrate --help` 或 `dotnet-migrate -h` 查看常用选项：命令名为粗体青色，选项名为青色，占位符及候选值为绿色。帮助直接返回 `0`，不读取 `.env` 或处理输入文件。 升迁制包流程开始后，结束时显示一行总耗时，命令名称和秒数以粗体青色突出；失败退出也显示已用时间，耗时本身不表示成功。
+
 dotnet-migrate 制作可移交的升迁归档和启动脚本。制作阶段描述并准备变更，执行阶段将升迁包应用到目标环境。
 
 ## 基础概念
@@ -79,7 +83,7 @@ hosting 根目录的 `migrate.cmd` 是交互入口：默认名称 `zongsoft`、�
 
 上例生成 `.migration/zongsoft(migrate)@1.0.0_linux-x64.tar.gz` 和同名 `.sh`。当前默认输入包含 MySQL SQL 和 Amazon S3 桶定义，连接参数使用 `.deploy/default/migration/` 中的 `.ini`。归档内的计划、内部入口和原生执行器直接位于根部，SQL 在 `.artifacts/mysql/`；hosting 的输出目录 `.migration/` 不会作为归档内层目录。只制作时不连接目标服务，源版本文件不回写；脚本不覆盖已有同名产物，覆盖需直接调用工具并指定 `--overwrite`。
 
-制作完成后，在宿主 `deploy.cmd` / `pack.cmd` 的升迁提示中填写 `zongsoft`，打包器会沿源目录祖先链查找配套产物；名称独立于宿主名称，但 Edition、版本及 RID 必须与安装包匹配。Windows x64 的升迁包可以独立使用；当前安装包集成使用 Linux x64/arm64 产物。安装包只把归档和外部脚本收纳到安装根 `.migration/`，执行时解压到独立临时目录。默认持久状态目录是启动脚本旁的 `.migration/<升迁名称>/`，它独立于归档布局；安装包调用时则显式传入 `/var/lib/<包名>/packager`。完整脚本流程见 [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.zh-Hans.md#安装包与升迁包)。
+制作完成后，在宿主 `pack.cmd` 的升迁提示中填写 `zongsoft`，打包器会沿源目录祖先链查找配套产物；名称独立于宿主名称，但 Edition、版本及 RID 必须与安装包匹配。Windows x64 的升迁包可以独立使用；当前安装包集成使用 Linux x64/arm64 产物。安装包只把归档和外部脚本收纳到安装根 `.migration/`，执行时解压到独立临时目录。默认持久状态目录是启动脚本旁的 `.migration/<升迁名称>/`，它独立于归档布局；安装包调用时则显式传入 `/var/lib/<包名>/packager`。完整脚本流程见 [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.zh-Hans.md#安装包与升迁包)。
 
 ### 变量与 .env 文件
 

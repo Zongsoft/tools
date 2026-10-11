@@ -43,7 +43,7 @@ using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer;
 
-internal sealed partial class ApplicationImageBuilder(ContainerEngine engine, BuildResources buildResources, RuntimeEnvironmentCache environments, Action<CommandOutletContent> output, Action<string> error)
+internal sealed partial class ApplicationImageBuilder(ContainerEngine engine, BuildResources buildResources, RuntimeEnvironmentCache environments, Action<CommandOutletContent> output, Action<CommandOutletContent> error)
 {
 	#region 公共方法
 	public async Task BuildAsync(ServiceBuildContext source, ContainerManifest manifest, string workspace, string delivery, string imageReference, CancellationToken cancellation)
@@ -56,7 +56,7 @@ internal sealed partial class ApplicationImageBuilder(ContainerEngine engine, Bu
 		var directory = Path.Combine(workspace, source.Plan.Id);
 		var baseline = await environments.PrepareAsync(distribution, manifest["architecture"], runtime, directory, cancellation);
 
-		using var timing = Output.Measure(output, string.Format(Properties.Resources.NodeBuilder_PrepareImage, source.Plan.Id));
+		using var timing = Utility.MeasureOutput(output, Properties.Resources.Run_Elapsed, string.Format(Properties.Resources.NodeBuilder_PrepareImage, source.Plan.Id));
 		PrepareImage(component["package"], package, source, distribution, directory);
 
 		var reference = buildResources.RegisterImage();

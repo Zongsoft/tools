@@ -63,15 +63,15 @@ public sealed class RunCommand : CommandBase<CommandContext>
 
 		try
 		{
-			context.Output.WriteLine(Output.FormatMessage(Properties.Resources.Run_Verify, Path.GetFullPath(arguments[0])));
+			context.Output.WriteLine(Utility.FormatOutput(Properties.Resources.Run_Verify, Path.GetFullPath(arguments[0])));
 
 			DeliveryBundle bundle;
 
-			using(Output.Measure(content => context.Output.WriteLine(content), Properties.Resources.Run_StageVerify))
+			using(Utility.MeasureOutput(content => context.Output.WriteLine(content), Properties.Resources.Run_Elapsed, Properties.Resources.Run_StageVerify))
 				bundle = DeliveryBundle.Open(arguments[0]);
 
 			using var verified = bundle;
-			var engine = await ContainerEngine.ConnectAsync(choice, new ProcessRunner(), stopping.Token, requireCompose: false, error: content => context.Error.WriteLine(content));
+			var engine = await ContainerEngine.ConnectAsync(choice, new ProcessRunner(), stopping.Token, requireCompose: false, error: content => Utility.WriteOutput(context.Error, content));
 			engine.Mirrors = RegistryMirrorSettings.Read(Path.GetDirectoryName(Path.GetFullPath(arguments[0])));
 
 			var run = new RunContext(engine, bundle, content => context.Output.WriteLine(content));

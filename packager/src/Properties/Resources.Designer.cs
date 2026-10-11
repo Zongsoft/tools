@@ -241,6 +241,15 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
+        ///   Looks up a localized string similar to   → {0}: {1} s.
+        /// </summary>
+        internal static string Output_Elapsed {
+            get {
+                return ResourceManager.GetString("Output.Elapsed", resourceCulture);
+            }
+        }
+
+        /// <summary>
         ///   Looks up a localized string similar to The source file &apos;{0}&apos; conflicts with an existing package entry &apos;{1}&apos;..
         /// </summary>
         internal static string PackageEntryConflicted_Message {

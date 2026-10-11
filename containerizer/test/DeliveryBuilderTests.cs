@@ -270,7 +270,7 @@ public sealed class DeliveryBuilderTests : IDisposable
 		Assert.DoesNotContain(runner.Calls, arguments => arguments.Contains("prune") || arguments.Contains("--force") || arguments.Contains("-f"));
 	}
 
-	private DeliveryBuilder CreateBuilder(BuildRunner runner, Action<string> error = null) => new(runner, Path.Combine(_root, "cache"), Path.Combine(_root, "executor"), output: _ => { }, error: error);
+	private DeliveryBuilder CreateBuilder(BuildRunner runner, Action<CommandOutletContent> error = null) => new(runner, Path.Combine(_root, "cache"), Path.Combine(_root, "executor"), output: _ => { }, error: error);
 
 	[Theory]
 	[InlineData("podman")]
@@ -377,7 +377,7 @@ public sealed class DeliveryBuilderTests : IDisposable
 		var runner = new BuildRunner { FailCleanup = true };
 		using var errors = new StringWriter();
 
-		var archive = await this.CreateBuilder(runner, errors.WriteLine).BuildAsync(manifest, CancellationToken.None);
+		var archive = await this.CreateBuilder(runner, content => errors.WriteLine(CommandOutletContent.GetFullText(content))).BuildAsync(manifest, CancellationToken.None);
 		Assert.True(File.Exists(archive));
 		Assert.True(File.Exists(manifest.ManifestPath));
 		Assert.Equal("[redis]\r\ntag=latest\r\n", File.ReadAllText(Path.Combine(manifest["output"], ".settings")));

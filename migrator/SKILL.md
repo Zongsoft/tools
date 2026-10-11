@@ -30,3 +30,7 @@ description: 修改独立升迁输入、SQL 批次、原生执行、产物命名
 Native AOT 显式发布 Linux x64/arm64 与 Windows x64 到 `executor/src/bin/<配置>/net10.0/<RID>/publish/`；生成端从发布目录链接文件，构建和独立发布布局为 .migrator/<RID>/；NuGet 包在 tools/.migrator/<RID>/ 共用一份，生成端在本地 .migrator/ 不存在时定位该共享目录。检查 ELF/PE、原生库、资源、权限和第三方警告，日志与符号保留在 RID 下的独立目录。Pod 使用相对 YAML 路径，继承根中央包和公共构建属性；Linux 发布禁用只读规范配置的同步。DNS 或挂载修改需重建专用 Pod；保留缓存，不修改其他容器。普通 dotnet build/test 不启动环境。文档集中维护命令用法、输入协议和实现机制；临时验证文件在结束后清理。
 
 权限变更同时更新 MigrationPrivileges 与驱动展开：统一名称只映射库内能力，ReadWrite 含 Execute，基础读写含 Sequence 取值，CreateTable/CreateIndex 含适用的序列创建。允许粗粒度合并，禁止公开 NativePrivileges 或隐式实例权限。角色范围和 PostgreSQL 所有权不足明确报不支持；测试覆盖合并去重、范围拒绝、权限阶段失败及指纹。
+
+输出逻辑统一复用仓库 `.shared/Utility.Output.cs`：FormatOutput/FormatError 负责格式化，WriteOutput/WriteError 负责终端与文本写入器分流，HandleFailure 负责命令异常输出和已处理标记；各工具只决定退出码和业务诊断，不另建相同的包装层。用 Core CommandOutletContent 分段保存正文和参数：警告为暗黄色正文配粗体青色参数，错误为暗红色正文配粗体紫色参数。追加内容时从 Last 节点追加。Terminals 负责颜色；重定向和调用方提供的错误写入器保留原通道及纯文本；不要把 ANSI 序列写入报告或诊断回调。
+
+帮助语法统一使用共享 FormatHelp/HighlightSyntax，计时统一使用 MeasureOutput，不在各工具复制正则、计时器或颜色拼接。帮助入口在业务解析之前处理，返回 0 且不读取 .env、不写入产物；测试须验证重定向为纯文本、所有语法片段保留，以及耗时仅输出一次。计时文案由各工具资源提供，资源访问属性通过 ResXFileCodeGenerator 生成。

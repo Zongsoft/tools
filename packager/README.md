@@ -7,6 +7,10 @@
 
 [English](README.md) | [简体中文](README.zh-Hans.md)
 
+Terminal warnings use dark-yellow text with bold cyan parameters; errors use dark-red text with bold magenta parameters; success messages use green text. Exception types are highlighted in magenta and messages retain their original text. All four tools share the repository’s `.shared/Utility.Output.cs`: `FormatOutput` and `FormatError` construct Core `CommandOutletContent`; `WriteOutput` and `WriteError` route terminal and text-writer output; tools using the command executor call `HandleFailure` to display exceptions and mark them handled, while retaining their own exit codes. Terminals renders the colors. Redirected output and caller-provided error writers preserve plain text and their original streams.
+
+Run `dotnet-pack --help` or `dotnet-pack -h` for common options: the command name is bold cyan, option names are cyan, and placeholders and candidate values are green. Help returns `0` without reading `.env` or processing input files. The `tar`, `deb`, and `rpm` subcommands also accept `--help` or `-h`. Once packaging starts, it ends with one elapsed-time line, with the command name and seconds in bold cyan. Failed operations also report elapsed time; timing alone does not indicate success.
+
 `dotnet-pack` is a .NET global tool that turns an application directory, such as a frontend `dist` or a published .NET application, into Linux installation packages (**`.tar.gz`**, **`.deb`**, and **`.rpm`**) and can generate systemd services, install/uninstall scripts, and Nginx site configuration on demand.
 
 Package formats are written directly in .NET without calling external `tar`, `dpkg-deb`, `rpmbuild`, or `cpio` commands, so Linux packages can be built on Windows as well.
@@ -134,18 +138,17 @@ This walkthrough uses the real [Zongsoft.Hosting.Web](https://github.com/Zongsof
 
 ### Step 1: Prepare the application
 
-Prepare the host and its plugins with the host's [deployment script](https://github.com/Zongsoft/hosting/blob/main/web/default/deploy.cmd). Define root-level `framework=net10.0` in the hosting root's `.env`, and set the matching process variable `framework` in the current Windows console for Cake. The script no longer prompts for the framework. Set remote debugging to `off` (Release), then choose Linux and x64. To prepare only the host, enter `exit` at the packaging prompt (this branch currently returns `1`, without indicating a preceding deployment failure):
+Prepare the host and its plugins with the hosting root's [deployment script](https://github.com/Zongsoft/hosting/blob/main/deploy.cmd), selecting `web/default` as source. Choose one scheme, environment, and network; set debugging to `off` (Release), then choose Linux and x64. deploy.cmd passes an explicit framework override to Cake and deployer; enter the same override in pack.cmd. Without an override, keep the framework in `.env` consistent with the Cake default. deploy.cmd exits after building and deploying; run pack.cmd separately to package the result:
 
 ```cmd
-set "framework=net10.0"
 set "Environment=production"
-cd /d D:/Zongsoft/hosting/web/default
-deploy.cmd
+cd /d D:/Zongsoft/hosting
+deploy.cmd web/default
 ```
 
 ### Step 2: Build the package
 
-Package directly from the host directory: without `--source`, the source is the current directory, and positional arguments select its payload. Alternatively, run the host's [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd). The standalone script defaults to tar, Release, and x64 and packages existing files only. For the example below, choose `deb`, version `1.0.0`, and environment `production`, and leave the migration prompt empty. The corresponding core command follows, omitting empty `--edition` and `--migration` options:
+Package directly from the host directory: without `--source`, the source is the current directory, and positional arguments select its payload. Alternatively, run the hosting root's [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/pack.cmd). Select `web/default` as source and use the scheme, environment, and network used for deployment. The standalone script defaults to tar, Release, and x64 and packages existing files only. For the example below, choose `deb`, version `1.0.0`, and environment `production`, and leave the migration prompt empty. Run the corresponding core command below from `hosting/web/default`, omitting empty `--edition` and `--migration` options:
 
 ```cmd
 dotnet-pack deb ^
@@ -190,7 +193,7 @@ dotnet-pack deb ^
 
 > 💡 **Tip:** Replace `deb` with `tar` or `rpm` to build the other formats. When building the same format again, use another output directory or add `--overwrite`.
 
-Daemon scripts generate `zongsoft.daemon.service` and pass `Environment` and `DOTNET_ENVIRONMENT`. Terminal scripts pass the same variables with `--daemon:disabled`; this does not set process variables for an interactive terminal. All three hosts can include existing migration artifacts without creating them. First run `migrate.cmd` from the hosting root, then enter `zongsoft` at the host's migration prompt. See the [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.md#installation-and-migration-packages) for complete script parameters; this README defines the tool's behavior.
+When source is daemon, the root script generates `zongsoft.daemon.service` and pass `Environment` and `DOTNET_ENVIRONMENT`. When source is terminal, it passes the same variables with `--daemon:disabled`; this does not set process variables for an interactive terminal. All three hosts can include existing migration artifacts without creating them. First run `migrate.cmd` from the hosting root, then enter `zongsoft` at the root script's migration prompt. See the [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.md#installation-and-migration-packages) for complete script parameters; this README defines the tool's behavior.
 
 ### Step 3: Inspect the result
 
@@ -530,7 +533,7 @@ dotnet-pack deb \
   --output:../../../.packages
 ```
 
-**Explicit selection:** with positional arguments, only the listed files or directories are included. This example matches the host [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd): it selects the MIME definitions, application settings, host configuration, static files, and plugins, and uses the `~` directory alias to place the build output at the installation root:
+**Explicit selection:** with positional arguments, only the listed files or directories are included. This example matches the host [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/pack.cmd): it selects the MIME definitions, application settings, host configuration, static files, and plugins, and uses the `~` directory alias to place the build output at the installation root:
 
 ```bash
 dotnet-pack deb \
@@ -669,7 +672,7 @@ HTTPS requires a usable default server certificate configured in the host; the p
 
 ### Service environment variables
 
-Values of the variables listed in `--daemon-environments` are written to the generated service's `Environment=`. The Web host's [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/web/default/pack.cmd) uses it for `Environment`, `DOTNET_ENVIRONMENT`, and `ASPNETCORE_ENVIRONMENT`. This Bash example specifies the framework explicitly; the host scripts resolve it from its variable providers:
+Values of the variables listed in `--daemon-environments` are written to the generated service's `Environment=`. The Web host's [pack.cmd](https://github.com/Zongsoft/hosting/blob/main/pack.cmd) uses it for `Environment`, `DOTNET_ENVIRONMENT`, and `ASPNETCORE_ENVIRONMENT`. This Bash example specifies the framework explicitly; the root script accepts an override or resolves it from variable providers:
 
 ```bash
 dotnet-pack deb \

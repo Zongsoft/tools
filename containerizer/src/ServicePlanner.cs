@@ -57,7 +57,7 @@ internal static class ServicePlanner
 				if(!manifest.IsPlanning)
 					throw new ContainerizationException(2, message);
 
-				output?.Invoke(Output.FormatMessage(Properties.Resources.NodeBuilder_1_Message, CommandOutletColor.Magenta, component.Name, missing));
+				output?.Invoke(Utility.FormatOutput(Properties.Resources.NodeBuilder_1_Message, CommandOutletColor.DarkYellow, component.Name, missing));
 			}
 
 			if(!component.IsApplication)

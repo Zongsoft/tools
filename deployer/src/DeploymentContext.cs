@@ -32,7 +32,6 @@
  */
 
 using System;
-using System.Collections.Generic;
 
 using Zongsoft.Text.Templating;
 
@@ -42,31 +41,32 @@ namespace Zongsoft.Tools.Deployer;
 public class DeploymentContext
 {
 	#region 构造函数
-	public DeploymentContext(Deployer deployer, Zongsoft.Configuration.Profiles.Profile profile, string destinationDirectory)
+	/// <summary>创建当前 .deploy 文件的输出上下文。</summary>
+	/// <param name="deployer">负责本次部署的实例。</param>
+	/// <param name="profile">当前 .deploy 文件的配置。</param>
+	/// <param name="outputDirectory">该文件对应的输出目录。</param>
+	public DeploymentContext(Deployer deployer, Zongsoft.Configuration.Profiles.Profile profile, string outputDirectory)
 	{
-		if(string.IsNullOrWhiteSpace(destinationDirectory))
-			throw new ArgumentNullException(nameof(destinationDirectory));
+		if(string.IsNullOrWhiteSpace(outputDirectory))
+			throw new ArgumentNullException(nameof(outputDirectory));
 
 		this.Deployer = deployer ?? throw new ArgumentNullException(nameof(deployer));
 		this.Profile = profile ?? throw new ArgumentNullException(nameof(profile));
-		this.DestinationDirectory = destinationDirectory;
+		this.OutputDirectory = outputDirectory;
 		this.Counter = deployer.Session?.Counter ?? new DeploymentCounter(profile.FilePath);
 	}
 	#endregion
 
 	#region 公共属性
+	/// <summary>获取负责本次部署的实例。</summary>
 	public Deployer Deployer { get; }
+	/// <summary>获取本次部署共享的计数器。</summary>
 	public DeploymentCounter Counter { get; }
-	public string DestinationDirectory { get; }
+	/// <summary>获取当前 .deploy 文件对应的输出目录。</summary>
+	public string OutputDirectory { get; }
+	/// <summary>获取当前 .deploy 文件的配置。</summary>
 	public Configuration.Profiles.Profile Profile { get; }
 	/// <summary>获取当前部署器的模板评估器。</summary>
 	public TemplateEvaluator Evaluator => this.Deployer.Evaluator;
 	#endregion
-}
-
-/// <summary>提供部署环境选项的查询辅助方法。</summary>
-public static class DeploymentContextUtility
-{
-	public static bool IsVerbosity(this Deployer deployer, Verbosity verbosity) =>
-		deployer.Evaluator.TryGetOption(Deployer.VERBOSITY_OPTION, out var variable) && Zongsoft.Common.Convert.TryConvertValue<Verbosity>(variable, out var value) && verbosity == value;
 }

@@ -39,11 +39,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
+using Zongsoft.Components;
+
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer;
 
-internal sealed class ServiceImagePreparer(ContainerEngine engine, Action<string> error = null)
+internal sealed class ServiceImagePreparer(ContainerEngine engine, Action<CommandOutletContent> error = null)
 {
 	public async Task PrepareAsync(ServiceBuildContext context, string workspace, CancellationToken cancellation)
 	{

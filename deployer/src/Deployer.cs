@@ -38,7 +38,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-using Zongsoft.Terminals;
+using Zongsoft.Components;
 using Zongsoft.Text.Templating;
 using Zongsoft.Configuration.Profiles;
 
@@ -52,7 +52,8 @@ public partial class Deployer
 	internal const string EXPANSION_OPTION = "expansion";
 	internal const string OVERWRITE_OPTION = "overwrite";
 	internal const string VERBOSITY_OPTION = "verbosity";
-	internal const string DESTINATION_OPTION = "destination";
+	internal const string SOURCE_OPTION = "source";
+	internal const string OUTPUT_OPTION = "output";
 	internal const string IGNOREDEPENDENTPREFIX_OPTION = "ignoreDependentPrefix";
 	internal const string IGNOREDEPLOYMENTFILE_OPTION = "ignoreDeploymentFile";
 	internal const string DEFAULT_DEPLOYMENT_FILENAME = ".deploy";
@@ -83,10 +84,11 @@ public partial class Deployer
 	#endregion
 
 	#region 公共属性
-	public ITerminal Terminal => Terminals.Terminal.Console;
+	/// <summary>获取诊断输出，由调用方负责其生命周期。</summary>
 	public TextWriter Output { get; }
 	/// <summary>获取解析部署参数及配置模板的评估器。</summary>
 	public TemplateEvaluator Evaluator { get; }
+	/// <summary>获取最近一次部署的计划；开始解析前为空。</summary>
 	public DeploymentPlan Plan { get; private set; }
 	#endregion
 
@@ -96,11 +98,25 @@ public partial class Deployer
 	#endregion
 
 	#region 公共方法
+	/// <summary>将指定 .deploy 文件部署到 output 选项指定的目录。</summary>
+	/// <param name="path">.deploy 文件或其目录，相对于 source 解析，支持模板表达式。</param>
+	/// <param name="cancellation">部署取消令牌。</param>
+	/// <returns>部署计数；失败通过计数和诊断输出报告，取消则抛出异常。</returns>
 	public Task<DeploymentCounter> DeployAsync(string path, CancellationToken cancellation = default) => this.DeployAsync(path, null, cancellation);
 
-	public Task<DeploymentCounter> DeployAsync(string path, string destinationDirectory, CancellationToken cancellation = default) => this.DeployManyAsync([path], destinationDirectory, cancellation);
+	/// <summary>将指定 .deploy 文件部署到给定目录。</summary>
+	/// <param name="path">.deploy 文件或其目录，相对于 source 解析，支持模板表达式。</param>
+	/// <param name="outputDirectory">输出目录，相对于 source 解析；为空时使用 output 选项或 source。</param>
+	/// <param name="cancellation">部署取消令牌。</param>
+	/// <returns>部署计数；取消则抛出异常。</returns>
+	public Task<DeploymentCounter> DeployAsync(string path, string outputDirectory, CancellationToken cancellation = default) => this.DeployManyAsync([path], outputDirectory, cancellation);
 
-	public async Task<DeploymentCounter> DeployManyAsync(IEnumerable<string> paths, string destinationDirectory = null, CancellationToken cancellation = default)
+	/// <summary>先解析和校验所有 .deploy 文件，再依次执行同一部署计划。</summary>
+	/// <param name="paths">.deploy 文件或目录序列，相对于 source 解析，支持模板表达式。</param>
+	/// <param name="outputDirectory">输出目录，相对于 source 解析；为空时使用 output 选项或 source。</param>
+	/// <param name="cancellation">部署取消令牌。</param>
+	/// <returns>部署计数；计划错误阻止全部写入，执行阶段错误不回滚已经完成的操作。</returns>
+	public async Task<DeploymentCounter> DeployManyAsync(IEnumerable<string> paths, string outputDirectory = null, CancellationToken cancellation = default)
 	{
 		if(Interlocked.Exchange(ref _running, 1) != 0)
 			throw new InvalidOperationException(string.Format(Properties.Resources.Review_Busy, "Deployer"));
@@ -113,7 +129,7 @@ public partial class Deployer
 		{
 			var files = paths.ToArray();
 			counter = new DeploymentCounter(string.Join(";", files));
-			var root = Path.GetFullPath(destinationDirectory == null ? this.Evaluator.GetOption(DESTINATION_OPTION) ?? Environment.CurrentDirectory : this.Normalize(destinationDirectory));
+			var root = this.GetPath(outputDirectory == null ? this.Evaluator.GetOption(OUTPUT_OPTION) ?? "." : this.Normalize(outputDirectory));
 			this.Session = new DeploymentSession(root, counter);
 			this.Plan = this.Session.Plan;
 			this.Overwrite = GetOverwrite(this.Evaluator);
@@ -127,11 +143,11 @@ public partial class Deployer
 				if(!this.Evaluator.TryGetOption("lockFile", out var lockFile))
 					throw new InvalidOperationException(string.Format(Properties.Resources.Review_Locked, "lockFile"));
 
-				this.Session.LockedPlan = DeploymentPlan.Load(lockFile);
+				this.Session.LockedPlan = DeploymentPlan.Load(this.GetPath(lockFile));
 			}
 
 			foreach(var file in files.Distinct(DeploymentPath.Comparer))
-				await this.PlanManifestAsync(this.Normalize(file), root, cancellation);
+				await this.PlanManifestAsync(this.GetPath(this.Normalize(file)), root, cancellation);
 
 			if(counter.Failures == 0)
 			{
@@ -171,7 +187,7 @@ public partial class Deployer
 			{
 				try
 				{
-					var path = Path.GetFullPath(report);
+					var path = this.GetPath(report);
 					this.ValidateOutput(path, true);
 					this.Plan.Save(path);
 				}
@@ -194,9 +210,9 @@ public partial class Deployer
 	#region 虚拟方法
 	/// <summary>加载部署清单，并在通用指令回调中求值参数。</summary>
 	/// <param name="path">已解析的清单路径。</param>
-	/// <param name="destination">已确定的部署目标目录。</param>
+	/// <param name="outputDirectory">已确定的部署输出目录。</param>
 	/// <returns>包含加载后配置与本次评估器的部署上下文。</returns>
-	protected virtual DeploymentContext CreateContext(string path, string destination)
+	protected virtual DeploymentContext CreateContext(string path, string outputDirectory)
 	{
 		var options = new ProfileOptions
 		{
@@ -207,12 +223,12 @@ public partial class Deployer
 			},
 		};
 
-		return new(this, Profile.Load(path, Utility.ConfigureDirectiveEvaluation(options, this.Evaluator)), destination);
+		return new(this, Profile.Load(path, Utility.ConfigureDirectiveEvaluation(options, this.Evaluator)), outputDirectory);
 	}
 	#endregion
 
 	#region 清单解析
-	internal async Task PlanManifestAsync(string path, string destination, CancellationToken cancellation)
+	internal async Task PlanManifestAsync(string path, string outputDirectory, CancellationToken cancellation)
 	{
 		cancellation.ThrowIfCancellationRequested();
 		path = Path.GetFullPath(path);
@@ -234,7 +250,7 @@ public partial class Deployer
 				this.Session.Counter.Skip();
 				var warning = string.Format(Properties.Resources.Review_MissingFile, path);
 				this.Plan.Diagnostics.Add(warning);
-				this.Output.WriteLine(warning);
+				this.Write(Utility.FormatOutput(Properties.Resources.Review_MissingFile, CommandOutletColor.DarkYellow, path));
 				return;
 			}
 
@@ -243,7 +259,7 @@ public partial class Deployer
 
 			this.Plan.Manifests[path] = DeploymentSession.Hash(path);
 
-			var context = this.CreateContext(path, this.Session.Validate(destination));
+			var context = this.CreateContext(path, this.Session.Validate(outputDirectory));
 
 			foreach(var item in context.Profile)
 				await this.PlanItemAsync(context, item, cancellation);
@@ -270,9 +286,9 @@ public partial class Deployer
 			{
 				//Evaluate filters before expanding optional branch evaluator.
 				Utility.Requisition.GetRequisites(entry.Name, out var sourceFilter);
-				Utility.Requisition.GetRequisites(entry.Value, out var targetFilter);
+				Utility.Requisition.GetRequisites(entry.Value, out var outputFilter);
 
-				if(!Utility.Requisition.IsRequisites(this.Evaluator, sourceFilter) || !Utility.Requisition.IsRequisites(this.Evaluator, targetFilter))
+				if(!Utility.Requisition.IsRequisites(this.Evaluator, sourceFilter) || !Utility.Requisition.IsRequisites(this.Evaluator, outputFilter))
 				{
 					context.Counter.Skip();
 
@@ -290,20 +306,27 @@ public partial class Deployer
 			catch(Exception exception)
 			{
 				context.Counter.Fail();
-				this.Error(string.Format(Properties.Resources.Review_Failure, $"{entry.Profile.FilePath}:{entry.LineNumber}", Environment.NewLine + exception.Message));
+				this.Error(Utility.FormatOutput(Properties.Resources.Review_Failure, CommandOutletColor.DarkRed, $"{entry.Profile.FilePath}:{entry.LineNumber}", Environment.NewLine + exception.Message));
 			}
 		}
 	}
 	#endregion
 
 	#region 辅助方法
-	internal void Error(string text)
+	internal void Error(string text) => this.Error(CommandOutletContent.Create(CommandOutletColor.DarkRed, text));
+	private void Error(CommandOutletContent content)
 	{
-		this.Plan?.Diagnostics.Add(text);
-		this.Output.WriteLine(text);
+		this.Plan?.Diagnostics.Add(CommandOutletContent.GetFullText(content));
+		this.Write(content);
 	}
 
+	internal void Write(CommandOutletContent content) => Utility.WriteOutput(this.Output, content);
+
 	internal string Normalize(string text) => this.Evaluator.Evaluate(text);
+	private string GetPath(string path) => Path.GetFullPath(path, this.Evaluator.GetOption(SOURCE_OPTION) ?? Environment.CurrentDirectory);
+
+	private bool IsVerbosity(Verbosity verbosity) =>
+		this.Evaluator.TryGetOption(VERBOSITY_OPTION, out var variable) && Zongsoft.Common.Convert.TryConvertValue<Verbosity>(variable, out var value) && verbosity == value;
 
 	private static void ValidateVerbosity(TemplateEvaluator evaluator)
 	{

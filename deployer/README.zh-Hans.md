@@ -7,6 +7,10 @@
 
 [English](README.md) | [简体中文](README.zh-Hans.md)
 
+终端警告使用暗黄色正文和粗体青色参数；错误使用暗红色正文和粗体紫色参数；成功提示使用绿色正文。异常类型以紫色标示，异常消息保留原文。四个工具共用仓库 `.shared/Utility.Output.cs`：`FormatOutput` 和 `FormatError` 构造 Core `CommandOutletContent`；`WriteOutput` 和 `WriteError` 统一终端与文本写入器的输出；使用命令执行器的工具通过 `HandleFailure` 输出异常并标记已处理，退出码由各工具决定。颜色由 Terminals 渲染。重定向的输出以及调用方提供的错误写入器保留纯文本和原通道。 自定义 TextWriter 和部署报告也保持纯文本。
+
+运行 `dotnet deploy --help` 或 `dotnet deploy -h` 查看常用选项：命令名为粗体青色，选项名为青色，占位符及候选值为绿色。帮助直接返回 `0`，不读取 `.env` 或处理输入文件。 部署流程开始后，结束时显示一行总耗时，命令名称和秒数以粗体青色突出；失败退出也显示已用时间，耗时本身不表示成功。
+
 -----
 
 ## 概述
@@ -19,12 +23,12 @@
 
 部署文件为 `.ini` 格式的纯文本文件，其内容由中括号包裹的 **章节**_(`Section`)_ 和 **条目**_(`Entry`)_ 两种内容组成，其中 **章节** 部分表示部署的目标目录。
 
-**章节** 和 **条目** 值均支持以美元符接圆括号 `${___}` 或双百分号 `${___}` 格式的变量引用，变量来自命令选项、环境变量、祖先链 `.env` 和目标应用配置。
+**章节** 指定结构性的目录层级；**条目** 的源路径和输出路径支持 Core `${name}` 模板表达式，变量来自命令选项、环境变量、祖先链 `.env` 和输出目录的应用配置。
 
 每个条目由 **键** 和 **值** 两部分组成，以等于号 _(`=`)_ 分隔，其中 **值** 可省略。
 
 - **键** 由 _解析器名_ 和 _解析参数_ 两部分组成，以冒号 _(`:`)_ 分隔；
-	- 解析器名：省略、留空或指定为 `path` 时采用默认的路径解析器，此外还支持 `nuget` 和 `delete`/`remove` 解析器。解析器名不区分大小写。
+	- 解析器名：省略、留空或指定为 `path` 时采用默认的路径解析器，此外还支持 `template`、`nuget` 和 `delete`/`remove` 解析器。解析器名不区分大小写。
 	- 解析参数：由指定的解析器进行解析，详情参考下面的 _解析参数_。
 
 - **值** 由 _目标路径_ 和 _过滤条件_ 两部分组成。
@@ -52,6 +56,30 @@ drivers/mysql/src/Zongsoft.Data.MySql.plugin
 `path:` 前缀选择默认路径解析器，冒号之后才是源路径。相对路径也可显式指定该前缀，例如 `path:drivers/mysql/src/Zongsoft.Data.MySql.plugin`。此示例引用 [framework](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Data) 中实际存在的插件文件，并假定部署文件位于 `D:/Zongsoft/framework/Zongsoft.Data` 目录；请根据本地仓库位置调整路径。
 
 > 💡 提示：通常不应该在 `.deploy` 文件中指定绝对路径，因为源路径默认基于所在 `.deploy` 文件的路径，而目标路径则基于部署宿主程序或部署参数指定的目标路径的相对位置，参考 [framework](https://github.com/Zongsoft/framework) 中的相关项目的部署文件。
+
+#### 模板解析器
+
+`template:` 读取文本文件，以本次部署的 Core `TemplateEvaluator` 求值后生成配置。它与 `path:` 使用相同的相对路径、通配搜索、章节目标和过滤规则；显式指定目标名称时按该名称输出，否则移除源文件名末尾的 `.template`。普通路径复制不会自动解释模板内容。
+
+```ini
+# hosting/daemon/.deploy
+template:../.deploy/.shared/app.option.template = Zongsoft.Hosting.Daemon.option
+
+[plugins zongsoft externals aliyun]
+template:../.deploy/.shared/Zongsoft.Externals.Aliyun.option.template
+```
+
+模板只使用 Core 语法，没有另一套变量或条件语言。`${mysql:server}` 原样插值；XML 文本及属性用 `${mysql:server#xml}` 转义，JSON 用 `${title#json}` 生成完整 JSON 值（字符串包含引号，不应再套引号）。`.env` 值是字符串，`#json` 不猜测数字或布尔类型。没有通用 INI/YAML 转义，按目标格式组织内容。`\${runtime}` 输出字面 `${runtime}`，`\\` 输出一个反斜杠。
+
+```xml
+<connection value="${mysql:connection#xml}" />
+```
+
+模板按 UTF-8 读取，也识别 UTF BOM，输出为无 BOM 的 UTF-8，保留模板换行。整个计划在任何写入或删除前完成模板求值；缺失的显式模板文件、未定义变量、循环、非法表达式或源文件变化都会阻止执行。通配符没有匹配结果时不产生操作。
+
+默认 `newest` 对模板比较生成内容：内容不同就更新，即使目标时间更新；相同则记为 `Unchanged` 并保留时间。`never` 保留已有目标，`alway` 总是写入。普通文件复制继续按修改时间处理 `newest`。
+
+`.env` 只提供变量，不作为文件载荷复制；目录搜索选中的 `.env` 也会跳过。模板后缀约定为 `*.template`。
 
 #### Delete 解析器
 
@@ -157,13 +185,13 @@ ${NUGET_PACKAGES}/mysql.data/6.10.9/lib/netstandard2.0/*.dll    <framework:net5.
 
 工具明确启用 Core 的变量回退：具名变量按当前命名空间、各级父命名空间、全局的顺序查询；每一级先按来源优先级查询全部来源；全部缺失则报告缺少变量。无命名空间的引用仍写作 `${name}`，命中空值也停止回退。
 
-每个命名空间内依次查询命令选项、目标应用的 `appsettings.json`、从工作目录到文件系统根目录的各级 `.env`、系统环境变量。首个命中生效，`appsettings.json` 中显式声明的 null 也会阻止低优先级来源回退。配置和命令选项名忽略大小写；系统环境通过 Core `Variables.Environments()` 实时读取，只提供默认命名空间，名称及原始值不改写，Windows 忽略大小写，Unix/Linux 区分大小写。
+每个命名空间内依次查询命令选项、目标应用的 `appsettings.json`、从 source 到文件系统根目录的各级 `.env`、系统环境变量。首个命中生效，`appsettings.json` 中显式声明的 null 也会阻止低优先级来源回退。配置和命令选项名忽略大小写；系统环境通过 Core `Variables.Environments()` 实时读取，只提供默认命名空间，名称及原始值不改写，Windows 忽略大小写，Unix/Linux 区分大小写。
 
 所有变量（包括 `framework`）统一遵循首个命中生效：null、空字符串、false 和 0 都不会触发下层回退。只有未提供该值时才继续查找；需要有效值的业务操作负责校验并在无法继续时报告错误。
 
 每级只读取直属 `.env`，不搜索子目录或各个清单所在目录；同次调用的全部清单共用变量集合。INI 文件使用 Core `Profile.Load` 读取，支持 `#@import`。根条目属于默认命名空间，章节层级以点号组成命名空间，条目名的点号和连字符改为下划线：`[io rustfs]` 下的 `access_key=example` 生成 `io.rustfs:access_key=example`，根级 `environment=Development` 生成 `environment`。缺失的 `.env` 跳过，读取或解析失败终止初始化。值仅在使用时展开，不修改进程环境变量。
 
-变量值可递归引用其他变量，不受命令选项顺序影响；仅在使用时展开，缺失、循环引用或超过 64 层会报错。`destination` 可引用命令选项、环境变量及已加载的 `.env` 变量；目标目录确定后才加载其中的 `appsettings.json`。
+变量值可递归引用其他变量，不受命令选项顺序影响；仅在使用时展开，缺失、循环引用或超过 64 层会报错。`output` 可引用命令选项、环境变量及已加载的 `.env` 变量；目标目录确定后才加载其中的 `appsettings.json`。
 
 - 如果 `appsettings.json` 中定义了名为 `ApplicationName` 的属性，则可以使用 `application` 作为该属性的变量别名。
 - 名称为 `Framework` 的变量表示 .NET *目标框架* 标识，有关该 *目标框架* 标识的定义请参考：https://learn.microsoft.com/zh-cn/dotnet/standard/frameworks
@@ -172,17 +200,30 @@ ${NUGET_PACKAGES}/mysql.data/6.10.9/lib/netstandard2.0/*.dll    <framework:net5.
 - `NuGet_Server` 表示 NuGet 服务器信息，默认值为：`https://api.nuget.org/v3/index.json`
 - `NuGet_Packages` 表示 NuGet 包的目录，默认值为：`%USERPROFILE%/.nuget/packages`
 
-### hosting 脚本中的框架与变量
+### 源目录、导入与 hosting
 
-hosting 的 `deploy.cmd` 已省略部署命令的 `--framework`，可以在 hosting 根目录 `.env` 的根层定义 `framework=net10.0`。部署器从变量来源获取它，全局查询顺序为命令选项 → 目标应用 `appsettings.json` → 由近到远的祖先 `.env` → 环境变量。省略选项时继续查询后续来源；显式 null/空字符串阻止回退，与其它变量一致。
+`--source` 自身相对于调用时的当前目录解析；它不能依赖尚未加载的 `.env`。确定 source 后，才加载其祖先 `.env` 并求值 `--output`。本地相对 `.deploy` 参数、output、report、lockFile、previous、NuGet_Packages 和本地 NuGet_Server 都相对于 source，包含 `./` 与 `../`；绝对路径保持原义。`.deploy` 内的源路径和 `#@import` 仍相对于声明文件。
 
-在 daemon 宿主目录中，部署命令可写为：
+部署 API 的输出目录参数为 `outputDirectory`；`DeploymentContext.OutputDirectory` 保存当前 `.deploy` 的输出目录。条目和操作通过 `Output` 表示输出，报告和锁文件的 JSON 使用 `Operations[].Output` 记录输出路径。
 
-```cmd
-dotnet deploy --verbosity:quiet --overwrite:newest --prerelease:true --host:daemon --site:daemon --scheme:default --environment:development --debug:off --edition:Release --platform:linux --architecture:x64 --destination:bin/${edition}/${framework} .deploy ../.deploy/default/${host}.deploy ../.deploy/default/${site}.deploy
+工具不识别 scheme、environment 或 network；它们都是普通变量。例如 `hosting/daemon/.env` 主动导入方案：
+
+```ini
+#@import ../.deploy/${scheme}/.env
+
+name=Zongsoft.Hosting.Daemon
+title=Zongsoft Daemon
 ```
 
-`--edition:Release` 在这个部署流程中用于定位构建配置目录；安装包的 Edition 是另外的身份参数，不应混用。这里仅执行插件部署，不编译宿主、不制作安装包或升迁包。当前 hosting 的 `deploy.cmd` 调用 Cake 时也省略 `--framework`，构建使用各宿主 `build.cake` 的 `Argument("framework", "net10.0")` 默认值；Cake 脚本不读取 `.env` 或进程变量 `framework`。应保持该构建值与部署、打包变量一致；需要改变构建框架时，显式向 Cake 传入 `--framework` 或调整其默认值。脚本参数和独立打包流程见 [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.zh-Hans.md#安装包与升迁包)。
+`hosting/.deploy/default/.env` 可以再 `#@import ../.env` 复用 `hosting/.deploy/.env`。导入目录不会自动建立第二条祖先链。同一 Profile 的后续同名声明覆盖此前声明，因此项目与方案的覆盖关系由 `.env` 写法决定。导入参数只能引用命令选项、此前已读条目和可见祖先变量，不能引用后续声明。全部 `.deploy` 和模板共用同次调用的变量，不按模板物理目录重载变量。
+
+从 hosting 根目录部署 daemon 的配置及插件：
+
+```powershell
+dotnet deploy --source:daemon --output:'bin/${edition}/${framework}' --scheme:default --environment:production --network:internal --edition:Release --platform:linux --architecture:x64 --prerelease:true
+```
+
+根目录 `deploy.cmd`/`pack.cmd` 询问宿主源目录。框架覆盖留空时，部署及打包使用 `.env` 的 framework，Cake 使用 build.cake 默认值；两者须一致。deploy.cmd 只构建和部署，pack.cmd 独立打包；填写覆盖值时，两个脚本须使用同一 framework。`edition` 在部署中用于编译目录，安装包 Edition 则是独立身份参数。参见 [hosting README](https://github.com/Zongsoft/hosting/blob/main/README.zh-Hans.md#部署)。
 
 ## 安装
 
@@ -256,18 +297,19 @@ dotnet deploy --edition:Debug --framework:net10.0 --platform:win --architecture:
 
 命令支持普通终端和重定向/管道执行。成功返回 `0`，解析、依赖或文件操作失败返回 `1`，取消返回 `130`。默认先生成完整计划，预检查失败时不写入目标；正常覆盖跳过和删除有独立统计。
 
-缺失源文件（包括包内清单引用的可选文件）和部署清单只产生警告：每项计入跳过，继续处理其余输入。默认 `.deploy`、显式清单参数及没有 `.deploy` 的目录参数均适用，方便不同环境统一传入可选文件。警告在 `--verbosity:quiet` 下也会输出，并保留在报告诊断中，不导致非零退出码。NuGet 包缺失、无效变量或语法、源链接失效、访问错误，以及计划生成后文件丢失仍作为失败处理。
+缺失的普通路径源文件（包括包内 `.deploy` 引用的可选文件）和部署清单只产生警告：每项计入跳过，继续处理其余输入。默认 `.deploy`、显式清单参数及没有 `.deploy` 的目录参数均适用，方便不同环境统一传入可选文件。警告在 `--verbosity:quiet` 下也会输出，并保留在报告诊断中，不导致非零退出码。NuGet 包缺失、无效变量或语法、源链接失效、访问错误，以及计划生成后文件丢失仍作为失败处理。
 
 ```text
 dotnet deploy [--选项:值 ...] [部署文件或目录 ...]
 dotnet-deploy [--选项:值 ...] [部署文件或目录 ...]
 ```
 
-两个入口等价，没有子命令。无位置参数时读取当前目录的 `.deploy`；可按顺序传入多个部署文件，目录参数使用其直属 `.deploy`。相对清单路径基于当前工作目录，清单内相对源路径基于所在清单，目标路径基于 `destination`。选项亦可写为 `--key=value`，含空格的值应按终端语法加引号。任意其他 `--name:value` 也会成为用户变量，供清单和配置引用；下表仅列出工具自己识别的控制选项。部署文件中的 `path`、`nuget`、`delete`/`remove` 是解析器，不是子命令。
+两个入口等价，没有子命令。无位置参数时读取 source 直属的 `.deploy`；可按顺序传入多个部署文件，目录参数使用其直属 `.deploy`。相对 `.deploy` 参数基于 source，清单内相对源路径基于所在清单，目标路径基于 `output`。选项亦可写为 `--key=value`，含空格的值应按终端语法加引号。任意其他 `--name:value` 也会成为用户变量，供清单和配置引用；下表仅列出工具自己识别的控制选项。部署文件中的 `path`、`template`、`nuget`、`delete`/`remove` 是解析器，不是子命令。
 
 | 选项 | 默认值 | 用途 |
 | --- | --- | --- |
-| `--destination:<目录>` | 当前目录 | 目标根目录；先用命令选项、环境变量及 `.env` 变量解析，再加载该目录的 `appsettings.json`。 |
+| `--source:<目录>` | 调用时当前目录 | 工作源目录；选项自身相对于调用目录解析，只使用命令选项和系统变量定位，必须存在。 |
+| `--output:<目录>` | source | 目标根目录；先用命令选项、环境变量及 `.env` 变量解析，再加载该目录的 `appsettings.json`。 |
 | `--verbosity:<级别>` | `normal` | `quiet`、`normal`、`detail`；无法转换的值报错。 |
 | `--overwrite:<策略>` | `newest` | `alway`（保持现有枚举拼写）、`never`、`newest`。这不是布尔开关。 |
 | `--expansion[:布尔值]` | `false` | 目录通配匹配时，将匹配到的相对目录层级保留到目标路径；`false` 只保留通配捕获部分。 |
@@ -288,7 +330,7 @@ dotnet-deploy [--选项:值 ...] [部署文件或目录 ...]
 NuGet 相关的 `NuGet_Server` 与 `NuGet_Packages` 可通过命令选项、环境变量或 `.env` 提供；`Framework`、`Platform`、`Architecture`、`edition` 等是供解析器和部署文件使用的普通变量。示例：
 
 ```powershell
-dotnet deploy --destination:'bin/${edition}/${framework}' --edition:Release --framework:net10.0 --dry-run --report:deploy-plan.json .deploy extra.deploy
+dotnet deploy --output:'bin/${edition}/${framework}' --edition:Release --framework:net10.0 --dry-run --report:deploy-plan.json .deploy extra.deploy
 ```
 
 ### NuGet 包
@@ -336,7 +378,7 @@ ${NUGET_PACKAGES}/mysql.data/8.3.0/lib/net8.0/*.dll
 
 ### 计划、锁定与清理
 
-默认覆盖策略为 `newest`；无法转换的覆盖值、无效过滤条件和有效路径中的未定义变量均报错。目标写入限制在 `destination` 内且拒绝链接路径；清单及 `#@import` 都检测循环。过滤组合从左到右求值。`**` 匹配零层或多层目录，复制目录会保留其内部相对结构。
+默认覆盖策略为 `newest`；无法转换的覆盖值、无效过滤条件和有效路径中的未定义变量均报错。目标写入限制在 `output` 内且拒绝链接路径；清单及 `#@import` 都检测循环。过滤组合从左到右求值。`**` 匹配零层或多层目录，复制目录会保留其内部相对结构。
 
 | 选项 | 行为 |
 | --- | --- |

@@ -6,7 +6,7 @@
 
 ## 入口与职责
 
-`Program.Main` 使用 Zongsoft.Core 的 `CommandLine` 解析命令，建立取消令牌，并调用 `Deployer.CreateEvaluator` 与 `DeployManyAsync`。没有参数时读取当前目录的 `.deploy`。正常结果退出 0，失败退出 1，取消退出 130。执行不依赖交互控制台句柄，日志输出到 `TextWriter`。
+`Program.Main` 使用 Zongsoft.Core 的 `CommandLine` 解析命令，建立取消令牌，并调用 `Deployer.CreateEvaluator` 与 `DeployManyAsync`。没有参数时读取source 直属的 `.deploy`。正常结果退出 0，失败退出 1，取消退出 130。执行不依赖交互控制台句柄，日志输出到 `TextWriter`。
 
 | 文件/类型 | 职责 |
 | --- | --- |
@@ -52,13 +52,13 @@ Core 通过 Profile.Directives 全局登记指令实现，ProfileReader 解析�
 
 解析和在线求解阶段可能下载到 NuGet 缓存，因此 dry-run 不表示完全不写磁盘。`offline=true` 使用已解压且有有效 nuspec 的本地缓存；缺包失败。
 
-缺失的普通源文件和清单视为可选输入。`DeploymentPath.IsMissing` 区分文件/目录不存在、访问错误与失效链接。`PlanManifestAsync` 跳过缺失清单（包括显式参数及目录直属的默认 `.deploy`）；`PlanSourcesAsync` 跳过缺失源文件，包括包内清单引用的文件。每项增加 Skipped，并将本地化警告写入输出和 Diagnostics，quiet 模式也显示。缺失项不登记复制操作或清单哈希，不阻止有效操作执行；dry-run 沿用同样的警告语义。包解析失败、无效输入和计划生成后的源变化仍然失败。
+缺失的普通源文件和清单视为可选输入。`DeploymentPath.IsMissing` 区分文件/目录不存在、访问错误与失效链接。`PlanManifestAsync` 跳过缺失清单（包括显式参数及目录直属的默认 `.deploy`）；`PlanSourcesAsync` 跳过缺失的普通源文件，包括包内 `.deploy` 引用的文件；显式选中的模板文件必须存在，否则计划生成失败。每项增加 Skipped，并将本地化警告写入输出和 Diagnostics，quiet 模式也显示。缺失项不登记复制操作或清单哈希，不阻止有效操作执行；dry-run 沿用同样的警告语义。包解析失败、无效输入和计划生成后的源变化仍然失败。
 
 ## 变量、清单与路径
 
-`DeploymentEntry.Get` 在模板表达式之前识别解析器前缀，`${...}` 内的命名空间冒号不作为解析器分隔符。没有冒号的条目直接使用 `path` 名称。`DeploymentResolverManager.GetResolver` 将 null、空字符串及纯空白名称解析为默认路径解析器；`path`、`nuget` 和 `delete`/`remove` 按不区分大小写的方式匹配，未知名称返回 null。空名称选择默认路径解析器是其功能约定。默认路径解析器自身的 Name 为空字符串，`path` 是选择该实例的解析器名。Windows 字面绝对源路径使用 `path:D:/dir/files.ext`，避免盘符被解析为解析器名；相对路径可以省略前缀或显式使用 `path:`。
+`DeploymentEntry.Get` 在模板表达式之前识别解析器前缀，`${...}` 内的命名空间冒号不作为解析器分隔符。没有冒号的条目直接使用 `path` 名称。`DeploymentResolverManager.GetResolver` 将 null、空字符串及纯空白名称解析为默认路径解析器；`path`、`template`、`nuget` 和 `delete`/`remove` 按不区分大小写的方式匹配，未知名称返回 null。空名称选择默认路径解析器是其功能约定。默认路径解析器自身的 Name 为空字符串，`path` 是选择该实例的解析器名。Windows 字面绝对源路径使用 `path:D:/dir/files.ext`，避免盘符被解析为解析器名；相对路径可以省略前缀或显式使用 `path:`。
 
-变量遵循 Core 模板标识符与命名空间规则，配置及命令选项查询不区分大小写，系统环境遵循平台规则；覆盖顺序为环境变量、从根到工作目录的各级 `.env`、目标应用 `appsettings.json`、命令选项。先用环境变量、`.env` 及全部命令选项递归展开 `destination`，定位目标目录后加载其配置；最终变量保留原始值并按需递归展开，不受选项遍历顺序影响。缺失、循环或超过 64 层的已引用变量失败，未使用的变量不提前解析。先展开布尔、枚举等选项值再转换；`expansion` 按实际布尔值工作，无法转换的 `verbosity` 会报错。枚举选项沿用 Core 的转换规则，不额外检查枚举成员是否已定义；调用方应提供有效枚举项。JSON 支持注释和尾随逗号；嵌套对象和数组生成 `Database_Name`、`Items_0_Name` 等键。
+变量遵循 Core 模板标识符与命名空间规则，配置及命令选项查询不区分大小写，系统环境遵循平台规则；覆盖顺序为环境变量、从根到 source 的各级 `.env`、目标应用 `appsettings.json`、命令选项。先用环境变量、`.env` 及全部命令选项递归展开 `output`，定位目标目录后加载其配置；最终变量保留原始值并按需递归展开，不受选项遍历顺序影响。缺失、循环或超过 64 层的已引用变量失败，未使用的变量不提前解析。先展开布尔、枚举等选项值再转换；`expansion` 按实际布尔值工作，无法转换的 `verbosity` 会报错。枚举选项沿用 Core 的转换规则，不额外检查枚举成员是否已定义；调用方应提供有效枚举项。JSON 支持注释和尾随逗号；嵌套对象和数组生成 `Database_Name`、`Items_0_Name` 等键。
 
 共享 `Utility.LoadEnvironmentProfiles` 收集祖先链，再逆序用 `Profile.Load` 加载各级直属 `.env`。根条目属于默认命名空间，章节层级以点号连接为命名空间，条目名中的点号和连字符改为下划线，保留 Core 解析、空值和导入语义。仅跳过打开阶段的缺失文件；读取、权限及解析异常直接传播。每次调用独立加载，嵌套清单不重新加载，不修改进程环境变量。
 
@@ -78,7 +78,7 @@ Core `TemplateEvaluator` 处理 `${name}`，保留 URL 中的斜线。部署路�
 
 glob 的 `**` 匹配零层或多层目录，`?` 匹配目录名中的单字符；展开时保留目标相对结构，并跳过目录链接遍历。Core Searcher 返回逻辑路径及通配捕获，部署适配层据此生成目标后缀。
 
-目标路径先绝对化，再以相对路径验证其位于 destination 内；写路径及其祖先拒绝 reparse point，包括悬空链接。源文件可以位于目标根外。清单源路径通过解析链接取得标识，活动栈检测直接/间接循环，最大深度为 64；重复清单在前一次展开完成后可用于另一个目标目录。`#@import` 有独立活动集合，并将实际读取的导入文件纳入哈希。Core 跳过缺失的可选 import。
+目标路径先绝对化，再以相对路径验证其位于 output 内；写路径及其祖先拒绝 reparse point，包括悬空链接。源文件可以位于目标根外。清单源路径通过解析链接取得标识，活动栈检测直接/间接循环，最大深度为 64；重复清单在前一次展开完成后可用于另一个目标目录。`#@import` 有独立活动集合，并将实际读取的导入文件纳入哈希。Core 跳过缺失的可选 import。
 
 ## 包版本与资产
 
@@ -156,7 +156,7 @@ deployer 只订阅 `Loading`；哈希按路径另行读取，并非解析字节�
 
 Core 由 ProfileReader 逐行解析，ImportDirective 解释路径和可选/严格打开失败，ProfileReader.Session 管理活动链、流及文件通知。Profile.Load 保留转发入口；子文件解析成功后由父 Profile.Import 合并有效引用及登记关系，然后通知 Loaded，最后清理活动状态。
 
-Loading/Loaded 使用 Action<ProfileContext>：FilePath 是来源绝对路径，Depth 是活动深度，Referer 是直接引用者（根配置为 null），Profile 在解析前为 null、完成后为解析结果。文件前后通知分别创建上下文。会话在根入口先固定全局注册表，再复制加载选项；复制后的集合指向复制后的 ProfileOptions。ProfileDirectiveContext 继承 ProfileContext，其中 Profile 为声明配置，Referer 为其直接引用者。Directives.Processing/Directives.Processed 围绕每条指令，可改写 Argument 或通过 Handled 接管，保存保留原始注释。导入的 None 采用允许缺失文件的内置行为，Strict 要求文件存在，Ignore 仅保留注释，Suppress 在指令回调前拒绝。deployer 采用导入默认设置，只订阅 Loading 记录子文件哈希。回调异常终止整个加载。
+Loading/Loaded 使用 Action<ProfileContext>：FilePath 是来源绝对路径，Depth 是活动深度，Referer 是直接引用者（根配置为 null），Profile 在解析前为 null、完成后为解析结果。文件前后通知分别创建上下文。会话在根入口先固定全局注册表，再复制加载选项；复制后的集合指向复制后的 ProfileOptions。ProfileDirectiveContext 继承 ProfileContext，其中 Profile 为声明配置，Referer 为其直接引用者。Directives.Processing/Directives.Processed 围绕每条指令，可改写 Argument 或通过 Handled 接管，保存保留原始注释。导入的 None 采用允许缺失文件的内置行为，Strict 要求文件存在，Ignore 仅保留注释，Suppress 在指令回调前拒绝。deployer 采用导入默认设置，在 Loading 中记录子文件哈希，并在 Directives.Processing 中求值指令参数。回调异常终止整个加载。
 
 ## Core Profile 声明与保存
 
@@ -166,7 +166,7 @@ Core 的无显式目标 Save() 仅将自身及导入子树中修改的声明写�
 
 ## hosting 调用边界
 
-hosting 脚本将构建、插件部署和可选安装包制作分为不同命令。当前脚本没有向 Cake 传入 `--framework`，各宿主 `build.cake` 使用 `Argument("framework", "net10.0")` 的默认值，不读取 `.env` 或进程变量 `framework`；deployer 按自身加载顺序从变量来源取得框架，`appsettings.json` 参与最终合并。构建值须与部署、打包值一致。框架用于 destination 表达式时须在目标目录预解析阶段可用，不能靠随后加载的目标配置反推 destination。部署器不负责同步 Cake 参数，也不调用 packager 或 migrator。操作示例见 [README](../README.zh-Hans.md#hosting-脚本中的框架与变量)。
+hosting 的 deploy.cmd 负责构建和插件部署，pack.cmd 独立制作安装包。根目录 `deploy.cmd` 和 `pack.cmd` 选择宿主源目录；填写框架覆盖值时，deploy.cmd 将其传给 Cake 和 deployer，pack.cmd 须另行输入同一值；留空时 Cake 使用 `build.cake` 默认值，工具从各自变量来源读取；deployer 按自身加载顺序从变量来源取得框架，`appsettings.json` 参与最终合并。构建值须与部署、打包值一致。框架用于 output 表达式时须在输出目录预解析阶段可用，不能靠随后加载的目标配置反推 output。部署器不负责同步 Cake 参数，也不调用 packager 或 migrator。操作示例见 [README](../README.zh-Hans.md#hosting-脚本中的框架与变量)。
 
 ## 本地搜索与源链接
 
@@ -177,3 +177,19 @@ Core Searcher 处理本地模式及递归匹配。搜索结果保留逻辑名称
 部署操作 Source 保留逻辑路径，链接源另记 ResolvedSource。复制和摘要读取实际目标；锁定比较包含目标路径，执行前重新核对解析结果，因此改指向等内容文件也会失败。NuGet 框架适配及 expansion 后缀由部署适配层负责。
 
 `Searcher.Search` 通过 `Searcher.Target` 选择文件、目录或两者（默认 Both）；`Match.Origin` 提供逻辑固定目录前缀，用于计算相对输出路径。
+
+## 源目录与模板操作
+
+输出命名与命令选项一致：目录参数为 `outputDirectory`，上下文属性为 `OutputDirectory`，条目与操作路径为 `Output`；报告和锁文件中的操作路径字段同样为 `Output`。`Deployer.Output` 表示诊断用的 `TextWriter`，由调用方持有。
+
+`CreateEvaluator` 先用命令选项和系统变量相对于调用目录定位 source，再通过共享 Utility 加载其祖先 `.env`，相对于 source 定位 output，最后加载输出目录的 appsettings。report、lockFile、previous、本地包缓存和本地包源也基于 source；`.deploy` 和 import 引用仍基于声明文件。scheme 只出现在用户表达式和导入中。
+
+`TemplateResolver` 复用 `DeploymentResolverBase` 的源枚举与准备扩展点，执行前对输入快照求值，生成的 UTF-8 字节仅保存在内存。`SourceHash` 标识源字节，`ContentHash` 标识生成字节并参与锁比较，`Hash` 记录最终输出。报告和锁文件不序列化载荷字节；写入前再次检查源身份及哈希。
+
+Core Formatting 事件提供显式 xml/json 格式，finally 中取消订阅；评估器不得跨并发部署共享。XML 转义包含属性空白；JSON 序列化实际类型，不推测字符串的类型。没有另建模板解析器或文档合并逻辑。
+
+Render 操作通过共享 ArtifactPublisher 原子替换单个文件。默认 newest 比较生成内容，never 保留已有目标，alway 强制写入。Rendered 与 Unchanged 保留 previous/prune 所有权；never 跳过的既有文件不建立所有权。显式模板缺失时报错，未匹配的通配搜索不生成操作。源枚举排除 `.env`；Profile 章节名是目录层级，不支持模板表达式；只拼接文件系统路径，不再对生成的路径求值，因此平台分隔符不会进入模板解析器。
+
+终端警告使用暗黄色正文和粗体青色参数；错误使用暗红色正文和粗体紫色参数；成功提示使用绿色正文。异常类型以紫色标示，异常消息保留原文。四个工具共用仓库 `.shared/Utility.Output.cs`：`FormatOutput` 和 `FormatError` 构造 Core `CommandOutletContent`；`WriteOutput` 和 `WriteError` 统一终端与文本写入器的输出；使用命令执行器的工具通过 `HandleFailure` 输出异常并标记已处理，退出码由各工具决定。颜色由 Terminals 渲染。重定向的输出以及调用方提供的错误写入器保留纯文本和原通道。
+
+帮助入口在解析业务命令之前匹配独立的 `--help`/`-h`，通过共享 `FormatHelp` 和 `HighlightSyntax` 组织显示；不会加载变量文件或进入文件处理流程。总耗时通过共享 `MeasureOutput` 统计，由工具提供本地化 `Output.Elapsed` 资源及输出回调，首次释放时输出一次；退出码和成功/失败判断仍由业务流程决定。 计时仅由 CLI 入口添加，不改变 `Deployer` API、诊断回调或 JSON 报告；`--verbosity:quiet` 仍显示统计摘要和总耗时。

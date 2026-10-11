@@ -68,11 +68,15 @@ internal static class Program
 			await executor.ExecuteAsync(Utility.FormatCommand(command, command == "containerize" ? arguments.AsSpan() : arguments.AsSpan(1)));
 			return code;
 		}
-		catch(ContainerizationException failure) { Terminal.Default.Error.WriteLine(failure.Message); return failure.Code; }
-		catch(Exception exception) { Terminal.Default.Error.WriteLine(exception.Message); return 2; }
+		catch(ContainerizationException failure) { Utility.WriteError(Utility.FormatError(failure)); return failure.Code; }
+		catch(Exception exception) { Utility.WriteError(Utility.FormatError(exception)); return 2; }
 		finally { executor.Failed -= OnFailed; }
 
-		void OnFailed(object sender, CommandExecutorFailureEventArgs args) => code = args.Exception is ContainerizationException failure ? failure.Code : args.Exception is OperationCanceledException ? 130 : 2;
+		void OnFailed(object sender, CommandExecutorFailureEventArgs args)
+		{
+			code = args.Exception is ContainerizationException failure ? failure.Code : args.Exception is OperationCanceledException ? 130 : 2;
+			Utility.HandleFailure(args);
+		}
 	}
 	#endregion
 }

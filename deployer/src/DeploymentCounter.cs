@@ -47,45 +47,30 @@ public class DeploymentCounter
 	#endregion
 
 	#region 构造函数
+	/// <summary>创建部署计数器。</summary>
+	/// <param name="filePath">本次部署的 .deploy 文件路径描述。</param>
 	public DeploymentCounter(string filePath = null) => _filePath = filePath;
-	public DeploymentCounter(string filePath, int failures, int successes)
-	{
-		_filePath = filePath;
-		_failures = failures;
-		_successes = successes;
-	}
 	#endregion
 
 	#region 公共属性
+	/// <summary>获取本次部署的文件路径描述。</summary>
 	public string FilePath => _filePath;
+	/// <summary>获取跳过的操作数。</summary>
 	public int Skipped => _skipped;
+	/// <summary>获取成功删除的文件数。</summary>
 	public int Deleted => _deleted;
+	/// <summary>获取已统计的操作总数。</summary>
 	public int Total => _failures + _successes + _skipped + _deleted;
+	/// <summary>获取失败次数。</summary>
 	public int Failures => _failures;
+	/// <summary>获取成功写入的文件数。</summary>
 	public int Successes => _successes;
 	#endregion
 
 	#region 内部方法
 	internal void Skip() => System.Threading.Interlocked.Increment(ref _skipped);
 	internal void Delete() => System.Threading.Interlocked.Increment(ref _deleted);
-	internal int Fail(int interval = 1)
-	{
-		int result = 0;
-
-		for(int i = 0; i < interval; i++)
-			result = System.Threading.Interlocked.Increment(ref _failures);
-
-		return result;
-	}
-
-	internal int Success(int interval = 1)
-	{
-		int result = 0;
-
-		for(int i = 0; i < interval; i++)
-			result = System.Threading.Interlocked.Increment(ref _successes);
-
-		return result;
-	}
+	internal void Fail() => System.Threading.Interlocked.Increment(ref _failures);
+	internal void Success() => System.Threading.Interlocked.Increment(ref _successes);
 	#endregion
 }

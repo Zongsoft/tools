@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 
 using Xunit;
+using Zongsoft.Components;
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
@@ -25,7 +26,7 @@ public sealed class ContainerEngineMirrorTests
 	{
 		var runner = new MirrorRunner { FailFirstPull = true };
 		var errors = new List<string>();
-		var engine = CreateEngine(executable, runner, errors.Add);
+		var engine = CreateEngine(executable, runner, content => errors.Add(CommandOutletContent.GetFullText(content)));
 		var image = await engine.ResolveAsync(REPOSITORY, null, "8.10.2", "x64", TestContext.Current.CancellationToken);
 		Assert.Equal(_digest, image.Digest);
 		Assert.Equal(REPOSITORY, image.Repository);
@@ -107,7 +108,7 @@ public sealed class ContainerEngineMirrorTests
 		Assert.DoesNotContain("one.example.com", json);
 	}
 
-	private static ContainerEngine CreateEngine(string executable, MirrorRunner runner, Action<string> error = null) => new(executable, runner, error)
+	private static ContainerEngine CreateEngine(string executable, MirrorRunner runner, Action<CommandOutletContent> error = null) => new(executable, runner, error)
 	{
 		Mirrors = new() { Registries = new() { ["docker.io"] = ["one.example.com", "two.example.com/docker.io"] } },
 	};

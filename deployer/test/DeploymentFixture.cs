@@ -13,7 +13,8 @@ internal sealed class DeploymentFixture : IDisposable
 	{
 		this.Root = Path.Combine(Path.GetTempPath(), "zongsoft-deployer-tests", Guid.NewGuid().ToString("N"));
 		Directory.CreateDirectory(this.Root);
-		Directory.CreateDirectory(this.Destination);
+		Directory.CreateDirectory(Path.Combine(this.Root, "source"));
+		Directory.CreateDirectory(this.OutputDirectory);
 		Directory.CreateDirectory(this.Packages);
 		Directory.CreateDirectory(Path.Combine(this.Root, "feed"));
 		this.Variables = new()
@@ -31,7 +32,7 @@ internal sealed class DeploymentFixture : IDisposable
 
 	#region 属性定义
 	public string Root { get; }
-	public string Destination => Path.Combine(this.Root, "target");
+	public string OutputDirectory => Path.Combine(this.Root, "target");
 	public string Packages => Path.Combine(this.Root, "packages");
 	public global::Zongsoft.Common.Variables Variables { get; }
 	public Zongsoft.Text.Templating.TemplateEvaluator Evaluator { get; }

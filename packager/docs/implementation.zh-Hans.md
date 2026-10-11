@@ -8,7 +8,7 @@
 
 本文的应用示例引用 hosting 中真实的 [Zongsoft.Hosting.Web](https://github.com/Zongsoft/hosting/tree/main/web/default) 宿主，暂存目录、Bash 工作目录和版本约定见 [README 快速开始](../README.zh-Hans.md#快速开始)。宿主 DLL 为 `Zongsoft.Hosting.Web.dll`，`--daemon:zongsoft.web` 指定包和服务标识。自动 Web 配置使用宿主的 web.profile；根路径别名一节另以用户自备的 manual.conf 演示普通载荷。
 
-hosting 当前脚本省略 `--framework`，框架由工具从变量来源读取，编译配置由 `--compilation` 指定。生成服务时，daemon 声明 `Environment,DOTNET_ENVIRONMENT`，Web 另声明 `ASPNETCORE_ENVIRONMENT`；terminal 禁用 daemon，声明变量列表不代表设置交互进程环境。脚本中的编译、部署和升迁制作均发生在本工具调用之外，独立 `pack.cmd` 只收集已有载荷。脚本设置及实际命令见 [快速开始](../README.zh-Hans.md#快速开始)。
+hosting 根脚本通过 source 选择宿主，并接受框架覆盖值；留空时由工具从变量来源读取框架，编译配置由 `--compilation` 指定。生成服务时，daemon 声明 `Environment,DOTNET_ENVIRONMENT`，Web 另声明 `ASPNETCORE_ENVIRONMENT`；terminal 禁用 daemon，声明变量列表不代表设置交互进程环境。脚本中的编译、部署和升迁制作均发生在本工具调用之外，独立 `pack.cmd` 只收集已有载荷。脚本设置及实际命令见 [快速开始](../README.zh-Hans.md#快速开始)。
 
 ## 设计目标
 
@@ -1155,3 +1155,7 @@ rpm2cpio ./packages/zongsoft.web@1.0.0-x64.rpm | cpio -t
 - GNU tar manual: [GNU tar](https://www.gnu.org/software/tar/manual/)
 
 Web 打包从最终托管模型生成 .conf.template，并在能够完整表达时生成 .bindings；host/bind 支持逗号与分号。containerizer make 渲染模板，分别记录前端发布及应用 Listen，详见 [Web 托管](web.zh-Hans.md).
+
+终端警告使用暗黄色正文和粗体青色参数；错误使用暗红色正文和粗体紫色参数；成功提示使用绿色正文。异常类型以紫色标示，异常消息保留原文。四个工具共用仓库 `.shared/Utility.Output.cs`：`FormatOutput` 和 `FormatError` 构造 Core `CommandOutletContent`；`WriteOutput` 和 `WriteError` 统一终端与文本写入器的输出；使用命令执行器的工具通过 `HandleFailure` 输出异常并标记已处理，退出码由各工具决定。颜色由 Terminals 渲染。重定向的输出以及调用方提供的错误写入器保留纯文本和原通道。
+
+帮助入口在解析业务命令之前匹配独立的 `--help`/`-h`，通过共享 `FormatHelp` 和 `HighlightSyntax` 组织显示；不会加载变量文件或进入文件处理流程。总耗时通过共享 `MeasureOutput` 统计，由工具提供本地化 `Output.Elapsed` 资源及输出回调，首次释放时输出一次；退出码和成功/失败判断仍由业务流程决定。 帮助还接受 `tar`/`deb`/`rpm` 后的单个帮助选项；三种格式在 `PackCommand` 中共用计时。

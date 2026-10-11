@@ -75,7 +75,7 @@ internal sealed partial class RunContext
 			throw new ContainerizationException(4, string.Format(Properties.Resources.Run_BaseConflict_Message, image));
 		}
 
-		_output(Output.FormatMessage(Properties.Resources.Run_Prepare, _bundle.Plan.Distribution, _bundle.Plan.Architecture));
+		_output(Utility.FormatOutput(Properties.Resources.Run_Prepare, _bundle.Plan.Distribution, _bundle.Plan.Architecture));
 
 		if(!_engine.Mirrors.IsEmpty)
 		{
@@ -155,7 +155,7 @@ internal sealed partial class RunContext
 
 	private async Task InstallDeliveryAsync(CancellationToken cancellation)
 	{
-		using(Output.Measure(_output, Properties.Resources.Run_StageCopy))
+		using(Utility.MeasureOutput(_output, Properties.Resources.Run_Elapsed, Properties.Resources.Run_StageCopy))
 		{
 			await _engine.RunAsync(["cp", _bundle.Directory, $"{this.Name}:/delivery"], null, cancellation);
 
@@ -169,7 +169,7 @@ internal sealed partial class RunContext
 
 		await _engine.RunAsync(["exec", this.Name, "chmod", "+x", "/delivery/containerizer"], null, cancellation);
 
-		_output(Output.FormatMessage(Properties.Resources.Run_Install, _bundle.Plan.Name));
+		_output(Utility.FormatOutput(Properties.Resources.Run_Install, _bundle.Plan.Name));
 		var culture = CultureInfo.CurrentUICulture.Name;
 		var locale = string.IsNullOrEmpty(culture) ? "C.UTF-8" : $"{culture.Replace('-', '_')}.UTF-8";
 		List<string> arguments = ["exec", "--env", $"LANG={locale}"];
@@ -192,7 +192,7 @@ internal sealed partial class RunContext
 		var hosts = _bundle.Plan.Services.Where(service => service.Kind != "infrastructure").ToArray();
 		var forwarded = new HashSet<Endpoint>();
 
-		_output(Output.FormatMessage(string.Empty));
+		_output(Utility.FormatOutput(string.Empty));
 
 		foreach(var endpoint in infrastructure)
 		{
@@ -201,7 +201,7 @@ internal sealed partial class RunContext
 		}
 
 		if(infrastructure.Length > 0 && hosts.Length > 0)
-			_output(Output.FormatMessage(string.Empty));
+			_output(Utility.FormatOutput(string.Empty));
 
 		foreach(var service in hosts)
 		{
@@ -216,7 +216,7 @@ internal sealed partial class RunContext
 			}
 
 			if(service.Kind == "application" && service.Ports.Count == 0 && !_bundle.Plan.Services.Any(ingress => ingress.Web.Any(site => site.Application == service.Id)))
-				_output(Output.FormatMessage(Properties.Resources.Run_Daemon, service.Id));
+				_output(Utility.FormatOutput(Properties.Resources.Run_Daemon, service.Id));
 		}
 
 		var unknown = _bundle.Plan.Services.Where(service => service.Kind == "application" && service.Ports.Count > 0 && service.Web.Count == 0).ToArray();
@@ -243,7 +243,7 @@ internal sealed partial class RunContext
 			if(endpoint.IsWeb)
 				throw new ContainerizationException(4, string.Format(Properties.Resources.Run_WebFailed_Message, endpoint.Address, exception.Message), exception);
 
-			_output(Output.FormatMessage(Properties.Resources.Run_ForwardFailed, Zongsoft.Components.CommandOutletColor.Magenta, endpoint.Service.Id, exception.Message));
+			_output(Utility.FormatOutput(Properties.Resources.Run_ForwardFailed, Zongsoft.Components.CommandOutletColor.DarkRed, endpoint.Service.Id, exception.Message));
 			return false;
 		}
 	}
@@ -254,21 +254,21 @@ internal sealed partial class RunContext
 		{
 			foreach(var result in endpoint.ProbeResults.Where(result => result.Application == application))
 			{
-				_output(Output.FormatMessage("  {0}: {1}", result.Site, result.Address));
+				_output(Utility.FormatOutput("  {0}: {1}", result.Site, result.Address));
 				if(result.Redirect != null)
-					_output(Output.FormatMessage(Properties.Resources.Run_Redirect_Message, result.Redirect));
+					_output(Utility.FormatOutput(Properties.Resources.Run_Redirect_Message, result.Redirect));
 			}
 
-			_output(Output.FormatMessage(Properties.Resources.Run_WebBrowser, endpoint.HostPort.ToString(CultureInfo.InvariantCulture)));
+			_output(Utility.FormatOutput(Properties.Resources.Run_WebBrowser, endpoint.HostPort.ToString(CultureInfo.InvariantCulture)));
 			var addresses = endpoint.GetLocalAddresses();
 			if(addresses.Length > 0)
-				_output(Output.FormatMessage(Properties.Resources.Run_WebInterfaces, string.Join(", ", addresses)));
+				_output(Utility.FormatOutput(Properties.Resources.Run_WebInterfaces, string.Join(", ", addresses)));
 		}
 		else
-			_output(Output.FormatMessage("  {0}: {1}", endpoint.Service.Id, endpoint.Address));
+			_output(Utility.FormatOutput("  {0}: {1}", endpoint.Service.Id, endpoint.Address));
 
 		if(endpoint.Service.Kind == "ingress" && !endpoint.IsWeb)
-			_output(Output.FormatMessage($"  {Properties.Resources.Run_UnknownEntry}", Zongsoft.Components.CommandOutletColor.Magenta, endpoint.Service.Id));
+			_output(Utility.FormatOutput($"  {Properties.Resources.Run_UnknownEntry}", Zongsoft.Components.CommandOutletColor.DarkYellow, endpoint.Service.Id));
 	}
 	#endregion
 }
