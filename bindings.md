@@ -1,1322 +1,838 @@
-# 统一绑定描述与 XML 处理指令设计
+# 统一绑定描述与交付元数据方案
 
-> 文档路径：`D:\Zongsoft\tools\bindings.md`
-> 用途：为后续新聊天提供完整的设计上下文、源码依据、已确认约定、待定问题和实施目标。
-> 状态：Core 提供设置解析、XML PI 定义、通用指令处理器与 Import；XML 绑定提取、统一包元数据及相应工具改造尚未实现，示例中标为“拟议”的 binding 语义不能当作现有工具能力。
-> 指令名称已经确定为 `binding`；指令配置路径使用 `/`，例如 `path="Kestrel/Endpoints"`。结果文件名称仍为 `.bindings`。
+> 本文是绑定重构的当前设计依据，替换此前草案；不记录方案演进过程。
+> 已确认的规则是实现依据；标为“建议”或“推荐”的内容是实施方向，不表示已经定稿。剩余决策集中在第 12 节，开始相关实现前逐项确认。
+> 已确定：XML 处理指令名为 `binding`，配置路径使用 `/`，包级结果名称为 `.bindings`。
+> binding 的 path 使用精确路径选择单项，使用末尾 `/*` 选择直接子项。
+> 字段引用采用普通字段名或 `字段名[设置键]`；后者使用 Core Settings 解析指定字段，再读取其中的键。
+> 字段引用以 `/` 开头时从本次配置根读取，否则相对于当前候选项读取；protocols 引用与 filter 使用同一规则，范围限定在本次文件及其显式 Import 结果内。template 的配置视图见第 4.5 节。
+> `template` 统一按 Core 模板求值；option 表示当前候选项，`${option['/Network/Address']}` 显式从本次配置根读取；固定 Settings 键采用字符串索引，如 `${option.Settings['port']}`。
+> `protocols` 是可选属性，补充 template 地址未表达的协议能力；默认使用常量，读取配置时仅使用 `@` 前缀显式标记引用；去除 `@` 后沿用字段引用规则。
+> 协议列表采用逗号分隔，HTTP 类名称使用 `http`、`http1`、`http2`、`http3`，支持多项；http 表示未声明具体版本的 HTTP，与具体版本同时出现时移除泛称 http，见第 4.6 节。
+> 显式 HTTP/1、HTTP/2 能力对应 TCP，HTTP/3 对应 UDP；混合声明保留两种传输需求及完整协议集合，不增加 transport 属性，不自动发布宿主端口。
+> 首版支持 http、https、tcp、udp、opc.tcp 网络监听；Unix domain socket 及未识别的 scheme 在 binding 提取时明确报错，不静默跳过或猜测为 TCP。
+> URL scheme 与协议集合存在已知冲突时，整条绑定声明报错，不自动修改 URL 或丢弃冲突协议；required 不豁免此类错误。
+> 多地址仅在显式指定 `separators` 时展开；它是模板求值结果的分隔字符集合，省略时按单个完整 URL 处理。展开后的地址使用当前候选项的同一组 protocols，分别校验。
+> PI 位置及收集规则沿用 Core；binding 的 path 始终从本次读取结果的配置根定位。
+> 每个绑定以匹配项的完整配置路径作为默认别名；name 可选，只增加简短别名：精确 path 增加 name，末尾 `/*` 的子项增加 name 和 `name/子项键`。按内容去重后合并全部别名。server 直接填写名称或别名，无需 `~` 前缀；省略与空值等效，最终无有效后端配置时自动选择唯一合适目标。
+> 筛选属性名称为 `filter`，采用 deployer 的过滤语法；Settings 仅用于已声明的设置字段取值，不作为筛选表达式语法。
+> 启用条件统一由 `filter` 表达，不设独立 `enabled` 参数，也不隐式识别名为 Enabled 的配置字段。
+> `required` 默认为 `false`；设为 `true` 时，该声明必须在全局去重前提取出至少一个有效绑定。允许零结果不豁免解析或校验错误。
 
 ## 阅读导航
 
-- [背景与问题](#background)
-- [已达成的共识](#agreements)
-- [当前代码的真实行为](#current)
-- [Framework 项目调研结论](#research)
-- [目标处理链与职责](#pipeline)
-- [处理指令规范：确定项和待定项](#instruction)
-- [配置与指令示例](#examples)
-- [有效配置、条件和覆盖](#configuration)
-- [统一绑定模型与容器化](#model)
-- [合并结果与包格式](#package)
-- [实现影响、待定事项和实施顺序](#implementation)
-- [验收目标](#acceptance)
-- [本地源码与外部参考](#references)
-- [附录：已核对的 Framework 项目索引](#projects)
+- [目标与已确认约定](#goals)
+- [现有能力与复用边界](#reuse)
+- [入包文件范围与逐文件提取](#configuration)
+- [绑定声明与提取](#instructions)
+- [统一结果模型](#model)
+- [Web 代理与应用绑定](#web)
+- [包格式与元数据承载](#packages)
+- [Containerizer 消费与发布](#containers)
+- [实际服务器的配置适配](#servers)
+- [实施顺序与改动位置](#implementation)
+- [验收与开发约束](#acceptance)
+- [待确认问题与讨论顺序](#decisions)
 
-<a id="background"></a>
+## 续接实施说明
 
-## 1. 背景与要解决的问题
+本文可以独立用于下一台电脑的设计续接，状态如下：
 
-### 1.1 部署配置的来源
-
-本地工作区包含：
-
-| 目录 | 职责 |
+| 状态 | 范围 |
 | --- | --- |
-| `D:\Zongsoft\hosting` | daemon、terminal、web/default 等宿主及部署、打包、升迁、容器化脚本。 |
-| `D:\Zongsoft\tools\deployer` | 根据 `.deploy` 文件部署文件、插件、配置和 NuGet 资产，支持模板处理。 |
-| `D:\Zongsoft\tools\packager` | 收集部署结果，制作 tar.gz、deb、rpm，生成服务文件、安装脚本及 Nginx 配置。 |
-| `D:\Zongsoft\tools\containerizer` | 消费安装包，制作应用及基础服务的容器交付物。 |
-| `D:\Zongsoft\tools\migrator` | 独立制作升迁产物，涉及数据库和 S3 等初始化；本次绑定功能不应侵入其业务职责。 |
-| `D:\Zongsoft\framework` | Core、Plugins、Web、各服务器和外部系统适配插件。 |
-| `D:\Zongsoft\guidelines` | 必须遵循的开发规范。 |
+| 已完成的前置工作 | 工具改为只读取 source 直属 `.env` 及显式导入；Core Settings 解析修复已在 framework 仓库完成 |
+| 已确认的业务规则 | 逐文件提取、按内容去重、声明参数、模板配置视图、协议范围、默认路径别名及 server 三种选择规则，见第 1～6 节中已确认的约定 |
+| 仅完成可行性验证 | template 配置视图经过临时隔离原型验证；原型不是仓库内的正式实现或回归测试，换机后应按第 4.5、11 节建立正式测试 |
+| 尚未实施 | 绑定提取器、统一结果模型、三格式读写、Web/Containerizer 消费、旧 Listen 链移除及宿主 binding 声明迁移 |
+| 尚待确认 | 第 12 节列出的代理适配、服务器配置适配、结果规范化与承载、发布及探测、Import 文件范围 |
 
-`hosting/.deploy/<scheme>/` 用于隔离部署产品、项目、客户或云平台的配置、证书和插件组合。共享内容放在 `hosting/.deploy/.shared/`。这些目录由 `.deploy` 文件通过 `${scheme}` 引用，工具不应固化客户、环境和网络的目录组合。
+续接时先同步 tools，并按所需工作同步 framework、hosting 和 guidelines；本地 Debug 引用的相邻目录布局以项目文件为准，Automao 宿主另从其所属仓库同步。本文跨仓库引用使用 GitHub 链接，不要求保持当前电脑的盘符。工具和 Core 依赖版本从项目及 Directory.Packages.props 读取，不能仅复制当前电脑的编译输出作为实现前提。
 
-一次部署生成一个已经确定的配置组合；输出位置由命令选项指定，不要求工具推导一套固定目录结构。deployer 使用 `--source`、`--output`。按仓库契约，`--source` 本身相对于调用目录，受其管理的本地相对输入、输出相对于最终 source；配置文件内部相对引用仍遵循对应文件的既有规则。
+下一步从第 12 节第 1 项继续确认代理连接目标，已确认的 server 写法和别名规则不再重新设计。随后按第 10 节分阶段实现；涉及尚待确认的行为，先补齐该项契约，不把建议默认为已批准的规则，也不扩大为工具对应用运行时的自动推断。
 
-`.env` 用于工具变量，不是运行配置，也不部署到输出位置。工具只自动读取当前工作源目录直属的 `.env`（有 `--source` 时以最终 source 为准，否则为调用目录），其他配置由 `.env` 通过 `#@import` 显式组织，不内置向父目录逐级搜索的逻辑，不应由工具写死 scheme、宿主、项目各层的特殊优先顺序。例如：
+<a id="goals"></a>
 
-```ini
-# 路径示意：D:\Zongsoft\hosting\daemon\.env
-#@import ../.env
-#@import ../.deploy/${scheme}/.env
+## 1. 目标与已确认约定
 
-name=Zongsoft.Hosting.Daemon
-title=Zongsoft Daemon
-```
-
-项目也可以有自己的 `.env`，与方案目录的 `.env` 并不互斥。附加变量文件以 `.env` 结尾；当前已有 `network.internal.env`、`network.external.env`、`environment.development.env`、`environment.test.env`、`environment.production.env` 等名称。
-
-模板使用完整扩展名 `*.template`。Core 的 `Variables`、`TemplateEvaluator`、`Profile` 以及 `tools/.shared/` 已经承担相关通用能力，后续实现应复用。
-
-### 1.2 为什么需要统一的绑定描述
-
-原先容器化主要围绕 Web：Packager 从 `web.profile` 生成 Nginx 配置及 `.web/nginx/.bindings`，Containerizer 读取这些信息处理 Web 入口。另外，Packager 的 `--listen` 会进入生成服务的 `--urls` 和包头监听元数据。
-
-实际应用还可能包含：
-
-- Web 宿主本身的 Kestrel HTTP/HTTPS。
-- Diagnostics OTLP 的 HTTP/2/gRPC 端点。
-- 独立 Prometheus HttpListener。
-- ZeroMQ、MQTT、Garnet、OPC 或业务 TCP 服务器。
-
-仅依靠 Nginx 文件和一个 Web 的 listen 值，不能覆盖整个应用的监听。
-
-此前曾临时增加 `port!名称=[绑定IP:]宿主端口:容器端口` 声明。用户已要求撤回该功能及其文档，避免影响统一设计。它不应被恢复为插件绑定来源，也不应在后续实施中顺带撤回其他既有改动。
-
-### 1.3 方案的演进结论
-
-最初考虑各插件维护固定名称 `.bindings`，Packager 合并为一份。后来发现这样会与 `*.option` 重复维护监听参数，即使两个模板引用相同 `.env` 变量，也仍有两份描述。
-
-现在的方向是：
-
-1. 监听参数在实际运行配置中显式给出。
-2. 在 XML 格式的 `*.option` 或 `*.option.template` 中，用 `<?binding ...?>` 声明参数的提取位置。
-3. Packager 按实际有效配置提取，生成统一绑定元数据。
-4. Containerizer 消费生成结果，处理端口映射。
-5. `web.profile` 保留，负责 Web 代理入口、域名、路由、证书和代理行为。
-
-来源端不再要求手写 `.bindings` 或 `.bindings.template`；包中的统一结果是工具生成物。
-
-<a id="agreements"></a>
-
-## 2. 已达成的共识
-
-以下内容是继续讨论的基础，不应在新聊天中重新混淆。
-
-| 编号 | 已确认约定 |
-| --- | --- |
-| C01 | XML 处理指令名为单数 `binding`，例如 `<?binding ...?>`。 |
-| C02 | 指令中配置路径使用 `/` 分隔，例如 `Kestrel/Endpoints`；不是 XML XPath，也不使用冒号作为对外示例的路径分隔符。 |
-| C03 | `*.option` 是运行配置。处理指令仅供工具读取，不启动服务器、不修改监听行为。 |
-| C04 | `.env` 和 `.bindings` 都服务于工具；不得将 `.bindings` 当作应用启动时读取的配置。 |
-| C05 | 包内绑定结果属于交付元数据，不应复制到应用安装目录或容器的应用运行目录。处理指令本身可随 `.option` 留存并被运行时忽略；是否在生成包时剥离，尚未决定。 |
-| C06 | 实际地址和端口只维护在运行配置中，处理指令引用配置字段，不再维护一份重复的值。 |
-| C07 | `settings` 是有明确键值语义的字符串，使用 Core 的解析能力，不在工具中另写连接字符串解析器。 |
-| C08 | `ISettings` 继承 `IDictionary<string, string>`，`IConnectionSettings` 继承 `ISettings`，`ConnectionSettingsBase` 继承 `Settings` 并共用解析器；工具通过 Core 解析设置文本。 |
-| C09 | 需要自动导出的监听必须显式配置。打包时应能确定所需监听参数，不能依赖工具猜测代码或第三方库的默认值。 |
-| C10 | 显式配置必须由运行代码实际消费，不能只增加供工具读取的假配置。 |
-| C11 | 共用宿主监听的插件无须重复声明端口。Hangfire Dashboard、控制器等应复用宿主的绑定描述。 |
-| C12 | `web.profile` 及其处理机制继续保留。实际监听由运行配置提供，代理入口由 `web.profile` 提供。 |
-| C13 | 最终希望合并成一份包级绑定元数据，原来的 `.web/nginx/.bindings` 信息纳入其中。不同原生包格式的具体存放位置仍需定稿。 |
-| C14 | 不需要按业务插件归属生成多个绑定文件，但不同执行进程/容器的监听仍须能区分。 |
-| C15 | 工具内部使用，不设计旧格式、旧选项的兼容层。按最终行为同步代码、文档、帮助和注释。 |
-| C16 | 优先复用 Core 和 `tools/.shared/`。发现既有框架能力有缺陷或需要改造，应准确指出来源，不在工具中绕过根因。 |
-
-已经确认的事实：在当前 Web 宿主正常加载显式 Kestrel Endpoints 且没有启用 `PreferHostingUrls` 的情况下，生成服务中的 `--urls` 可以省略，实际监听不变。
-
-建议的改造目标：移除 Packager 的重复监听输入及生成的 `--urls`，以配置提取结果替代它对代理和包元数据的作用。彻底删除 `--listen` 的具体影响及 `server=~` 的替代选择规则，仍须在实施前定清楚；不能只删一段服务命令就认为改造完成。
-
-<a id="current"></a>
-
-## 3. 当前代码的真实行为
-
-### 3.1 当前宿主配置和模板
-
-实际文件：
-
-- [hosting/web/.env](../hosting/web/.env)
-- [hosting/web/default/.deploy](../hosting/web/default/.deploy)
-- [hosting/.deploy/.shared/web.option.template](../hosting/.deploy/.shared/web.option.template)
-- [hosting/web/default/web.default.option](../hosting/web/default/web.default.option)
-
-当前变量示例：
-
-```ini
-# D:\Zongsoft\hosting\web\.env
-listen=8069
-
-[web]
-url=http://*:${listen}
-protocols=Http1
-```
-
-当前模板：
-
-```xml
-<!-- D:\Zongsoft\hosting\.deploy\.shared\web.option.template -->
-<configuration>
-	<option path="kestrel">
-		<endpoints>
-			<endpoint endpoint.name="http"
-			          url="${web:url#xml}"
-			          protocols="${web:protocols#xml}" />
-		</endpoints>
-	</option>
-</configuration>
-```
-
-当前 `.deploy` 中的相关引用：
-
-```ini
-# D:\Zongsoft\hosting\web\default\.deploy
-template:../../.deploy/.shared/web.option.template = web.${site}.option
-```
-
-站点为 default 时，部署结果包含：
-
-```xml
-<!-- D:\Zongsoft\hosting\web\default\web.default.option -->
-<configuration>
-	<option path="kestrel">
-		<endpoints>
-			<endpoint endpoint.name="http" url="http://*:8069" protocols="Http1" />
-		</endpoints>
-	</option>
-</configuration>
-```
-
-删除工具的 `--listen` 选项，不等于必须机械删除所有名为 listen 的业务变量。上面的变量仍可作为生成 `web:url` 的普通输入；需核对引用后决定最终命名。
-
-### 3.2 当前 Packager 的 listen 链路
-
-主要源码为 [ApplicationHost.cs](packager/src/ApplicationHost.cs)、[PackageOptions.cs](packager/src/PackageOptions.cs)、[Scriptor.Systemd.cs](packager/src/Scriptor.Systemd.cs)、[PackCommand.cs](packager/src/PackCommand.cs) 和 [Definition.Resolver.cs](packager/src/Web/Definition.Resolver.cs)。
-
-当前行为：
-
-1. listen 可由显式命令选项或既有变量来源取得；脚本没有显式传 `--listen`，不代表最终值一定为空。
-2. 纯数字端口会被规范为 `http://127.0.0.1:端口`。
-3. 自动生成宿主服务时可写入 `ExecStart=dotnet ... --urls ...`；已有服务文件与自动生成服务的处理不同。
-4. `web.profile` 的 `server=~` 使用该应用地址。
-5. 自动生成宿主的有效 listen 写入包元数据：tar PAX 的 Listen、Debian control 的 Listen、RPM 应用字符串标签。
-6. 当前 Containerizer 的 [ApplicationHealth.cs](containerizer/src/ApplicationHealth.cs) 和 [ApplicationPlanner.cs](containerizer/src/ApplicationPlanner.cs) 还会利用这些值改写或添加 `--urls`、产生端口和健康检查。
-
-新方案必须一起审视这些消费者，避免移除服务参数后仍依赖旧 Listen 元数据，或把独立 HttpListener 的地址错误地塞给 Kestrel。
-
-### 3.3 为什么当前 --urls 是重复配置
-
-[Application.cs](../framework/Zongsoft.Plugins.Web/src/Application.cs) 调用 `LoadConfiguration("web")`；[WebApplicationBuilder.cs](../framework/Zongsoft.Plugins.Web/src/WebApplicationBuilder.cs) 将插件配置加入应用配置管理器。
-
-Kestrel 默认优先采用显式 Endpoints，而不是再叠加顶层 URLs。当前例子中，即使服务命令写的是：
-
-```ini
-ExecStart=dotnet /opt/zongsoft/web/Zongsoft.Hosting.Web.dll --urls http://127.0.0.1:8069
-```
-
-正常加载上述 `.option` 后，实际仍按 `http://*:8069` 监听。可以简化为：
-
-```ini
-ExecStart=dotnet /opt/zongsoft/web/Zongsoft.Hosting.Web.dll
-```
-
-这个判断有条件：对应配置确实加载，且没有 `PreferHostingUrls` 或其他实际生效的覆盖。不能推广成“所有 Web 程序的 --urls 永远无效”。官方依据见文末参考。
-
-### 3.4 Hangfire Dashboard 与端口的关系
-
-本仓库 [Hangfire Web Initializer.cs](../framework/externals/hangfire/web/Initializer.cs) 调用 `UseHangfireDashboard()`。上游实现把默认路径 `/hangfire` 注册为现有 ASP.NET Core 应用的请求处理分支，并放入 Dashboard 中间件；它不创建新的网络监听。
-
-请求流程：
+目标是解析最终进入安装包的所有 `*.option` 文件，按其中的 binding 声明提取绑定信息，将结果汇总去重，生成一份供工具消费的包级元数据。应用的配置选择由部署工程师负责，工具保持通用性。
 
 ```text
-http://localhost:8069/hangfire/
-          │          │
-          │          └─ 请求到达应用后，匹配 Dashboard 路径
-          └─ 连接 Web 宿主 Kestrel 的 8069 端口
+.env 与显式工具变量
+        │
+        ▼
+deployer 展开 *.option.template
+        │
+        ▼
+Packager 确定最终入包的全部 *.option
+        │
+        ▼
+逐文件由 Core 读取配置、Import 与 binding
+        │
+        ▼
+按声明提取 → 汇总结果并去重 → 应用绑定
+        │                         │
+        │                         ▼
+        │                  web.profile 选择后端
+        │                         │
+        │                         ▼
+        │                  最终 Nginx 配置与绑定
+        └────────────┬────────────┘
+                     ▼
+              统一包级绑定元数据
+                     │
+                     ▼
+          Containerizer 规划代理、发布和探测
 ```
 
-因此：
+以下为已确认的总体边界：
 
-- Dashboard 的默认路由不是默认独立端口。
-- 提取宿主 Kestrel 的绑定已经覆盖 Dashboard 所使用的网络入口。
-- 无须为 Hangfire 补一份端口配置。
-- 如果通过 Nginx 转发，入口和路径转发规则继续在 `web.profile` 中配置。
-- Hangfire 后台作业处理器的“Server”名称，也不能据此认定存在独立 TCP/HTTP 监听。
-- 授权、JobStorage 和 Dashboard 的可用性是运行验证的另一个层面，端口已映射不证明 Dashboard 能成功访问。
+- 实际地址、端口和启用条件只维护在运行代码确实消费的配置中。binding 引用这些字段，不重复保存一份监听值，也不猜测服务器或第三方库默认值。
+- Kestrel 等服务器自行根据应用配置建立监听；工具提取 binding 只生成交付元数据，不替应用打开、关闭或重新配置监听。重构后不再通过 --listen 或生成的 --urls 向应用注入监听地址。
+- `*.option` 是运行配置；`.env` 是工具变量；`.bindings` 是生成的交付元数据。应用运行时不读取 `.bindings`。
+- 源端不要求手写 `.bindings` 或 `.bindings.template`。不恢复已撤回的 `port!` 临时语法，不建立旧格式或旧选项兼容层。
+- `web.profile` 保留，负责代理入口、域名、路径、证书和代理行为。应用监听与代理入口分别描述。
+- 一个安装包提供一份逻辑绑定结果，包含应用和代理等不同执行目标；不按业务插件拆成多份结果。
+- `.bindings` 不进入应用安装目录或应用运行镜像。PI 可保留在 `.option` 中，运行时默认不解释 binding 的业务语义。
+- 绑定功能只依赖 Zongsoft.Core 和工具内部共享代码，不依赖 Plugins 或其它应用框架库，不装载应用程序集、不解析插件树、不推导应用的配置加载顺序。
+- Core 已有的实现规范直接遵循，包括 PI 位置及属性解析、XML 配置映射、Import、Settings 词法及比较规则。工具只定义 binding 的业务语义；仅在确认 Core 存在问题或能力不足时，定位具体实现与案例，再提出修复或扩展。
+- 部署工程师通过 `.deploy` 确定交付内容，Packager 按最终入包条目确定解析范围；不要求额外的配置入口文件。
+- 每个入包 option 都参与解析；声明哪些 binding 就处理哪些，全部绑定结果去重后形成应用绑定集。不从文件名、端口惯例或插件类型猜测未声明的绑定。
+- 按绑定内容去重，匹配项的完整配置路径及可选名称作为别名保留。内容相同的结果合并为一项并合并全部别名，别名和声明来源不参与绑定内容的等价比较。
+- 方案、环境和网络由本次部署选择确定，不固化客户目录树或额外优先级。
 
-<a id="research"></a>
+`.env` 的前置调整已经完成：工具只加载工作源目录直属的 `.env`，其它变量文件通过 `#@import` 显式组织。有 `--source` 时使用最终 source，否则使用调用目录；不搜索祖先目录。`--source` 自身相对于调用目录解析，其管理的相对输入输出基于最终 source，配置内部引用仍基于声明文件。模板采用完整扩展名 `*.template`。
 
-## 4. Framework 项目调研结论
+当前绑定重构尚未实现。Packager 仍使用 `Listen` 与 `.web/nginx/.bindings`，Containerizer 仍消费这两套信息。下文说明替换它们的目标和实施位置，不表示新命令或新格式已经可用。
 
-### 4.1 调研范围与证据强度
+<a id="reuse"></a>
 
-本轮讨论已逐项核对 Framework 的 113 个 `.csproj`，查看项目定义、引用和就近文档，对归属这些项目的 2654 个源码/配置文件进行检索，并对监听相关命中追踪配置与实现。附录保留项目路径，后续聊天不需要依赖本机临时审计文件。
+## 2. 现有能力与复用边界
 
-这不是“每行代码都经过人工审计”，也不是 113 个项目全部经过运行验证。库中存在服务器类型，不代表部署该库后服务器就会启动；测试和 samples 中的监听也不能自动当作生产绑定。Framework 的第三方 proto 子模块不作为本次 .NET 项目绑定设计的修改对象。
+### 2.1 Core 已经提供的能力
 
-后续实现应重新核对受影响文件的最新内容，尤其是工具引用的 Core API、字典视图和设置文本语义是否符合下述契约。
-
-### 4.2 实际监听和配置形态
-
-| 项目/组件 | 已确认行为 | 对设计的影响 |
+| 工作 | 直接复用 | 工具保留的职责 |
 | --- | --- | --- |
-| Web 宿主 / Plugins.Web | 宿主及插件可共同向 Kestrel Endpoints 提供配置。 | 在最终有效配置上统一提取，不能仅检查一个固定文件。 |
-| Diagnostics.Protocols.Server | `Zongsoft.Diagnostics.Protocols.Server.option` 配置 `http://*:4317`、`Http2`。 | HTTP/2 端点；代理 gRPC 的方式不能仅由 HTTP/2 字样推断。 |
-| Diagnostics / Prometheus | `PrometheusExporterLauncher` 使用独立 `AddPrometheusHttpListener`；从连接设置的 urls 读取地址。 | 也是 HTTP，但不由 Kestrel 的 `--urls` 控制；必须纳入通用提取。 |
-| ZeroMQ daemon | 发现端口由服务器 Port 属性提供；控制/输入/输出端口来自配置或启动参数。 | 显式配置、实例选择、位置端口及启动参数覆盖都要核对。 |
-| MQTT | 内嵌 MqttQueueServer 以 Port 属性设置端口；现有主插件主要提供客户端能力，并不自动启动服务器。 | 不因 DLL 或客户端配置存在就导出 MQTT 监听。 |
-| Garnet | 服务器从选定 Settings 配置生成底层启动参数；插件有启动注册。 | 需提取被选中的设置，而不是把所有预设都当作运行实例。 |
-| OPC | OpcServerOptions.Urls 对应 ServerConfiguration.BaseAddresses；Discovery 用于注册发现。 | 实际监听与发现目的地址应区分；证书和安全策略不等于新增端口。 |
-| Zongsoft.Net | 提供通用 TcpServer；存在样例与默认地址/端口行为。 | 业务宿主实际创建并启用服务器后，才应提供相应配置提取声明。 |
+| XML 配置键、命名集合和 option 路径映射 | `AddOptionFile`、`XmlConfigurationProvider` | 遍历最终入包的 option 条目 |
+| 递归导入、路径基准、循环与深度检查 | Core XML Import | 提供与交付路径一致的文件访问视图 |
+| 有效指令及来源收集 | 文件/流提供程序的 `Instructions` | 在该文件及其导入完成后处理 binding |
+| PI 属性词法、实体解码、重复属性 | `XmlConfigurationInstruction.GetAttributes()` | 参数白名单、必需项和组合校验 |
+| Settings 文本 | `Settings.Parse()` 及原始字典访问 | 取出声明引用的显式字段并转换 |
+| 工具变量、模板和 Profile 导入 | `Variables`、`TemplateEvaluator`、`Profile`、共享 Utility | 按现有工具边界组织输入 |
+| 配置查询 | `IConfiguration` 及子节访问 | 在本次文件读取的结果中定位声明引用的字段 |
 
-关键源码见第 14 节引用索引。
+详细契约见 [XML 配置](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/docs/xml-configuration.zh-Hans.md)、[Settings](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/docs/settings.zh-Hans.md)、[Profile](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/docs/profiles.zh-Hans.md)和[模板](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/docs/expressions.zh-Hans.md)。本文不复制这些解析器的完整规范。
 
-### 4.3 ZeroMQ 的具体边界
+已经由 Core 定义的行为不再作为工具方案的独立待确认项，也不另造一套大小写、转义、容错或节点位置规则。新增 binding 参数、集合选择与结果汇总等业务规则不属于 Core 现有解析契约，应与基础库能力区分说明。
 
-当前 [ZeroQueueServer.cs](../framework/messaging/zero/src/ZeroQueueServer.cs) 中：
+### 2.2 binding 不需要注册 Core 指令处理器
 
-- 发现端口的初始值为 7969，Port 属性在停止状态下可设置。
-- 控制、输入、输出端口可由启动参数提供；否则读取 `/Messaging/ZeroMQ/Servers`。
-- 可按服务器名称选择配置，或使用集合默认配置。
-- 数据通道未给定固定端口时，底层可能执行 `BindRandomPort`。
-- [ZeroQueueServer.Control.cs](../framework/messaging/zero/src/ZeroQueueServer.Control.cs) 在消息存储为空时不创建控制监听。
-- [ServerOptions.cs](../framework/messaging/zero/src/Configuration/ServerOptions.cs) 的端口字符串有位置语义：两个值表示输入/输出，三个值表示控制/输入/输出；不是任意端口集合。
-- 发现响应会发布后续通道端口。宿主端口与容器端口不一致时，单独做 NAT 映射不保证发现结果可用；还需处理通告地址/端口语义。
+对每个入包 option 分别使用 Core 提供程序读取。在该文件及其显式 Import 完成后，遍历提供程序的 `Instructions`，解析 binding，并从本次读取的配置结果取值。随后汇总所有文件的提取结果。
 
-当前 [ZeroMQ daemon 插件](../framework/messaging/zero/src/Zongsoft.Messaging.ZeroMQ-daemon.plugin) 创建服务器并加入启动列表，但没有在该文件中将发现端口明确连接到一个 `.option` 参数。已有 [daemon option 模板](../hosting/.deploy/.shared/Zongsoft.Messaging.ZeroMQ-daemon.option.template) 则提供控制、输入、输出端口。
+指令执行回调的 `Configuration` 只含当前文件已经读到的内容，不包含后续配置和导入，因此不在遇到 PI 时立即提取值。binding 不写入配置，也不需要改变 Core 的全局处理器注册表。不同入包文件之间不构建全局合并配置。
 
-因此，支持新方案前，需要让“实际服务器属性”与“可提取配置”建立真实连接。不能只在 XML 中添加一个工具专用的 7969 值。具体由配置对象还是插件属性注入完成，尚待实现设计。
+`XmlStreamConfigurationProvider.Read(Stream, ...)` 只解析当前流，不执行或跟随 Import。需要支持显式导入时使用会执行指令的文件或流提供程序。单个提供程序已经提供有效导入链的指令及来源快照；工具负责绑定语义与结果汇总，不复制导入解析器。
 
-原始库的 [Zongsoft.Messaging.ZeroMQ.deploy](../framework/messaging/zero/src/Zongsoft.Messaging.ZeroMQ.deploy) 会按 site 选择插件变体。客户端和 daemon 变体不应获得相同的服务器绑定声明。
+`XmlConfigurationInstruction.Path` 是实际 XML 父元素路径，不是映射后的配置路径。binding 的 `path` 参数必须显式给出，不通过“紧跟某个节点”推断含义。
 
-### 4.4 Prometheus 的具体边界
+### 2.3 Settings 的当前边界
 
-源码：[PrometheusExporterLauncher.cs](../framework/Zongsoft.Diagnostics/src/Telemetry/PrometheusExporterLauncher.cs)、[Zongsoft.Diagnostics.option](../framework/Zongsoft.Diagnostics/src/Zongsoft.Diagnostics.option)。
+普通设置与连接设置共用 Core 解析器。工具提取字符串中的参数时直接使用普通 `Settings`，通过 `TryGetValue`、成员判断和枚举读取显式内容，不从驱动描述器补默认值。
 
-- Prometheus 启动器当前通过 `ConnectionSettings` 读取 settings。
-- urls 可包含多个地址；运行代码按逗号、分号、竖线拆分取得的 urls 值。外层连接字符串的分隔语义仍先由 Core 决定，不能混淆两层分隔。
-- 抓取路径由 path 提供，常见值为 `/metrics`；路径不是新的端口。
-- 当前配置中的回环地址不能被工具偷偷换成通配地址以便容器访问。
-- 同文件中 OTLP exporter 的 `server=http://localhost:4317` 是客户端目的地址，不是本进程监听。
-- settings 的存在及某条 exporter 的存在，也要结合实际启用的诊断组件判断。
+以等号开头的值须加引号，例如 `password='=abc=='`。引号内使用反斜杠转义；未闭合引号、未完成转义及末尾非法字符现在会正确失败。索引器会删除空值并裁剪非空值，生成设置文本时需要保留显式空值或首尾空白则使用字典 `Add`。
 
-### 4.5 OPC、MQTT、Garnet 与通用 TCP
+Containerizer 的 [ServiceSettings](containerizer/src/ServiceSettings.cs) 已统一复用 Core 的读写语法。绑定提取不再引入正则拆分或 ADO.NET 引号规则。
 
-- [OpcServerOptions.cs](../framework/externals/opc/src/OpcServerOptions.cs) 的默认 URL 为 `opc.tcp://localhost:4840`；多个安全策略可共用同一个端点。不要导出 Discovery 注册地址，也不要因安全策略数量增加端口。某些 OPC 地址可能带路径，不能先把通用 URL 规范定成“一律不许路径”再忽略此场景。
-- [MqttQueueServer.cs](../framework/messaging/mqtt/src/MqttQueueServer.cs) 当前明确设置默认 TCP endpoint 的端口。尚未从本仓库实现确认内嵌服务器暴露 TLS/WebSocket 的配置能力，不能凭第三方库能力假定已经支持。
-- [GarnetServer.cs](../framework/externals/garnet/src/GarnetServer.cs) 使用 Core Settings，支持多种底层参数映射，其中包括 bind、port、TLS、UnixSocketPath 和集群通告字段。Unix socket 不属于宿主 TCP/UDP 端口映射，通告字段也不是另一个监听。
-- [TcpServer.cs](../framework/Zongsoft.Net/src/TcpServer.cs) 提供可配置或由启动参数改变的地址/端口。显式约定要覆盖真正参与启动的值，不能导出一个随后被参数覆盖的旧值。
-
-### 4.6 不新增独立监听的 Web 功能
-
-下列功能主要注册路由、中间件或 Web 服务，复用已有 Web 宿主监听：
-
-- Hangfire Dashboard。
-- Security Web API、Captcha。
-- OpenAPI、SignalR。
-- Zongsoft.Web.Grpc 的服务映射。
-- Intelligences Web 的流式响应。
-- Grapecity Web 报表/设计器。
-- Aliyun、Wechat 的 Web/gateway 控制器。
-- Upgrading Web API。
-
-其中 Diagnostics OTLP 插件额外提供 Kestrel endpoint 配置，需与“仅映射一个 gRPC 服务”的行为区分。同一个 Kestrel endpoint 也可能服务多种路由，不能设计成每个端口只能属于 http 或 grpc 的互斥类型。
-
-### 4.7 客户端、基础设施及样例
-
-Data 及 ClickHouse、DuckDB、Influx、MsSql、MySql、PostgreSql、SQLite、TDengine 驱动中的连接配置，是应用连接数据库的设置；不会因此在应用容器新增数据库服务端口。
-
-Kafka、RabbitMQ 客户端，以及 Redis、Etcd、Amazon S3、Aliyun、Wechat 等外部连接同理。基础服务容器的端口仍由它们自己的容器交付定义负责，不能从应用的连接地址反推一个同名基础服务应该被创建。
-
-Core、Commands、Reporting、Hardwares、通用插件设施及各类文档/脚本适配库，不因名称或依赖项存在就认定有生产监听。服务器 samples 证明能力用法，不是部署启用证明。
-
-本次生产源码检索没有发现必须立即覆盖的独立 UDP/HTTP3 默认监听；这不构成永远没有 UDP 的保证。UDP、HTTP3、Unix socket 等支持范围需要在正式规范中明示，不能把未知协议默认当 TCP。
-
-<a id="pipeline"></a>
-
-## 5. 目标处理链与职责
-
-```text
-.env / 显式工具变量
-        │
-        ▼
-deployer：展开 *.option.template
-        │
-        ▼
-实际 *.option，包含 <?binding ...?> 提取声明
-        │
-        ▼
-packager：确定文件及有效配置 → 收集指令 → 提取、校验、合并
-        │                                      │
-        │                                      └─ 为 Web 代理提供应用端点信息
-        ▼
-web.profile → Nginx 最终配置 → 导出 Nginx 监听信息
-        │
-        ▼
-一份包级绑定元数据
-        │
-        ▼
-containerizer：确定执行目标、网络、代理和端口发布
-```
-
-### 5.1 deployer
-
-沿用现有模板机制，输出实际运行配置。模板中的变量由 Core 求值，XML 值使用适当的 XML 格式化。
-
-新功能不要求 deployer 理解 Kestrel、Prometheus 或 ZeroMQ 的监听结构。它也不负责启动应用进行探测。不应仅为绑定提取另造一套 `.env` 导入和覆盖机制。
-
-### 5.2 packager
-
-建议承担：
-
-1. 按 source、打包输入及排除条件确定应用配置范围。
-2. 建立与本次运行组合相对应的有效配置视图。
-3. 收集启用配置中的 binding 指令。
-4. 复用 Core 读取配置字段和 Settings，执行有限的筛选及展开。
-5. 验证必需值、协议、端口、重复和矛盾。
-6. 让 Web 配置器引用明确的应用端点。
-7. 从最终 Nginx 配置导出其监听，合并为包元数据。
-8. 保留文件、指令行号和配置路径用于诊断，但不要求在交付元数据中保留业务插件归属。
-
-不要将客户方案目录、包缓存、Framework 源码中所有 `.option` 无差别扫描后合并。提取应针对真正交付并参与配置的文件，不是全仓搜索。
-
-### 5.3 containerizer
-
-读取统一结果，处理执行目标和端口发布。它不应再次实现各插件的 `.option` 解析，也不应通过反射启动插件查找监听。
-
-需要区分：
-
-- 应用容器实际监听。
-- Nginx 等代理容器监听。
-- 应用间内部连接。
-- 宿主机对外发布。
-- 健康检查所使用的协议和地址。
-
-已有“出现 Nginx 就不再单独处理其他 HTTP 监听”等概括性判断，需要改成逐个端点判断。
-
-### 5.4 运行时
-
-运行程序继续使用 `.option` 等本来就会读取的配置。Core 的 XML 配置提供程序默认执行已注册指令（内置 Import），同时收集原始 PI 定义；未知的 binding 默认只保留定义，不自动映射为配置键，也不生成 `.bindings`。无需让 Web 宿主、MQTT、ZeroMQ、OPC 等读取包内 `.bindings`。
-
-生成元数据不能改变配置含义，也不能代替运行时配置。监听变化应重新制包及生成容器交付物。
-
-<a id="instruction"></a>
-
-## 6. XML 处理指令规范：确定项和待定项
-
-### 6.1 名称与路径已经确定
-
-```xml
-<?binding path="Kestrel/Endpoints" url="Url" protocols="Protocols" ?>
-```
-
-- 指令目标名为 `binding`。
-- path 表示配置路径，使用 `/` 分隔。工具内部可转换为 Core 配置 API 的键分隔形式。
-- path 不是 XML XPath；不能在没有明确支持的情况下夹入 XPath 谓词。
-- 真实 XML 的根可能为 configuration 或 options，集合项也可能采用不同元素名称。应复用 Core 将它们映射为配置键的行为。
-- 路径大小写、前导斜杠、尾部斜杠和非法片段的规范化需正式定义；不应擅自改变真实配置键。
-
-### 6.2 参数示例尚不是最终语法
-
-以下名称只是讨论中的候选，不代表已经实现或全部定案。
-
-| 参数/能力 | 示例 | 仍需决定的语义 |
-| --- | --- | --- |
-| path | `Kestrel/Endpoints` | 指向当前项还是默认枚举子项，如何明确区分。 |
-| url | `Url` | 配置字段引用；是否另设 urls 以区分多值。 |
-| protocols | `Protocols` | HTTP 协议能力；实际字段缺失时不能凭空复制运行时默认值。 |
-| settings | `Settings` | 引用外层字符串后进入 Settings；需要解决同条规则混合内外字段的情况。 |
-| match | `Driver=prometheus` | 筛选先于读取；比较类型、大小写、缺失值规则及有限逻辑组合。 |
-| separators | `,\|` | 分隔字符集合还是完整分隔串；只作用于提取出的字段值。 |
-| address / port | 字段引用 | 独立地址加端口；与完整 URL 形式互斥。 |
-| transport / scheme | `tcp` 等 | 哪些是字面常量，哪些是字段引用；应用协议与传输协议不能混淆。 |
-| 标识、禁用、覆盖 | 尚未定名 | 多文件的重复指令、规则替换、显式禁用与作用域。 |
-| 单项/集合选择 | 尚未定名 | 自身字段、直接子项、列表或位置端口。 |
-| 条件启用 | 尚未定名 | 运行配置的布尔条件与实例选择，不能仅以字段存在为启用。 |
-
-建议不要设计任意代码执行能力。规则应能通过少量明确的配置选择、取值、转换和展开操作表达，并产生可定位的错误。
-
-### 6.3 普通设置（Settings）与连接设置（ConnectionSettings）的使用约定
-
-普通设置（`Settings`）与连接设置（`ConnectionSettings`）共用 Core 解析器，构造、`Value` 赋值和 `Settings.Parse/TryParse` 按相同语法处理文本。重复键按原文顺序后值覆盖，驱动别名参与同一逻辑参数的顺序。
-
-- `ISettings` 是 `IDictionary<string, string>`；原始索引器、非泛型 `TryGetValue`、成员判断及枚举仅呈现显式主参数。
-- 类型化读取使用驱动描述器及其默认值；工具判断字段是否存在时使用原始字典视图。
-- 带 `TOptions` 的连接设置（`ConnectionSettings`）按描述器划分主参数和扩展属性集（`Properties`）；有效复合路径属于主参数，未知文本项属于扩展参数。
-- 完整 `Value` 包含显式主参数及扩展项，代码修改同步到文本；工具解析完整文本时直接使用普通设置（`Settings`）。
-
-工具引用的 Core 程序集须满足上述契约。详细行为见[设置契约](../framework/Zongsoft.Core/docs/settings.zh-Hans.md)。
-
-### 6.4 XML PI 的词法规则必须写清
-
-正式术语是 XML 处理指令（Processing Instruction，PI）。它用于嵌入应用指令，并不自动执行预处理。
-
-Core 的文件和流 XML 配置提供程序通过 `Instructions` 暴露按导入位置深度优先展开的只读 PI 快照，定义类型为 `XmlConfigurationInstruction`；保留 Import 自身、有效子文件中的定义及各自来源。静态 `XmlStreamConfigurationProvider.Read` 只解析当前流，不执行或跟随指令。具体契约见 [XML 配置与处理指令](../framework/Zongsoft.Core/docs/xml-configuration.zh-Hans.md)。
-
-- 定义保留 `Name`、`Data`、`Path`、`FilePath`、`LineNumber`、`LinePosition`。`Data` 来自 `XmlReader.Value`，不额外裁剪或解码，不承诺原文件字节级复原。
-- `Path` 是包含 PI 的实际 XML 父元素路径，不是 binding 的 `path` 参数，也不是映射后的配置键；根元素之外为空字符串。
-- `GetAttributes()` / `TryGetAttributes(out ...)` 提供可选的属性式解析，具体指令也可以直接解释 `Data`，不强制使用键值参数。
-- 属性值须使用单引号或双引号，遵循 XML 属性空白规范化和单次实体解码。名称按 `OrdinalIgnoreCase` 比较；`Path="a" path="b"` 属于重复参数并失败。空白数据成功返回空集合。
-- 属性式解析必须消费全部数据，返回只读字符串字典，不接受尾部杂文或注入的元素。格式错误由 `GetAttributes()` 抛出 `FormatException`；`TryGetAttributes()` 返回 `false` 和 `null`，不提供部分结果，不改变 `Data`。
-- 通用层通过 `XmlConfiguration.Instructions` 注册处理器，通过来源的 `Options.Instructions` 配置行为与回调，内置 Import 使用 `path` 和 `required`。binding 的参数、必需字段和业务错误仍由后续工具规则确定；工具应先取得完整声明集合，再从最终配置取值，不能把指令执行时当前文件的局部配置字典当作最终结果。
-- PI 内容中的 `?>` 是终止标记，不能作为普通内容直接出现。不用正则扫描整个文件，不向运行配置增加属性来模拟指令。
-
-### 6.5 指令位置与作用范围
-
-Core 的纯解析读取收集根元素之前、元素内部和根元素之后的全部 PI，保留同名重复声明；XML 声明、注释及 CDATA 内形似 PI 的文本不属于指令。配置提供程序内的 Import 只能位于根前、根后或 `option` 的直接子级；根外导入全部选项，`option` 内只导入目标文件中相同规范化 `option path` 的块。按路径导入跳过其它选项中的指令及其依赖，保留文件级和选中范围内的指令。binding 的业务规范可以另行限制声明位置，目前尚未定稿。不要靠“紧跟某节点”推断配置语义，因为覆盖文件可能只修改属性而不重复指令。
-
-必须明确：某条指令访问的是本文件、对应配置文件组，还是本次应用最终有效配置。前面“一个 Kestrel 规则可覆盖宿主与插件共同提供的端点”的讨论，要求有应用级有效配置视图，不能仅以单文件解析实现。
-
-指令生效文件、规则标识范围、覆盖以及条件控制应一起确定。相同声明可去重；冲突不能取决于目录遍历顺序。
-
-<a id="examples"></a>
-
-## 7. 配置与指令示例
-
-本节所有新增 binding 指令都是拟议语法。已确定的是指令名、路径分隔和职责；第 6 节列出的参数组合仍需定稿。示例省略不相关配置，不代表可以直接替换原文件的全部内容。
-
-### 7.1 Web 宿主：只维护实际运行配置
-
-拟修改现有文件 `D:\Zongsoft\hosting\.deploy\.shared\web.option.template`：
-
-```xml
-<?xml version="1.0" encoding="utf-8" ?>
-
-<?binding path="Kestrel/Endpoints"
-          url="Url"
-          protocols="Protocols" ?>
-
-<configuration>
-	<option path="kestrel">
-		<endpoints>
-			<endpoint endpoint.name="http"
-			          url="${web:url#xml}"
-			          protocols="${web:protocols#xml}" />
-		</endpoints>
-	</option>
-</configuration>
-```
-
-由现有模板部署规则生成 `web.default.option`。指令引用 Url 和 Protocols，不重复引用一份地址变量，因此之后修改 `web:url` 时，工具读取的就是部署出来的实际值。
-
-本例按“枚举 Kestrel/Endpoints 的直接子项”理解；正式语法仍需明确单项/集合模式。
-
-### 7.2 Diagnostics OTLP：来自插件的 Kestrel 端点
-
-当前文件：
-
-```xml
-<!-- D:\Zongsoft\framework\Zongsoft.Diagnostics\protocols\server\src\Zongsoft.Diagnostics.Protocols.Server.option -->
-<options>
-	<option path="kestrel">
-		<endpoints>
-			<telemetry url="http://*:4317" protocols="Http2" />
-		</endpoints>
-	</option>
-</options>
-```
-
-只要这个插件及其配置在本次应用中实际启用，应用级 Kestrel 提取规则应能取得该端点，不必额外维护一个 4317 的 `.bindings` 文件。
-
-如果选择让插件也自带同样的 Kestrel 提取规则，必须有稳定的相同规则去重机制。不能因为两处声明就产生重复绑定，更不能把同一端点误判成两个服务器占用端口。
-
-### 7.3 Prometheus：从 Settings 取 urls
-
-拟修改现有文件 `D:\Zongsoft\framework\Zongsoft.Diagnostics\src\Zongsoft.Diagnostics.option`，核心片段示意：
-
-```xml
-<?xml version="1.0" encoding="utf-8" ?>
-
-<?binding path="Diagnostics/Diagnostor/Meters/Exporters"
-          match="Driver=prometheus"
-          settings="Settings"
-          url="urls"
-          separators=",|" ?>
-
-<options>
-	<option path="/Diagnostics">
-		<diagnostor>
-			<meters>
-				<exporters>
-					<exporter exporter.name="prometheus"
-					          driver="prometheus"
-					          settings="urls=http://127.0.0.1:9464,http://localhost:9464;path=/metrics;" />
-				</exporters>
-			</meters>
-		</diagnostor>
-	</option>
-</options>
-```
-
-处理意图：
-
-1. 选择 meters 的 exporter 子项。
-2. 先匹配外层 Driver，避免处理 OTLP 客户端 exporter。
-3. 读取外层 Settings，使用 Core 普通设置（`Settings`）解析。
-4. 取 urls 的值。
-5. 按明确的字段内分隔符展开 URL。
-6. 记录实际回环监听，不将其改成通配监听。
-
-`match` 只说明如何筛选 exporter，并不自动证明诊断服务或该 exporter 已启用；最终规则还要与实际启动条件一致。
-
-### 7.4 ZeroMQ：有位置语义的多端口
-
-现有模板中的配置片段：
-
-```xml
-<!-- D:\Zongsoft\hosting\.deploy\.shared\Zongsoft.Messaging.ZeroMQ-daemon.option.template -->
-<option path="/Messaging/ZeroMQ">
-	<servers port="${messaging.zeromq:control},${messaging.zeromq:incoming},${messaging.zeromq:outgoing}" />
-</option>
-```
-
-部署后的示意值：
-
-```xml
-<servers port="32100,32101,32102" />
-```
-
-提取结果需要表达：
-
-| 位置 | 运行语义 | 提取要求 |
-| --- | --- | --- |
-| 第一个 | 控制端口 | 还要满足控制通道实际启用条件。 |
-| 第二个 | 输入端口 | 必须是打包时已确定的有效端口。 |
-| 第三个 | 输出端口 | 必须是打包时已确定的有效端口。 |
-
-发现端口需要先补齐实际配置来源。本节故意不提供一个貌似完整的 binding 指令，以免把“任意分割全部端口”误写成已经成立的方案。
-
-需要决定：有限的位置选择能否满足该结构，还是应同步完善服务器选项，使各个监听参数具有更清楚的配置字段。涉及 Framework 的改造应先说明具体契约及复用方式。
-
-### 7.5 普通字段与 Settings 混合的输入
-
-以下是语法设计用的假想配置，不是仓库中已经存在的服务器文件：
-
-```xml
-<!-- 假想文件：D:\Zongsoft\hosting\.deploy\.shared\Example.Server.option.template -->
-<configuration>
-	<option path="/Example">
-		<server address="${example:address#xml}"
-		        settings="port=${example:port#xml};" />
-	</option>
-</configuration>
-```
-
-这里 Address 来自普通配置，Port 来自解析后的 Settings。前面采用一个全局 `settings="Settings"` 切换所有字段来源的草案，不足以表达这种情况。
-
-正式规范必须选定一种清楚的字段引用方式，例如分别声明来源或采用受限字段访问语法；不能继续靠“这个参数有时读外层、有时读内层”的隐式规则。具体拼写尚未决定，不应直接按聊天中的临时示例实现。
-
-### 7.6 显式配置覆盖的验证例
-
-以下数值仅用于设计和测试，不是在修改当前宿主端口。
-
-```xml
-<!-- 测试输入：临时 source/web.option -->
-<configuration>
-	<option path="kestrel">
-		<endpoints>
-			<endpoint endpoint.name="http" url="http://*:8069" protocols="Http1" />
-		</endpoints>
-	</option>
-</configuration>
-```
-
-```xml
-<!-- 测试输入：同一临时 source/web.default.option -->
-<configuration>
-	<option path="kestrel">
-		<endpoints>
-			<endpoint endpoint.name="http" url="http://*:8070" />
-		</endpoints>
-	</option>
-</configuration>
-```
-
-如果 default 是本次实际站点，按对应运行配置加载规则，最终应导出 8070，并保留从有效配置继承的协议设置。8069 不能作为额外端点残留。若 default 文件未被本次运行选择，不能仅因它位于目录中就生效。
-
-### 7.7 Web 代理入口与应用监听
-
-保留 `D:\Zongsoft\hosting\web\default\web.profile` 的作用。下面使用示例域名，展示语义而非当前完整配置：
-
-```ini
-# web.profile 的现有机制示意；server=~ 的新端点选择规则仍待定。
-server=~
-
-[api]
-host=api.example.test
-bind=http://*:8080
-```
-
-这里的 8080 是代理入口；应用自身仍可能监听 8069。不能把 profile 的入口端口改写进 Kestrel。
-
-若没有代理，容器发布也可以是“宿主机 8080 → 应用容器 8069/tcp”。这只是映射语义示意，不是在恢复已经撤回的 port! 配置语法。
-
-### 7.8 应报告错误的输入
-
-- 已启用声明引用不存在的 Url/Port 字段。
-- 端口是空值、非数值、越界值，或运行时随机端口标记。
-- 声明中的配置路径拼错却没有任何可解释的禁用条件。
-- 多地址字段存在空项或不符合约定的分隔方式。
-- 完整 URL 与独立 address/port 同时指定。
-- 一条规则要求显式协议，却读取不到该协议字段。
-- 提取结果还包含未展开变量。
-- 多个 HTTP 后端都能匹配 `server=~`，没有明确选择。
-- 只生成了部分必要绑定，却准备把元数据作为完整结果发布。
-
-“集合本来可以为空”与“路径拼错”的区别需要通过规则的基数/必需性约定解决，不能一律空集合成功或一律失败。
+模板插值、Settings 取值与条件判断是不同职责。现有 `TemplateEvaluator` 不承担过滤表达式的逻辑组合；绑定筛选沿用 deployer 的过滤语法，Settings 继续负责 `字段名[设置键]` 的值解析，见第 4 节。
 
 <a id="configuration"></a>
 
-## 8. 有效配置、条件和覆盖
+## 3. 入包文件范围与逐文件提取
 
-### 8.1 不可用目录扫描代替配置加载
+### 3.1 已确认的职责边界
 
-当前宿主配置加载考虑：
+部署工程师通过 `.deploy` 定义应用交付内容。Packager 在完成输入选择、排除及目标路径映射后，以最终入包的全部 `*.option` 为解析范围，不另行要求配置入口、入口清单或 Plugins 提供离线装配接口。
 
-- 基础宿主 option。
-- 环境对应文件。
-- host 和 site 对应文件及相关环境配置。
+工具不关心应用运行时加载哪些 option、插件是否被装载、host/site/环境后缀的含义及运行时覆盖顺序，也不为绑定重构要求迁移宿主 Program 中的参数。进入打包范围的 option 有 binding 就按声明处理，没有 binding 就不自行推导监听。
 
-插件配置还考虑：
+部署工程师负责让声明结果符合应用的部署用途。应用通过配置以外的代码、环境变量或启动参数调整监听时，由部署方案保持配置与声明一致；工具不模拟应用启动，也不尝试证明声明覆盖了运行时所有动态行为。
 
-- 与插件文件对应的基础 option。
-- 环境 option。
-- 环境附属 option。
-- host/site 专用文件。
-- 插件本身是否被装配。
+### 3.2 已确认的逐文件求值规则
 
-这些规则分布在 Plugins 的配置提供者和宿主构建器中。若多个插件对同一全局配置键有贡献，还需核实真实的优先关系；不能自行规定字母序或最后扫描的文件获胜。
+对每个入包 option 独立执行：用 Core 加载该文件及其显式 Import，取得本次读取的配置与指令；处理有效 binding 声明，得到该文件贡献的绑定结果。不同文件的结果最后合并去重，文件枚举顺序不决定覆盖优先级。
 
-建议在实现前找到可离线复用的配置选择/组合职责。如果既有 API 与插件树或运行服务耦合，需要先告知用户并讨论必要重构，而不是在工具中复制一套近似加载器。
+例如两个入包文件分别声明同一路径的绑定，一个读出 `http://*:8069`，另一个读出 `http://*:8070`，两项都进入结果集；工具不根据 `production`、`default` 等文件名猜测谁覆盖谁。若第二个文件没有 binding，也没有导入带 binding 的配置，就不会借用第一个文件的声明来生成或修改结果。
 
-### 8.2 指令收集与值求取分开
+显式 Import 内部仍遵循 Core 的声明位置和覆盖规则。例如 B 导入 A，并将 A 中的端口改为 8070，B 的提取应读取 8070。若 A 自身也是入包 option，且带有能够独立读出 8069 的 binding，A 的独立提取仍会贡献 8069；8069 与 8070 不会通过去重相互抵消。若只希望导出最终值，可把 binding 放在最终消费配置的文件，共享基础文件只提供配置值。
 
-推荐顺序：
+这不要求增加统一入口文件。每个入包 option 都是自然的解析单元，Import 仅表达文件主动声明的局部依赖。逐文件求值规则已确认，导入指令作用域及重复导入沿用 Core；实现时为上述覆盖与独立入包场景补充回归，不重新定义导入顺序。
 
-1. 确定本次真正使用的配置文件。
-2. 使用 Core 形成最终配置视图，同时记录提取声明的来源。
-3. 按规则标识和作用域处理重复、覆盖、禁用。
-4. 判断条目和监听的启用条件。
-5. 从最终视图读取字段。
-6. 解析 Settings、转换和展开。
-7. 校验并生成绑定。
+### 3.3 已确认的结果去重与别名规则
 
-这样基准文件可以只声明一次提取方式，覆盖文件只修改实际值。
+不能先按 PI 文本、规则名或来源文件去重。同一条 `name="kestrel" path="Kestrel/Endpoints/*"` 声明，在不同文件中可能提取出不同端点；同一个被导入的声明也可能因引用文件的配置不同而产生不同值。
 
-规则标识是否全局唯一、是否按配置文件组隔离，仍需定稿。业务插件归属可作为制作时诊断上下文，不必进入最终端口描述。
+按规范化后的绑定内容判断等价：内容相同的结果合并为一项，将它们的默认路径别名和可选名称别名合并为该绑定的别名集合；重复别名不重复保存。别名与声明来源不参与内容等价比较，来源仅用于诊断。端口号相同不足以证明重复，还需区分执行目标、监听地址、传输协议，以及应用协议、HTTP 能力、URL 路径等消费者需要的属性；这些属性不同的结果不能作为重复项删除。
 
-### 8.3 不能只看“配置存在”
+例如以下三项属于同一个应用执行目标，未列出的属性均相同：
 
-需要覆盖：
+| 来源 | 名称 | 监听地址 | HTTP 能力 |
+| --- | --- | --- | --- |
+| A.option | web | `http://*:8069` | Http1 |
+| B.option | api | `http://*:8069` | Http1 |
+| C.option | management | `http://*:8070` | Http1 |
 
-- 包中有客户端插件，但没有服务器启动插件。
-- 配置集合包含多个预设，运行对象只选中一个。
-- 服务器由开关禁用。
-- ZeroMQ 控制通道因没有存储而不启动。
-- 应用参数实际覆盖了配置。
-- 业务代码在运行时动态决定是否创建服务器。
+最终生成两个绑定：除各自的默认路径别名外，8069 对应的绑定保留 web、api 两个名称别名；8070 对应的绑定保留 management 名称别名。若 A、B 的地址和端口相同，但 HTTP 能力或有意义的路径不同，则不能按此例合并，也不能自行拼成一种新的协议能力。
 
-最后一种若不能由部署配置确定，应明确不在自动静态提取的保证范围内。不要为此启动应用探测，也不要仅靠扫描 DLL 名称决定端口。
+不同文件使用相同名称不直接构成错误，也不建立覆盖关系；绑定内容不同时仍分别保留。同一别名指向多个绑定时，引用选择按第 6.2 节处理，筛选后仍有歧义则报错；地址和别名的精确规范化规则随结果格式讨论确定。重复结果的合并和无效声明的报错分开处理，不能用去重掩盖解析失败。
 
-### 8.4 确定配置组合，而非固定目录组合
+### 3.4 使用最终交付路径
 
-环境、站点、scheme 和网络选择必须与本次交付一致，但不要求工具强制使用某种目录树，也不要求创建所有组合的输出文件。
+推荐以 `Package.Entries` 建立只读文件视图：按最终入包路径判断哪些条目为 option，导入也按交付后的逻辑路径访问，避免读取已排除内容或按重命名前路径解析引用。`*.option.template` 先由 deployer 展开为 option，源模板不作为 option 解析。
 
-包元数据是制作时快照。部署后修改监听参数、改变启用条件或以启动参数覆盖监听，都可能使快照失效；相应交付物需要重新生成。
+Core 已支持虚拟 `IFileProvider`，工具只需提供流、目录查询及来源诊断，制作时不启用文件监听。虚拟文件不能向 Core 暴露制作机的物理路径作为导入基准。
+
+建议首版导入限定在最终交付文件视图中，沿用 Core 对虚拟相对路径、循环和越界的检查；缺失的可选导入按 Core 规则处理。包外配置及绝对路径导入是否支持另行确认，不静默读取制作机的同名文件，也不把此问题扩展成宿主运行环境推导。
+
+<a id="instructions"></a>
+
+## 4. 绑定声明与提取
+
+本节为最小语法方案。已采用指令名 `binding`、配置路径分隔符 `/`、精确路径选择单项及末尾 `/*` 选择直接子项、普通字段引用与 `字段名[设置键]` 取值语法。字段引用以 `/` 开头时从配置根读取，否则相对于当前候选项读取。PI 位置与收集遵循 Core，path 始终从配置根定位。筛选属性为 `filter`，语法采用 deployer 的过滤条件。监听地址通过 template 统一求值，option 成员导航及字符串路径/设置键索引规则见第 4.5 节；尚待确定的协议来源适配及结果规范化细节见第 12 节，不再预留另一套 binding 参数。
+
+### 4.1 已确认的参数
+
+| 参数 | 示例 | 含义 |
+| --- | --- | --- |
+| `name` | `kestrel` | 可选，只增加简短别名；精确 path 增加 name，集合子项增加 name 及 `name/子项键`，均保留完整配置路径默认别名 |
+| `path` | `Kestrel/Endpoints/http` 或 `Kestrel/Endpoints/*` | 必填，从本次文件及导入读取结果的配置根选择单项或直接子项，非 XPath |
+| `template` | `${option.Url}`、`${option.Settings['urls']}` | 必填，统一以 Core 模板生成完整监听地址，见第 4.5 节；允许在明确声明分隔符后展开多值 |
+| `protocols` | `http1,http2` 或 `@Protocols` | 可选的协议能力补充，列表以逗号分隔，默认常量，以 `@` 前缀显式引用配置字段；省略不补入服务器默认协议 |
+| `filter` | `Driver:prometheus` | 可选，按 deployer 过滤语法选择候选项；省略保留全部候选项 |
+| `separators` | `,;\|` | 可选的地址分隔字符集合，仅切分 template 求值后的结果；省略时按单个完整 URL 处理，不切分外层 Settings；协议列表固定使用逗号 |
+| `required` | `false`（默认）或 `true` | 默认允许零结果；true 要求该声明在全局去重前提取出至少一个有效绑定，不豁免解析或校验错误 |
+
+protocols 默认按常量解释，例如 `protocols="http1,http2"`。读取配置时仅采用 `@` 前缀显式标记引用，例如 `protocols="@Protocols"`。去除前缀后，引用内容按已确定的相对路径、根路径及 Settings 取键规则处理，再解析取得的协议列表。协议值无法识别时不自动改为配置查找。监听地址统一由 template 模板生成，成员导航规则见第 4.5 节，filter 保持既有过滤语法。
+
+| protocols 的写法 | 含义 |
+| --- | --- |
+| `http1` | 单个协议名称 |
+| `http1,http2` | 同时声明 HTTP/1 和 HTTP/2 |
+| `@Protocols` | 当前候选项的 Protocols 字段 |
+| `@/Server/Protocols` | 本次配置根下的 Server/Protocols 字段 |
+| `@Settings[protocols]` | 当前候选项的 Settings 字段，经 Core Settings 解析后读取 protocols 键 |
+| `@/Server/Settings[protocols]` | 本次配置根下的 Server/Settings 字段，经 Core Settings 解析后读取 protocols 键 |
+
+Core 的 PI 属性解析只提供属性文本；TemplateEvaluator 的变量引用采用 `${...}`，不会把 `@...` 自动解释为上述配置引用。`@` 引用标记属于 binding 的业务语法，识别后继续复用 Core 的配置路径转换、查询与 Settings 解析。template 的求值复用 Core 模板，见第 4.5 节，不自建插值解析器或引入脚本求值。
+
+path 的末尾 `/*` 表示枚举前面路径的直接子项。去掉该后缀的精确路径只选择自身，不因节点具有子项而自动枚举。字段引用逐候选项求值，引用内容以 `/` 开头时从本次配置根读取，否则相对于该候选项读取；protocols 为引用时先去除 `@` 前缀。
+
+| path | 选择范围 |
+| --- | --- |
+| `Kestrel/Endpoints/http` | 只选择 http 项 |
+| `Kestrel/Endpoints/*` | 分别选择 http、telemetry 等直接子项 |
+| `Kestrel/Endpoints` | 只选择 Endpoints 节点自身，不自动深入各端点 |
+
+末尾 `/*` 不表示递归搜索或部分名称匹配。首版只支持精确路径与这一后缀，不引入 `**`、`http*` 或中间路径段的通配规则。Core 的 `ConfigurationUtility.GetConfigurationPath` 负责路径分隔符转换，不负责展开 `*`；工具识别末尾后缀后，用 `GetSection` 定位父节点并调用 `GetChildren()`，继续复用既有配置查询能力。
+
+首版支持单对象、直接子项、普通字段和一次 Settings 取键，筛选采用 deployer 已有的存在判断、候选值匹配、否定及逻辑组合语法。不增加任意代码、方法调用、XPath 或另一种条件表达式语言。
+
+字段引用内容的语法已确认：以 `/` 开头时从本次文件及其显式 Import 形成的配置根读取，否则相对于当前候选项读取。这套规则用于 protocols 显式引用中去除标记后的内容，以及 filter 中的字段引用。template 的成员与索引语法遵循第 4.5 节的已确认规则，两者保持相同的配置读取边界。protocols 的常量不参与配置查询。binding 的 path 始终从配置根定位，不受字段引用的相对起点规则影响。
+
+| 引用 | 取值步骤 |
+| --- | --- |
+| `Url` | 直接读取当前项的 Url 字段 |
+| `Settings[urls]` | 读取当前项的 Settings 字段，用 Core Settings 解析，再取 urls 键 |
+| `Connection[port]` | 读取当前项的 Connection 字段，用 Core Settings 解析，再取 port 键 |
+| `/Server/Protocols` | 从本次配置根读取 Server/Protocols 字段 |
+| `/Server/Settings[urls]` | 从本次配置根读取 Server/Settings 字段，用 Core Settings 解析，再取 urls 键 |
+
+对 protocols 和 filter 的字段引用，方括号前是配置字段路径，不限定字段名为 Settings；方括号内是该字段所含设置文本的键。先按前导 `/` 确定引用起点并读取字段，再用 Core Settings 解析该字段并取键。这类引用仅在采用 `字段名[设置键]` 时解析 Settings；template 则通过第 4.5 节的显式索引取设置键。两者都不对普通字段自动尝试解析，也不在外层配置与设置文本之间隐式回退。提取的是 Core 解析后的实际值，再按 URL 或协议等目标语义转换。
+
+实现时先按参数语义区分常量和字段引用；protocols 为显式引用时先去除 `@` 前缀。随后识别引用内容的前导 `/`，选择本次配置根或当前候选项作为查询对象，再复用 Core `ConfigurationUtility.GetConfigurationPath` 转换配置字段路径并读取。该 API 会去除前后 `/` 并转换分隔符，因此不能先转换再判断引用起点。根引用不会读取其它独立入包文件，相对引用缺失时也不自动向上级或配置根回退。
+
+例如以下声明提取 `http://*:9090/`：
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<?binding name="metrics" path="Metrics/Listener" template="${option.Settings['urls']}"?>
+<configuration>
+	<option path="Metrics">
+		<listener settings="urls=http://*:9090/;path=/metrics" />
+	</option>
+</configuration>
+```
+
+Settings 文本的引号、转义、空值及语法错误均沿用 Core；读取声明所引用的 Settings 时解析失败，不回退为普通字段或把整串当作地址。字段或键缺失时与其它必需字段缺失采用同一错误契约，见第 4.4 节。配置键和 Settings 键的已有规则直接复用；若方括号引用与合法键名存在无法表达的情况，再用具体案例提出语法补充，读取范围保持在本次文件及导入结果内。
+
+例如，假设本次读取结果包含以下配置：
+
+```text
+Server/Enabled = true
+Server/Protocols = Http1
+Server/Listeners/public/Url = http://*:8080/
+Server/Listeners/admin/Url = http://127.0.0.1:8081/
+```
+
+两个监听项共用上层的启用条件和协议字段，可声明为：
+
+```xml
+<?binding name="server"
+	path="Server/Listeners/*"
+	filter="/Server/Enabled:true"
+	template="${option.Url}"
+	protocols="@/Server/Protocols"?>
+```
+
+逐项读取各自的 Url，并从本次配置根读取共同的 Enabled 和 Protocols。Enabled 为 true 时提取两个绑定，为 false 时产生零结果；省略 required，按默认规则允许零结果。
+
+筛选属性名称确定为 `filter`，语法参考 [deployer 的过滤条件](deployer/README.zh-Hans.md#过滤)，实际行为以 [Utility.Requisition](deployer/src/Utility.cs) 为依据。
+
+属性值直接填写过滤表达式，不携带 `.deploy` 条目外围的 `<...>`。字段引用与提取字段共用起点规则：以 `/` 开头时从本次配置根读取，否则相对于当前候选项读取，均支持普通字段及 `字段名[设置键]` 引用。不自动查询制作进程的环境变量、命令选项或其它文件。
+
+| 表达式 | 含义 |
+| --- | --- |
+| `Driver` | Driver 字段存在，不按值的真假判断 |
+| `!Driver` | Driver 字段不存在 |
+| `Driver:prometheus` | Driver 值为 prometheus，忽略大小写 |
+| `Driver:prometheus,custom` | Driver 值为候选列表中的任意一个，忽略大小写 |
+| `/Server/Enabled:true` | 本次配置根下的 Server/Enabled 值为 true，忽略大小写 |
+| `!Driver:telemetry` | Driver 不匹配 telemetry，字段缺失时也满足否定 |
+| `Driver:prometheus & Scope:public` | 两个条件都满足 |
+| `Driver:prometheus \| Scope:public` | 任一条件满足 |
+
+先筛选再读取绑定字段，未选中项无需包含被 template 引用的地址字段。存在判断必须区分缺失与已存在的空值；例如 `Enabled` 只判断字段存在，要按内容筛选应写 `Enabled:true`。Settings 内部键的存在性通过 Core `TryGetValue` 判断，不能只检查返回值是否为 null。
+
+启用条件统一通过 `filter` 表达，不提供独立的 `enabled` 参数。需要显式启用时写 `filter="Enabled:true"`；如果对应服务约定字段缺失时默认启用，写 `filter="!Enabled | Enabled:true"`。两者均沿用字符串匹配规则，忽略大小写并处理首尾空白，不额外进行布尔类型校验；空字符串或其它不匹配的文本不选中。省略 filter 时，保留 path 选中的全部候选项，不因存在名为 Enabled 的配置字段而自动筛选。字段缺失时是否启用由声明表达，工具不猜测服务默认值。
+
+字符串比较沿用 deployer 的忽略大小写匹配及首尾空白处理，不再采用 Settings 等值比较作为筛选语义。`字段名[设置键]` 的取值过程仍遵循 Core Settings；得到的值再交给过滤比较。否定作用于整个单项匹配结果，包括字段缺失的情况。
+
+deployer 当前实现将 `&` 和 `|` 从左到右组合，没有单独的运算符优先级，也不将括号解释为分组。因此 `A | B & C` 相当于先计算 A 或 B，再与 C 组合。共享实现应保留这一规则，不只在 binding 中改变优先级；若以后需要括号或优先级，另行作为统一语法扩展讨论。值中包含过滤分隔符的转义能力不能照搬 Settings 语法，出现需求时按实际案例确定。
+
+PI 属性通过 Core `GetAttributes()` 解析，表达式中的 `&` 写为 `&amp;`，由 Core 单次解码后交给过滤器。例如 `filter="Driver:prometheus &amp; !Disabled:true"`。不得再手工执行第二次实体解码。
+
+实现时建议把 deployer 的通用过滤解析、逻辑组合及字符串匹配抽到 `tools/.shared/`，通过调用方提供字段或变量查询，共用于 deployer 和 Packager。deployer 的 `framework:net10.0^` 属于目标框架专用比较，依赖 NuGet 的部分留在 deployer，由其适配，不引入绑定工具或改变普通同名配置字段的含义。不让 Packager 引用 deployer 可执行项目，也不复制一套独立解析器。
+
+绑定声明以 template 生成完整监听地址，由 protocols 补充协议及能力说明，不另设 transport 参数。结果模型需要区分地址、端口、传输协议与应用协议，不意味着声明语法也要逐项增加同名参数。URL 的 scheme 已能表达的信息不要求在 protocols 重复填写；已知的 scheme 与 protocols 冲突直接报错，见第 4.6 节。首版 scheme 范围见第 4.7 节，未知协议不能默认为 TCP；非 HTTP 的 protocols 扩展名称尚未定义，不能将支持某个 scheme 等同于新增同名的 protocols 值。
+
+独立 address/port 参数不列入当前最小方案。对于地址和端口分开存储的运行配置，使用 template 与 option 配置成员导航，由 Core 模板组合现有字段。具体规则及求值阶段见第 4.5 节，方案已确认并完成隔离原型验证，尚未接入正式工具；不增加一份与运行配置独立维护的监听地址。
+
+### 4.2 Kestrel 示例
+
+开发人员在应用配置中定义 Kestrel 端点。例如本机 `hosting/web/default/web.default.option` 已有下列配置；该文件是本地部署产物，不在 Git 中，换机时可从仓库内的 [web.option.template](https://github.com/Zongsoft/hosting/blob/main/.deploy/.shared/web.option.template) 查阅其配置结构：
+
+```xml
+<endpoint endpoint.name="http" url="http://*:8069" protocols="Http1" />
+```
+
+运行时由 Kestrel 根据加载后的配置监听该地址，无需打包工具再指定 --listen。为入包配置补充 binding 后，Packager 仅读取同一配置中的地址和协议并输出元数据；binding 不产生运行时监听，也不改变服务器是否启用。该示例不赋予 web.default.option 特殊的工具入口或加载优先级，仍遵循全部入包 option 逐文件提取的规则。
+
+不指定 name 也能生成可引用的绑定。例如在该文件中声明：
+
+```xml
+<?binding path="kestrel/endpoints/*" template="${option.Url}"?>
+```
+
+匹配到 http 项后，默认别名为 `kestrel/endpoints/http`，web.profile 可以直接引用：
+
+```ini
+server=kestrel/endpoints/http
+```
+
+按第 4.5 节的已确认规则，拟在 [web.option.template](https://github.com/Zongsoft/hosting/blob/main/.deploy/.shared/web.option.template) 的 XML 声明之后加入：
+
+```xml
+<?binding name="kestrel"
+          path="Kestrel/Endpoints/*"
+          template="\${option.Url}"
+          protocols="@Protocols"?>
+```
+
+现有运行配置模板仍提供实际字段：
+
+```xml
+<configuration>
+	<option path="kestrel">
+		<endpoints>
+			<endpoint endpoint.name="http"
+			          url="${web:url#xml}"
+			          protocols="${web:protocols#xml}" />
+		</endpoints>
+	</option>
+</configuration>
+```
+
+deployer 只展开模板。Packager 在 web.option 中提取该文件的 http 端点。[Diagnostics OTLP endpoint](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Diagnostics/protocols/server/src/Zongsoft.Diagnostics.Protocols.Server.option) 若入包，也应带有相应 binding 声明，从其自身配置提取 telemetry 端点。两份文件可使用相同的 Kestrel 集合声明，分别求值后汇总，不能因 PI 文本相同而跳过其中一份。
+
+上面的 `protocols="@Protocols"` 以来源字段符合绑定协议列表为前提；单项 Http1/Http2 的大小写处理见第 4.6 节。若实际配置为 Http1AndHttp2 等 Kestrel 组合枚举，不能直接套用该声明；其来源适配属于第 12 节第 2 项，不能擅自把运行配置改成 Kestrel 不接受的表示。
+
+如果模板已生成端口 8070，或该文件的显式 Import 最终得到 8070，则该文件导出 8070。独立的其它入包文件不覆盖它；这些文件有声明时分别贡献结果，没有声明时不追加绑定。
+
+### 4.3 Prometheus 与混合字段示例
+
+拟在 [Zongsoft.Diagnostics.option](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Diagnostics/src/Zongsoft.Diagnostics.option) 中声明：
+
+```xml
+<?binding name="prometheus"
+          path="Diagnostics/Diagnostor/Meters/Exporters/*"
+          filter="Driver:prometheus"
+          template="${option.Settings['urls']}"
+          separators=",;|"?>
+```
+
+先按 deployer 过滤语法筛选 exporter，再用 Core 解析其 Settings，最后分割 urls 字段。分号若属于 urls 的内容，必须先按 Settings 语法在外层正确加引号。
+
+**已确认的多地址展开：**只有显式指定 separators 时才切分 template 的求值结果；省略时将结果作为一个完整 URL 校验，不自动猜测分隔符。separators 是分隔字符集合，例如 `separators=",;|"` 表示逗号、分号和竖线中的任意一个都可分隔地址，不表示三字符组成的连续分隔串。该步骤发生在模板求值之后，不切分原始模板或外层 Settings。
+
+例如 Settings 为 `urls='http://127.0.0.1:9464/;http://127.0.0.1:9465/';path=/metrics`，模板先取得 urls 的完整值，使用 `separators=";"` 后得到两个监听地址。不指定 separators 时，URL 路径中的逗号或分号保持原义。展开后每个地址使用当前候选项求得的同一组 protocols，不按地址和协议的位置配对；需要不同协议能力时使用独立候选项或声明。各地址仍分别校验，任一地址无效或与协议冲突即整条声明失败。
+
+此处的 Driver 筛选只决定声明选取哪些配置项。部署工程师负责让声明对应本次交付需要的监听；若需要启用条件，应由 filter 引用本次文件及导入结果可读的配置。工具不检查插件是否装载或诊断服务是否启动。
+
+[PrometheusExporterLauncher](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Diagnostics/src/Telemetry/PrometheusExporterLauncher.cs) 创建独立 HttpListener：先裁掉每个 urls 地址末尾的 `/`，再追加首尾补齐 `/` 的 path，得到实际监听前缀。例如 `urls=http://127.0.0.1:9464/;path=/metrics` 对应 `http://127.0.0.1:9464/metrics/`。本节声明只演示 Settings 取值和多地址展开，尚未导出拼接后的路径，不能直接作为完整的 Prometheus 迁移方案；实际声明及探测输入如何保留该路径，纳入第 12 节第 2、4 项确认。同文件中的 OTLP `server` 是客户端目的地址，不能因都是 HTTP 字符串就一起导出。
+
+[Garnet 配置示例](https://github.com/Zongsoft/framework/blob/main/externals/garnet/README.zh-Hans.md#安装与配置) 将 bind 和 port 分开写在设置文本中，例如 `bind=127.0.0.1;port=6379`，并没有完整的监听 URL。[GarnetServer](https://github.com/Zongsoft/framework/blob/main/externals/garnet/src/GarnetServer.cs) 把各设置项转换为服务器参数。第 4.5 节给出从其 Value 字段组合 URL 的具体模板，不把读取单个 bind 或 port 等同于取得完整监听地址。
+
+### 4.4 提取顺序与错误
+
+推荐顺序：确定全部入包 option → 逐文件完成 Core 读取及显式 Import → 校验 binding 语法 → 按 filter 筛选候选项 → 通过 template 求值及 protocols 字段引用取值（按显式索引解析 Settings）→ 多值展开与规范化校验 → 按声明检查 required → 汇总去重及必要的身份校验。
+
+各文件的 binding 先分别求值，不按规则名或声明文本提前合并，不因跨文件同名而直接报错。独立文件之间没有规则覆盖或禁用关系。候选项按 filter 筛选；相同绑定内容合并，名称合入别名集合，见第 3.3 节。引用身份及消歧方式见第 5 节。
+
+required 默认为 false，省略该参数等同于 `required="false"`。它只约束当前声明是否必须产生绑定，不改变配置读取、筛选和字段解析规则。
+
+| 情况 | 省略 required 或 `required="false"` | `required="true"` |
+| --- | --- | --- |
+| path 不存在 | 不产生绑定 | 报错 |
+| path 末尾为 `/*`，但没有直接子项 | 不产生绑定 | 报错 |
+| 全部候选项被 filter 排除 | 不产生绑定 | 报错 |
+| 选中项缺少必需字段，或地址、Settings 等解析或校验失败 | 报错 | 报错 |
+
+`required="true"` 要求当前声明在全局去重前提取出至少一个有效绑定；结果与其它声明重复仍满足要求，其它声明产生的绑定不能代替本声明满足要求。所有选中项仍须通过校验，不能因其中一个项有效就忽略其它项的错误。
+
+例如，可选的 Prometheus 声明省略 required，没有匹配 exporter 时正常产生零条绑定；必须提供监听的 Kestrel 声明设置 `required="true"`，路径拼错、集合为空或全部被筛选掉时均报错。默认允许零结果也意味着未设置 required 的声明无法仅凭空结果识别路径拼写错误，必须存在的监听由声明者显式标记。
+
+筛选后选中项的缺失字段、非法值、未展开模板、随机端口、空列表项及协议不明均导致提取失败。required 不豁免 XML、binding 声明、filter 或所引用 Settings 的解析错误，不能把解析失败降级为空结果。
+
+PI 属性只使用 Core 的解析规则：带引号、单次实体解码、拒绝重复属性和尾部杂文。工具另外检查必需参数、拒绝未知参数并校验参数语义，诊断包含声明文件、行列和所引用的配置路径，不输出整段 Settings 或凭据。
+
+声明位置与 path 作用域已确认：沿用 Core 对合法 XML 处理指令位置的支持，在文件级或元素内部均可放置 binding；path 始终显式填写并从本次读取结果的配置根定位，不随 XML 嵌套位置改变基准。按路径 Import 时，仍由 Core 的有效范围筛选决定哪些声明会被收集；这与声明被收集后如何解释 path 是两件事。工具不额外限制 binding 只能位于文件头或 option 的直接子级。
+
+<a id="url-templates"></a>
+
+### 4.5 template 与配置成员导航（已确认）
+
+绑定声明使用 template 属性，所有值统一交给 Core TemplateEvaluator 求值，不再按是否含 `${` 区分字段引用和模板。template 仍专门生成完整监听地址，不表示任意输出格式；运行配置自身的 Url 字段不改名。不保留 url 的兼容别名，也不增加 address、port、transport 等 PI 属性。本节的声明语法、配置视图及求值边界已确认，正式实现仍按验收要求推进。
+
+| template 写法 | 含义 |
+| --- | --- |
+| `${option.Url}` | 读取当前候选项的完整地址 |
+| `${option.Settings['urls']}` | 解析当前项的 Settings 字段，读取 urls |
+| `tcp://${option.Address}:${option.Settings['port']}` | 组合当前项普通字段与 Settings 键 |
+| `tcp://${option.Value['bind']}:${option.Value['port']}` | 从当前项 Value 设置文本读取两个键后组合 |
+| `tcp://${option['/Network/Address']}:${option.Settings['port']}` | 从本次配置根读取公共地址，组合当前项的端口 |
+| `${option['/Network/Settings']['port']}` | 先从根读取 Settings 字段，再解析设置文本并取 port 键；此处仅演示字段取值 |
+
+单字段引用也写成模板表达式。`${option.Url}` 读取当前候选项的 Url；`${url}` 表示名为 url 的模板变量，不作为当前配置字段的简写，工具不自动把配置字段注册成同名变量。`template="Url"` 的结果是字面文本 Url，不查询字段，随后不能通过完整监听地址校验。纯文本合法地址仍由 Core 原样输出；实际运行参数优先从配置读取，避免维护两份监听值。
+
+**Core 原生语法与配置适配必须分开说明：**
+
+- `${option.Address}` 和 `${option.Network.Address}` 是已有的成员导航语法。原生求值通过 Reflector 读取真实 CLR 公共属性或字段，不会把 IConfigurationSection 的任意配置子项、字典键或 ExpandoObject 键自动视为同名属性。
+- `${option.Settings['port']}` 是已有的成员导航加字符串索引语法。如果 Settings 属性返回 Core Settings 对象，原生求值即可读取；实际配置中的 Settings 或 Value 通常仍是字符串，必须由工具在明确的设置键索引处调用 Core Settings 解析，不能直接对原字符串使用字符串键索引。
+- `${option.Settings[port]}` 同样是合法模板，但 port 是另一个变量的引用。它不是字符串键 port 的简写；变量不存在时失败，变量值为 alternative 时读取的是 alternative 键。固定设置键应采用 `['port']`，不改变 Core 对动态索引的含义。
+
+例如，把声明加入已有 Garnet 配置，地址和端口只维护在运行程序消费的 Value 字段中：
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<?binding name="garnet"
+	path="Externals/Garnet/default"
+	template="tcp://${option.Value['bind']}:${option.Value['port']}"?>
+<options>
+	<option path="/Externals/Garnet">
+		<server server.name="default" value="bind=127.0.0.1;port=6379" />
+	</option>
+</options>
+```
+
+提取结果为 `tcp://127.0.0.1:6379`。tcp 由声明者明确指定；工具不根据 Garnet 类型或默认参数猜测。Settings 取键不限定配置字段必须叫 Settings。
+
+**配置起点必须显式区分：**只提供 option 视图。点号成员相对于 path 选中的当前候选项；直接作用于 option 的字符串索引表示配置路径，以 `/` 开头时从当前文件及其显式 Import 完成后的配置根读取，否则仍相对于当前候选项。选定字段之后的字符串索引表示读取该字段设置文本中的键。配置路径索引复用 Core ConfigurationUtility.GetConfigurationPath，先判断前导 `/` 再转换路径。不存在相对路径向根自动回退，也不访问其它独立入包文件。
+
+假设 path 选中 Server/Listener，当前项的 Network/Address 为 `127.0.0.2`，配置根的 Network/Address 为 `10.0.0.1`：
+
+- `${option.Network.Address}` 读取 `Server/Listener/Network/Address`，得到 `127.0.0.2`。
+- `${option['/Network/Address']}` 读取 `Network/Address`，得到 `10.0.0.1`。
+- `${option['Network/Address']}` 与点号写法一样读取当前项下的路径，得到 `127.0.0.2`。
+
+`${option['/Network/Address']}` 的字符串索引是 Core 现有语法，但 `/` 定位配置根是工具配置视图的语义，不是 TemplateEvaluator 自带的路径规则。直接把 IConfigurationSection 注册为 option 不会自动获得这种语义。该方式保持单一 option 名称，并可用字符串路径表达含连字符等不适合点号成员语法的配置键。
+
+**实现复用边界：**
+
+1. Core 完成当前文件及 Import 加载，再选择候选项并执行 filter；未选中项不读取模板字段。
+2. 使用独立的 TemplateEvaluator，设置 `CultureInfo.InvariantCulture`、`Recursive=false`、`Fallback=false`，不注册环境变量或工具命令的变量来源。
+3. 通过现有 Resolving 事件适配 option 完整引用。工具负责配置成员导航、显式路径定位及 Settings 取键，成功后设置 Value 和 Handled；Core 继续负责外层模板解析、文本拼接、转义、格式化和诊断。无需应用专用配置类型、Plugins 依赖或新增 Core 公共 API。
+4. 原型复用 Core `MemberExpression.Parse` 取得成员和索引节点，没有在工具中自建模板解析器。该解析器与 TemplateEvaluator 内部解析器是不同实现，原型验证不意味着所有语法已等价；接入时应覆盖合法特殊键、转义、动态索引及错误位置。Resolving 接管完整引用会跳过默认动态索引求值，适配必须保持变量索引的原义，不能将裸标识符偷换成字符串键。
+5. 设置文本按实际索引惰性解析并在本次读取范围内缓存；用 Settings.TryGetValue 区分缺键与存在的空值。缺字段、缺设置键及非法设置文本报告错误。已存在的 null 或空字符串沿用 Core 的空文本插值。
+6. 求值结果继续进行多值处理、完整监听地址和协议校验，再按声明检查 required 并汇总去重。
+
+[Core 模板文档](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/docs/expressions.zh-Hans.md)、[TemplateEvaluator.Resolve](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Text/Templating/TemplateEvaluator.cs)、[Reflector](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Reflection/Reflector.cs) 和 [MemberExpression](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Reflection/Expressions/MemberExpression.cs) 是上述语法与扩展点的依据。这里需要补充的是通用配置取值适配，不能把简单更换变量名等同于已经支持任意配置成员导航；目前没有发现这些示例所需的模板解析错误。
+
+部署与绑定提取继续区分求值阶段：普通 `.option` 使用 `${option...}`；由 deployer 展开的 `.option.template` 使用 `\${option...}`，先生成保留占位符的 `.option`，再在打包阶段读取最终配置求值。例如：
+
+```xml
+<?binding name="garnet"
+	path="Externals/Garnet/default"
+	template="tcp://\${option.Value['bind']}:\${option.Value['port']}"?>
+```
+
+不为 deployer 增加跳过 binding 或保留未知变量的特殊处理。模板不自动完成 URL 编码、IPv6 方括号或协议推导；已知字段保存裸 IPv6 时可明确写 `tcp://[${option.Address}]:${option.Settings['port']}`，其它格式化需求优先复用 Core Formatting 扩展点并按实际案例确定。
+
+已使用现有 Core 程序集完成 32 项隔离验证：真实属性及 Settings 对象的原生导航、裸索引变量含义、原始配置和字典点号读取的限制、原生字符串索引没有配置根语义、适配后的绝对与相对路径索引、根路径与本地成员混合、路径后继续成员导航或 Settings 取键、连字符键、任意设置字段、直接字段模板、字面文本、空值、关闭递归、大小写、动态索引、缺字段/缺键、非法 Settings 和两阶段转义。原型证明本节列举的表达式可通过已有扩展点实现，尚未接入 Packager；完整配置视图和模板契约仍需按上述边界验收。
+
+### 4.6 可选协议列表与能力补充
+
+**已确认的表示格式：**协议名称采用 `http`、`http1`、`http2`、`http3`，多个名称用逗号分隔，例如 `http1,http2`、`http1,http2,http3`。这些名称是 HTTP 类协议的表示，不表示其它协议被排除。协议列表不使用 Http1AndHttp2 一类组合枚举名称。列表格式与协议字段的来源分开处理。
+
+建议按不区分大小写比较各名称、裁剪分隔项两端空白，并规范化为不重复的协议集合；空项和未知名称报告错误。协议分隔符固定为逗号，不受地址多值 separators 影响。原有配置若使用 Http1AndHttp2，直接引用该字段不会自动变成新格式；配置适配时须明确来源表示，不能假定 TemplateEvaluator 会转换枚举组合名称。
+
+**已确认的 http 含义及规范化：**http 表示 HTTP 协议，但未声明具体版本，不等于 http1，也不展开为全部版本。与一个或多个具体 HTTP 版本同时出现时，移除重复的泛称 http，保留全部已声明的具体版本。此规则仅规范化同一项的协议列表，不把不同声明的协议集合合并。
+
+| 输入 | 规范化结果 | 含义 |
+| --- | --- | --- |
+| `http` | `http` | HTTP，具体版本未声明 |
+| `http1` | `http1` | 明确支持 HTTP/1 |
+| `http1,http2` | `http1,http2` | 明确支持 HTTP/1 和 HTTP/2 |
+| `http,http2` | `http2` | 泛称不增加其它版本能力 |
+| `http,http1,http3` | `http1,http3` | 保留 HTTP/1 和 HTTP/3，不补入 HTTP/2 |
+
+只有 http 时不能据此确认 HTTP/2 或 HTTP/3 能力；下游需要确定版本时应要求明确声明。规范化后的协议集合参与绑定内容比较，不能把版本未声明的 http 与明确的 http1 当作相同能力。
+
+**已确认：保留可选的 protocols 属性。** template 生成完整监听 URL，protocols 补充地址未表达的协议能力。Core TemplateEvaluator.Evaluate 返回文本，不会因模板引用了某配置项就自动取得该项其它协议字段。相同的 `https://*:8443` 可以对应不同 HTTP 版本集合，单看 URL 无法区分以下三种声明：
+
+```xml
+<?binding name="web" path="Server/Listener"
+	template="${option.Url}" protocols="http1,http2"?>
+```
+
+将上例的 protocols 分别改为 `http3` 或 `http1,http2,http3`，地址保持相同，协议能力却不同。[Kestrel 的 HTTP/3 文档](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/kestrel/http3?view=aspnetcore-10.0) 说明 HTTPS 端点可以同时提供多个 HTTP 版本；HTTP/3 使用的 QUIC 基于 UDP，见 [RFC 9000](https://www.rfc-editor.org/rfc/rfc9000.html)。提取结果需要保留这类差异，供代理选择及 TCP/UDP 发布规划使用，不能把 https 固定等同于一种 HTTP 版本或传输方式。
+
+如果地址自身已经包含制作流程所需的协议信息，例如 `tcp://127.0.0.1:6379`，可省略 protocols。省略只表示未补充协议能力，不能推导为支持全部版本或套用服务器默认值；下游操作若需要明确版本而信息不足，应报告不足。
+
+template 的输出保持 URL，不在其结果中嵌入另一层 Settings 绑定描述，也不把协议列表塞入自定义 URL 附加语法。protocols 继续采用已确认的常量及 `@` 引用规则；template 的表达式支持不自动改变其它参数的取值规则。
+
+**已确认的 scheme 与协议集合冲突处理：**对已知的矛盾直接报告错误，整条绑定声明失败，不自动改写地址，也不丢弃冲突的协议项。required 只约束零结果，不豁免此类错误；提取失败时终止制包，不发布部分绑定结果。
+
+| 模板求值得到的 URL | protocols | 一致性检查结果 |
+| --- | --- | --- |
+| `http://*:8080` | `http1,http2` | 通过本项检查 |
+| `http://*:8080` | `http3` | 报错：HTTP/3 要求 HTTPS |
+| `http://*:8080` | `http1,http3` | 整条声明报错，不仅保留 http1 |
+| `https://*:8443` | `http1,http3` | 通过本项检查 |
+
+错误诊断指出声明来源文件、位置、配置路径、可选的绑定名称、求值后的地址及冲突协议，便于定位。这是工具的绑定语义校验，Core 继续负责配置解析与模板求值。通过本项检查只表示没有这一已知矛盾，实际监听及运行环境支持仍由部署验收保证。首版 scheme 支持范围见第 4.7 节。
+
+**已确认的 HTTP 版本到传输需求映射：**对通过一致性检查且显式声明具体 HTTP 版本的每个地址，保留完整协议集合，并记录对应的 TCP/UDP 传输需求。HTTP/1 和 HTTP/2 对应 TCP，HTTP/3 对应基于 UDP 的 QUIC；同一地址同时声明这些版本时需要保留两种传输，不能只按端口整数去重。不增加 PI transport 参数，具体结果字段在第 5 节的序列化结构讨论中确定。
+
+| 同一地址 `https://*:8443` 的 protocols | 对应的传输需求 |
+| --- | --- |
+| `http1,http2` | `8443/tcp`，保留两种 HTTP 能力 |
+| `http3` | `8443/udp`，不额外补入 TCP |
+| `http1,http2,http3` | `8443/tcp` 和 `8443/udp`，保留三种 HTTP 能力 |
+
+上述映射描述声明所需的监听，不自动发布宿主端口，也不保证任意代理或探测器支持这些协议。省略 protocols 或仅声明 http 时，继续保留版本信息不足的边界，不通过本项映射补入未声明的版本。首版 scheme 范围及 Unix socket 边界见第 4.7 节。
+
+### 4.7 首版监听范围（已确认）
+
+首版覆盖 IP 网络监听，提供 http、https、tcp、udp 和 opc.tcp 的地址解析与语义映射；不认识的 scheme 明确报错，不猜测传输。http/https 按前述能力约定处理，tcp/udp 分别表达其传输，opc.tcp 对应 TCP 并保留 OPC 应用协议及 URL 路径。协议专用行为通过通用工具内部的映射实现，不引用对应应用框架库，也不按端口号猜测应用协议。
+
+| 地址示例 | 首版处理 |
+| --- | --- |
+| `http://*:8080`、`https://*:8443` | 按已确认的 HTTP 能力规则处理 |
+| `tcp://*:6379` | TCP 监听 |
+| `udp://*:9000` | UDP 监听 |
+| `opc.tcp://localhost:4840/server` | TCP 监听，保留 OPC 协议及路径 |
+| `unix:///run/example/app.sock` | 明确报告不支持 |
+| 未识别的 scheme | 明确报告不支持，不回退为 TCP |
+
+Unix domain socket 暂不纳入首版：例如 `unix:///run/example/app.sock` 被 binding 选中时明确报告不支持，不能静默跳过或转换成网络端口。应用仍可使用此类监听；此边界只限制工具的绑定元数据处理。后续支持时需一并明确路径身份、容器挂载、代理连接和探测方式。本项确认功能范围，具体序列化字段不在这里定稿。
 
 <a id="model"></a>
 
-## 9. 统一绑定模型与容器化
+## 5. 统一结果模型
 
-本节是语义需求，不是已经批准的字段名或类定义。
+推荐一个带格式版本的结果对象，分为绑定、Web 入口和后端引用三部分。字段名与序列化结构需要定稿，以下先固定各部分必须表达的语义。
 
-### 9.1 模型至少要表达什么
-
-| 信息 | 用途与约束 |
+| 部分 | 所需内容 |
 | --- | --- |
-| 监听地址与端口 | 反映实际配置；保留回环、通配、IPv4/IPv6 语义。 |
-| 传输协议 | TCP 与 UDP 分开；未知协议不得默认为 TCP。 |
-| 应用协议 | HTTP、HTTPS、opc.tcp 等，不能仅以一个通用 tcp 字样丢掉代理需要的信息。 |
-| HTTP 协议能力 | 例如 Http1、Http2；不等于路由一定采用 gRPC。 |
-| 执行目标 | 应用与 Nginx 等不同进程/容器需要区分，不必细分每个业务插件。 |
-| 可引用身份 | 如 Web Profile 需要选择某个应用入口，必须有稳定引用方式；命名待定。 |
-| 必要的代理入口关系 | 保留已有 Nginx 域名、默认站点等信息，不因合并丢失现有消费能力。 |
-| 来源位置 | 制作时诊断使用，是否写入包不作为必要要求。 |
+| 绑定 | 稳定身份、别名集合、执行目标、一个或多个实际监听端点 |
+| 监听端点 | 地址、端口、传输协议、应用协议，以及有意义的 HTTP 协议能力和 URL 路径 |
+| Web 入口 | 站点身份、域名、所引用的代理监听、显式默认站点关系 |
+| 后端引用 | 代理路由引用的应用绑定，区分本应用后端与普通远程地址 |
+| 结果状态 | 格式版本；能够区分有效空结果、未生成元数据和无效结果 |
 
-同端口可能出现在不同地址、不同传输或不同执行目标上。相同声明的去重与真正端口冲突也不相同，不能仅按整数端口做 Distinct。
+执行目标至少区分应用进程和 nginx。多个业务插件共用应用进程时无需按插件拆文件；插件和声明来源用于制作时诊断，不作为容器端口归属。
 
-应分别校验应用内部监听、生成的代理监听，以及宿主机发布冲突。不能把系统是否允许复用端口的复杂语义简化成“同端口必然冲突”。
+每个绑定有完整配置路径默认别名，可通过 name 增加简短别名。第 6.2 节的别名生成及 server 引用规则已确认，可用于调试定位和后端选择。不能预设同一配置路径或名称在多个文件之间唯一。结果等价比较不包含别名与来源，不依赖文件枚举顺序，不用数组序号作为长期身份。
 
-### 9.2 三种地址不能混淆
+结果去重至少考虑执行目标、地址及地址族、传输和端口，并保留应用协议、HTTP 能力和 URL 路径等语义。同一 socket 对应的不同能力或路径不能直接丢弃，也不能未经约定自动拼成新的监听描述。工具不模拟多个服务能否实际共享 socket；宿主发布冲突由发布规划另行校验。
+
+三类地址必须分开处理：
 
 ```text
 实际监听：http://*:8069
-代理连接：http://127.0.0.1:8069 或 http://应用服务名:8069
-宿主发布：8080 → 容器 8069/tcp
+代理连接：同机 http://127.0.0.1:8069；跨容器 http://应用服务名:8069
+宿主发布：宿主 8080 → 应用容器 8069/tcp
 ```
 
-- `*`、`0.0.0.0`、`[::]` 不是可直接交给代理连接的业务后端主机名。
-- 回环地址不能自动改成通配地址；普通独立容器中的回环监听不能仅通过增加宿主发布就保证可访问。
-- 同机安装与跨容器代理需要不同的连接目标构造。
-- IP、DNS、localhost、通配符及 IPv6 zone 的支持和规范化需要逐项定义。不同服务器对非 IP 主机名的解释未必相同。
-- OPC 路径、Prometheus 抓取路径、Web 业务路径不应参与 TCP 端口去重，但也不能在还需要构造代理请求时丢失必要语义。
-- ZeroMQ、OPC、Garnet 等对外通告/发现地址的处理，不能冒充普通 NAT 映射已经解决。
+- 通配地址不是代理连接目标；构造连接目标不能反过来改写实际监听。
+- 回环、IPv4、IPv6 与 IPv6 zone 保留实际含义；不能假定 IPv6 通配自动覆盖 IPv4。
+- HTTP/2 不自动等于 gRPC。具体 HTTP 版本的 TCP/UDP 映射按第 4.6 节执行；普通 UDP 地址、Unix socket 及未知协议按第 4.7 节处理，不能统一回退为 TCP。
+- OPC URL 路径和 Prometheus 抓取路径不增加 socket，但需要构造请求或引用端点时不能丢失。
+- 元数据不含证书私钥、Settings 全文、无关配置或仍需求值的表达式。
+- 输出顺序稳定，失败不发布部分结果或保留可被误读的旧文件。没有 binding 的文件不贡献结果；合法空集合表示本次交付未提取出绑定，可能没有声明，也可能声明允许且得到零结果，不要求工具证明应用没有动态监听。
 
-### 9.3 HTTP、gRPC、HTTPS 与代理选择
+推荐保留 option 中的 PI，无需额外解析并改写运行文件以剥离它们。生成结果只保留确定值，Containerizer 不重新求值声明。
 
-- HTTP/2 不自动等于 gRPC；同一 Kestrel endpoint 可以承载多个服务和路由。
-- 独立 Prometheus HttpListener 不能受 Kestrel `--urls` 管理。
-- TLS 终止可能发生在应用，也可能发生在 Nginx；绑定元数据不携带私钥，也不代替运行证书配置。
-- 代理采用普通 HTTP、gRPC 等哪种转发方式，继续由 `web.profile` 及配置器能力确定。
-- 当前自动生成的普通代理配置不能直接被宣称已经支持所有 grpc_pass 场景；应核对配置器并单独验收。
-- HTTP3 若纳入支持，需要明确其传输语义；不能把所有 http/https 端点无条件只生成 TCP 映射。
+<a id="web"></a>
 
-### 9.4 server=~ 的新语义必须定稿
+## 6. Web 代理与应用绑定
 
-取消重复 listen 后，应用可能有 8069、4317、9464 等多个 HTTP 地址，不能随便选第一个作为主站点后端。
+### 6.1 保留现有配置器
 
-讨论中的建议是：唯一合适候选可以自动确定；多个候选必须明确选择。需要进一步决定：
+[Definition.Resolver](packager/src/Web/Definition.Resolver.cs) 继续负责 `web.profile` 的覆盖、站点、路径和后端策略；应用绑定只替代它依赖单个 Listen 地址的部分。
 
-- 在 binding 声明中标记主入口，还是让 `web.profile` 显式引用绑定身份。
-- 如何保留应用后端与普通远程后端的区别。
-- 通配监听如何转换成当前安装形态下的可连接地址。
-- 如何在容器化时重定位本应用后端，而不误改一个恰好同端口的远程服务器。
+[Configurator.Nginx.Bindings](packager/src/Web/Configurator.Nginx.Bindings.cs) 继续从生成后的 Nginx 结构读取 listen、server_name 和 default_server。改为返回统一模型中的对象，再与应用绑定合并，不先生成 `.web/nginx/.bindings` 文本供另一个流程读回。
 
-这是未定事项，不能在实现中悄悄选择“排序第一个”。
+原生 Nginx 指令可能覆盖 profile 的入口值，导出器必须继续反映最终结构。不能安全表示的 include、动态监听或复杂匹配应给出定位明确的失败；推荐在统一绑定生成模式中终止制包，不把部分入口当成完整结果。
 
-### 9.5 端口发布与健康检查
+`.web/nginx/<包名>.conf`、配置模板和证书资源仍按现有职责保留。只替换独立的旧绑定文件，不删除整个 `.web` 目录。
 
-从应用监听得知“容器内有哪些端口”，不等于“所有端口都必须发布到宿主机”。内部端口、直接发布端口、代理后端端口需要由交付策略区分；宿主绑定 IP 和宿主端口也属于部署策略。具体配置入口仍待定，不能恢复临时 port! 语法充当最终方案。
+### 6.2 应用后端选择
 
-健康检查也不能简单使用“第一个 HTTP URL”：
+server 是可选的代理后端选择项。应用自行监听，工具从 binding 结果取得可用后端，托管配置器据此生成转发配置。
 
-- 纯 HTTP/2 gRPC 服务未必能用普通 HTTP/1 curl 探测。
-- 路由、授权、TLS 和必要 Host 请求头可能影响结果。
-- TCP 连通与应用业务健康不同。
-- 缺少可靠 HTTP 探测信息时，不应编造一个必然通过的检查。
+**已确认的别名生成：**每个匹配项以其完整配置路径作为默认别名，取 Core 映射后的实际配置路径，以 `/` 连接各级且不带前导 `/`。例如 path 为 `kestrel/endpoints/*`，匹配到 http 项的默认别名为 `kestrel/endpoints/http`；使用精确 path 选中同一项时，默认别名相同。默认别名不包含通配符或文件名，不使用枚举序号。
 
-应审视现有 ApplicationHealth 行为，明确可推导部分、显式配置部分和合理的降级方式。
+name 是 `<?binding ... ?>` 的可选属性，只增加简短别名，不替换默认路径别名。精确 path 增加 name；末尾 `/*` 的每个子项增加 name 和 `name/子项键`，子项键取 Core 配置节 Key。例如同一 http 项加上 `name="kestrel"` 后，可用的别名为 `kestrel/endpoints/http`、`kestrel`、`kestrel/http`。
 
+内容去重后合并全部别名。跨文件同路径或同名不覆盖结果；别名查找后仍有歧义则报错。别名可用于调试定位及显式引用，无需在 web.profile 中重复列出全部绑定。
 
-<a id="package"></a>
+**已确认的 server 规则只有三种：**
 
-## 10. 合并结果与安装包规范
+| 有效写法 | 含义 |
+| --- | --- |
+| 未指定或 `server=` | 自动选择唯一合适的应用绑定 |
+| `server=kestrel/endpoints/http`、`server=kestrel` 或 `server=kestrel/public` | 按默认路径别名或 name 生成的简短别名选择应用绑定 |
+| `server=http://backend.example.test:8080` | 使用指定的完整后端 URL |
 
-### 10.1 一个逻辑结果，包含应用与代理
+自动选择和名称引用都必须得到唯一合适的后端及可连接目标；零个或多个候选报错，不取第一条，也不自动组成后端池。候选是否合适由当前代理方式和绑定协议能力判断。
 
-已确认的目标是：同一安装包只提供一份统一的绑定结果。原有 `.web/nginx/.bindings` 的信息并入其中，不再要求 Containerizer 分别寻找两套端口描述。
+例如 kestrel 下有 public、admin 两个合适端点，自动选择或 `server=kestrel` 都有歧义，填写 `server=kestrel/public` 即可明确目标。
 
-需要保留的并不是“这些端口属于哪个业务插件”，而是“哪个执行目标实际监听这些端口”。应用和 Nginx 可能运行在不同容器中，同一端口的含义不同；合并文件仍必须表达这个区别。
+配置合并时，空值及求值后的纯空白按未声明处理，与省略采用相同的继承规则；合并后的有效值按上表解析，求值错误仍报错。带 `scheme://` 的值按 URL 校验，非法 URL 不回退为名称查询。取消 `~` 特殊值及前缀，不保留旧写法兼容层。
 
-合并不能影响 `.web/nginx/` 中真正的配置文件及其模板用途，也不能把整个目录删除。
+托管配置器使用选中的后端生成转发配置。当前 [Nginx Writer](packager/src/Web/Configurator.Nginx.Writer.cs) 和 [WebIngress.Files](containerizer/src/WebIngress.Files.cs) 的本应用标记可扩展为绑定引用，用于构造同机或跨容器的连接地址；显式远程 URL 保持原义。TLS、HTTP/gRPC 转发及多地址连接适配属于配置器实现，支持范围需单独验收，不增加 server 写法。
 
-建议的结果约束：
+<a id="packages"></a>
 
-1. 写入已经展开、转换、校验的确定值，不再包含变量、配置路径、提取表达式或指令。
-2. 结果由本次最终应用配置和最终代理配置共同生成，不靠手工追加。
-3. 顺序稳定；重复声明按明确规则归并；冲突报告指向原始配置。
-4. 不携带 Settings 全文、连接凭据、证书私钥或不相关配置。
-5. 文件为空、文件缺失、提取失败是不同状态，不能混同为“没有任何监听”。
-6. 下游能识别不支持的格式或协议，并明确失败；格式版本机制是否必要、怎样表达，需要在正式格式中确定。
-7. 此文件服务于工具，不作为应用运行时配置，不要求应用或插件读取它。
+## 7. 包格式与元数据承载
 
-### 10.2 合并文件示意：尚未冻结的语法
+### 7.1 推荐的序列化方式
 
-下面仅说明需要表达的信息；章节名称、字段名、身份编码及值的规范化均是草案。
+推荐 `.bindings` 使用带格式版本的 JSON，由公共模型和 `System.Text.Json` 读写。它是机器生成的交付结果，绑定的地址集合、站点关系和后端引用适合直接序列化，不需要再维护一套 Profile 到对象的映射规则。
 
-示意位置：tar.gz 安装包的根目录 `/.bindings`，**不是**安装后的 `/opt/zongsoft/web/.bindings`。
+Packager 与 Containerizer 共用少量模型、序列化和必要校验源码，放在 `tools/.shared/` 按实际引用关系链接；不互相引用可执行项目。Core 继续处理用户输入和配置，包级业务模型不放入 Core。现场执行器继续消费已有交付协议，不为解析 `.bindings` 增加 Core 依赖。
 
-```ini
-# 拟议的统一元数据；不是现有工具已经接受的格式。
-# application 表示应用进程，nginx 表示代理执行目标。
-# 数字编号仅为展示，不作为稳定绑定身份方案。
+明确格式版本、必需字段、未知字段、未知协议、重复身份和内容长度的处理。版本不支持或内容损坏应失败，不回退到旧 Listen 或旧 Nginx 文件。空数组表示已生成的空结果时，仍须有合法的顶层结构；缺少元数据不能自动等价为空结果。
 
-[application 1]
-url=http://*:8069
-transport=tcp
-protocols=Http1
+### 7.2 推荐的三格式存放位置
 
-[application 2]
-url=http://*:4317
-transport=tcp
-protocols=Http2
+统一逻辑内容，物理承载遵循包格式：
 
-[application 3]
-url=tcp://*:7969
-transport=tcp
-
-[nginx api]
-host=api.example.test
-bind=http://0.0.0.0:8080,http://[::]:8080
-```
-
-这个示例没有声称：
-
-- 7969 是所有 TCP 插件的固定端口。
-- 三条 application 绑定都必须发布到宿主机。
-- `Http2` 就足以决定使用 gRPC 代理。
-- 只要声明了一个 IPv6 监听，就一定同时覆盖 IPv4。
-- 所有安装格式都能原样在同一物理根目录存放此文件。
-
-如果 Web Profile 已有默认站点、多个域名、特殊监听参数等，合并模型必须完整保留当前消费所需的信息。上例为简化展示，并非完整 Nginx 元数据定义。
-
-### 10.3 Nginx 绑定必须来自最终配置
-
-现有 `D:\Zongsoft\tools\packager\src\Web\Configurator.Nginx.Bindings.cs` 的价值在于从配置器处理后的 Nginx 结构导出入口，而不是简单复制 `web.profile` 原始的 bind 字段。
-
-重构必须保留这个原则：用户的原生 Nginx 指令可能改变最终监听；最终元数据应反映配置器实际输出。
-
-当前导出器对不能安全表示的结构会拒绝导出并报告信息。统一流程还需明确：
-
-- 不支持的 include、动态或复杂匹配等结构，如何说明无法完整提取。
-- 未生成 Nginx 元数据时，是否允许继续制作仅供传统安装的包。
-- Containerizer 如何拒绝把一个不完整结果当作完整端口映射。
-- 如何避免失败后保留上一次生成的旧 `.bindings`。
-
-不能仅为凑齐一个文件而忽略无法解析的入口。
-
-### 10.4 “安装包根目录”在不同格式中的含义
-
-这里存在必须继续确认的物理存储问题。
-
-| 包格式 | 现有结构与约束 | 建议方向，尚未定稿 |
+| 格式 | 推荐承载 | 必须同步的消费边界 |
 | --- | --- | --- |
-| tar.gz | 可以有归档根目录元数据，载荷由安装脚本处理。 | 根目录 `.bindings`，安装与容器载荷提取必须排除它。 |
-| deb | 包外层是 ar，内部区分 `control.tar.*` 与 `data.tar.*`；数据归档条目会成为安装载荷。 | 研究控制归档或其他合法包元数据位置；验证制作工具、读取器和实际安装器行为。不能把工具元数据混入 data 载荷。 |
-| rpm | 元数据在 RPM Header，载荷有文件清单及安装语义。当前已存在应用监听等自定义元数据读取链。 | 研究承载统一序列化结果的 Header 元数据，或明确其他合法存放机制；需验证字段类型、大小及读写库支持。 |
+| tar.gz | 归档根目录 `.bindings` | 安装脚本及应用镜像提取排除它；PackageReader 在普通安装路径映射前识别 |
+| deb | `control.tar.*` 内 `control` 的专用字段，名称可采用 `Zongsoft-Bindings` | 存放序列化结果，不加入 `data.tar.*` 安装载荷 |
+| rpm | Header 的专用应用字符串标签 | 不加入 payload 文件清单；标签号与读写类型统一定义 |
 
-建议统一的是一份逻辑模型和一套读取接口；物理承载遵循包格式。若用户坚持三种包都必须是字面意义上的根目录文件，应先把各格式的实际结构展示清楚，再作决定。
+deb/rpm 可沿用现有 Listen 元数据的写入、读取位置，替换为统一结果；字段及标签不沿用 Listen 的含义。三种格式使用同一序列化器，只有外层承载适配不同。deb/rpm 中的 `.bindings` 表示同一逻辑文档，不承诺存在字面意义的根目录文件。
 
-不能用“安装后再删掉 `.bindings`”掩盖包文件归属错误，也不能宣称 tar.gz 的根目录方案已经自动解决 deb/rpm。
+Debian 允许[自定义 control 字段](https://www.debian.org/doc/debian-policy/ch-controlfields.html#user-defined-fields)，RPM Header 提供[字符串标签](https://rpm.org/docs/4.20.x/manual/tags.html)。上述承载是方案建议，具体字段、标签号、大小限制和原生读回结果必须在实施时验证。
 
-### 10.5 源端手写 .bindings 的地位
+生成结果作为包元数据直接交给编码器，不通过普通 `Package.Entries` 安装条目添加。tar 使用独立的归档条目；deb/rpm 使用各自元数据结构。避免“先安装再删除”的处理，也避免 Containerizer 把 tar 根文件归入应用 InstallPath。
 
-早期讨论确认过“每个目录使用固定名称 `.bindings`，打包后合并”，而不是为每个插件创建 `PluginName.bindings`。
+### 7.3 发布完整性
 
-后续选择 XML 指令，就是为了尽量省掉这些手写源文件，改由真实 `*.option` 提取。当前设计主线应围绕指令实现。
+先完成应用和 Nginx 绑定提取及校验，再序列化和发布安装包。复用现有成组/原子发布能力，不在源目录写一个可被下次误用的中间 `.bindings`。
 
-是否仍为非 XML 配置提供手写 `.bindings` 入口，尚未确认。不要自动保留为兼容机制，也不要同时实现两套可以互相覆盖而没有优先规则的输入。
+绑定提取失败时终止制包。所有入包 option 均无 binding 时，应用绑定集自然为空；Web 代理部分仍按其配置生成。空结果如何序列化、是否总是生成元数据在格式讨论时确定，不增加运行时监听推断。
+
+<a id="containers"></a>
+
+## 8. Containerizer 消费与发布
+
+### 8.1 分开规划职责
+
+[PackageReader](containerizer/src/PackageReader.cs) 负责三格式元数据读取，得到同一绑定模型；它不解析各插件的 option，也不装载插件或重新展开模板。
+
+[ApplicationPlanner](containerizer/src/ApplicationPlanner.cs) 负责入口与工作目录。[ApplicationHealth](containerizer/src/ApplicationHealth.cs) 当前还会根据 Listen 改写 `--urls`、转换监听地址、在没有 Web 资产时发布端口并选择首个 HTTP 端点；这些行为需按职责调整：
+
+- 应用入口保留实际启动参数，不根据绑定元数据追加或改写 `--urls`。
+- 绑定模型只描述真实监听；发布规划产生宿主映射，不改变 option 中的值。
+- [WebIngress](containerizer/src/WebIngress.cs) 按绑定引用规划代理关系，逐项处理应用端点，不能因为存在 nginx 就忽略其它 HTTP/TCP 监听。
+- 健康检查独立选择端点和探测方式；没有可靠探测信息时保留进程检查，不把端口可连接等同于业务健康。
+
+### 8.2 发布策略留在交付配置
+
+监听不自动等于宿主公开。推荐在 `.container` 中通过稳定绑定身份声明直接发布、仅内部访问及宿主 IP/端口；精确语法和默认策略待定，不恢复 port! 方案。
+
+代理后端、Prometheus、OTLP 和业务 TCP 端口分别决策。宿主发布冲突按绑定 IP、地址族、传输及宿主端口校验；不能仅对整数端口做 Distinct。回环监听无法通过增加宿主映射变成跨容器可访问。
+
+ZeroMQ、OPC、Garnet 的发现或通告地址还需与部署网络一致。NAT 映射不是这些协议的通告地址配置。
+
+### 8.3 整体替换 Listen 链
+
+需要同步移除或替换：
+
+- Packager 的 `--listen`、PackageOptions/ApplicationHost/Package 的相应属性与验证。
+- 自动生成 systemd 服务时追加的 `--urls`。
+- tar PAX、Debian control 和 RPM Header 的旧 Listen 元数据。
+- 依赖单一 Listen 的后端选择，以及 `~` 特殊值和名称引用前缀；改为缺失/空值自动选择及直接名称引用。
+- Containerizer 的 ListenerAddresses、旧绑定读取、监听地址重写和启动参数拼接。
+- hosting 脚本中的相关提示或传参，以及双语帮助、资源、文档和测试。
+
+已有自定义 `.service` 的 ExecStart 不应机械删除参数。它与绑定声明是否一致由部署工程师负责，工具不解析任意启动参数来推导或反向覆盖绑定。普通业务变量名 `listen` 若仍用于生成实际 `web:url`，可以继续存在，不因 CLI 选项移除而误删。
+
+<a id="servers"></a>
+
+## 9. 实际服务器的配置适配
+
+以下为声明编写者适配实际服务器时的参考，不是工具内置的类型识别或启动检查逻辑。工具只处理入包配置中的 binding；部署工程师负责选择配置文件、声明及显式条件，保证它们表达本次交付需要的监听。
+
+| 组件 | 当前事实 | 本次适配重点 |
+| --- | --- | --- |
+| Web / Diagnostics OTLP | 运行时可共同贡献 Kestrel 端点 | 各入包文件声明并提取自身端点，再汇总去重，保留 Http1/Http2 等能力 |
+| Prometheus | 独立 HttpListener，读取 Settings 中 urls 和 path | 声明筛选所需 exporter 及显式配置条件，保留回环语义，不选取 OTLP 客户端地址 |
+| ZeroMQ daemon | 发现端口来自服务器属性；数据/控制端口来自具名或默认选项，也可被启动参数覆盖 | 明确实际选中实例、发现端口、控制通道启用条件和固定端口 |
+| Garnet | 从选中的 Settings 生成服务参数，包含 bind/port、TLS、Unix socket 和通告项 | 只提取被选中的网络监听；不把全部预设和通告项当作端口 |
+| OPC | BaseAddresses 为实际服务地址，Discovery 为注册目的地址 | 保留 URL 路径与协议，只提取服务监听 |
+| MQTT / 通用 TcpServer | 业务宿主实际创建并启动服务器才监听 | 在真实启动链支持显式配置后添加声明，不依据客户端插件推断 |
+
+ZeroMQ 推荐先完善服务器配置，再添加 binding。[ServerOptions](https://github.com/Zongsoft/framework/blob/main/messaging/zero/src/Configuration/ServerOptions.cs) 当前端口串有位置语义：两项为输入/输出，三项为控制/输入/输出；[ZeroQueueServer](https://github.com/Zongsoft/framework/blob/main/messaging/zero/src/ZeroQueueServer.cs) 还单独维护发现端口，并允许随机绑定；[控制通道](https://github.com/Zongsoft/framework/blob/main/messaging/zero/src/ZeroQueueServer.Control.cs) 在没有存储时不监听。
+
+建议把发现、输入、输出、控制端口及其启用条件明确接到运行时配置。复用现有选项和插件属性注入职责，避免为了端口串而把位置索引、补位和任意条件运算加入通用 binding 语法。具体配置对象与迁移方式需要单独确认；部署工程师保持声明与启动配置一致，工具不推导启动参数优先级。适配不仅修改 [daemon option 模板](https://github.com/Zongsoft/hosting/blob/main/.deploy/.shared/Zongsoft.Messaging.ZeroMQ-daemon.option.template)。
+
+Hangfire Dashboard、Controller、SignalR、普通 gRPC 服务映射等复用宿主监听，无需重复声明。数据库、Redis、Etcd、S3、MQTT 客户端等出站连接不生成应用端口或基础服务容器。
+
+服务器实现参考：[Prometheus](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Diagnostics/src/Telemetry/PrometheusExporterLauncher.cs)、[Garnet](https://github.com/Zongsoft/framework/blob/main/externals/garnet/src/GarnetServer.cs)、[OPC](https://github.com/Zongsoft/framework/blob/main/externals/opc/src/OpcServerOptions.cs)、[MQTT](https://github.com/Zongsoft/framework/blob/main/messaging/mqtt/src/MqttQueueServer.cs)、[TcpServer](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Net/src/TcpServer.cs)。
 
 <a id="implementation"></a>
 
-## 11. 最终改造目标与影响范围
+## 10. 实施顺序与改动位置
 
-本节列出工具实现所需的依赖契约及实施位置；Core 提供现有设置解析能力，其余工具能力以各项说明为准。
-
-### 11.1 按职责修改
-
-| 位置 | 目标 |
-| --- | --- |
-| `D:\Zongsoft\framework\Zongsoft.Core\src\Configuration\Settings*.cs`、`ConnectionSettings*.cs` | Core 提供共用设置解析器；工具直接调用普通设置（`Settings`），引用的程序集须满足第 6.3 节契约。 |
-| `D:\Zongsoft\framework\Zongsoft.Core\src\Configuration\Xml\XmlStreamConfigurationProvider.cs`、`XmlConfigurationReader.cs`、`XmlConfigurationSession.cs` | 配置提供程序执行 Import 并发布有效导入链的 `Instructions`；静态 `Read(Stream, out instructions, filePath)` 只解析单流。复用 Core 映射与加载流程，具体 binding 求值语义由后续工具实现。 |
-| `D:\Zongsoft\framework\Zongsoft.Plugins\src\Hosting\ApplicationBuilder.cs`、`Configuration\PluginConfigurationProvider.cs` | 确定可以离线复用的配置选择和合并能力，避免 Packager 重写不一致的加载顺序。 |
-| `D:\Zongsoft\tools\deployer\src\TemplateResolver.cs` | 模板展开后保留合法 XML 指令，正确报告模板错误；不承担插件监听业务。 |
-| `D:\Zongsoft\tools\packager\src\PackageOptions.cs`、`PackCommand.cs`、`ApplicationHost.cs` | 调整重复 listen 概念及所有引用；建立提取过程需要的确定宿主/环境上下文。选项移除方式需与正式设计一致。 |
-| `D:\Zongsoft\tools\packager\src\Scriptor.Systemd.cs` | 根据最终方案停止生成重复或误导性的 `--urls`；保留其他启动参数和既有服务文件处理规则。 |
-| `D:\Zongsoft\tools\packager\src\Web\Definition.Resolver.cs` | 明确 `server=~` 如何指向真实应用端点，处理多个候选及通配地址。 |
-| `D:\Zongsoft\tools\packager\src\Web\Configurator.Nginx.Bindings.cs` 等 | 保留最终 Nginx 配置导出，将其合并到统一结果；不能降低原有验证能力。 |
-| `D:\Zongsoft\tools\packager\src\Generator.Tar.cs`、`Generator.Deb.cs`、`Generator.Rpm.cs` 及公共生成流程 | 写入各包格式的统一绑定元数据，清除被替代的监听元数据与孤立代码；保证工具元数据不进入运行载荷。 |
-| `D:\Zongsoft\tools\containerizer\src\PackageReader.cs` 及 `PackageReader.Tar.cs`、`PackageReader.Deb.cs`、`PackageReader.Rpm.cs` | 统一读取模型；不再分别依赖旧 Listen 与旧 Nginx 绑定文件，也不解析应用 option。 |
-| `D:\Zongsoft\tools\containerizer\src\ApplicationPlanner.cs`、`ApplicationHealth.cs` | 生成正确的端口、启动与健康检查计划，取消从旧单一 listen 推导全部行为的假设。 |
-| `D:\Zongsoft\tools\containerizer\src\WebIngress.cs`、`WebIngress.Files.cs` | 保留代理重定位功能，以明确的后端关系取代含糊的端口匹配；支持应用和代理分别消费绑定。 |
-| `D:\Zongsoft\tools\.shared` | 仅在多个工具确实共享模型、序列化或诊断职责时复用；不要各自复制同一套代码，也不要让工具互相引用可执行项目以求复用。 |
-| `D:\Zongsoft\hosting\.deploy\.shared\*.option.template`、具体插件的 `*.option` | 添加声明与必要的显式配置；核实字段确实被运行对象读取。 |
-| `D:\Zongsoft\hosting\.shared.ps1`、根目录 `pack.cmd`、`containerize.cmd` 等 | 仅同步确实受影响的参数和提示，不引入新的 scheme/env/network 固定组合。 |
-| `D:\Zongsoft\tools\migrator` | 参与整体交付验收，但不因统一绑定而增加不属于它的监听解析职责。 |
-
-以上是已知职责位置，不是最终的类和文件结构。实现前应按最新源码重新定位所有引用，不能只改表中列出的几个文件。
-
-### 11.2 必须整体处理 --listen
-
-若最终决定取消 Packager 的 `--listen`，应一并处理：
-
-- 命令选项、资源消息、变量/属性/字段、验证逻辑。
-- Systemd 服务生成和已有服务文件的处理边界。
-- tar/deb/rpm 的旧监听元数据读写。
-- `server=~` 的解析与 Web Profile 示例。
-- Containerizer 的启动参数修改、端口推导、代理上游重定位和健康检查。
-- hosting 的脚本提示、传参、说明和测试。
-- 双语 README、实现文档和相关 SKILL。
-
-不能只删命令参数，却仍由 Containerizer 拼接 `--urls`。也不要因为命令选项叫 listen，就误删模板中用于生成实际运行配置的普通同名变量。
-
-### 11.3 Framework 调整的边界
-
-用户要求复用 Core 和共享代码；若它们存在问题或不足，先说明具体源码、输入和影响，再由用户决定如何重构。此前用户针对特定 Core 问题、ZeroMQ 插件问题作出的修复授权，不等于本次可以无条件改造所有框架接口。
-
-普通设置（`Settings`）与连接设置（`ConnectionSettings`）共用 Core 解析器。工具使用第 6.3 节契约读取完整文本和显式参数，依赖以项目实际引用的程序集为准。
-
-同理，如果某个服务器的配置对象没有端口属性，或者虽然写了 option 但启动代码并不读取它，应在该服务器的真实配置链上解决。不要让 XML 指令输出一个实际并未监听的端口来绕过问题。
-
-### 11.4 开发约束
-
-后续实施必须继续遵守工作区的最新 AGENTS、SKILL 和 `D:\Zongsoft\guidelines`，尤其是：
-
-- 不考虑兼容旧的临时方案；代码、文档、注释直接描述最终效果，不编写重构过程流水账。
-- 保留与本功能无关的未提交修改，不用整文件回退清除局部功能。
-- 文本使用 CRLF；手写代码使用 Tab；按阶段适当留空行；第三方文件保持上游格式；shell 脚本按 Git 属性保留 LF。
-- XML 文档注释应遵循项目规范，尽量使用语义化的XML元素(`<c>...</c>`, `<see ...></see>`)；对同类公共成员保持完整一致，不只给其中几个成员加注释。
-- 不为方便测试扩大生产代码的访问范围。
-- 命令和资源变更同步双语文档及资源来源，生成文件通过既有生成流程更新。
-- 四个工具的通用输出继续复用 `tools/.shared/`：警告暗黄色配高亮参数，错误暗红色配紫色参数；不重新引入各工具重复的 Output 实现。
-- 依赖和工具版本以项目及仓库版本配置为准，文档不把某次讨论的版本号变成长期固定要求。
-- 仓库 Cake 的发布任务可能向 NuGet 推送；不要把发布任务当作普通本地验证。
-
-## 12. 尚未定稿的事项与后续讨论顺序
-
-### 12.1 待定事项
-
-下面的“建议方向”用于延续讨论，并不代表用户已经批准其精确语法。
-
-| 优先级 | 必须定稿的问题 | 建议方向 |
+| 阶段 | 工作与完成条件 | 主要位置 |
 | --- | --- | --- |
-| 1 | Packager 怎样获取与运行时一致的有效配置和插件选择？ | 找到可离线复用的 Framework API；不要自行按文件名排序合并。 |
-| 1 | 指令针对单对象还是集合，怎样引用字段、Settings 内字段及混合来源？ | 先用 Kestrel、Prometheus、ZeroMQ 三种真实输入推导最小语法，再验证普通字段与 Settings 混合示例。 |
-| 1 | 声明怎样表达启用条件、选择中的实例和配置缺失？ | 明确可静态判断的范围、必需性和空集合语义；动态业务启动不伪装为已知。 |
-| 1 | 指令作用域、规则标识、覆盖/禁用以及重复规则如何处理？ | 从最终配置求值，允许基础文件声明一次；标识作用域必须清楚。 |
-| 1 | `server=~` 如何选择主 HTTP 入口？ | 唯一候选可推导；多个候选要求明确引用，不按扫描顺序取第一个。 |
-| 2 | 多 URL、多端口、位置语义、地址默认值与协议来源怎样表达？ | 采用受限、可验证的声明，不设计任意脚本语言，也不在工具写死插件类名。 |
-| 2 | 哪些端口只供内部使用，哪些通过代理，哪些直接发布？ | 与实际监听分层，明确容器发布策略及宿主端口配置入口；不恢复 port! 临时语法。 |
-| 2 | 通配、回环、IPv6、同端口多协议及发现/通告地址如何处理？ | 分清监听、连接和发布，针对每种服务器验证；NAT 不能代替服务通告配置。 |
-| 2 | 最终 `.bindings` 的字段、身份及格式版本？ | 一个结果表达应用和代理；保留当前 Nginx 消费所需语义，不记录不必要的插件归属。 |
-| 2 | deb/rpm 的物理存放方式？ | 使用合法的包元数据结构，并验证安装后不进入运行目录。 |
-| 2 | 无法完整提取时制作包和制作容器分别是否允许继续？ | 不允许下游把部分结果当成完整结果；诊断精确到文件、指令和配置路径。 |
-| 3 | 是否保留非 XML 的源端手写描述入口？ | 先完成真实 option 场景；有具体需求再定，不为兼容旧草案增加双轨输入。 |
-| 3 | 是否移除运行产物中的 PI、是否持久化来源诊断？ | 不影响运行读取；工具结果不携带敏感配置；按实际成本和需要决定。 |
-| 3 | 健康检查如何支持 HTTP/2、TLS、授权和非 HTTP？ | 不从端口表凭空推导完整业务探测，保留必要的显式配置。 |
+| 1 | 基于最终包条目遍历全部 option；由 Core 逐文件读取配置与 PI，明确 Import 与求值边界 | Packager 的 PackCommand、Package 与交付文件视图；Core 原有 XML API |
+| 2 | 确认剩余取值边界及结果规范化细节，复用 deployer 通用过滤，接入已确认的 template 与 option 配置视图，落实按内容去重和别名合并，完成 Kestrel/Prometheus 提取 | Packager 新增绑定提取实现、`tools/.shared/` 过滤与必要模型；Core Settings、TemplateEvaluator 及成员表达式 API |
+| 3 | 接入 Web 后端引用与选择；Nginx 导出对象并合入统一结果 | Web/Definition.Resolver、Configurator.Nginx.Bindings、Nginx Writer |
+| 4 | 三格式写入并统一读回，排除运行载荷，处理失败发布 | [Generator.Tar](packager/src/Generator.Tar.cs)、[Generator.Deb](packager/src/Generator.Deb.cs)、[Generator.Rpm](packager/src/Generator.Rpm.cs)、PackageReader 对应实现 |
+| 5 | 按绑定规划代理、发布和健康检查，整体替换旧 Listen 链 | Containerizer 的 ApplicationPlanner、ApplicationHealth、WebPackage、WebIngress；Packager 的宿主与服务生成 |
+| 6 | 在实际交付的配置中加入绑定；有必要时完善 ZeroMQ 等服务器的显式配置消费 | Framework 对应服务器配置、Zongsoft/Automao hosting 模板；不改造 Plugins 配置装配 |
+| 7 | 同步脚本、帮助、双语文档，完成隔离集成及获授权的运行验收 | 两套 hosting、受影响工具的测试与文档 |
 
-继续讨论时遵循用户要求：**问题逐个询问，给出真实文件路径、配置片段和设计理由。** 不要一次把整张表抛给用户选择，不使用没有具体文件指代的“清单”等含糊叫法。
+阶段可以分别验证，但不能把只覆盖 Kestrel 的阶段结果宣称为整个统一绑定重构完成。JSON 模型及文件位置确定后，生成端和读取端成对变更，不留下双轨兼容代码。
 
-### 12.2 推荐的实施顺序
+deployer 继续只负责模板展开并保留合法 PI；migrator 不增加监听解析职责。两者参与最终交付链验证，不因绑定功能扩大业务范围。
 
-1. 重新核实当前分支和未提交修改；确认 Core Settings 与配置加载能力的最新状态。
-2. 用真实配置冻结 XML 指令最小语法、有效配置上下文和错误规则。
-3. 冻结统一结果模型、包内存放方式及 `web.profile` 选择应用端点的约定。
-4. 必要时先完成已确认的 Framework 配置能力调整，覆盖真实服务器的显式配置消费。
-5. 在 Packager 实现指令发现、最终配置求值和模型校验；先用临时目录与本地输入验证。
-6. 合并 Nginx 最终配置导出，处理三种包格式及工具元数据排除。
-7. 改造 Containerizer 的读取、端口规划、代理和健康检查，整体处理旧 listen 链。
-8. 同步 hosting 示例模板、脚本和工具文档，删除被替代且确实无用的代码。
-9. 执行分层测试，再在明确的测试环境完成安装、容器和本地 Debug 验收。
-10. 文档只描述最终使用效果；本设计交接稿的待定项在确认后及时更新，避免形成互相矛盾的规则。
-
-完整工具链的绑定改造尚未实施，本文的验收清单不构成恢复容器或本地 Web 服务的授权。
+建议的工具内部结构只包含必要职责：交付文件遍历及读取、声明提取与校验、结果汇总去重及序列化；过滤复用从 deployer 抽取的共享实现。不增加插件发现、宿主配置装配、全局配置入口、XML/Settings 解析器或通用规则引擎。
 
 <a id="acceptance"></a>
 
-## 13. 实现验收目标
+## 11. 验收与开发约束
 
-以下均是新功能完成后需要验证的目标，不能把本文中的设计示例当作已通过的测试结果。
+### 11.1 配置与提取
 
-### 13.1 解析与配置语义
+- 只按最终入包范围遍历 option；无需 Plugins、插件清单、应用程序集或额外配置入口即可提取。
+- 基础、环境及 host/site 命名的文件按相同规则处理；文件枚举顺序不产生覆盖关系。
+- 排除、重命名、可选导入、按 option 路径导入、循环和越界均遵循 Core 与交付文件视图的实际规则。
+- binding 位于 Core 允许的不同 PI 位置时，path 的配置根基准不变；按路径 Import 对声明的保留或过滤沿用 Core，工具不增加位置限制。
+- 每个文件及其显式导入完成后再求值；被导入文件独立入包时仍单独提取，按结果去重，不按声明来源提前跳过。
+- 精确 path 仅选择指定项；末尾 `/*` 仅枚举直接子项；不把无后缀的集合节点自动展开或递归遍历更深层级。
+- protocols 默认采用常量，配置引用仅使用 `@` 前缀；去除前缀后覆盖普通字段、根引用和 Settings 取键。常量不触发配置查找，未知值不回退为字段引用。
+- protocols 可省略；省略不补入服务器默认协议、不宣称支持全部版本，下游需要明确协议能力而信息不足时报告不足。template 的结果保持 URL。
+- 协议列表覆盖逗号分隔的 http/http1/http2/http3 多项输入，不按 Http1AndHttp2 组合枚举名解析；来源取值和列表解析分开，地址 separators 不影响协议分隔。
+- http 单独出现表示版本未声明，不转换为 http1 或全部版本；与具体版本同时出现时移除 http，保留具体版本。覆盖 http,http2 与 http2 的规范化等价，以及 http 与 http1 的内容不等价，不跨声明拼合协议集合。
+- scheme 与协议集合的已知冲突使整条声明失败，不修改 URL、不丢弃冲突协议，也不受 required 豁免。覆盖 http 搭配 http3、http1,http3 的失败，以及 http 搭配 http1,http2、https 搭配 http1,http3 通过本项检查；诊断包含来源、配置路径、可选名称、求值后的地址及冲突协议，失败不发布部分结果。
+- 显式 http1/http2 映射 TCP，http3 映射 UDP，混合版本保留两种传输及完整协议集合；同端口的 TCP/UDP 不合并，只有 http3 时不补 TCP。不增加 transport 参数，也不因得到传输需求自动发布宿主端口。
+- 首版覆盖 http/https、tcp、udp 和 opc.tcp；opc.tcp 保留应用协议和路径。被声明选中的 Unix socket 或未知 scheme 明确失败，不静默跳过、不回退 TCP，且不引入应用框架库依赖。
+- protocols 引用与 filter 共用引用起点规则：引用内容无前导 `/` 时相对于当前候选项，有前导 `/` 时从本次配置根读取；普通字段及 Settings 取键均覆盖。候选项与根有同名字段时分别读取正确值，相对引用缺失时不自动向上级或根回退。
+- 根引用覆盖本次显式 Import 的最终读取结果，不读取其它独立入包文件；binding 的 path 始终从配置根定位。
+- Kestrel 多端点、Settings 引号/转义/空值、普通字段与 Settings 混合、有限筛选及启用条件均有行为测试。
+- 筛选覆盖字段存在、否定、逗号候选值、忽略大小写、缺失与空值、从左到右的混合逻辑组合；PI 中的 `&amp;` 经 Core 单次解码。deployer 变量查询和 binding 配置字段查询使用同一通用过滤规则，框架专用比较保持在 deployer。
+- 启用条件仅由 filter 表达；覆盖 `Enabled:true`、`!Enabled | Enabled:true` 以及省略 filter 的情况，不自动识别 Enabled 字段，不额外进行布尔校验。独立 enabled 参数作为未知参数拒绝。
+- 普通字段直接读取，`字段名[设置键]` 只解析指定字段；覆盖 Settings 以外的字段名、内层键缺失及非法设置文本，不自动尝试其它来源或回退为原始字符串。
+- template 验收覆盖 option 的当前项成员、相对与绝对路径索引、Settings 取键及 Import 最终值；单字段也使用模板表达式，`${url}` 不隐式转换为 `${option.Url}`，字面文本不隐式查字段，未选中项不读取其模板字段。
+- 多地址仅在显式指定 separators 时展开，分隔字符集合只作用于模板求值后的地址文本，不作用于原始模板或外层 Settings；省略时保留 URL 路径中的逗号、分号。覆盖多个地址共用当前候选项的 protocols，以及其中任一地址无效或与协议冲突时整条声明失败，不按位置配对地址和协议。
+- URL 模板分别验证普通 option、部署模板中的 `\${...}` 保留及打包阶段求值；不注册环境变量来源，关闭递归及回退，字段缺失或 Settings/模板错误不降级为空结果。
+- 同一声明文本在不同文件读出不同值时全部保留；同名声明不隐式覆盖。内容相同、名称不同的结果合并为一项，保留全部别名并去除重复别名；改变文件枚举顺序不改变绑定和别名集合。
+- 未指定 name 时仍生成匹配项的完整配置路径默认别名；精确 path 与通配 path 选中同一项时默认别名相同，不保留通配符。提供 name 时保留默认别名，并按精确项/集合项增加 name、name/子项键；别名不受枚举顺序影响，内容去重后合并全部默认及简短别名。
+- 同一默认路径别名在多个文件对应不同绑定时不覆盖、不提前合并；引用筛选后仍有歧义则失败。省略 name 的诊断以来源及配置路径定位。
+- 地址、端口、传输协议、应用协议、HTTP 能力或有意义的路径不同，不能只因端口或名称相同就合并；声明来源不同不阻止相同内容去重。
+- required 省略及 false 时，路径缺失、没有直接子项或全部被 filter 排除均允许零结果；true 时上述情况报错。约束逐声明在全局去重前检查，重复结果仍满足非空要求，其它声明有结果不能掩盖本声明无结果。
+- 缺失必需字段、解析及校验错误不受 required 豁免；一个有效项不能掩盖其它选中项的错误。无声明的文件不贡献绑定。
+- 不从客户端地址或服务器默认值推测绑定；随机端口及残留模板变量失败。输入声明与实际服务的一致性在部署验收中验证。
 
-| 场景 | 期望结果 |
-| --- | --- |
-| `<?binding ...?>` 及 `path="Kestrel/Endpoints"` | 正确识别单数指令和斜杠路径；普通 XML 注释、其他 PI 不冒充声明。 |
-| 引号、实体、空白、重复参数、未知参数、终止符 | 严格遵循正式词法规范；错误包含文件位置，不用整文件正则猜测。 |
-| Kestrel 单端点与多端点 | 正确取得最终地址、端口和协议能力。 |
-| 基础配置被实际选中的站点或环境覆盖 | 只导出最终生效值；不残留被覆盖的端口。 |
-| 未选择的环境文件、未装配的插件、源目录中的模板 | 不因扫描到文件就纳入监听。 |
-| 同一全局配置路径由多个实际插件贡献 | 与运行配置提供者的真实合并行为一致。 |
-| 指令重复、覆盖、禁用及跨文件标识 | 遵循已定作用域，无扫描顺序依赖。 |
-| Settings 中大小写、空白、引用、转义和分隔符 | 与所引用 Core 的实际解析一致；没有工具私有的第二套解析规则。 |
-| 外层 Address 与 Settings 内 Port 混合 | 能明确解析来源，不使用模糊的隐式回退。 |
-| 未启用条目、可为空集合、缺失必需字段 | 三类情况有清楚且可验证的不同结果。 |
-| 多 URL 与有位置语义的端口列表 | 不把 ZeroMQ 的控制/输入/输出位置丢掉。 |
-| 动态端口、越界端口、残留模板变量 | 不生成看似有效的容器绑定；明确报告无法静态确定。 |
-| 入站监听与出站连接混在同一 option | 只按声明和真实启用状态提取监听，不扫描所有 server/port 字段。 |
-| 配置包含凭据 | 只输出必要绑定字段；错误定位不要求转储整份连接设置。 |
+### 11.2 代理、发布与包内容
 
-### 13.2 归并、代理与容器行为
+- server 直接引用名称或别名，完整 URL 继续作为显式后端；未知别名、无合适候选及多个候选均失败，远程同端口后端不被误改。不接受旧 ~ 特殊值及前缀。
+- server 缺失、显式空值及求值后的纯空白按相同继承规则处理，最终无有效配置时自动选择；求值错误仍报错。其它配置字段保持各自的空值语义。
+- Nginx 原生指令影响最终监听时正确导出；不支持的结构不产生部分成功结果。
+- 回环、通配、IPv4/IPv6、传输协议、不同执行目标和多地址分别验证。
+- 有 nginx 的应用仍保留其它端点；内部端口不因存在就全部公开。发布策略与健康检查不修改运行监听。
+- tar/deb/rpm 都能写入并读回同一逻辑结果；验证未知版本、损坏、缺失、合法空结果及大小限制。
+- 安装目录与应用镜像没有工具元数据、`.env` 或源模板；实际 option、代理配置及证书按原职责交付。
+- 同输入生成稳定结果，失败不会发布旧或半成品元数据；包级结果不含凭据、私钥和 Settings 全文。
+- 旧 Listen、启动参数补写与独立 Nginx 绑定文件链全部清理，保留业务变量和自定义服务的正确语义。
 
-- 同一监听的重复声明正确归并；不同执行目标、地址族和传输不被错误合并。
-- 检查 IPv4、IPv6、通配、回环、同端口多地址及 TCP/UDP 的区别；尚不支持的形态明确拒绝。
-- `server=~` 在唯一候选、多候选、无候选时行为确定。
-- HTTP/2、gRPC、TLS、普通 HTTP 的代理和健康检查不互相冒充。
-- 本应用代理上游可以按安装形态重定位；普通远程后端即使同端口也不被误改。
-- Nginx 原生指令改变监听时，元数据来自最终配置。
-- 不完整或不支持的 Nginx 配置不得悄悄变成“没有入口”。
-- 回环监听不因增加容器发布规则而被宣称可从外部访问。
-- 内部端口不自动全部公开；直接发布与代理入口的宿主冲突能够发现。
-- ZeroMQ 独立 daemon 的发现、实际启用的数据/控制通道及跨容器/本地客户端的发现结果一致。
-- Web 与 daemon 共用插件库时，不给 Web 误导出 daemon 服务端端口。
-- 不再残留已废弃 listen 的属性、包头写入、启动参数拼接或旧 Nginx 绑定读取路径。
-- 相同输入重复制作得到稳定的绑定内容；失败不会留下可被下游误读的旧结果。
+### 11.3 整体交付验收
 
-### 13.3 包格式和运行载荷
+最终验证同时覆盖容器和本地 Debug 两条路径，不能只检查生成的端口表。
 
-对 tar.gz、deb、rpm 分别检查：
+容器路径：以 [Zongsoft web/default](https://github.com/Zongsoft/hosting/tree/main/web/default) 为代表，从 hosting 根目录走部署、打包、升迁、容器化、安装及启动；在授权测试环境使用所需基础服务和独立 ZeroMQ daemon，验证登录、Security 常用 API、代理转发、日志、事件交换与发现后的实际通道可达性。
 
-1. 元数据能够写入并由 Containerizer 正确读取。
-2. 所有应用绑定与 Nginx 入口都进入同一逻辑结果。
-3. 格式不支持、内容损坏和缺失完整信息能被识别。
-4. 安装目录与应用运行镜像内没有工具专用的 `.env`、源模板和 `.bindings`。
-5. 实际 option、证书及代理配置仍按原职责正确交付。
-6. 安装脚本、服务文件及卸载行为正确，不出现“先安装工具元数据再手工删掉”的补丁。
-7. 在对应平台验证包元数据和安装行为。仅检查归档内容，不等于已经验证安装成功。
+本地路径：使用宿主 Debug 便捷部署入口，连接同一组基础服务及独立 daemon，执行相同业务验证。保持便捷脚本已有的当前宿主、Debug、Windows/x64 和覆盖策略，不为绑定重构无关改写。Automao 宿主按其实际站点配置增加代表性覆盖。
 
-### 13.4 用户要求的整体流程
+Security 输入参考 [HTTP 示例](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Security/docs/http)和[数据库脚本](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Security/database)。账户和凭据从已授权测试配置取得，不写入本文或生成元数据。
 
-用户此前提出的验收目标仍是有价值的最终验证场景；本次设计文档不表示已完成这套新功能的验收。
+本文不是启动服务或执行安装的授权。执行前遵守用户当时的服务状态要求；归档检查、编译及交叉编译不能替代对应平台的安装和运行验证。
 
-**容器流程：**
+### 11.4 开发要求
 
-1. 以 `D:\Zongsoft\hosting\web\default` 为宿主，从 hosting 根目录分别走 `deploy.cmd`、`pack.cmd`、`migrate.cmd`、`containerize.cmd`。
-2. 验证部署、打包、数据库等升迁、容器交付、安装和启动的完整链路。
-3. 按选定配置运行需要的 Redis、MySQL、RustFS、Etcd 等基础服务，ZeroMQ 作为独立 daemon 部署。
-4. Web 启动后实际登录，再执行 Security 常用 API，不能只检查 HTTP 端口开放。
-5. 检查服务日志、代理转发、事件交换器和发现通道，确认没有重复订阅或实际端口缺失。
+遵循仓库 [AGENTS.md](AGENTS.md)、目标工具的 SKILL 和 [guidelines](https://github.com/Zongsoft/Guidelines/blob/main/AGENTS.md)。保留用户修改，不为测试扩大成员可见性；文本 CRLF、代码 Tab，Shell 和第三方文件保持各自格式约定。
 
-**本地 Debug 流程：**
+代码改动按受影响项目执行全部目标框架的严格构建、IDE0049 验证和相关回归。文件系统行为使用临时目录及本地输入；文档改动只检查内容、链接、换行和差异。API、命令或资源变化同步对应双语文档及生成资源流程。
 
-1. 保持验收所需的基础服务和独立 daemon 运行。
-2. 执行 `D:\Zongsoft\hosting\web\default\deploy.cmd`。
-3. 该便捷脚本已有用户要求的固定默认项：当前宿主、Debug 开、Windows、x64、默认 framework、始终覆盖；其他项目保持既有默认和提示。
-4. 在本机启动 Web，连接同一组服务，登录并执行相同的常用 API。
-5. 同时核对本地访问 ZeroMQ 发现结果是否真的可达，不能只验证发现端口。
+Core 和工具依赖版本以项目及 [Directory.Packages.props](Directory.Packages.props) 为准。Debug 本地程序集与 Release 包引用都必须包含所需的新能力，不能以本地 Debug 通过代替包依赖验收。
 
-Security 的参考输入在：
+各工具保留独立解决方案和发布流程。Cake pack 会推送 NuGet，不能用作本地验证。需要实际工具安装验收时，按届时用户授权的范围执行；版本从项目读取，安装操作与普通源码测试分开，不把本文当作另一台电脑的全局卸载或安装授权。
 
-- [HTTP 示例目录](../framework/Zongsoft.Security/docs/http)
-- [数据库脚本目录](../framework/Zongsoft.Security/database)
+<a id="decisions"></a>
 
-此前使用的本地测试账号为 `Popeye`，密码不写入仓库文档；执行前从用户授权的测试配置取得，必要时向用户确认，不以猜测值代替。
+## 12. 待确认问题与讨论顺序
 
-这些步骤必须在明确的测试环境执行。当前用户曾要求停止全部容器和本地 Web，本次整理文档不撤销该要求。后续会话开展有副作用的运行验收前，应核实当前指令和环境；运行结束后的服务状态也应服从用户当时的要求。
+下面是影响实施的决策点。推荐方向已写入对应章节；尚未确认的细节不应被实现者自行视为最终契约。
 
-### 13.5 开发验证与本地工具安装
-
-遵循对应工具的独立解决方案和测试流程，不为单工具变动无条件构建整个仓库。
-
-受影响 C# 项目需要严格规范构建及 IDE0049 检查，例如以 Packager 为例：
-
-```powershell
-# 工作目录：D:\Zongsoft\tools
-dotnet build .\packager\Zongsoft.Tools.Packager.slnx -p:ZongsoftCodeStyleStrict=true
-dotnet format style .\packager\Zongsoft.Tools.Packager.slnx --no-restore --verify-no-changes --diagnostics IDE0049
-```
-
-多目标项目按当前仓库要求覆盖全部目标框架；测试命令和平台以各项目实际配置为准。Containerizer 的解决方案是 `D:\Zongsoft\tools\containerizer\Containerizer.slnx`，不要凭命名规律虚构路径。
-
-文件与解析测试使用临时 source/output 和本地缓存；无需真实启动服务器的测试不要引入服务依赖。实际安装、服务启停和容器验证单独记录，不能用构建成功代替。
-
-用户此前明确要求实际工具验证采用本机全局工具：**先卸载，再安装本次本地生成的工具包**，防止同版本号被旧安装遮蔽。执行时从项目读取真实包标识和版本，不把安装示例写成过期固定版本，也不使用 NuGet 推送流程来制作本地验证包。
-
-本文档改动需核对内容、链接、CRLF 和差异；Core PI 代码改动按 Core 的聚焦构建及测试要求验证，不需要安装工具或运行服务。
-
-<a id="references"></a>
-
-## 14. 参考资料与源码索引
-
-本地链接均相对于本文 `D:\Zongsoft\tools\bindings.md`。表格标出目录基准，链接文字为实际文件名；复制到其他环境时，应使用对应仓库的同路径文件。
-
-源码是当前实现的依据；README 可辅助理解，但 hosting 的旧文档可能未同步设计。若说明与实现冲突，先定位真实行为，再更新文档，不把旧说明当作已生效契约。
-
-### 14.1 规范和工具说明
-
-目录基准：`D:\Zongsoft\tools`。
-
-- [仓库 AGENTS.md](AGENTS.md)、[仓库 SKILL.md](SKILL.md)。
-- [deployer/README.zh-Hans.md](deployer/README.zh-Hans.md)、[deployer/SKILL.md](deployer/SKILL.md)。
-- [packager/README.zh-Hans.md](packager/README.zh-Hans.md)、[packager/SKILL.md](packager/SKILL.md)。
-- [containerizer/README.zh-Hans.md](containerizer/README.zh-Hans.md)、[containerizer/SKILL.md](containerizer/SKILL.md)。
-- [migrator/README.zh-Hans.md](migrator/README.zh-Hans.md)。
-- [guidelines/README.md](../guidelines/README.md)、[guidelines/AGENTS.md](../guidelines/AGENTS.md)。
-
-### 14.2 Core 变量、配置和解析
-
-目录基准：`D:\Zongsoft\framework\Zongsoft.Core\src`。
-
-| 文件 | 核对内容 |
-| --- | --- |
-| [Common/Variables.cs](../framework/Zongsoft.Core/src/Common/Variables.cs) | 变量与命名空间能力，不重新实现。 |
-| [Text/Templating/TemplateEvaluator.cs](../framework/Zongsoft.Core/src/Text/Templating/TemplateEvaluator.cs) | 模板展开与表达式语义。 |
-| [Configuration/Settings.cs](../framework/Zongsoft.Core/src/Configuration/Settings.cs)、[Settings.Parser.cs](../framework/Zongsoft.Core/src/Configuration/Settings.Parser.cs) | 通用键值设置与共用解析器；`ISettings` 继承 `IDictionary<string, string>`。 |
-| [Configuration/ConnectionSettings.cs](../framework/Zongsoft.Core/src/Configuration/ConnectionSettings.cs)、[ConnectionSettingsBase.cs](../framework/Zongsoft.Core/src/Configuration/ConnectionSettingsBase.cs) | 连接设置基类（`ConnectionSettingsBase`）继承普通设置（`Settings`），提供驱动约束、类型化读取及扩展属性集（`Properties`）。 |
-| [Configuration/Xml/XmlConfigurationReader.cs](../framework/Zongsoft.Core/src/Configuration/Xml/XmlConfigurationReader.cs)、[XmlConfigurationSession.cs](../framework/Zongsoft.Core/src/Configuration/Xml/XmlConfigurationSession.cs) | option、命名属性、路径映射与 PI 解析；指令调度、递归导入与有效范围。 |
-| [Configuration/Xml/XmlStreamConfigurationProvider.cs](../framework/Zongsoft.Core/src/Configuration/Xml/XmlStreamConfigurationProvider.cs)、[XmlConfigurationProvider.cs](../framework/Zongsoft.Core/src/Configuration/Xml/XmlConfigurationProvider.cs) | 流与文件配置提供程序、PI 快照、纯解析入口及文件重载。 |
-| [Configuration/Xml/XmlConfigurationExtension.cs](../framework/Zongsoft.Core/src/Configuration/Xml/XmlConfigurationExtension.cs) | 配置来源接入方式。 |
-
-### 14.3 宿主与插件配置
-
-目录基准：`D:\Zongsoft\framework`。
-
-- [Zongsoft.Plugins/src/Hosting/ApplicationBuilder.cs](../framework/Zongsoft.Plugins/src/Hosting/ApplicationBuilder.cs)
-- [Zongsoft.Plugins/src/Configuration/PluginConfigurationProvider.cs](../framework/Zongsoft.Plugins/src/Configuration/PluginConfigurationProvider.cs)
-- [Zongsoft.Plugins.Web/src/Application.cs](../framework/Zongsoft.Plugins.Web/src/Application.cs)
-- [Zongsoft.Plugins.Web/src/WebApplicationBuilder.cs](../framework/Zongsoft.Plugins.Web/src/WebApplicationBuilder.cs)
-
-重点不是只知道路径分隔符，而是确认哪些文件实际加载、先后顺序、环境/站点选择和插件贡献怎样进入同一配置。
-
-### 14.4 服务器和 Web 组件
-
-目录基准：`D:\Zongsoft\framework`。
-
-| 组件 | 实际文件 |
-| --- | --- |
-| OTLP/Kestrel | [Zongsoft.Diagnostics.Protocols.Server.option](../framework/Zongsoft.Diagnostics/protocols/server/src/Zongsoft.Diagnostics.Protocols.Server.option) |
-| Prometheus | [PrometheusExporterLauncher.cs](../framework/Zongsoft.Diagnostics/src/Telemetry/PrometheusExporterLauncher.cs)、[Zongsoft.Diagnostics.option](../framework/Zongsoft.Diagnostics/src/Zongsoft.Diagnostics.option) |
-| ZeroMQ | [ZeroQueueServer.cs](../framework/messaging/zero/src/ZeroQueueServer.cs)、[ZeroQueueServer.Control.cs](../framework/messaging/zero/src/ZeroQueueServer.Control.cs)、[ServerOptions.cs](../framework/messaging/zero/src/Configuration/ServerOptions.cs)、[daemon.plugin](../framework/messaging/zero/src/Zongsoft.Messaging.ZeroMQ-daemon.plugin)、[ZeroMQ.deploy](../framework/messaging/zero/src/Zongsoft.Messaging.ZeroMQ.deploy) |
-| MQTT | [MqttQueueServer.cs](../framework/messaging/mqtt/src/MqttQueueServer.cs) |
-| Garnet | [GarnetServer.cs](../framework/externals/garnet/src/GarnetServer.cs) |
-| OPC | [OpcServer.cs](../framework/externals/opc/src/OpcServer.cs)、[OpcServerOptions.cs](../framework/externals/opc/src/OpcServerOptions.cs) |
-| 通用 TCP | [TcpServer.cs](../framework/Zongsoft.Net/src/TcpServer.cs) |
-| Hangfire Dashboard | [Initializer.cs](../framework/externals/hangfire/web/Initializer.cs)、[README.zh-Hans.md](../framework/externals/hangfire/web/README.zh-Hans.md) |
-| gRPC 路由 | [GrpcInitializer.cs](../framework/Zongsoft.Web/grpc/GrpcInitializer.cs) |
-| Grapecity 路由 | [WebApplicationInitializer.cs](../framework/externals/grapecity/api/Reporting/WebApplicationInitializer.cs) |
-
-### 14.5 工具的现有实现入口
-
-目录基准：`D:\Zongsoft\tools`。
-
-- 部署模板：[deployer/src/TemplateResolver.cs](deployer/src/TemplateResolver.cs)。
-- 共享能力：[.shared/Utility.cs](.shared/Utility.cs)、[.shared/Utility.Output.cs](.shared/Utility.Output.cs)。
-- 打包参数与宿主：[PackageOptions.cs](packager/src/PackageOptions.cs)、[PackCommand.cs](packager/src/PackCommand.cs)、[ApplicationHost.cs](packager/src/ApplicationHost.cs)。
-- 服务文件：[Scriptor.Systemd.cs](packager/src/Scriptor.Systemd.cs)。
-- 包写入：[Generator.Tar.cs](packager/src/Generator.Tar.cs)、[Generator.Deb.cs](packager/src/Generator.Deb.cs)、[Generator.Rpm.cs](packager/src/Generator.Rpm.cs)。
-- Web 上游：[Definition.Resolver.cs](packager/src/Web/Definition.Resolver.cs)。
-- 最终 Nginx 绑定：[Configurator.Nginx.Bindings.cs](packager/src/Web/Configurator.Nginx.Bindings.cs)。
-- 包读取：[PackageReader.cs](containerizer/src/PackageReader.cs)、[PackageReader.Tar.cs](containerizer/src/PackageReader.Tar.cs)、[PackageReader.Deb.cs](containerizer/src/PackageReader.Deb.cs)、[PackageReader.Rpm.cs](containerizer/src/PackageReader.Rpm.cs)。
-- 容器计划与健康：[ApplicationPlanner.cs](containerizer/src/ApplicationPlanner.cs)、[ApplicationHealth.cs](containerizer/src/ApplicationHealth.cs)。
-- 代理入口：[WebIngress.cs](containerizer/src/WebIngress.cs)、[WebIngress.Files.cs](containerizer/src/WebIngress.Files.cs)。
-
-### 14.6 Hosting 示例来源
-
-目录基准：`D:\Zongsoft\hosting`。
-
-- [web/.env](../hosting/web/.env)：宿主变量及导入。
-- [web/default/.deploy](../hosting/web/default/.deploy)：具体部署引用。
-- [.deploy/.shared/web.option.template](../hosting/.deploy/.shared/web.option.template)：Web 运行配置模板。
-- [.deploy/.shared/app.option.template](../hosting/.deploy/.shared/app.option.template)：应用共享运行配置模板。
-- [web/default/web.default.option](../hosting/web/default/web.default.option)：已有实际宿主配置示例。
-- [web/default/web.profile](../hosting/web/default/web.profile)：继续保留的 Web 代理定义。
-- [.deploy/.shared/Zongsoft.Messaging.ZeroMQ.option.template](../hosting/.deploy/.shared/Zongsoft.Messaging.ZeroMQ.option.template)：客户端连接配置，不能当作服务端监听。
-- [.deploy/.shared/Zongsoft.Messaging.ZeroMQ-daemon.option.template](../hosting/.deploy/.shared/Zongsoft.Messaging.ZeroMQ-daemon.option.template)：daemon 配置。
-- [.shared.ps1](../hosting/.shared.ps1)：共享脚本逻辑。
-- [deploy.cmd](../hosting/deploy.cmd)、[pack.cmd](../hosting/pack.cmd)、[migrate.cmd](../hosting/migrate.cmd)、[containerize.cmd](../hosting/containerize.cmd)：完整流程入口。
-
-`D:\Zongsoft\hosting\.deploy\default\.env` 及对应 `network.*.env`、`environment.*.env` 是本地方案变量来源。本文不复制其中的真实连接凭据和地址。
-
-### 14.7 外部的一手参考
-
-这些引用解释框架底层行为，不代替核查本地实际依赖版本。
-
-- [W3C XML：Processing Instructions](https://www.w3.org/TR/xml/#sec-pi)：准确术语是 XML“处理指令”；它本身不自动执行预处理，工具需要定义目标名和内容语义。
-- [ASP.NET Core：Kestrel endpoints](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/kestrel/endpoints?view=aspnetcore-10.0)：端点配置、地址配置、协议与优先规则。
-- [ASP.NET Core AddressBinder.cs](https://github.com/dotnet/aspnetcore/blob/v10.0.0/src/Servers/Kestrel/Core/src/Internal/AddressBinder.cs)：实际配置端点与 server addresses、PreferHostingUrls 的选择。此固定源码链接是证据快照，不是要求将项目依赖固定为该版本。
-- [HangfireApplicationBuilderExtensions.cs](https://github.com/HangfireIO/Hangfire/blob/v1.8.25/src/Hangfire.AspNetCore/HangfireApplicationBuilderExtensions.cs)：UseHangfireDashboard 构造并映射 Dashboard 请求管线，不自行向 Kestrel 增加端口。
-- [AspNetCoreDashboardMiddleware.cs](https://github.com/HangfireIO/Hangfire/blob/v1.8.25/src/Hangfire.AspNetCore/Dashboard/AspNetCoreDashboardMiddleware.cs)：处理已经进入 ASP.NET Core 管线的请求。
-- [ASP.NET Core MapExtensions.cs](https://github.com/dotnet/aspnetcore/blob/v10.0.0/src/Http/Http.Abstractions/src/Extensions/MapExtensions.cs)、[MapMiddleware.cs](https://github.com/dotnet/aspnetcore/blob/v10.0.0/src/Http/Http.Abstractions/src/Extensions/MapMiddleware.cs)：按请求路径分支，不创建新的网络监听。
-
-<a id="projects"></a>
-
-## 15. 附录：Framework 项目索引
-
-下表逐项保留本轮核对的 113 个项目，目录基准为 `D:\Zongsoft\framework`。它用于新会话定位范围，不表示每个项目都需要添加 binding 指令，也不表示每个项目都已完成运行测试。
-
-“示例/测试”按项目所在路径分类；其余列为“库/应用能力”，不据此断定是否创建监听。具体生产监听及无需额外监听的结论见第 4 节。
-
-| 序号 | 项目文件 | 分类 |
+| 顺序 | 需要确认的问题 | 推荐方向与边界 |
 | --- | --- | --- |
-| 1 | [externals/aliyun/gateway/Zongsoft.Externals.Aliyun.Gateway.csproj](../framework/externals/aliyun/gateway/Zongsoft.Externals.Aliyun.Gateway.csproj) | 库/应用能力 |
-| 2 | [externals/aliyun/src/Zongsoft.Externals.Aliyun.csproj](../framework/externals/aliyun/src/Zongsoft.Externals.Aliyun.csproj) | 库/应用能力 |
-| 3 | [externals/amazon/src/Zongsoft.Externals.Amazon.csproj](../framework/externals/amazon/src/Zongsoft.Externals.Amazon.csproj) | 库/应用能力 |
-| 4 | [externals/amazon/test/Zongsoft.Externals.Amazon.Tests.csproj](../framework/externals/amazon/test/Zongsoft.Externals.Amazon.Tests.csproj) | 测试/基准 |
-| 5 | [externals/closedxml/samples/Zongsoft.Externals.ClosedXml.Samples.csproj](../framework/externals/closedxml/samples/Zongsoft.Externals.ClosedXml.Samples.csproj) | 示例 |
-| 6 | [externals/closedxml/src/Zongsoft.Externals.ClosedXml.csproj](../framework/externals/closedxml/src/Zongsoft.Externals.ClosedXml.csproj) | 库/应用能力 |
-| 7 | [externals/closedxml/test/Zongsoft.Externals.ClosedXml.Tests.csproj](../framework/externals/closedxml/test/Zongsoft.Externals.ClosedXml.Tests.csproj) | 测试/基准 |
-| 8 | [externals/etcd/samples/distributedlock/master/Zongsoft.Externals.Etcd.DistributedLock.Master.csproj](../framework/externals/etcd/samples/distributedlock/master/Zongsoft.Externals.Etcd.DistributedLock.Master.csproj) | 示例 |
-| 9 | [externals/etcd/samples/distributedlock/slaver/Zongsoft.Externals.Etcd.DistributedLock.Slaver.csproj](../framework/externals/etcd/samples/distributedlock/slaver/Zongsoft.Externals.Etcd.DistributedLock.Slaver.csproj) | 示例 |
-| 10 | [externals/etcd/samples/sequence/Zongsoft.Externals.Etcd.Sequence.Samples.csproj](../framework/externals/etcd/samples/sequence/Zongsoft.Externals.Etcd.Sequence.Samples.csproj) | 示例 |
-| 11 | [externals/etcd/src/Zongsoft.Externals.Etcd.csproj](../framework/externals/etcd/src/Zongsoft.Externals.Etcd.csproj) | 库/应用能力 |
-| 12 | [externals/etcd/test/Zongsoft.Externals.Etcd.Tests.csproj](../framework/externals/etcd/test/Zongsoft.Externals.Etcd.Tests.csproj) | 测试/基准 |
-| 13 | [externals/garnet/src/Zongsoft.Externals.Garnet.csproj](../framework/externals/garnet/src/Zongsoft.Externals.Garnet.csproj) | 库/应用能力 |
-| 14 | [externals/garnet/test/Zongsoft.Externals.Garnet.Tests.csproj](../framework/externals/garnet/test/Zongsoft.Externals.Garnet.Tests.csproj) | 测试/基准 |
-| 15 | [externals/grapecity/api/Zongsoft.Externals.Grapecity.Web.csproj](../framework/externals/grapecity/api/Zongsoft.Externals.Grapecity.Web.csproj) | 库/应用能力 |
-| 16 | [externals/grapecity/src/Zongsoft.Externals.Grapecity.csproj](../framework/externals/grapecity/src/Zongsoft.Externals.Grapecity.csproj) | 库/应用能力 |
-| 17 | [externals/hangfire/samples/Zongsoft.Externals.Hangfire.Samples.csproj](../framework/externals/hangfire/samples/Zongsoft.Externals.Hangfire.Samples.csproj) | 示例 |
-| 18 | [externals/hangfire/src/Zongsoft.Externals.Hangfire.csproj](../framework/externals/hangfire/src/Zongsoft.Externals.Hangfire.csproj) | 库/应用能力 |
-| 19 | [externals/hangfire/storages/redis/Zongsoft.Externals.Hangfire.Storages.Redis.csproj](../framework/externals/hangfire/storages/redis/Zongsoft.Externals.Hangfire.Storages.Redis.csproj) | 库/应用能力 |
-| 20 | [externals/hangfire/test/Zongsoft.Externals.Hangfire.Tests.csproj](../framework/externals/hangfire/test/Zongsoft.Externals.Hangfire.Tests.csproj) | 测试/基准 |
-| 21 | [externals/hangfire/web/Zongsoft.Externals.Hangfire.Web.csproj](../framework/externals/hangfire/web/Zongsoft.Externals.Hangfire.Web.csproj) | 库/应用能力 |
-| 22 | [externals/lua/src/Zongsoft.Externals.Lua.csproj](../framework/externals/lua/src/Zongsoft.Externals.Lua.csproj) | 库/应用能力 |
-| 23 | [externals/lua/test/Zongsoft.Externals.Lua.Tests.csproj](../framework/externals/lua/test/Zongsoft.Externals.Lua.Tests.csproj) | 测试/基准 |
-| 24 | [externals/opc/samples/client/Zongsoft.Externals.Opc.Samples.Client.csproj](../framework/externals/opc/samples/client/Zongsoft.Externals.Opc.Samples.Client.csproj) | 示例 |
-| 25 | [externals/opc/samples/server/Zongsoft.Externals.Opc.Samples.Server.csproj](../framework/externals/opc/samples/server/Zongsoft.Externals.Opc.Samples.Server.csproj) | 示例 |
-| 26 | [externals/opc/src/Zongsoft.Externals.Opc.csproj](../framework/externals/opc/src/Zongsoft.Externals.Opc.csproj) | 库/应用能力 |
-| 27 | [externals/opc/test/Zongsoft.Externals.Opc.Tests.csproj](../framework/externals/opc/test/Zongsoft.Externals.Opc.Tests.csproj) | 测试/基准 |
-| 28 | [externals/openxml/src/Zongsoft.Externals.OpenXml.csproj](../framework/externals/openxml/src/Zongsoft.Externals.OpenXml.csproj) | 库/应用能力 |
-| 29 | [externals/openxml/test/Zongsoft.Externals.OpenXml.Tests.csproj](../framework/externals/openxml/test/Zongsoft.Externals.OpenXml.Tests.csproj) | 测试/基准 |
-| 30 | [externals/polly/samples/Zongsoft.Externals.Polly.Samples.csproj](../framework/externals/polly/samples/Zongsoft.Externals.Polly.Samples.csproj) | 示例 |
-| 31 | [externals/polly/src/Zongsoft.Externals.Polly.csproj](../framework/externals/polly/src/Zongsoft.Externals.Polly.csproj) | 库/应用能力 |
-| 32 | [externals/polly/test/Zongsoft.Externals.Polly.Tests.csproj](../framework/externals/polly/test/Zongsoft.Externals.Polly.Tests.csproj) | 测试/基准 |
-| 33 | [externals/python/src/Zongsoft.Externals.Python.csproj](../framework/externals/python/src/Zongsoft.Externals.Python.csproj) | 库/应用能力 |
-| 34 | [externals/python/test/Zongsoft.Externals.Python.Tests.csproj](../framework/externals/python/test/Zongsoft.Externals.Python.Tests.csproj) | 测试/基准 |
-| 35 | [externals/redis/samples/distributedcache/Zongsoft.Externals.Redis.DistributedCache.Samples.csproj](../framework/externals/redis/samples/distributedcache/Zongsoft.Externals.Redis.DistributedCache.Samples.csproj) | 示例 |
-| 36 | [externals/redis/samples/distributedlock/master/Zongsoft.Externals.Redis.DistributedLock.Master.csproj](../framework/externals/redis/samples/distributedlock/master/Zongsoft.Externals.Redis.DistributedLock.Master.csproj) | 示例 |
-| 37 | [externals/redis/samples/distributedlock/slaver/Zongsoft.Externals.Redis.DistributedLock.Slaver.csproj](../framework/externals/redis/samples/distributedlock/slaver/Zongsoft.Externals.Redis.DistributedLock.Slaver.csproj) | 示例 |
-| 38 | [externals/redis/samples/messaging/Zongsoft.Externals.Redis.Messaging.Samples.csproj](../framework/externals/redis/samples/messaging/Zongsoft.Externals.Redis.Messaging.Samples.csproj) | 示例 |
-| 39 | [externals/redis/src/Zongsoft.Externals.Redis.csproj](../framework/externals/redis/src/Zongsoft.Externals.Redis.csproj) | 库/应用能力 |
-| 40 | [externals/redis/test/Zongsoft.Externals.Redis.Tests.csproj](../framework/externals/redis/test/Zongsoft.Externals.Redis.Tests.csproj) | 测试/基准 |
-| 41 | [externals/scriban/src/Zongsoft.Externals.Scriban.csproj](../framework/externals/scriban/src/Zongsoft.Externals.Scriban.csproj) | 库/应用能力 |
-| 42 | [externals/wechat/api/Zongsoft.Externals.Wechat.Web.csproj](../framework/externals/wechat/api/Zongsoft.Externals.Wechat.Web.csproj) | 库/应用能力 |
-| 43 | [externals/wechat/gateway/Zongsoft.Externals.Wechat.Gateway.csproj](../framework/externals/wechat/gateway/Zongsoft.Externals.Wechat.Gateway.csproj) | 库/应用能力 |
-| 44 | [externals/wechat/src/Zongsoft.Externals.Wechat.csproj](../framework/externals/wechat/src/Zongsoft.Externals.Wechat.csproj) | 库/应用能力 |
-| 45 | [externals/wechat/test/Zongsoft.Externals.Wechat.Tests.csproj](../framework/externals/wechat/test/Zongsoft.Externals.Wechat.Tests.csproj) | 测试/基准 |
-| 46 | [messaging/kafka/samples/Zongsoft.Messaging.Kafka.Samples.csproj](../framework/messaging/kafka/samples/Zongsoft.Messaging.Kafka.Samples.csproj) | 示例 |
-| 47 | [messaging/kafka/src/Zongsoft.Messaging.Kafka.csproj](../framework/messaging/kafka/src/Zongsoft.Messaging.Kafka.csproj) | 库/应用能力 |
-| 48 | [messaging/kafka/test/Zongsoft.Messaging.Kafka.Tests.csproj](../framework/messaging/kafka/test/Zongsoft.Messaging.Kafka.Tests.csproj) | 测试/基准 |
-| 49 | [messaging/mqtt/samples/client/Zongsoft.Messaging.Mqtt.Samples.Client.csproj](../framework/messaging/mqtt/samples/client/Zongsoft.Messaging.Mqtt.Samples.Client.csproj) | 示例 |
-| 50 | [messaging/mqtt/samples/server/Zongsoft.Messaging.Mqtt.Samples.Server.csproj](../framework/messaging/mqtt/samples/server/Zongsoft.Messaging.Mqtt.Samples.Server.csproj) | 示例 |
-| 51 | [messaging/mqtt/src/Zongsoft.Messaging.Mqtt.csproj](../framework/messaging/mqtt/src/Zongsoft.Messaging.Mqtt.csproj) | 库/应用能力 |
-| 52 | [messaging/mqtt/test/Zongsoft.Messaging.Mqtt.Tests.csproj](../framework/messaging/mqtt/test/Zongsoft.Messaging.Mqtt.Tests.csproj) | 测试/基准 |
-| 53 | [messaging/rabbit/samples/Zongsoft.Messaging.RabbitMQ.Samples.csproj](../framework/messaging/rabbit/samples/Zongsoft.Messaging.RabbitMQ.Samples.csproj) | 示例 |
-| 54 | [messaging/rabbit/src/Zongsoft.Messaging.RabbitMQ.csproj](../framework/messaging/rabbit/src/Zongsoft.Messaging.RabbitMQ.csproj) | 库/应用能力 |
-| 55 | [messaging/rabbit/test/Zongsoft.Messaging.RabbitMQ.Tests.csproj](../framework/messaging/rabbit/test/Zongsoft.Messaging.RabbitMQ.Tests.csproj) | 测试/基准 |
-| 56 | [messaging/zero/samples/client/Zongsoft.Messaging.ZeroMQ.Samples.Client.csproj](../framework/messaging/zero/samples/client/Zongsoft.Messaging.ZeroMQ.Samples.Client.csproj) | 示例 |
-| 57 | [messaging/zero/samples/server/Zongsoft.Messaging.ZeroMQ.Samples.Server.csproj](../framework/messaging/zero/samples/server/Zongsoft.Messaging.ZeroMQ.Samples.Server.csproj) | 示例 |
-| 58 | [messaging/zero/src/Zongsoft.Messaging.ZeroMQ.csproj](../framework/messaging/zero/src/Zongsoft.Messaging.ZeroMQ.csproj) | 库/应用能力 |
-| 59 | [messaging/zero/test/Zongsoft.Messaging.ZeroMQ.Tests.csproj](../framework/messaging/zero/test/Zongsoft.Messaging.ZeroMQ.Tests.csproj) | 测试/基准 |
-| 60 | [upgrading/deployer/Zongsoft.Upgrading.Deployer.csproj](../framework/upgrading/deployer/Zongsoft.Upgrading.Deployer.csproj) | 库/应用能力 |
-| 61 | [upgrading/tool/Zongsoft.Tools.Upgrader.csproj](../framework/upgrading/tool/Zongsoft.Tools.Upgrader.csproj) | 库/应用能力 |
-| 62 | [upgrading/upgrader/Zongsoft.Upgrading.Upgrader.csproj](../framework/upgrading/upgrader/Zongsoft.Upgrading.Upgrader.csproj) | 库/应用能力 |
-| 63 | [upgrading/web/Zongsoft.Upgrading.Web.csproj](../framework/upgrading/web/Zongsoft.Upgrading.Web.csproj) | 库/应用能力 |
-| 64 | [Zongsoft.Commands/src/Zongsoft.Commands.csproj](../framework/Zongsoft.Commands/src/Zongsoft.Commands.csproj) | 库/应用能力 |
-| 65 | [Zongsoft.Core/benchmark/Zongsoft.Core.Benchmarks.csproj](../framework/Zongsoft.Core/benchmark/Zongsoft.Core.Benchmarks.csproj) | 测试/基准 |
-| 66 | [Zongsoft.Core/samples/eventexchanger/Zongsoft.Samples.EventExchanger.csproj](../framework/Zongsoft.Core/samples/eventexchanger/Zongsoft.Samples.EventExchanger.csproj) | 示例 |
-| 67 | [Zongsoft.Core/samples/memorycache/Zongsoft.Samples.MemoryCache.csproj](../framework/Zongsoft.Core/samples/memorycache/Zongsoft.Samples.MemoryCache.csproj) | 示例 |
-| 68 | [Zongsoft.Core/samples/spooler/Zongsoft.Samples.Spooler.csproj](../framework/Zongsoft.Core/samples/spooler/Zongsoft.Samples.Spooler.csproj) | 示例 |
-| 69 | [Zongsoft.Core/samples/superviser/Zongsoft.Samples.Superviser.csproj](../framework/Zongsoft.Core/samples/superviser/Zongsoft.Samples.Superviser.csproj) | 示例 |
-| 70 | [Zongsoft.Core/src/Zongsoft.Core.csproj](../framework/Zongsoft.Core/src/Zongsoft.Core.csproj) | 库/应用能力 |
-| 71 | [Zongsoft.Core/test/Zongsoft.Core.Tests.csproj](../framework/Zongsoft.Core/test/Zongsoft.Core.Tests.csproj) | 测试/基准 |
-| 72 | [Zongsoft.Data/drivers/clickhouse/src/Zongsoft.Data.ClickHouse.csproj](../framework/Zongsoft.Data/drivers/clickhouse/src/Zongsoft.Data.ClickHouse.csproj) | 库/应用能力 |
-| 73 | [Zongsoft.Data/drivers/clickhouse/test/Zongsoft.Data.ClickHouse.Tests.csproj](../framework/Zongsoft.Data/drivers/clickhouse/test/Zongsoft.Data.ClickHouse.Tests.csproj) | 测试/基准 |
-| 74 | [Zongsoft.Data/drivers/duckdb/src/Zongsoft.Data.DuckDB.csproj](../framework/Zongsoft.Data/drivers/duckdb/src/Zongsoft.Data.DuckDB.csproj) | 库/应用能力 |
-| 75 | [Zongsoft.Data/drivers/duckdb/test/Zongsoft.Data.DuckDB.Tests.csproj](../framework/Zongsoft.Data/drivers/duckdb/test/Zongsoft.Data.DuckDB.Tests.csproj) | 测试/基准 |
-| 76 | [Zongsoft.Data/drivers/influx/src/Zongsoft.Data.Influx.csproj](../framework/Zongsoft.Data/drivers/influx/src/Zongsoft.Data.Influx.csproj) | 库/应用能力 |
-| 77 | [Zongsoft.Data/drivers/influx/test/Zongsoft.Data.Influx.Tests.csproj](../framework/Zongsoft.Data/drivers/influx/test/Zongsoft.Data.Influx.Tests.csproj) | 测试/基准 |
-| 78 | [Zongsoft.Data/drivers/mssql/src/Zongsoft.Data.MsSql.csproj](../framework/Zongsoft.Data/drivers/mssql/src/Zongsoft.Data.MsSql.csproj) | 库/应用能力 |
-| 79 | [Zongsoft.Data/drivers/mssql/test/Zongsoft.Data.MsSql.Tests.csproj](../framework/Zongsoft.Data/drivers/mssql/test/Zongsoft.Data.MsSql.Tests.csproj) | 测试/基准 |
-| 80 | [Zongsoft.Data/drivers/mysql/src/Zongsoft.Data.MySql.csproj](../framework/Zongsoft.Data/drivers/mysql/src/Zongsoft.Data.MySql.csproj) | 库/应用能力 |
-| 81 | [Zongsoft.Data/drivers/mysql/test/Zongsoft.Data.MySql.Tests.csproj](../framework/Zongsoft.Data/drivers/mysql/test/Zongsoft.Data.MySql.Tests.csproj) | 测试/基准 |
-| 82 | [Zongsoft.Data/drivers/postgres/src/Zongsoft.Data.PostgreSql.csproj](../framework/Zongsoft.Data/drivers/postgres/src/Zongsoft.Data.PostgreSql.csproj) | 库/应用能力 |
-| 83 | [Zongsoft.Data/drivers/postgres/test/Zongsoft.Data.PostgreSql.Tests.csproj](../framework/Zongsoft.Data/drivers/postgres/test/Zongsoft.Data.PostgreSql.Tests.csproj) | 测试/基准 |
-| 84 | [Zongsoft.Data/drivers/sqlite/src/Zongsoft.Data.SQLite.csproj](../framework/Zongsoft.Data/drivers/sqlite/src/Zongsoft.Data.SQLite.csproj) | 库/应用能力 |
-| 85 | [Zongsoft.Data/drivers/sqlite/test/Zongsoft.Data.SQLite.Tests.csproj](../framework/Zongsoft.Data/drivers/sqlite/test/Zongsoft.Data.SQLite.Tests.csproj) | 测试/基准 |
-| 86 | [Zongsoft.Data/drivers/tdengine/src/Zongsoft.Data.TDengine.csproj](../framework/Zongsoft.Data/drivers/tdengine/src/Zongsoft.Data.TDengine.csproj) | 库/应用能力 |
-| 87 | [Zongsoft.Data/drivers/tdengine/test/Zongsoft.Data.TDengine.Tests.csproj](../framework/Zongsoft.Data/drivers/tdengine/test/Zongsoft.Data.TDengine.Tests.csproj) | 测试/基准 |
-| 88 | [Zongsoft.Data/src/Zongsoft.Data.csproj](../framework/Zongsoft.Data/src/Zongsoft.Data.csproj) | 库/应用能力 |
-| 89 | [Zongsoft.Data/test/Zongsoft.Data.Tests.csproj](../framework/Zongsoft.Data/test/Zongsoft.Data.Tests.csproj) | 测试/基准 |
-| 90 | [Zongsoft.Diagnostics/protocols/client/src/Zongsoft.Diagnostics.Protocols.Client.csproj](../framework/Zongsoft.Diagnostics/protocols/client/src/Zongsoft.Diagnostics.Protocols.Client.csproj) | 库/应用能力 |
-| 91 | [Zongsoft.Diagnostics/protocols/server/samples/Zongsoft.Diagnostics.Protocols.Server.Samples.csproj](../framework/Zongsoft.Diagnostics/protocols/server/samples/Zongsoft.Diagnostics.Protocols.Server.Samples.csproj) | 示例 |
-| 92 | [Zongsoft.Diagnostics/protocols/server/src/Zongsoft.Diagnostics.Protocols.Server.csproj](../framework/Zongsoft.Diagnostics/protocols/server/src/Zongsoft.Diagnostics.Protocols.Server.csproj) | 库/应用能力 |
-| 93 | [Zongsoft.Diagnostics/src/Zongsoft.Diagnostics.csproj](../framework/Zongsoft.Diagnostics/src/Zongsoft.Diagnostics.csproj) | 库/应用能力 |
-| 94 | [Zongsoft.Hardwares/samples/Zongsoft.Hardwares.Samples.csproj](../framework/Zongsoft.Hardwares/samples/Zongsoft.Hardwares.Samples.csproj) | 示例 |
-| 95 | [Zongsoft.Hardwares/src/Zongsoft.Hardwares.csproj](../framework/Zongsoft.Hardwares/src/Zongsoft.Hardwares.csproj) | 库/应用能力 |
-| 96 | [Zongsoft.Hardwares/test/Zongsoft.Hardwares.Tests.csproj](../framework/Zongsoft.Hardwares/test/Zongsoft.Hardwares.Tests.csproj) | 测试/基准 |
-| 97 | [Zongsoft.Intelligences/api/Zongsoft.Intelligences.Web.csproj](../framework/Zongsoft.Intelligences/api/Zongsoft.Intelligences.Web.csproj) | 库/应用能力 |
-| 98 | [Zongsoft.Intelligences/src/Zongsoft.Intelligences.csproj](../framework/Zongsoft.Intelligences/src/Zongsoft.Intelligences.csproj) | 库/应用能力 |
-| 99 | [Zongsoft.Net/samples/client/Zongsoft.Net.Samples.Client.csproj](../framework/Zongsoft.Net/samples/client/Zongsoft.Net.Samples.Client.csproj) | 示例 |
-| 100 | [Zongsoft.Net/samples/server/Zongsoft.Net.Samples.Server.csproj](../framework/Zongsoft.Net/samples/server/Zongsoft.Net.Samples.Server.csproj) | 示例 |
-| 101 | [Zongsoft.Net/src/Zongsoft.Net.csproj](../framework/Zongsoft.Net/src/Zongsoft.Net.csproj) | 库/应用能力 |
-| 102 | [Zongsoft.Net/test/Zongsoft.Net.Tests.csproj](../framework/Zongsoft.Net/test/Zongsoft.Net.Tests.csproj) | 测试/基准 |
-| 103 | [Zongsoft.Plugins.Web/src/Zongsoft.Plugins.Web.csproj](../framework/Zongsoft.Plugins.Web/src/Zongsoft.Plugins.Web.csproj) | 库/应用能力 |
-| 104 | [Zongsoft.Plugins/src/Zongsoft.Plugins.csproj](../framework/Zongsoft.Plugins/src/Zongsoft.Plugins.csproj) | 库/应用能力 |
-| 105 | [Zongsoft.Plugins/test/Zongsoft.Plugins.Tests.csproj](../framework/Zongsoft.Plugins/test/Zongsoft.Plugins.Tests.csproj) | 测试/基准 |
-| 106 | [Zongsoft.Reporting/src/Zongsoft.Reporting.csproj](../framework/Zongsoft.Reporting/src/Zongsoft.Reporting.csproj) | 库/应用能力 |
-| 107 | [Zongsoft.Security/api/Zongsoft.Security.Web.csproj](../framework/Zongsoft.Security/api/Zongsoft.Security.Web.csproj) | 库/应用能力 |
-| 108 | [Zongsoft.Security/captcha/Zongsoft.Security.Captcha.csproj](../framework/Zongsoft.Security/captcha/Zongsoft.Security.Captcha.csproj) | 库/应用能力 |
-| 109 | [Zongsoft.Security/src/Zongsoft.Security.csproj](../framework/Zongsoft.Security/src/Zongsoft.Security.csproj) | 库/应用能力 |
-| 110 | [Zongsoft.Web/grpc/Zongsoft.Web.Grpc.csproj](../framework/Zongsoft.Web/grpc/Zongsoft.Web.Grpc.csproj) | 库/应用能力 |
-| 111 | [Zongsoft.Web/openapi/Zongsoft.Web.OpenApi.csproj](../framework/Zongsoft.Web/openapi/Zongsoft.Web.OpenApi.csproj) | 库/应用能力 |
-| 112 | [Zongsoft.Web/src/Zongsoft.Web.csproj](../framework/Zongsoft.Web/src/Zongsoft.Web.csproj) | 库/应用能力 |
-| 113 | [Zongsoft.Web/test/Zongsoft.Web.Tests.csproj](../framework/Zongsoft.Web/test/Zongsoft.Web.Tests.csproj) | 测试/基准 |
+| 1 | 代理连接目标与方式 | 默认路径别名、可选 name 简短别名、server 直接引用、缺失与空值等效及唯一候选自动选择已确认；明确通配/回环/IPv4/IPv6 多地址的可连接目标构造、协议能力不足时的候选判断，以及 HTTP/2、TLS 与代理方式的适配。不改动 server 的三种写法 |
+| 2 | 实际服务器适配 | 首版监听范围已确认；明确 Kestrel 组合枚举与绑定协议列表的适配、Prometheus urls 与 path 的组合、必要的非 HTTP 协议能力，有必要时完善 ZeroMQ 的显式配置。部署方案保证与运行一致，通用提取器不内置服务器类型判断 |
+| 3 | 结果规范化、JSON 结构与三格式承载 | 确认下述规范化边界、JSON 版本/身份/别名/引用/空结果结构、deb 字段、rpm 标签及共同长度限制；元数据不进入运行载荷 |
+| 4 | `.container` 发布与健康检查输入 | 通过绑定身份选择内部访问、直接发布、宿主 IP/端口和探测方式；确定默认策略及 Prometheus 等端点的请求路径来源，不恢复 port! |
+| 5 | Import 的文件访问范围 | 建议按最终交付路径访问入包内容；确认包外依赖与绝对导入是否支持，不增加运行时配置发现职责 |
+
+第 3 项还需明确以下边界，避免序列化前各消费者已经采用不同的等价规则：
+
+- 一次多地址展开是分别形成绑定，还是形成含多个端点的绑定；例如同一候选项得到 A、B，另一声明只得到 B 时，如何去重、合并别名并保留唯一后端选择语义。
+- URL 的缺省端口、尾斜杠、大小写、IPv4/IPv6 与通配形式怎样比较；保留有意义的路径，不能直接把 URL 字符串相等或端口相同当成等价。
+- 协议列表采用第 4.6 节建议的大小写、空白及重复项规范化；为可选参数显式空值、空的分隔字符集合、根节点候选的默认别名等边界给出一致的有效性规则。未知协议及展开后的空地址项报错这一约束不变。
+- 别名查找与去重沿用 Core 配置键比较规则的范围、输出大小写和稳定排序；身份生成不依赖来源顺序或数组位置。
+
+后续按顺序逐个讨论，给出实际文件、配置片段和设计理由，不一次要求选择全部事项。已确认后直接更新对应章节并移除该待确认项，保持本文只描述当前方案。
