@@ -2,7 +2,7 @@
 
 > 文档路径：`D:\Zongsoft\tools\bindings.md`
 > 用途：为后续新聊天提供完整的设计上下文、源码依据、已确认约定、待定问题和实施目标。
-> 状态：设计交接稿。XML 绑定提取、统一包元数据及相应工具改造尚未实现，示例中标为“拟议”的语法不能当作现有工具能力。
+> 状态：Core 设置解析与通用 XML PI 解析能力已实现；XML 绑定提取、统一包元数据及相应工具改造尚未实现，示例中标为“拟议”的 binding 语义不能当作现有工具能力。
 > 指令名称已经确定为 `binding`；指令配置路径使用 `/`，例如 `path="Kestrel/Endpoints"`。结果文件名称仍为 `.bindings`。
 
 ## 阅读导航
@@ -384,7 +384,7 @@ containerizer：确定执行目标、网络、代理和端口发布
 
 ### 5.4 运行时
 
-运行程序继续使用 `.option` 等本来就会读取的配置。Core 当前会忽略 XML 处理指令；无需让 Web 宿主、MQTT、ZeroMQ、OPC 等读取包内 `.bindings`。
+运行程序继续使用 `.option` 等本来就会读取的配置。Core 默认收集 XML 处理指令定义，但不执行具体语义，也不将指令写入配置键；无需让 Web 宿主、MQTT、ZeroMQ、OPC 等读取包内 `.bindings`。
 
 生成元数据不能改变配置含义，也不能代替运行时配置。监听变化应重新制包及生成容器交付物。
 
@@ -439,18 +439,19 @@ containerizer：确定执行目标、网络、代理和端口发布
 
 正式术语是 XML 处理指令（Processing Instruction，PI）。它用于嵌入应用指令，并不自动执行预处理。
 
-XML 读取器提供目标名称和指令内容；其中 `path="..."` 形式属于本功能约定的参数语法，不会自动成为 XElement.Attributes。建议正式规范采用属性式写法，并规定：
+Core 的文件和流 XML 配置提供程序默认通过 `Instructions` 暴露按文档顺序排列的只读 PI 快照，定义类型为 `XmlConfigurationInstruction`。具体契约见 [XML 配置与处理指令](../framework/Zongsoft.Core/docs/xml-configuration.zh-Hans.md)。
 
-- 单/双引号、换行、空白和转义规则。
-- 未知参数、重复参数和格式错误应如何报告。
-- PI 内容中的 `?>` 是终止标记，不能作为普通内容直接出现。
-- 如果工具再按 XML 属性式语法解析内容，明确解码的层次，避免重复解码。
-- 不用正则扫描整个文件替代 XML 解析。
-- 不给运行时增加带命名空间的配置属性来模拟指令；现有 Core XML 读取器对该类属性有自己的限制，PI 已提供独立通道。
+- 定义保留 `Name`、`Data`、`Path`、`FilePath`、`LineNumber`、`LinePosition`。`Data` 来自 `XmlReader.Value`，不额外裁剪或解码，不承诺原文件字节级复原。
+- `Path` 是包含 PI 的实际 XML 父元素路径，不是 binding 的 `path` 参数，也不是映射后的配置键；根元素之外为空字符串。
+- `GetAttributes()` / `TryGetAttributes(out ...)` 提供可选的属性式解析，具体指令也可以直接解释 `Data`，不强制使用键值参数。
+- 属性值须使用单引号或双引号，遵循 XML 属性空白规范化和单次实体解码。名称按 `OrdinalIgnoreCase` 比较；`Path="a" path="b"` 属于重复参数并失败。空白数据成功返回空集合。
+- 属性式解析必须消费全部数据，返回只读字符串字典，不接受尾部杂文或注入的元素。格式错误由 `GetAttributes()` 抛出 `FormatException`；`TryGetAttributes()` 返回 `false` 和 `null`，不提供部分结果，不改变 `Data`。
+- 通用层不规定已知指令名或参数名，不执行处理器、Import 或 binding。binding 的未知参数、必需字段和业务错误仍须由后续工具规则确定。
+- PI 内容中的 `?>` 是终止标记，不能作为普通内容直接出现。不用正则扫描整个文件，不向运行配置增加属性来模拟指令。
 
 ### 6.5 指令位置与作用范围
 
-建议将声明放在文档头部，或规范允许的配置根级位置；是否允许放在任意节点附近，需要定稿。不要靠“紧跟某节点”推断配置语义，因为覆盖文件可能只修改属性而不重复指令。
+Core 通用层收集根元素之前、元素内部和根元素之后的全部 PI，保留同名重复声明；XML 声明、注释及 CDATA 内形似 PI 的文本不属于指令。binding 的业务规范可以另行限制声明位置，目前尚未定稿。不要靠“紧跟某节点”推断配置语义，因为覆盖文件可能只修改属性而不重复指令。
 
 必须明确：某条指令访问的是本文件、对应配置文件组，还是本次应用最终有效配置。前面“一个 Kestrel 规则可覆盖宿主与插件共同提供的端点”的讨论，要求有应用级有效配置视图，不能仅以单文件解析实现。
 
@@ -895,7 +896,7 @@ bind=http://0.0.0.0:8080,http://[::]:8080
 | 位置 | 目标 |
 | --- | --- |
 | `D:\Zongsoft\framework\Zongsoft.Core\src\Configuration\Settings*.cs`、`ConnectionSettings*.cs` | Core 提供共用设置解析器；工具直接调用普通设置（`Settings`），引用的程序集须满足第 6.3 节契约。 |
-| `D:\Zongsoft\framework\Zongsoft.Core\src\Configuration\Xml\XmlStreamConfigurationProvider.cs` | 核实现有 XML 到配置的映射及 PI 保留/忽略行为；若缺少提取需要的复用入口，先说明问题再讨论改造。 |
+| `D:\Zongsoft\framework\Zongsoft.Core\src\Configuration\Xml\XmlStreamConfigurationProvider.cs` | 复用现有 XML 到配置的映射、默认 `Instructions` 快照及 `Read(Stream, out instructions, filePath)`；具体 binding 求值语义由后续工具实现。 |
 | `D:\Zongsoft\framework\Zongsoft.Plugins\src\Hosting\ApplicationBuilder.cs`、`Configuration\PluginConfigurationProvider.cs` | 确定可以离线复用的配置选择和合并能力，避免 Packager 重写不一致的加载顺序。 |
 | `D:\Zongsoft\tools\deployer\src\TemplateResolver.cs` | 模板展开后保留合法 XML 指令，正确报告模板错误；不承担插件监听业务。 |
 | `D:\Zongsoft\tools\packager\src\PackageOptions.cs`、`PackCommand.cs`、`ApplicationHost.cs` | 调整重复 listen 概念及所有引用；建立提取过程需要的确定宿主/环境上下文。选项移除方式需与正式设计一致。 |
@@ -987,7 +988,7 @@ bind=http://0.0.0.0:8080,http://[::]:8080
 9. 执行分层测试，再在明确的测试环境完成安装、容器和本地 Debug 验收。
 10. 文档只描述最终使用效果；本设计交接稿的待定项在确认后及时更新，避免形成互相矛盾的规则。
 
-本次请求仅整理文档。此前用户已要求停止容器和本地 Web；新会话不能仅因看到后面的验收清单就擅自恢复运行服务。
+完整工具链的绑定改造尚未实施，本文的验收清单不构成恢复容器或本地 Web 服务的授权。
 
 <a id="acceptance"></a>
 
@@ -1089,7 +1090,7 @@ dotnet format style .\packager\Zongsoft.Tools.Packager.slnx --no-restore --verif
 
 用户此前明确要求实际工具验证采用本机全局工具：**先卸载，再安装本次本地生成的工具包**，防止同版本号被旧安装遮蔽。执行时从项目读取真实包标识和版本，不把安装示例写成过期固定版本，也不使用 NuGet 推送流程来制作本地验证包。
 
-本文档整理本身只需要核对内容、链接、CRLF 和差异，不需要构建工具或安装运行服务。
+本文档改动需核对内容、链接、CRLF 和差异；Core PI 代码改动按 Core 的聚焦构建及测试要求验证，不需要安装工具或运行服务。
 
 <a id="references"></a>
 
