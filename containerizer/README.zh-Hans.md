@@ -382,15 +382,15 @@ settings=root-password=${mysql:root_password};database=example
 
 `plan`、失败的制作和清单回放都不会改写 `.settings`。**只有按组件列表完整制作成功**，才补充缺失的服务 tag；已有的 tag、repository 和 settings 不会被改写。
 
-变量来自环境、从文件系统根目录到 source 各级 `.env`，以及命令选项。引用形式为 `${name}`，`\${name}` 保留字面引用。与参数同名的变量不会被自动绑定：内置绑定只有 MySQL 的 `mysql:root_password` 及 RustFS 的 `rustfs:access_key`、`rustfs:secret_key`；其他取值必须显式提供，如 hosting 示例所示。
+变量来自环境、source 直属 `.env` 及其显式导入，以及命令选项。只自动读取 source 直属 `.env`，不搜索父目录或子目录。如需父目录配置，显式使用 `#@import ../.env`；导入路径相对于声明文件，后续同名声明覆盖此前声明。引用形式为 `${name}`，`\${name}` 保留字面引用。与参数同名的变量不会被自动绑定：内置绑定只有 MySQL 的 `mysql:root_password` 及 RustFS 的 `rustfs:access_key`、`rustfs:secret_key`；其他取值必须显式提供，如 hosting 示例所示。
 
-服务参数使用单行连接字符串：
+服务参数使用单行 Core `Settings` 语法，引号内使用反斜杠转义，不以重复引号转义；例如 `password='=abc=='` 保留值开头的等号。读写统一使用 Core 解析器及序列化器：
 
 ```ini
-settings=port=16379;password="a;b=""c"""
+settings=port=16379;password='a;b="c"'
 ```
 
-参数先拆分、再对每个值求值，因此密码变量中的分号不会产生新参数。单项 `password=` 表示显式空值并阻止回退；`false` 与 `0` 都是有效取值；整条 `settings=` 为空表示没有显式参数，继续采用模板默认值或变量绑定。
+参数先拆分、再对每个值求值，因此密码变量中的分号不会产生新参数。单项 `password` 或 `password=` 均表示显式空值并阻止回退；`false` 与 `0` 都是有效取值；整条 `settings=` 为空表示没有显式参数，继续采用模板默认值或变量绑定。
 
 > 🚨 注意：完成清单记录的是展开后的取值，其中可能包含凭据。请把它当作含密配置管理其访问权限和版本控制。
 

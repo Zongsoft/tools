@@ -29,7 +29,7 @@ public class TemplateResolverTest
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write(".env", "scheme=wrong\n[redis]\nport=6379\n");
-		fixture.Write("project/.env", "#@import ../.deploy/${scheme}/.env\nname=project\nsource=../wrong\nNuGet_Packages=cache\nNuGet_Server=feed\n");
+		fixture.Write("project/.env", "#@import ../.env\n#@import ../.deploy/${scheme}/.env\nname=project\nsource=../wrong\nNuGet_Packages=cache\nNuGet_Server=feed\n");
 		fixture.Write(".deploy/selected/.env", "name=scheme\n[redis]\nserver=selected.example\n");
 		fixture.Write(".deploy/.shared/service.xml.template", "<service name=\"${name}\" endpoint=\"${redis:server}:${redis:port}\" />");
 		fixture.Manifest("#@import ../.deploy/selected/app.deploy\n", "project/.deploy");

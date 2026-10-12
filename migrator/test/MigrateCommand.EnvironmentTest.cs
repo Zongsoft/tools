@@ -87,11 +87,12 @@ public sealed partial class MigrateCommandTest
 	[Theory]
 	[InlineData(false)]
 	[InlineData(true)]
-	public async Task Execute_EnvironmentFilesSupplyVersionAndParametersForAllInputsAsync(bool emptySecret)
+	public async Task Execute_EnvironmentImportsSupplyVersionAndParametersForAllInputsAsync(bool emptySecret)
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write(".env", "zongsoft_env_secret=ancestor\nzongsoft_env_version=versions/release.version\nzongsoft_env_db=hosting\nzongsoft_env_host=ancestor-host\n");
-		directory.Write("workspace/missing/current/.env", "ZONGSOFT_ENV_SECRET=near\nversion=9.9.9\nzongsoft_env_title=${name} ${version}\n[io rustfs]\naccess_key=fixture-access\nsecret_key=fixture-secret\n");
+		directory.Write("workspace/.env", "#@import .env\n");
+		directory.Write("workspace/missing/current/.env", "#@import ../../../.env\nZONGSOFT_ENV_SECRET=near\nversion=9.9.9\nzongsoft_env_title=${name} ${version}\n[io rustfs]\naccess_key=fixture-access\nsecret_key=fixture-secret\n");
 		directory.Write("workspace/missing/current/versions/release.version", "Ignored.Name@2.3.4\n");
 		directory.Write("workspace/missing/current/db.migration", "[postgres]\n./schema.sql\n");
 		directory.Write("workspace/missing/current/db.ini", "#@import settings/database.ini\n[postgres]\nPassword=${zongsoft_env_secret}\n");

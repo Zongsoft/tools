@@ -16,7 +16,7 @@
 - packager 不引用独立 migrator 项目或共享升迁协议，不分发原生产物；通用变量来源组合源码由 tools/.shared 链接到四个制作工具。两个输入文件原样加入安装根 .migration/，脚本 0755、归档 0600，载荷冲突失败。
 - 安装调用外部脚本 apply，systemd 门禁调用 check，均明确传入 /var/lib/<包名>/packager。升迁失败阻止启动；无 daemon 也执行，DESTDIR 不执行钩子；卸载保留状态。
 - 三格式的安装/升级/覆盖/卸载阶段不同，保留 Debian configure 和 RPM 剩余实例语义。根路径别名、符号链接与安装目录必须规范化，避免越界目标。
-- [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Searcher 处理本地通配与链接，按逻辑来源定位相对路径。变量按显式选项、近层至远层 `.env`、系统环境的顺序查询，全部缺失后再查询描述符默认值；共享 Utility 用 Profile.Load 加载，章节层级以点号连接为命名空间，条目名中的点号和连字符改为下划线。先解析并固定 source，再加载 `.env`，不反向推导源目录；身份仍仅来自显式选项与源版本文件。TextSource 的 file:/text: 只解释一次。
+- [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Searcher 处理本地通配与链接，按逻辑来源定位相对路径。变量按显式选项、source 直属 `.env`（含显式导入）、系统环境的顺序查询，全部缺失后再查询描述符默认值；共享 Utility 用 Profile.Load 加载，章节层级以点号连接为命名空间，条目名中的点号和连字符改为下划线。先解析并固定 source，再加载 `.env`，不反向推导源目录；身份仍仅来自显式选项与源版本文件。TextSource 的 file:/text: 只解释一次。
 - --listen 生成宿主 --urls，完整地址保留；已有服务 ExecStart 不改写。仅 Generated 宿主将有效监听地址写入包头：tar PAX Listen、Debian control Listen、RPM 应用字符串标签 1000001；未使用及空值省略，不增加安装文件。--dependencies 统一使用 name[:range]：NuGet 风格区间及 [v) 下限简写，区间外逗号/分号为 AND、| 为 OR；Dependency 保留原生版本端点。Debian 展开为关系组，RPM 双边范围用 with、替代用 or，并声明相应 rpmlib 能力。其他关系选项保留原生语法。
 - 主页选项及变量为 homepage；manufacturer 未定义、null 或空字符串默认 Zongsoft，纯空白不触发默认值。厂家分别写入 tar PAX 全局 Manufacturer、Debian 自定义 Manufacturer、RPM VENDOR(1011)，与 maintainer 独立；maintainer 选项默认 Zongsoft。
 - 安装包来源元数据使用 Packager:程序集名@版本，独立于应用 .version。大载荷使用 DeleteOnClose 临时流和增量摘要，不分配完整包体。

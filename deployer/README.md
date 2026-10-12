@@ -23,7 +23,7 @@ It is recommended to define a default deployment file named `.deploy` in the dep
 
 The deployment file is a plain text file in `.ini` format, and its content consists of **Section**(`Paragraph`) and **Entry**(`Entry`) enclosed in square brackets, the **Section** part represents the destination directory of deployment.
 
-Sections specify structural directory levels. Entry source and output paths support Core `${...}` template expressions; variables come from command options, environment variables, ancestor `.env` files and output appsettings.
+Sections specify structural directory levels. Entry source and output paths support Core `${...}` template expressions; variables come from command options, environment variables, the source directory's `.env` and its explicit imports and output appsettings.
 
 Each entry consists of **KEY** and **VALUE** parts separated by an equal sign _(`=`)_, and the **VALUE** part is optional.
 
@@ -186,11 +186,11 @@ ${NUGET_PACKAGES}/mysql.data/6.10.9/lib/netstandard2.0/*.dll    <framework:net5.
 
 The tool explicitly enables Core variable fallback: named references search their namespace, its parents and global, querying every source in priority order at each level. A missing variable is reported after all levels miss. Unqualified references remain `${name}`, and a found null or empty value stops fallback.
 
-At each namespace, query command options, the destination application's `appsettings.json`, `.env` files from source up to the filesystem root, then environment variables. The first match wins; an explicit null in `appsettings.json` also stops fallback to lower-priority sources. Configuration and command-option names ignore case. Core `Variables.Environments()` reads system values live in the default namespace without rewriting names or values; names are case-insensitive on Windows and case-sensitive on Unix/Linux.
+At each namespace, query command options, the destination application's `appsettings.json`, source `.env` (including explicit imports), then environment variables. The first match wins; an explicit null in `appsettings.json` also stops fallback to lower-priority sources. Configuration and command-option names ignore case. Core `Variables.Environments()` reads system values live in the default namespace without rewriting names or values; names are case-insensitive on Windows and case-sensitive on Unix/Linux.
 
 All variables, including `framework`, use the first successful lookup: null, empty strings, false and zero never trigger fallback to a lower source. Only a missing value continues lookup. Operations requiring a valid value validate it and report an error when they cannot proceed.
 
-Each directory contributes only its direct `.env`; child directories and individual manifest directories are not searched. All manifests in one invocation share the resulting variables. Core `Profile.Load` reads these INI files, including `#@import`. Root entries use the default namespace; section levels form dot-separated namespaces and entry dots/hyphens become underscores: `[io rustfs]` with `access_key=example` creates `io.rustfs:access_key=example`. A root `environment=Development` creates `environment`. Missing `.env` files are skipped; read or parse failures stop initialization. Values expand only when used, and process environment variables are not modified.
+Only source's direct `.env` is loaded automatically; parent, child and individual manifest directories are not searched. Use `#@import ../.env` to include a parent file explicitly. All manifests in one invocation share the resulting variables. Core `Profile.Load` reads these INI files, including `#@import`. Root entries use the default namespace; section levels form dot-separated namespaces and entry dots/hyphens become underscores: `[io rustfs]` with `access_key=example` creates `io.rustfs:access_key=example`. A root `environment=Development` creates `environment`. Missing `.env` files are skipped; read or parse failures stop initialization. Values expand only when used, and process environment variables are not modified.
 
 Variable values may reference other values recursively, regardless of command-option order. Values expand when used; missing references, cycles, and chains longer than 64 levels fail. `output` may reference command options, environment variables and loaded `.env` values; its `appsettings.json` is loaded afterward.
 
@@ -203,20 +203,21 @@ NuGet-related parameters can be specified via command options, environment varia
 
 ### Source paths, imports, and hosting
 
-`--source` itself is relative to the invocation directory and cannot depend on `.env` files that have not yet been loaded. Once source is fixed, its ancestor `.env` files are loaded and `--output` is evaluated. Relative local `.deploy` arguments, output, report, lockFile, previous, NuGet_Packages, and local NuGet_Server paths resolve against source, including `./` and `../`; absolute paths keep their meaning. Source paths inside `.deploy` and `#@import` paths remain relative to their declaring file.
+`--source` itself is relative to the invocation directory and cannot depend on `.env` files that have not yet been loaded. Once source is fixed, the source directory's `.env` and its explicit imports are loaded and `--output` is evaluated. Relative local `.deploy` arguments, output, report, lockFile, previous, NuGet_Packages, and local NuGet_Server paths resolve against source, including `./` and `../`; absolute paths keep their meaning. Source paths inside `.deploy` and `#@import` paths remain relative to their declaring file.
 
 Deployment APIs name the output-directory argument `outputDirectory`; `DeploymentContext.OutputDirectory` carries the current `.deploy` output directory. Entries and operations expose `Output`; report and lock JSON use `Operations[].Output` for the output path.
 
 The tool gives scheme, environment, and network no special meaning. For example, `hosting/daemon/.env` explicitly selects a scheme:
 
 ```ini
+#@import ../.env
 #@import ../.deploy/${scheme}/.env
 
 name=Zongsoft.Hosting.Daemon
 title=Zongsoft Daemon
 ```
 
-`hosting/.deploy/default/.env` may import `../.env` to reuse `hosting/.deploy/.env`. Importing a file does not create another ancestor search chain. Later declarations of the same key in one Profile override earlier ones, so `.env` declarations control project/scheme precedence. Import arguments may use command options, previously read entries, and visible ancestors, but not later declarations. All `.deploy` files and templates share the invocation's variables; template directories do not reload variables.
+`hosting/.deploy/default/.env` may import `../.env` to reuse `hosting/.deploy/.env`. Other files load only through explicit `#@import` directives, with paths relative to their declaring file. Later declarations of the same key in one Profile override earlier ones, so `.env` declarations control project/scheme precedence. Import arguments may use command options, already-read entries in the current file (including completed imports), and system variables, but not later declarations. All `.deploy` files and templates share the invocation's variables; template directories do not reload variables.
 
 From the hosting root, deploy daemon configuration and plugins:
 
@@ -409,7 +410,7 @@ RID fallback uses the repository-pinned dotnet/runtime v10.0.0 graph through NuG
 
 Package access, dependency resolution, asset selection, and RID fallback have separate implementations; framework and version models reuse NuGet/.NET types. See [implementation details](docs/implementation.md) for responsibilities and behavior.
 
-Variables load from the environment, ancestor `.env` files, the destination application's appsettings.json, and finally command options. Nested JSON keys support `${Database_Name}` and `${Items_0_Name}`; substitution preserves URL slashes.
+Variables load from the environment, the source directory's `.env` and its explicit imports, the destination application's appsettings.json, and finally command options. Nested JSON keys support `${Database_Name}` and `${Items_0_Name}`; substitution preserves URL slashes.
 
 Run regression tests without publishing:
 

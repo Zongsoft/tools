@@ -1,6 +1,6 @@
 遵循 [../AGENTS.md](../AGENTS.md)，首先阅读双语 README、[SKILL.md](SKILL.md) 与 [docs/implementation.zh-Hans.md](docs/implementation.zh-Hans.md)。
 
-- 制作端 `src` 使用 Core Profile、ConnectionSettings 与仓库 `.shared` 变量流程；现场 `executor/src` 只消费 JSON 协议及已生成资产，不引用 Core/YamlDotNet，也不解析 `.container`。
+- 制作端 `src` 使用 Core Profile、Settings 与仓库 `.shared` 变量流程；只加载 source 直属 `.env`，其他配置通过 `#@import` 显式导入，不自动搜索父目录或子目录；现场 `executor/src` 只消费 JSON 协议及已生成资产，不引用 Core/YamlDotNet，也不解析 `.container`。
 - `.shared/Containerization.props` 直接链接模型、文件及进程辅助源码，不生成共享 DLL，不引用 packager/migrator 的可执行项目。交接仅通过它们的产物和配套脚本。
 - 新文本 CRLF、代码 Tab，Shell LF；资源通过 ResXFileCodeGenerator 更新，英文和中文同步。不得修改原有用户样例来迎合实现。
 - `upgrade`、`prepare` 使用唯一交付包位置参数，禁止重新引入 `--bundle`。应用身份不含 tag。基础设施或 bootstrap 变化不能由应用升级隐式接受。

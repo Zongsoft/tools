@@ -19,6 +19,23 @@ public sealed class ContainerManifestTests : IDisposable
 	public ContainerManifestTests() => Directory.CreateDirectory(_root);
 	public void Dispose() => Directory.Delete(_root, true);
 
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void SourceEnvironmentUsesOnlyExplicitImports(bool import)
+	{
+		this.Write(".env", "zongsoft_env_parent=shared\n");
+		this.Write("source/.env", (import ? "#@import ../.env\n" : string.Empty) + "zongsoft_env_local=source\n");
+		this.Write("source/child/.env", "#@import .env\n");
+		var source = Path.Combine(_root, "source");
+
+		var manifest = ManifestFactory.Create(CreateContext("redis", "--name:example", "--version:1.0", "--distribution:debian", "--source:" + source));
+
+		Assert.Equal("source", manifest.Evaluator.Evaluate("${zongsoft_env_local}"));
+		Assert.Equal(import, manifest.Evaluator.TryGetVariable("zongsoft_env_parent", out var value));
+		Assert.Equal(import ? "shared" : null, value);
+	}
+
 	[Fact]
 	public void RootChangesRemainVisibleToTemplateEvaluation()
 	{

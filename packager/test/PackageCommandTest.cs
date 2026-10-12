@@ -31,6 +31,7 @@ public sealed class PackageCommandTest
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write("hosting/.env", "framework=net9.0\n");
+		directory.Write("hosting/daemon/.env", "#@import ../.env\n");
 		directory.Write("hosting/daemon/bin/Release/net9.0/example.dll", "net9.0 application");
 		CommandBase<CommandContext> command = format switch { "tar" => new TarCommand(), "deb" => new DebCommand(), _ => new RpmCommand() };
 		var arguments = new List<string>

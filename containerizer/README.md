@@ -382,15 +382,15 @@ A section never selects its service; only the component list or the manifest doe
 
 `plan`, failed builds and manifest replay never rewrite `.settings`. Only a **successful complete build from a component list** fills in missing service tags; existing tags, repositories and settings are left alone.
 
-Variables come from the environment, the `.env` files along the path from the filesystem root down to the source, and command options. References use `${name}`; `\${name}` keep a literal reference. Names that merely match a parameter are not bound automatically — the only built-in bindings are MySQL's `mysql:root_password` and RustFS's `rustfs:access_key` and `rustfs:secret_key`. Any other value must be set explicitly, as the hosting example does.
+Variables come from the environment, the source directory's `.env` and its explicit imports, and command options. Only source's direct `.env` loads automatically; parent and child directories are not searched. Use `#@import ../.env` to include a parent file explicitly; import paths are relative to their declaring file and later declarations override earlier ones. References use `${name}`; `\${name}` keep a literal reference. Names that merely match a parameter are not bound automatically — the only built-in bindings are MySQL's `mysql:root_password` and RustFS's `rustfs:access_key` and `rustfs:secret_key`. Any other value must be set explicitly, as the hosting example does.
 
-Service parameters use a single-line connection string:
+Service parameters use single-line Core `Settings` syntax. Quoted values use backslash escapes, not doubled quotes; for example, `password='=abc=='` preserves a leading equals sign. Reading and writing use the same Core parser and serializer:
 
 ```ini
-settings=port=16379;password="a;b=""c"""
+settings=port=16379;password='a;b="c"'
 ```
 
-Parameters are split before individual values are evaluated, so a semicolon inside a password variable never starts a new parameter. A bare `password=` is an explicit empty value that blocks fallback; `false` and `0` are valid values; an empty whole `settings=` means "no explicit parameters", leaving template defaults and variable bindings in charge.
+Parameters are split before individual values are evaluated, so a semicolon inside a password variable never starts a new parameter. Both `password` and `password=` are explicit empty values that block fallback; `false` and `0` are valid values; an empty whole `settings=` means "no explicit parameters", leaving template defaults and variable bindings in charge.
 
 > 🚨 **Warning:** A completed manifest records evaluated values, which may include credentials. Treat it as configuration with secrets and manage its access and version control accordingly.
 

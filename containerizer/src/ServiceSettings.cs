@@ -33,74 +33,61 @@
 
 using System;
 using System.Linq;
-using System.Data.Common;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
 
 using Zongsoft.Configuration;
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer;
 
-internal static partial class ServiceSettings
+/// <summary>通过 Core Settings 读写服务参数，并校验服务名称、重复项及单行值。</summary>
+internal static class ServiceSettings
 {
+	#region 公共方法
 	public static Dictionary<string, string> Parse(string text)
 	{
-		var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+		ValidateValue(text);
+		return new ParsedSettings(text).ToDictionary(entry => entry.Key, entry => entry.Value ?? string.Empty, StringComparer.OrdinalIgnoreCase);
+	}
 
-		text = text?.Trim() ?? "";
-		if(text.Contains('\r') || text.Contains('\n'))
-			throw new ContainerizationException(2, Properties.Resources.Settings_Invalid_Message);
+	public static string Format(IEnumerable<KeyValuePair<string, string>> values)
+	{
+		ISettings settings = new Settings();
 
-		var position = 0;
-
-		foreach(Match match in GetEntryRegex().Matches(text))
+		foreach(var pair in values)
 		{
-			if(match.Index != position)
-				throw new ContainerizationException(2, Properties.Resources.Settings_Invalid_Message);
-
-			position += match.Length;
-			var entry = match.Groups["entry"].Value.Trim();
-
-			if(entry.Length == 0)
-				continue;
-
-			var separator = entry.IndexOf('=');
-			if(separator < 1)
-				throw new ContainerizationException(2, Properties.Resources.Settings_Invalid_Message);
-
-			var name = entry[..separator].Trim();
-			ContainerManifest.ValidateIdentity(name);
-			var value = entry[(separator + 1)..].Trim();
-
-			if(result.ContainsKey(name))
-				throw new ContainerizationException(2, Properties.Resources.Settings_Invalid_Message);
-
-			if(value.StartsWith('"') || value.StartsWith('\''))
-			{
-				var builder = new DbConnectionStringBuilder { ConnectionString = entry };
-				result[name] = (string)builder[name];
-			}
-			else
-				result[name] = new ConnectionSettings(entry)[name] ?? "";
+			ContainerManifest.ValidateIdentity(pair.Key);
+			ValidateValue(pair.Value);
+			// Add 保留显式空值和首尾空白；索引器会删除空值并裁剪空白。
+			settings.Add(pair.Key, pair.Value ?? string.Empty);
 		}
 
-		if(position != text.Length)
-			throw new ContainerizationException(2, Properties.Resources.Settings_Invalid_Message);
-
-		return result;
+		return settings.Value;
 	}
+	#endregion
 
-	public static string Format(IEnumerable<KeyValuePair<string, string>> values) => string.Join(';', values.Select(pair => $"{pair.Key}={Quote(pair.Value ?? "")}"));
-	private static string Quote(string value)
+	#region 私有方法
+	private static void ValidateValue(string value)
 	{
-		if(value.Contains('\r') || value.Contains('\n'))
+		if(value != null && (value.Contains('\r') || value.Contains('\n')))
 			throw new ContainerizationException(2, Properties.Resources.Settings_Invalid_Message);
-
-		return value.IndexOfAny([';', '\"', '\'']) < 0 && value.Trim().Length == value.Length ?
-			value : $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
 	}
+	#endregion
 
-	[GeneratedRegex("(?<entry>[^;=\\r\\n]+=[ \\t]*(?:\"(?:[^\"]|\"\")*\"|'(?:[^']|'')*'|[^;\\r\\n]*))[ \\t]*(?:;|$)|[ \\t]*;", RegexOptions.CultureInvariant)]
-	private static partial Regex GetEntryRegex();
+	#region 嵌套类型
+	private sealed class ParsedSettings(string text) : Settings(text)
+	{
+		protected override void OnEntryChanged(string key, string value)
+		{
+			ContainerManifest.ValidateIdentity(key);
+			ValidateValue(value);
+
+			// Core 默认允许后值覆盖；服务参数必须在覆盖前拒绝重复声明。
+			if(this.ContainsKey(key))
+				throw new ContainerizationException(2, Properties.Resources.Settings_Invalid_Message);
+
+			base.OnEntryChanged(key, value);
+		}
+	}
+	#endregion
 }

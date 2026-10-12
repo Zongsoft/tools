@@ -1,4 +1,4 @@
-﻿/*
+/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -42,7 +42,7 @@ namespace Zongsoft.Tools.Deployer;
 partial class Deployer
 {
 	#region 变量加载
-	/// <summary>组合命令参数、目标应用配置、逐级 .env 视图和系统环境，并解析部署目标目录。</summary>
+	/// <summary>组合命令参数、目标应用配置、源目录的 <c>.env</c> 视图和系统环境，并解析部署目标目录。</summary>
 	/// <param name="options">原始命令选项；变量名称中的点号和连字符映射为下划线。</param>
 	/// <param name="currentDirectory">解析 source 的调用目录；为空时使用进程当前目录。</param>
 	/// <returns>按优先级组织变量来源并启用递归求值的评估器。</returns>

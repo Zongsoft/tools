@@ -55,7 +55,7 @@ dotnet-migrate --name:zongsoft --version:1.0.0 --platform:linux --architecture:x
 dotnet-migrate --name:<name> --platform:<platform> [options...] <input.migration|pattern> [more inputs...]
 ```
 
-The package command has no subcommands. Options accept `--key:value` or `--key=value`; quote values with spaces according to the shell. For global variables, explicit options override ancestor `.env` values, environment variables and descriptor defaults, in descending priority; version-file selection has the separate rules below.
+The package command has no subcommands. Options accept `--key:value` or `--key=value`; quote values with spaces according to the shell. For global variables, explicit options override the working directory's `.env` values (including explicit imports), environment variables and descriptor defaults, in descending priority; version-file selection has the separate rules below.
 Successful generation returns `0`; no arguments return `2`; invalid options, inputs, or generation failures return `1`.
 
 | Option | Required/default | Description |
@@ -89,7 +89,7 @@ Then enter `zongsoft` at the migration prompt in the host's `pack.cmd`. The pack
 
 The tool explicitly enables Core variable fallback: named references search their namespace, its parents and global, querying every source in priority order at each level before allowing declared option defaults. Unqualified references remain `${name}`, and a found null or empty value stops fallback.
 
-For global variables, each invocation queries explicit options, direct `.env` files from the working directory up to the filesystem root, then environment variables. Descriptor defaults are queried only after all sources miss. The first match wins, including empty values. Configuration and command-option names ignore case. Core `Variables.Environments()` reads system values live in the default namespace without rewriting names or values; names are case-insensitive on Windows and case-sensitive on Unix/Linux. Child directories and individual input/version-file directories do not establish additional variable scopes. Variables remain local to the invocation and do not modify the process environment.
+For global variables, each invocation queries explicit options, the working directory's `.env` (including explicit imports), then environment variables. Descriptor defaults are queried only after all sources miss. The first match wins, including empty values. Configuration and command-option names ignore case. Core `Variables.Environments()` reads system values live in the default namespace without rewriting names or values; names are case-insensitive on Windows and case-sensitive on Unix/Linux. Only the working directory's direct `.env` loads automatically; parent, child and individual input/version-file directories are not searched. Use `#@import ../.env` to include a parent file explicitly; import paths are relative to their declaring file and later declarations override earlier ones. Variables remain local to the invocation and do not modify the process environment.
 
 All variables, including `framework`, use the first successful lookup: null, empty strings, false and zero never trigger fallback to a lower source. Only a missing value continues lookup. Operations requiring a valid value validate it and report an error when they cannot proceed. `framework` does not select the native executor or RID.
 

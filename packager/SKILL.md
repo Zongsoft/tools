@@ -10,7 +10,7 @@ description: 修改打包命令、应用版本管理、载荷路径、三种包�
 - 命令与版本：PackCommand*、PackageOptions、共享 Utility 中的来源组合及 Core TemplateEvaluator。直属 .edition/ApplicationManifest 优先，缺失才读 .version/ApplicationIdentifier；清单选择显式 Edition、Current、唯一 Edition 或顶层版本。成功后清单输入成组回写 .edition 和 .version（缺失则创建），持久化本次 Current 和最终标识；仅标识输入只保存 .version；两者均无则成组创建，不覆盖并发创建的文件。双文件失败回滚。源清单不入包，包内只生成最终单行标识。
 工具通过共享 Utility 显式启用 TemplateEvaluatorOptions.Fallback；同一命名空间按来源顺序查询，全部未找到才逐级进入父命名空间及全局，最后查询来源已声明的默认值。原始值读取、递归模板和指令参数评估使用同一设置。Profile 变量视图不自行展开模板。
 
-- 变量按显式选项、近层至远层 `.env`、系统环境的顺序查询，全部缺失后再查询描述符默认值；共用 Utility/Profile.Load，章节层级以点号连接为命名空间，条目名中的点号和连字符改为下划线。先用环境和选项固定 source，再加载 `.env`；不搜索子目录、不以 `.env` 重定位 source，保留显式身份与源版本文件规则。
+- 变量按显式选项、source 直属 `.env`（含显式导入）、系统环境的顺序查询，全部缺失后再查询描述符默认值；共用 Utility/Profile.Load，章节层级以点号连接为命名空间，条目名中的点号和连字符改为下划线。先用环境和选项固定 source，再加载 `.env`；不搜索子目录、不以 `.env` 重定位 source，保留显式身份与源版本文件规则。
 - 所有变量（包括 `framework`）统一遵循首个命中生效：null、空字符串、false 和 0 都不会触发下层回退。只有未提供该值时才继续查找；需要有效值的业务操作负责校验并在无法继续时报告错误。
 - 主页使用 `--homepage`/`homepage`；厂家使用 `--manufacturer`/`manufacturer`，null/空字符串默认 `Zongsoft`，保留纯空白边界。三格式分别写 tar PAX `Manufacturer`、Debian `Manufacturer`、RPM `VENDOR`(1011)；维护者独立保存，`--maintainer` 默认 `Zongsoft`。
 - 包模型与编码：Package*、Generator*；长度、对齐、校验和、字节序为精确契约。

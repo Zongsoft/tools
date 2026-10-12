@@ -153,7 +153,7 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 			return ValueTask.FromResult<object>(null);
 		}
 
-		//源目录确定后加载其祖先链 .env；后续变量不能改变本次查找起点。
+		//源目录确定后只加载其直属 .env，其他配置由显式导入组织；后续变量不能改变本次查找起点。
 		source = Path.GetFullPath(source);
 		evaluator = CreateEvaluator(context, source);
 		evaluator.SetVariable(SOURCE_OPTION, source.Replace('\\', '/'));

@@ -58,15 +58,15 @@ Core 通过 Profile.Directives 全局登记指令实现，ProfileReader 解析�
 
 `DeploymentEntry.Get` 在模板表达式之前识别解析器前缀，`${...}` 内的命名空间冒号不作为解析器分隔符。没有冒号的条目直接使用 `path` 名称。`DeploymentResolverManager.GetResolver` 将 null、空字符串及纯空白名称解析为默认路径解析器；`path`、`template`、`nuget` 和 `delete`/`remove` 按不区分大小写的方式匹配，未知名称返回 null。空名称选择默认路径解析器是其功能约定。默认路径解析器自身的 Name 为空字符串，`path` 是选择该实例的解析器名。Windows 字面绝对源路径使用 `path:D:/dir/files.ext`，避免盘符被解析为解析器名；相对路径可以省略前缀或显式使用 `path:`。
 
-变量遵循 Core 模板标识符与命名空间规则，配置及命令选项查询不区分大小写，系统环境遵循平台规则；覆盖顺序为环境变量、从根到 source 的各级 `.env`、目标应用 `appsettings.json`、命令选项。先用环境变量、`.env` 及全部命令选项递归展开 `output`，定位目标目录后加载其配置；最终变量保留原始值并按需递归展开，不受选项遍历顺序影响。缺失、循环或超过 64 层的已引用变量失败，未使用的变量不提前解析。先展开布尔、枚举等选项值再转换；`expansion` 按实际布尔值工作，无法转换的 `verbosity` 会报错。枚举选项沿用 Core 的转换规则，不额外检查枚举成员是否已定义；调用方应提供有效枚举项。JSON 支持注释和尾随逗号；嵌套对象和数组生成 `Database_Name`、`Items_0_Name` 等键。
+变量遵循 Core 模板标识符与命名空间规则，配置及命令选项查询不区分大小写，系统环境遵循平台规则；覆盖顺序为环境变量、source 直属 `.env`（含显式导入）、目标应用 `appsettings.json`、命令选项。先用环境变量、`.env` 及全部命令选项递归展开 `output`，定位目标目录后加载其配置；最终变量保留原始值并按需递归展开，不受选项遍历顺序影响。缺失、循环或超过 64 层的已引用变量失败，未使用的变量不提前解析。先展开布尔、枚举等选项值再转换；`expansion` 按实际布尔值工作，无法转换的 `verbosity` 会报错。枚举选项沿用 Core 的转换规则，不额外检查枚举成员是否已定义；调用方应提供有效枚举项。JSON 支持注释和尾随逗号；嵌套对象和数组生成 `Database_Name`、`Items_0_Name` 等键。
 
-共享 `Utility.LoadEnvironmentProfiles` 收集祖先链，再逆序用 `Profile.Load` 加载各级直属 `.env`。根条目属于默认命名空间，章节层级以点号连接为命名空间，条目名中的点号和连字符改为下划线，保留 Core 解析、空值和导入语义。仅跳过打开阶段的缺失文件；读取、权限及解析异常直接传播。每次调用独立加载，嵌套清单不重新加载，不修改进程环境变量。
+共享 `Utility.LoadEnvironmentProfiles` 只用 `Profile.Load` 加载 source 直属 `.env`，其他文件由 `#@import` 显式导入，不搜索父目录或子目录。根条目属于默认命名空间，章节层级以点号连接为命名空间，条目名中的点号和连字符改为下划线，保留 Core 解析、空值和导入语义。仅跳过打开阶段的缺失文件；读取、权限及解析异常直接传播。每次调用独立加载，嵌套清单不重新加载，不修改进程环境变量。
 
 变量契约使用 `Zongsoft.Common.IVariables`。显式命令选项及工具计算值保存在 Core `Variables` 中，`.env` 保留 `Profile.ToVariables()` 视图，系统环境直接使用 `Variables.Environments()` 实时读取，不复制、不改写名称或值。环境来源只提供默认命名空间，Windows 忽略大小写，Unix/Linux 区分大小写；参与模板的路径值使用 `/`，其余转义遵循 Core。`TemplateEvaluatorOptions.Fallback` 显式设为 true；同一命名空间按 Providers 顺序查询，全部未找到才逐级进入父命名空间及全局，最后允许来源自身已声明的默认值。首个命中即生效，包括 null。AppSettingsUtility 将对象与数组展开为变量名时保留显式 JSON null。指令参数评估沿用父评估器的 Fallback、Recursive、Culture 和 MaximumDepth；不带命名空间的模板无需额外语法。默认空间用 `${name}`，具名空间用 `${io.rustfs:access_key}`；章节层级以点号连接，条目名及命令选项名中的点号和连字符转换为下划线，非法配置名称不提供变量，配置名称冲突仅在查询时失败。
 
 模板直接通过 Core `TemplateEvaluator.Evaluate` / `TryEvaluate` 求值，启用 `Recursive`，默认上限为 64（根模板和递归字符串均计层）。所有输入遵循 Core 转义；`\${name}` 输出字面引用，`\\` 输出字面反斜杠。路径优先使用相对路径，绝对路径使用 `/`，例如 `../.shared/${product}.env` 或 `D:/deploy/${scheme}`。未知变量、循环和深度超限按 Core 错误契约处理。
 
-`.env` 的指令参数通过 `Directives.Processing` 求值，查找顺序为显式选项、当前文件已读内容（含已完成导入）、已加载的祖先 `.env` 和环境/默认值。不读取后文，不隐式查找导入父文件的局部变量。制作清单的回调先查本次命令的实际值，再查当前 Profile，全部未命中后才查描述符默认值。每条 import 使用完整参数导入一个文件，原始声明和条目值不被模板结果改写。Profile 只负责读取和导入，模板评估由工具显式发起。
+`.env` 的指令参数通过 `Directives.Processing` 求值，查找顺序为显式选项、当前文件已读内容（含已完成导入）、环境/默认值。不读取后文，不隐式查找导入父文件的局部变量。制作清单的回调先查本次命令的实际值，再查当前 Profile，全部未命中后才查描述符默认值。每条 import 使用完整参数导入一个文件，原始声明和条目值不被模板结果改写。Profile 只负责读取和导入，模板评估由工具显式发起。
 
 所有变量（包括 `framework`）统一遵循首个命中生效：null、空字符串、false 和 0 都不会触发下层回退。只有未提供该值时才继续查找；需要有效值的业务操作负责校验并在无法继续时报告错误。
 
@@ -182,7 +182,7 @@ Core Searcher 处理本地模式及递归匹配。搜索结果保留逻辑名称
 
 输出命名与命令选项一致：目录参数为 `outputDirectory`，上下文属性为 `OutputDirectory`，条目与操作路径为 `Output`；报告和锁文件中的操作路径字段同样为 `Output`。`Deployer.Output` 表示诊断用的 `TextWriter`，由调用方持有。
 
-`CreateEvaluator` 先用命令选项和系统变量相对于调用目录定位 source，再通过共享 Utility 加载其祖先 `.env`，相对于 source 定位 output，最后加载输出目录的 appsettings。report、lockFile、previous、本地包缓存和本地包源也基于 source；`.deploy` 和 import 引用仍基于声明文件。scheme 只出现在用户表达式和导入中。
+`CreateEvaluator` 先用命令选项和系统变量相对于调用目录定位 source，再通过共享 Utility 加载其直属 `.env`（含显式导入），相对于 source 定位 output，最后加载输出目录的 appsettings。report、lockFile、previous、本地包缓存和本地包源也基于 source；`.deploy` 和 import 引用仍基于声明文件。scheme 只出现在用户表达式和导入中。
 
 `TemplateResolver` 复用 `DeploymentResolverBase` 的源枚举与准备扩展点，执行前对输入快照求值，生成的 UTF-8 字节仅保存在内存。`SourceHash` 标识源字节，`ContentHash` 标识生成字节并参与锁比较，`Hash` 记录最终输出。报告和锁文件不序列化载荷字节；写入前再次检查源身份及哈希。
 

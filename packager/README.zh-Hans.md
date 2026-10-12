@@ -59,7 +59,7 @@
 
 1. **固定源目录**：解析 `--source`（默认当前目录）。
 2. **确定应用身份**：合并源目录的 `.edition` 清单文件或回退读取的 `.version` 版本标识文件中的值与 `--name`、`--edition`、`--version` 选项。
-3. **加载变量**：组合命令选项、各级 `.env` 和环境变量，默认值由 Core 在最后回退查询。
+3. **加载变量**：组合命令选项、source 直属 `.env`（含显式导入）和环境变量，默认值由 Core 在最后回退查询。
 4. **收集打包项**：按位置参数和 `--exclude` 确定载荷文件。
 5. **生成附属内容**：systemd 服务、生命周期脚本、Nginx 配置、升迁产物。
 6. **编码并写出**：生成 `.tar.gz`（含配套 `.sh`）、`.deb` 或 `.rpm`。
@@ -257,7 +257,7 @@ dotnet-pack rpm <选项...> [打包项...]
 | `--architecture:<arch>` | `x64` | 目标 CPU 架构，例如 `x64`、`x86`、`arm64`、`arm`。 |
 | `--compilation:<name>` | `Release` | 可选 .NET 构建配置，用于查找 `bin/<compilation>/<framework>` 中的宿主；也可通过 `${compilation}` 引用。 |
 
-普通文件打包无需提供 `--framework` 或 `--compilation`，这两个选项不会执行编译。源目录已有应用 DLL，或使用现成的 `.service` 文件时，也可省略两项；从 .NET 构建目录查找宿主时通过 `--framework`、环境变量或祖先 `.env` 提供框架，`--compilation` 默认使用 `Release`。
+普通文件打包无需提供 `--framework` 或 `--compilation`，这两个选项不会执行编译。源目录已有应用 DLL，或使用现成的 `.service` 文件时，也可省略两项；从 .NET 构建目录查找宿主时通过 `--framework`、环境变量或source 直属 `.env`（含显式导入）提供框架，`--compilation` 默认使用 `Release`。
 
 ### 输入与输出
 
@@ -855,7 +855,7 @@ ${namespace:name}
 全局变量按以下优先级查询，首个命中即生效（空值也终止查询）：
 
 1. 显式命令选项，包括额外选项（如 `--Environment:Production`）
-2. 从源目录到文件系统根目录，各级目录直属的 `.env` 文件（由近到远）
+2. 源目录直属 `.env`（含 `#@import` 显式导入的文件）
 3. 系统环境变量
 4. 描述符默认值：仅在前三项全部未命中时由 Core 查询
 
@@ -863,7 +863,7 @@ ${namespace:name}
 
 `.env` 的读取规则：
 
-- 先用环境变量和选项解析并固定 `--source`，再加载 `.env`；`.env` 不能确定或重新指定 source，也不会额外加载工作目录的祖先链或子目录。
+- 先用环境变量和选项解析并固定 `--source`，再加载 `.env`；`.env` 不能确定或重新指定 source，不搜索父目录、子目录或另一个调用目录。其他文件只通过 `#@import` 显式导入，路径相对于声明文件；后续同名声明覆盖此前声明。
 - 使用 [`Profile.Load`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Configuration/Profiles/Profile.cs) 读取，支持 INI 与 `#@import`。根级条目属于默认命名空间；章节层级以点号组成命名空间，条目名的点号和连字符改为下划线。例如 `[io rustfs]` 下的 `access_key=example` 生成 `io.rustfs:access_key`，根级 `environment=Development` 生成 `environment`。
 - 缺失的文件跳过；读取或解析失败则终止制包。
 - 每次调用的变量相互独立，不修改进程环境变量。
@@ -1006,7 +1006,7 @@ sudo rpm -Uvh ./.packages/zongsoft.web@1.0.0-x64.rpm
 
 ### 应用元数据
 
-`--homepage` 表示应用主页，`--manufacturer` 表示软件生产厂家，`--maintainer` 表示软件包维护者。变量 `homepage`、`manufacturer`、`maintainer` 按既有的默认值 → 环境变量 → 祖先 `.env` → 显式选项顺序加载。厂家值解析后为 null 或空字符串时使用 `Zongsoft`，纯空白不使用默认值。
+`--homepage` 表示应用主页，`--manufacturer` 表示软件生产厂家，`--maintainer` 表示软件包维护者。变量 `homepage`、`manufacturer`、`maintainer` 按既有的默认值 → 环境变量 → 直属 `.env`（含显式导入） → 显式选项顺序加载。厂家值解析后为 null 或空字符串时使用 `Zongsoft`，纯空白不使用默认值。
 
 | 应用字段 | tar.gz PAX 全局属性 | deb control 字段 | rpm 主 Header 标签 |
 | --- | --- | --- | --- |

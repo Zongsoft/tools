@@ -9,6 +9,57 @@ namespace Zongsoft.Tools.Deployer.Tests;
 public sealed class EnvironmentVariablesTest
 {
 	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void CreateEvaluator_OnlyLoadsTheSourceEnvironmentFile(bool local)
+	{
+		using var fixture = new DeploymentFixture();
+		fixture.Write(".env", "zongsoft_env_ancestor=must-not-load\n");
+		fixture.Write("source/child/.env", "zongsoft_env_child=must-not-load\n");
+
+		if(local)
+			fixture.Write("source/.env", "zongsoft_env_local=source\n");
+
+		var evaluator = Deployer.CreateEvaluator(new Dictionary<string, string> { ["source"] = "source" }, fixture.Root);
+
+		Assert.False(evaluator.Providers.TryGetValue("zongsoft_env_ancestor", out _));
+		Assert.False(evaluator.Providers.TryGetValue("zongsoft_env_child", out _));
+		Assert.Equal(local, evaluator.Providers.TryGetValue("zongsoft_env_local", out var value));
+		Assert.Equal(local ? "source" : null, value);
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void CreateEvaluator_InvalidAncestorEnvironmentFileIsIgnored(bool unreadable)
+	{
+		using var fixture = new DeploymentFixture();
+		if(unreadable)
+			Directory.CreateDirectory(Path.Combine(fixture.Root, ".env"));
+		else
+			fixture.Write(".env", "#@import .env\n");
+
+		var evaluator = Deployer.CreateEvaluator(new Dictionary<string, string>(), Path.Combine(fixture.Root, "source"));
+
+		Assert.Equal(Path.Combine(fixture.Root, "source").Replace('\\', '/'), evaluator.Evaluate("${source}"));
+		Assert.Empty(Directory.GetFiles(fixture.OutputDirectory));
+	}
+
+	[Theory]
+	[InlineData("#@import ../.env\nzongsoft_env_order=local\n", "local")]
+	[InlineData("zongsoft_env_order=local\n#@import ../.env\n", "imported")]
+	public void CreateEvaluator_ImportPositionDeterminesPrecedence(string content, string expected)
+	{
+		using var fixture = new DeploymentFixture();
+		fixture.Write(".env", "zongsoft_env_order=imported\n");
+		fixture.Write("source/.env", content);
+
+		var evaluator = Deployer.CreateEvaluator(new Dictionary<string, string>(), Path.Combine(fixture.Root, "source"));
+
+		Assert.Equal(expected, evaluator.Evaluate("${zongsoft_env_order}"));
+	}
+
+	[Theory]
 	[InlineData(false, null, false, "net8.0")]
 	[InlineData(true, null, false, "")]
 	[InlineData(true, "", false, "")]
@@ -85,11 +136,12 @@ public sealed class EnvironmentVariablesTest
 	}
 
 	[Fact]
-	public void CreateEvaluator_EnvironmentHierarchyPreservesNamespacesAndIsolatesLoads()
+	public void CreateEvaluator_EnvironmentImportsPreserveNamespacesAndIsolateLoads()
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write(".env", "zongsoft_env_root=ancestor\nzongsoft_env_shared=far\nzongsoft_env_parent=retained\nzongsoft_env_reference=${zongsoft_env_shared}/${zongsoft_env_root}\n[io rustfs]\naccess_key=ancestor-access\nsecret_key=RustFS@2025\n");
-		fixture.Write("source/missing/leaf/.env", "ZONGSOFT_ENV_SHARED=near\nzongsoft_env_empty=\nzongsoft_env_unused=${zongsoft_env_missing}\n[io rustfs]\naccess_key=local-access\n");
+		fixture.Write("source/.env", "#@import .env\n");
+		fixture.Write("source/missing/leaf/.env", "#@import ../../../.env\nZONGSOFT_ENV_SHARED=near\nzongsoft_env_empty=\nzongsoft_env_unused=${zongsoft_env_missing}\n[io rustfs]\naccess_key=local-access\n");
 		fixture.Write("source/missing/leaf/child/.env", "zongsoft_env_shared=child\nzongsoft_env_child=must-not-load\n");
 		var previous = Environment.GetEnvironmentVariable("zongsoft_env_shared");
 		var first = Deployer.CreateEvaluator(new Dictionary<string, string>(), Path.Combine(fixture.Root, "source", "missing", "leaf"));
@@ -105,7 +157,7 @@ public sealed class EnvironmentVariablesTest
 		Assert.Throws<TemplateEvaluationException>(() => first.Evaluate("${zongsoft_env_unused}"));
 		Assert.Equal(previous, Environment.GetEnvironmentVariable("zongsoft_env_shared"));
 
-		fixture.Write("source/missing/leaf/.env", "zongsoft_env_shared=updated\n");
+		fixture.Write("source/missing/leaf/.env", "#@import ../../../.env\nzongsoft_env_shared=updated\n");
 		var second = Deployer.CreateEvaluator(new Dictionary<string, string>(), Path.Combine(fixture.Root, "source", "missing", "leaf"));
 		Assert.Equal("updated/ancestor", second.Evaluate("${zongsoft_env_reference}"));
 		Assert.Equal("ancestor-access", second.Evaluate("${io.rustfs:access_key}"));
@@ -124,7 +176,7 @@ public sealed class EnvironmentVariablesTest
 		{
 			Environment.SetEnvironmentVariable(KEY, "process");
 			fixture.Write(".env", KEY + "=ancestor\nzongsoft_env_workspace=" + fixture.Root.Replace('\\', '/') + "\n");
-			fixture.Write("source/.env", KEY + "=source\nzongsoft_env_target=${zongsoft_env_workspace}/${zongsoft_env_stage}\n");
+			fixture.Write("source/.env", "#@import ../.env\n" + KEY + "=source\nzongsoft_env_target=${zongsoft_env_workspace}/${zongsoft_env_stage}\n");
 			fixture.Write("target/appsettings.json", "{\"zongsoft_env_priority\":\"configuration\",\"zongsoft_env_configuration\":\"target-only\"}");
 			var options = new Dictionary<string, string>
 			{
@@ -182,8 +234,8 @@ public sealed class EnvironmentVariablesTest
 	{
 		using var fixture = new DeploymentFixture();
 		fixture.Write(".env", "zongsoft_env_flag=ancestor-value\n");
-		fixture.Write("source/.env", "#@import settings/defaults.ini\nzongsoft_env_value=local\nzongsoft_env_flag\n");
-		fixture.Write("source/settings/defaults.ini", "#@import absent.ini\nzongsoft_env_value=imported\n[io rustfs]\nsecret_key=import-secret\n");
+		fixture.Write("source/.env", "#@import ../.env\n#@import settings/defaults.env\nzongsoft_env_value=local\nzongsoft_env_flag\n");
+		fixture.Write("source/settings/defaults.env", "#@import absent.env\nzongsoft_env_value=imported\n[io rustfs]\nsecret_key=import-secret\n");
 
 		var variables = Deployer.CreateEvaluator(new Dictionary<string, string>(), Path.Combine(fixture.Root, "source"));
 
@@ -191,7 +243,7 @@ public sealed class EnvironmentVariablesTest
 		Assert.Equal("import-secret", variables.Evaluate("${io.rustfs:secret_key}"));
 		Assert.Contains(variables.Providers, provider => provider.TryGetValue("zongsoft_env_flag", out _));
 		Assert.Contains(variables.Providers, provider => provider.TryGetValue("zongsoft_env_flag", out var value) && value == null);
-		Assert.Contains(variables.Providers, provider => provider.TryGetValue("zongsoft_env_flag", out var value) && Equals(value, "ancestor-value"));
+		Assert.DoesNotContain(variables.Providers, provider => provider.TryGetValue("zongsoft_env_flag", out var value) && Equals(value, "ancestor-value"));
 		Assert.Equal(string.Empty, variables.Evaluate("${zongsoft_env_flag}"));
 		using var exclusive = File.Open(Path.Combine(fixture.Root, "source", ".env"), FileMode.Open, FileAccess.ReadWrite, FileShare.None);
 		Assert.True(exclusive.CanWrite);

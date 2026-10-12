@@ -23,7 +23,7 @@
 
 部署文件为 `.ini` 格式的纯文本文件，其内容由中括号包裹的 **章节**_(`Section`)_ 和 **条目**_(`Entry`)_ 两种内容组成，其中 **章节** 部分表示部署的目标目录。
 
-**章节** 指定结构性的目录层级；**条目** 的源路径和输出路径支持 Core `${name}` 模板表达式，变量来自命令选项、环境变量、祖先链 `.env` 和输出目录的应用配置。
+**章节** 指定结构性的目录层级；**条目** 的源路径和输出路径支持 Core `${name}` 模板表达式，变量来自命令选项、环境变量、source 直属 `.env`（含显式导入）和输出目录的应用配置。
 
 每个条目由 **键** 和 **值** 两部分组成，以等于号 _(`=`)_ 分隔，其中 **值** 可省略。
 
@@ -185,11 +185,11 @@ ${NUGET_PACKAGES}/mysql.data/6.10.9/lib/netstandard2.0/*.dll    <framework:net5.
 
 工具明确启用 Core 的变量回退：具名变量按当前命名空间、各级父命名空间、全局的顺序查询；每一级先按来源优先级查询全部来源；全部缺失则报告缺少变量。无命名空间的引用仍写作 `${name}`，命中空值也停止回退。
 
-每个命名空间内依次查询命令选项、目标应用的 `appsettings.json`、从 source 到文件系统根目录的各级 `.env`、系统环境变量。首个命中生效，`appsettings.json` 中显式声明的 null 也会阻止低优先级来源回退。配置和命令选项名忽略大小写；系统环境通过 Core `Variables.Environments()` 实时读取，只提供默认命名空间，名称及原始值不改写，Windows 忽略大小写，Unix/Linux 区分大小写。
+每个命名空间内依次查询命令选项、目标应用的 `appsettings.json`、source 直属 `.env`（含显式导入）、系统环境变量。首个命中生效，`appsettings.json` 中显式声明的 null 也会阻止低优先级来源回退。配置和命令选项名忽略大小写；系统环境通过 Core `Variables.Environments()` 实时读取，只提供默认命名空间，名称及原始值不改写，Windows 忽略大小写，Unix/Linux 区分大小写。
 
 所有变量（包括 `framework`）统一遵循首个命中生效：null、空字符串、false 和 0 都不会触发下层回退。只有未提供该值时才继续查找；需要有效值的业务操作负责校验并在无法继续时报告错误。
 
-每级只读取直属 `.env`，不搜索子目录或各个清单所在目录；同次调用的全部清单共用变量集合。INI 文件使用 Core `Profile.Load` 读取，支持 `#@import`。根条目属于默认命名空间，章节层级以点号组成命名空间，条目名的点号和连字符改为下划线：`[io rustfs]` 下的 `access_key=example` 生成 `io.rustfs:access_key=example`，根级 `environment=Development` 生成 `environment`。缺失的 `.env` 跳过，读取或解析失败终止初始化。值仅在使用时展开，不修改进程环境变量。
+只自动读取 source 直属 `.env`，不搜索父目录、子目录或各个清单所在目录；如需父目录配置，显式使用 `#@import ../.env`；同次调用的全部清单共用变量集合。INI 文件使用 Core `Profile.Load` 读取，支持 `#@import`。根条目属于默认命名空间，章节层级以点号组成命名空间，条目名的点号和连字符改为下划线：`[io rustfs]` 下的 `access_key=example` 生成 `io.rustfs:access_key=example`，根级 `environment=Development` 生成 `environment`。缺失的 `.env` 跳过，读取或解析失败终止初始化。值仅在使用时展开，不修改进程环境变量。
 
 变量值可递归引用其他变量，不受命令选项顺序影响；仅在使用时展开，缺失、循环引用或超过 64 层会报错。`output` 可引用命令选项、环境变量及已加载的 `.env` 变量；目标目录确定后才加载其中的 `appsettings.json`。
 
@@ -202,20 +202,21 @@ ${NUGET_PACKAGES}/mysql.data/6.10.9/lib/netstandard2.0/*.dll    <framework:net5.
 
 ### 源目录、导入与 hosting
 
-`--source` 自身相对于调用时的当前目录解析；它不能依赖尚未加载的 `.env`。确定 source 后，才加载其祖先 `.env` 并求值 `--output`。本地相对 `.deploy` 参数、output、report、lockFile、previous、NuGet_Packages 和本地 NuGet_Server 都相对于 source，包含 `./` 与 `../`；绝对路径保持原义。`.deploy` 内的源路径和 `#@import` 仍相对于声明文件。
+`--source` 自身相对于调用时的当前目录解析；它不能依赖尚未加载的 `.env`。确定 source 后，才加载其直属 `.env`（含显式导入）并求值 `--output`。本地相对 `.deploy` 参数、output、report、lockFile、previous、NuGet_Packages 和本地 NuGet_Server 都相对于 source，包含 `./` 与 `../`；绝对路径保持原义。`.deploy` 内的源路径和 `#@import` 仍相对于声明文件。
 
 部署 API 的输出目录参数为 `outputDirectory`；`DeploymentContext.OutputDirectory` 保存当前 `.deploy` 的输出目录。条目和操作通过 `Output` 表示输出，报告和锁文件的 JSON 使用 `Operations[].Output` 记录输出路径。
 
 工具不识别 scheme、environment 或 network；它们都是普通变量。例如 `hosting/daemon/.env` 主动导入方案：
 
 ```ini
+#@import ../.env
 #@import ../.deploy/${scheme}/.env
 
 name=Zongsoft.Hosting.Daemon
 title=Zongsoft Daemon
 ```
 
-`hosting/.deploy/default/.env` 可以再 `#@import ../.env` 复用 `hosting/.deploy/.env`。导入目录不会自动建立第二条祖先链。同一 Profile 的后续同名声明覆盖此前声明，因此项目与方案的覆盖关系由 `.env` 写法决定。导入参数只能引用命令选项、此前已读条目和可见祖先变量，不能引用后续声明。全部 `.deploy` 和模板共用同次调用的变量，不按模板物理目录重载变量。
+`hosting/.deploy/default/.env` 可以再 `#@import ../.env` 复用 `hosting/.deploy/.env`。其他文件只通过显式 `#@import` 导入，路径相对于声明文件。同一 Profile 的后续同名声明覆盖此前声明，因此项目与方案的覆盖关系由 `.env` 写法决定。导入参数只能引用命令选项、当前文件此前已读条目（含已完成导入）和系统变量，不能引用后续声明。全部 `.deploy` 和模板共用同次调用的变量，不按模板物理目录重载变量。
 
 从 hosting 根目录部署 daemon 的配置及插件：
 
@@ -404,7 +405,7 @@ RID 回退通过 NuGet.RuntimeModel 使用仓库内固定的 dotnet/runtime v10.
 
 包访问、依赖求解、资产选择和 RID 回退分别由独立类型负责，框架与版本模型复用 NuGet/.NET 类型，职责与行为见[实现细节](docs/implementation.zh-Hans.md)。
 
-变量按环境变量、祖先链 `.env`、目标目录 appsettings.json、命令选项的顺序加载；JSON 嵌套键可用 `${Database_Name}`、`${Items_0_Name}` 引用。变量替换保留 URL 的斜线。
+变量按环境变量、source 直属 `.env`（含显式导入）、目标目录 appsettings.json、命令选项的顺序加载；JSON 嵌套键可用 `${Database_Name}`、`${Items_0_Name}` 引用。变量替换保留 URL 的斜线。
 
 回归命令（不会推送工具包）：
 

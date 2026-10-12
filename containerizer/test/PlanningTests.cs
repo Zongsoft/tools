@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 using Zongsoft.Components;
+using Zongsoft.Configuration;
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
@@ -326,6 +327,11 @@ public sealed class PlanningTests : IDisposable
 	[InlineData("password=\"a;b=c\";storage=temporary", "a;b=c")]
 	[InlineData("password='a;\"b';storage=temporary", "a;\"b")]
 	[InlineData("password=;storage=temporary", "")]
+	[InlineData("password;storage=temporary", "")]
+	[InlineData("password='=abc==';storage=temporary", "=abc==")]
+	[InlineData("password='a\\'b;=c\\\\';storage=temporary", "a'b;=c\\")]
+	[InlineData("password=\"a\\\"b;=c\";storage=temporary", "a\"b;=c")]
+	[InlineData("password='a\\tb';storage=temporary", "a\tb")]
 	public void SettingsRoundTripEmptyAndQuotedValues(string input, string password)
 	{
 		var values = ServiceSettings.Parse(input);
@@ -335,22 +341,44 @@ public sealed class PlanningTests : IDisposable
 	}
 
 	[Theory]
-	[InlineData("127.0.0.1:6379", "password=127.0.0.1:6379")]
-	[InlineData("persistent", "password=persistent")]
-	[InlineData("${redis_password}", "password=${redis_password}")]
-	[InlineData("a=b", "password=a=b")]
-	[InlineData("=abc==", "password==abc==")]
-	[InlineData("", "password=")]
-	[InlineData("a;b", "password=\"a;b\"")]
-	[InlineData("a\"b", "password=\"a\"\"b\"")]
-	[InlineData("'abc'", "password=\"'abc'\"")]
-	[InlineData(" padded ", "password=\" padded \"")]
-	[InlineData(@"C:\data\cache", @"password=C:\data\cache")]
-	public void SettingsOutputQuotesOnlyAmbiguousValuesAndPreservesTheirContents(string value, string expected)
+	[InlineData("127.0.0.1:6379")]
+	[InlineData("persistent")]
+	[InlineData("${redis_password}")]
+	[InlineData("a=b")]
+	[InlineData("=abc==")]
+	[InlineData("")]
+	[InlineData(null)]
+	[InlineData("a;b")]
+	[InlineData("a\"b")]
+	[InlineData("'abc'")]
+	[InlineData(" padded ")]
+	[InlineData(" \t ")]
+	[InlineData("a\tb")]
+	[InlineData(@"C:\data\cache")]
+	[InlineData("a;'b\"=c\\")]
+	public void SettingsOutputUsesCoreSyntaxAndPreservesParameterBoundaries(string value)
 	{
-		var output = ServiceSettings.Format(new Dictionary<string, string> { ["password"] = value });
-		Assert.Equal(expected, output);
-		Assert.Equal(value, ServiceSettings.Parse(output)["password"]);
+		var output = ServiceSettings.Format(new Dictionary<string, string> { ["password"] = value, ["storage"] = "temporary" });
+		var settings = Settings.Parse(output);
+		Assert.Equal(2, settings.Count);
+		Assert.True(settings.ContainsKey("password"));
+		Assert.Equal(value ?? string.Empty, settings["password"] ?? string.Empty);
+		Assert.Equal("temporary", settings["storage"]);
+
+		var parsed = ServiceSettings.Parse(output);
+		Assert.Equal(2, parsed.Count);
+		Assert.Equal(value ?? string.Empty, parsed["password"]);
+		Assert.Equal("temporary", parsed["storage"]);
+	}
+
+	[Theory]
+	[InlineData("password=first;PASSWORD=second")]
+	[InlineData("password;password=second")]
+	[InlineData("password=;PASSWORD=")]
+	[InlineData("invalid name=value")]
+	public void SettingsKeepServiceParameterValidation(string text)
+	{
+		Assert.Throws<ContainerizationException>(() => ServiceSettings.Parse(text));
 	}
 
 	[Theory]
@@ -400,6 +428,8 @@ public sealed class PlanningTests : IDisposable
 	{
 		Assert.Empty(ServiceSettings.Parse("  "));
 		Assert.Throws<ContainerizationException>(() => ServiceSettings.Parse("password=\"a\nb\""));
+		Assert.Throws<ContainerizationException>(() => ServiceSettings.Parse("password='a\\nb'"));
+		Assert.Throws<ContainerizationException>(() => ServiceSettings.Parse("password='a\\rb'"));
 		Assert.Throws<ContainerizationException>(() => ServiceSettings.Format(new Dictionary<string, string> { ["password"] = "a\nb" }));
 	}
 

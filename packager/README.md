@@ -59,7 +59,7 @@ A single packaging run performs these steps in order:
 
 1. **Fix the source directory:** resolve `--source` (the current directory by default).
 2. **Determine the application identity:** merge values from the source `.edition` manifest or fallback `.version` identifier with the `--name`, `--edition`, and `--version` options.
-3. **Load variables:** combine command options, ancestor `.env` files and environment variables; Core queries descriptor defaults last.
+3. **Load variables:** combine command options, the source directory's `.env` (including explicit imports), and environment variables; Core queries descriptor defaults last.
 4. **Collect package entries:** select payload files from positional arguments and `--exclude`.
 5. **Generate supporting content:** systemd service, lifecycle scripts, Nginx configuration, migration artifacts.
 6. **Encode and write:** produce `.tar.gz` (with its `.sh` companion), `.deb`, or `.rpm`.
@@ -257,7 +257,7 @@ In the tables below, **required** options must always be supplied; _conditionall
 | `--architecture:<arch>` | `x64` | Target CPU architecture, such as `x64`, `x86`, `arm64`, or `arm`. |
 | `--compilation:<name>` | `Release` | Optional .NET build configuration used to locate the host under `bin/<compilation>/<framework>`; also available as `${compilation}`. |
 
-Ordinary file packaging needs neither `--framework` nor `--compilation`; these options do not run a build. Both may also be omitted when the application DLL is already in the source directory or an existing `.service` file is supplied. Supply the framework through `--framework`, an environment variable or an ancestor `.env` to locate a host in a .NET build directory; `--compilation` defaults to `Release`.
+Ordinary file packaging needs neither `--framework` nor `--compilation`; these options do not run a build. Both may also be omitted when the application DLL is already in the source directory or an existing `.service` file is supplied. Supply the framework through `--framework`, an environment variable or the source `.env` or its explicit imports to locate a host in a .NET build directory; `--compilation` defaults to `Release`.
 
 ### Input and output
 
@@ -855,7 +855,7 @@ Variable names use Core identifiers; configuration and command options ignore ca
 Global variables are queried in this priority order; the first match wins, including empty values:
 
 1. Explicit command options, including extra options such as `--Environment:Production`
-2. The direct `.env` file of each directory from the source directory up to the filesystem root (nearest first)
+2. The source directory's direct `.env`, including explicit `#@import` files
 3. System environment variables
 4. Descriptor defaults, queried by Core only after all ordinary sources miss
 
@@ -863,7 +863,7 @@ All variables, including `framework`, use the first successful lookup: null, emp
 
 `.env` rules:
 
-- `--source` is resolved and fixed from the environment and options before `.env` files load. `.env` cannot determine or redirect source, and no separate working-directory chain or child directory is searched.
+- `--source` is resolved and fixed from the environment and options before `.env` files load. `.env` cannot determine or redirect source, and no parent, child or separate invocation directory is searched. Other files load only through explicit `#@import` directives, relative to their declaring file; later declarations override earlier ones.
 - Files are read with [`Profile.Load`](https://github.com/Zongsoft/framework/blob/main/Zongsoft.Core/src/Configuration/Profiles/Profile.cs), supporting INI and `#@import`. Root entries use the default namespace; section levels form dot-separated namespaces and entry dots/hyphens become underscores. For example, `access_key=example` under `[io rustfs]` creates `io.rustfs:access_key`, and root `environment=Development` creates `environment`.
 - Missing files are skipped; read or parse failures stop packaging.
 - Variables are isolated per invocation and never modify the process environment.
@@ -1006,7 +1006,7 @@ Root-level entries under `/etc/` are marked as RPM configuration files.
 
 ### Application metadata
 
-`--homepage` identifies the application's home page. `--manufacturer` identifies the software manufacturer, while `--maintainer` identifies the package maintainer. The variables `homepage`, `manufacturer`, and `maintainer` follow the usual defaults → environment → ancestor `.env` → explicit options order. Manufacturer values that resolve to null or an empty string use `Zongsoft`; a value consisting only of whitespace does not use the default.
+`--homepage` identifies the application's home page. `--manufacturer` identifies the software manufacturer, while `--maintainer` identifies the package maintainer. The variables `homepage`, `manufacturer`, and `maintainer` follow the usual defaults → environment → source `.env` (including explicit imports) → explicit options order. Manufacturer values that resolve to null or an empty string use `Zongsoft`; a value consisting only of whitespace does not use the default.
 
 | Application field | tar.gz PAX global attribute | deb control field | rpm main-header tag |
 | --- | --- | --- | --- |

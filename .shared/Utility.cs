@@ -179,28 +179,22 @@ internal static partial class Utility
 		return index < 0 ? name.Replace('.', '_').Replace('-', '_') : name[..(index + 1)] + name[(index + 1)..].Replace('.', '_').Replace('-', '_');
 	}
 
-	/// <summary>按从根到目标目录的顺序加载 .env，保留 Profile 的实时变量视图。</summary>
+	/// <summary>仅加载指定目录直属的 <c>.env</c>，由显式导入组织配置并保留 <see cref="Profile"/> 的实时变量视图。</summary>
 	/// <param name="evaluator">接收配置视图的评估器，首个来源保留给命令参数。</param>
-	/// <param name="directory">配置搜索的目标目录。</param>
+	/// <param name="directory">配置所在的工作目录；不搜索父目录或子目录。</param>
 	internal static void LoadEnvironmentProfiles(TemplateEvaluator evaluator, string directory)
 	{
-		var paths = new Stack<string>();
-		for(var current = new DirectoryInfo(directory); current != null; current = current.Parent)
-			paths.Push(Path.Combine(current.FullName, ".env"));
+		FileStream stream;
+		var path = Path.Combine(Path.GetFullPath(directory), ".env");
 
-		while(paths.TryPop(out var path))
+		try { stream = File.OpenRead(path); }
+		catch(FileNotFoundException) { return; }
+		catch(DirectoryNotFoundException) { return; }
+
+		using(stream)
 		{
-			FileStream stream;
-
-			try { stream = File.OpenRead(path); }
-			catch(FileNotFoundException) { continue; }
-			catch(DirectoryNotFoundException) { continue; }
-
-			using(stream)
-			{
-				var profile = Profile.Load(stream, ConfigureDirectiveEvaluation(new ProfileOptions(), evaluator, 1));
-				evaluator.Providers.Insert(1, profile.ToVariables());
-			}
+			var profile = Profile.Load(stream, ConfigureDirectiveEvaluation(new ProfileOptions(), evaluator, 1));
+			evaluator.Providers.Insert(1, profile.ToVariables());
 		}
 	}
 
@@ -215,11 +209,12 @@ internal static partial class Utility
 		{
 			var evaluation = new TemplateEvaluator(new()
 			{
-				Recursive = evaluator?.Options.Recursive ?? true,
-				Fallback = evaluator?.Options.Fallback ?? true,
 				Culture = evaluator?.Options.Culture,
+				Fallback = evaluator?.Options.Fallback ?? true,
+				Recursive = evaluator?.Options.Recursive ?? true,
 				MaximumDepth = evaluator?.Options.MaximumDepth ?? 64,
 			});
+
 			if(evaluator != null)
 			{
 				foreach(var provider in evaluator.Providers)

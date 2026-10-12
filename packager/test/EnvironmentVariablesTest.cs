@@ -226,11 +226,12 @@ public sealed class EnvironmentVariablesTest
 	}
 
 	[Fact]
-	public void CreateEvaluator_EnvironmentHierarchyRespectsDefaultsEnvironmentAndExplicitOptions()
+	public void CreateEvaluator_EnvironmentImportsRespectDefaultsEnvironmentAndExplicitOptions()
 	{
 		using var directory = new MigrationTestDirectory();
 		directory.Write(".env", "compilation=ancestor\nzongsoft_env_parent=retained\nzongsoft_env_reference=${compilation}/${zongsoft_env_parent}\n[io rustfs]\nsecret_key=import-secret\n");
-		directory.Write("source/missing/leaf/.env", "COMPILATION=source\narchitecture=Arm64\nzongsoft_env_empty=inherited\nzongsoft_env_blank=\nzongsoft_env_flag\n");
+		directory.Write("source/.env", "#@import .env\n");
+		directory.Write("source/missing/leaf/.env", "#@import ../../../.env\nCOMPILATION=source\narchitecture=Arm64\nzongsoft_env_empty=inherited\nzongsoft_env_blank=\nzongsoft_env_flag\n");
 		directory.Write("source/missing/leaf/child/.env", "compilation=child\n");
 		var previous = Environment.GetEnvironmentVariable("compilation");
 
@@ -253,7 +254,7 @@ public sealed class EnvironmentVariablesTest
 			Assert.Null(evaluator.GetVariable("zongsoft_env_flag"));
 			Assert.Equal("process", Environment.GetEnvironmentVariable("compilation"));
 
-			directory.Write("source/missing/leaf/.env", "compilation=changed\n");
+			directory.Write("source/missing/leaf/.env", "#@import ../../../.env\ncompilation=changed\n");
 			var reloaded = new PackageOptions(PackCommand<Package.Tar>.CreateEvaluator(context, source));
 			Assert.Equal("changed/retained", reloaded["zongsoft_env_reference"]);
 			Assert.False(reloaded.Contains("zongsoft_env_flag"));
