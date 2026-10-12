@@ -2,7 +2,7 @@
 
 > 文档路径：`D:\Zongsoft\tools\bindings.md`
 > 用途：为后续新聊天提供完整的设计上下文、源码依据、已确认约定、待定问题和实施目标。
-> 状态：Core 设置解析与通用 XML PI 解析能力已实现；XML 绑定提取、统一包元数据及相应工具改造尚未实现，示例中标为“拟议”的 binding 语义不能当作现有工具能力。
+> 状态：Core 提供设置解析、XML PI 定义、通用指令处理器与 Import；XML 绑定提取、统一包元数据及相应工具改造尚未实现，示例中标为“拟议”的 binding 语义不能当作现有工具能力。
 > 指令名称已经确定为 `binding`；指令配置路径使用 `/`，例如 `path="Kestrel/Endpoints"`。结果文件名称仍为 `.bindings`。
 
 ## 阅读导航
@@ -384,7 +384,7 @@ containerizer：确定执行目标、网络、代理和端口发布
 
 ### 5.4 运行时
 
-运行程序继续使用 `.option` 等本来就会读取的配置。Core 默认收集 XML 处理指令定义，但不执行具体语义，也不将指令写入配置键；无需让 Web 宿主、MQTT、ZeroMQ、OPC 等读取包内 `.bindings`。
+运行程序继续使用 `.option` 等本来就会读取的配置。Core 的 XML 配置提供程序默认执行已注册指令（内置 Import），同时收集原始 PI 定义；未知的 binding 默认只保留定义，不自动映射为配置键，也不生成 `.bindings`。无需让 Web 宿主、MQTT、ZeroMQ、OPC 等读取包内 `.bindings`。
 
 生成元数据不能改变配置含义，也不能代替运行时配置。监听变化应重新制包及生成容器交付物。
 
@@ -439,19 +439,19 @@ containerizer：确定执行目标、网络、代理和端口发布
 
 正式术语是 XML 处理指令（Processing Instruction，PI）。它用于嵌入应用指令，并不自动执行预处理。
 
-Core 的文件和流 XML 配置提供程序默认通过 `Instructions` 暴露按文档顺序排列的只读 PI 快照，定义类型为 `XmlConfigurationInstruction`。具体契约见 [XML 配置与处理指令](../framework/Zongsoft.Core/docs/xml-configuration.zh-Hans.md)。
+Core 的文件和流 XML 配置提供程序通过 `Instructions` 暴露按导入位置深度优先展开的只读 PI 快照，定义类型为 `XmlConfigurationInstruction`；保留 Import 自身、有效子文件中的定义及各自来源。静态 `XmlStreamConfigurationProvider.Read` 只解析当前流，不执行或跟随指令。具体契约见 [XML 配置与处理指令](../framework/Zongsoft.Core/docs/xml-configuration.zh-Hans.md)。
 
 - 定义保留 `Name`、`Data`、`Path`、`FilePath`、`LineNumber`、`LinePosition`。`Data` 来自 `XmlReader.Value`，不额外裁剪或解码，不承诺原文件字节级复原。
 - `Path` 是包含 PI 的实际 XML 父元素路径，不是 binding 的 `path` 参数，也不是映射后的配置键；根元素之外为空字符串。
 - `GetAttributes()` / `TryGetAttributes(out ...)` 提供可选的属性式解析，具体指令也可以直接解释 `Data`，不强制使用键值参数。
 - 属性值须使用单引号或双引号，遵循 XML 属性空白规范化和单次实体解码。名称按 `OrdinalIgnoreCase` 比较；`Path="a" path="b"` 属于重复参数并失败。空白数据成功返回空集合。
 - 属性式解析必须消费全部数据，返回只读字符串字典，不接受尾部杂文或注入的元素。格式错误由 `GetAttributes()` 抛出 `FormatException`；`TryGetAttributes()` 返回 `false` 和 `null`，不提供部分结果，不改变 `Data`。
-- 通用层不规定已知指令名或参数名，不执行处理器、Import 或 binding。binding 的未知参数、必需字段和业务错误仍须由后续工具规则确定。
+- 通用层通过 `XmlConfiguration.Instructions` 注册处理器，通过来源的 `Options.Instructions` 配置行为与回调，内置 Import 使用 `path` 和 `required`。binding 的参数、必需字段和业务错误仍由后续工具规则确定；工具应先取得完整声明集合，再从最终配置取值，不能把指令执行时当前文件的局部配置字典当作最终结果。
 - PI 内容中的 `?>` 是终止标记，不能作为普通内容直接出现。不用正则扫描整个文件，不向运行配置增加属性来模拟指令。
 
 ### 6.5 指令位置与作用范围
 
-Core 通用层收集根元素之前、元素内部和根元素之后的全部 PI，保留同名重复声明；XML 声明、注释及 CDATA 内形似 PI 的文本不属于指令。binding 的业务规范可以另行限制声明位置，目前尚未定稿。不要靠“紧跟某节点”推断配置语义，因为覆盖文件可能只修改属性而不重复指令。
+Core 的纯解析读取收集根元素之前、元素内部和根元素之后的全部 PI，保留同名重复声明；XML 声明、注释及 CDATA 内形似 PI 的文本不属于指令。配置提供程序内的 Import 只能位于根前、根后或 `option` 的直接子级；根外导入全部选项，`option` 内只导入目标文件中相同规范化 `option path` 的块。按路径导入跳过其它选项中的指令及其依赖，保留文件级和选中范围内的指令。binding 的业务规范可以另行限制声明位置，目前尚未定稿。不要靠“紧跟某节点”推断配置语义，因为覆盖文件可能只修改属性而不重复指令。
 
 必须明确：某条指令访问的是本文件、对应配置文件组，还是本次应用最终有效配置。前面“一个 Kestrel 规则可覆盖宿主与插件共同提供的端点”的讨论，要求有应用级有效配置视图，不能仅以单文件解析实现。
 
@@ -896,7 +896,7 @@ bind=http://0.0.0.0:8080,http://[::]:8080
 | 位置 | 目标 |
 | --- | --- |
 | `D:\Zongsoft\framework\Zongsoft.Core\src\Configuration\Settings*.cs`、`ConnectionSettings*.cs` | Core 提供共用设置解析器；工具直接调用普通设置（`Settings`），引用的程序集须满足第 6.3 节契约。 |
-| `D:\Zongsoft\framework\Zongsoft.Core\src\Configuration\Xml\XmlStreamConfigurationProvider.cs` | 复用现有 XML 到配置的映射、默认 `Instructions` 快照及 `Read(Stream, out instructions, filePath)`；具体 binding 求值语义由后续工具实现。 |
+| `D:\Zongsoft\framework\Zongsoft.Core\src\Configuration\Xml\XmlStreamConfigurationProvider.cs`、`XmlConfigurationReader.cs`、`XmlConfigurationSession.cs` | 配置提供程序执行 Import 并发布有效导入链的 `Instructions`；静态 `Read(Stream, out instructions, filePath)` 只解析单流。复用 Core 映射与加载流程，具体 binding 求值语义由后续工具实现。 |
 | `D:\Zongsoft\framework\Zongsoft.Plugins\src\Hosting\ApplicationBuilder.cs`、`Configuration\PluginConfigurationProvider.cs` | 确定可以离线复用的配置选择和合并能力，避免 Packager 重写不一致的加载顺序。 |
 | `D:\Zongsoft\tools\deployer\src\TemplateResolver.cs` | 模板展开后保留合法 XML 指令，正确报告模板错误；不承担插件监听业务。 |
 | `D:\Zongsoft\tools\packager\src\PackageOptions.cs`、`PackCommand.cs`、`ApplicationHost.cs` | 调整重复 listen 概念及所有引用；建立提取过程需要的确定宿主/环境上下文。选项移除方式需与正式设计一致。 |
@@ -1121,7 +1121,8 @@ dotnet format style .\packager\Zongsoft.Tools.Packager.slnx --no-restore --verif
 | [Text/Templating/TemplateEvaluator.cs](../framework/Zongsoft.Core/src/Text/Templating/TemplateEvaluator.cs) | 模板展开与表达式语义。 |
 | [Configuration/Settings.cs](../framework/Zongsoft.Core/src/Configuration/Settings.cs)、[Settings.Parser.cs](../framework/Zongsoft.Core/src/Configuration/Settings.Parser.cs) | 通用键值设置与共用解析器；`ISettings` 继承 `IDictionary<string, string>`。 |
 | [Configuration/ConnectionSettings.cs](../framework/Zongsoft.Core/src/Configuration/ConnectionSettings.cs)、[ConnectionSettingsBase.cs](../framework/Zongsoft.Core/src/Configuration/ConnectionSettingsBase.cs) | 连接设置基类（`ConnectionSettingsBase`）继承普通设置（`Settings`），提供驱动约束、类型化读取及扩展属性集（`Properties`）。 |
-| [Configuration/Xml/XmlStreamConfigurationProvider.cs](../framework/Zongsoft.Core/src/Configuration/Xml/XmlStreamConfigurationProvider.cs) | option、命名属性、路径映射、XML 节点处理。 |
+| [Configuration/Xml/XmlConfigurationReader.cs](../framework/Zongsoft.Core/src/Configuration/Xml/XmlConfigurationReader.cs)、[XmlConfigurationSession.cs](../framework/Zongsoft.Core/src/Configuration/Xml/XmlConfigurationSession.cs) | option、命名属性、路径映射与 PI 解析；指令调度、递归导入与有效范围。 |
+| [Configuration/Xml/XmlStreamConfigurationProvider.cs](../framework/Zongsoft.Core/src/Configuration/Xml/XmlStreamConfigurationProvider.cs)、[XmlConfigurationProvider.cs](../framework/Zongsoft.Core/src/Configuration/Xml/XmlConfigurationProvider.cs) | 流与文件配置提供程序、PI 快照、纯解析入口及文件重载。 |
 | [Configuration/Xml/XmlConfigurationExtension.cs](../framework/Zongsoft.Core/src/Configuration/Xml/XmlConfigurationExtension.cs) | 配置来源接入方式。 |
 
 ### 14.3 宿主与插件配置
