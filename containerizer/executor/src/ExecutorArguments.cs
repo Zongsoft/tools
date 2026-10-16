@@ -136,7 +136,7 @@ internal sealed class ExecutorArguments
 		if(result.Command is not ("list" or "install") && result.Name == null && result.SourceBundlePath == null)
 			throw new ContainerizationException(2, Properties.Resources.Arguments_11_Message);
 		if(result.Name != null)
-			DeliveryBundle.ValidateIdentity(result.Name);
+			ContainerBundle.ValidateIdentity(result.Name);
 
 		return result;
 	}

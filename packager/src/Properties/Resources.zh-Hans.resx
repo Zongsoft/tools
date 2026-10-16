@@ -248,4 +248,6 @@
   <data name="Output.Elapsed" xml:space="preserve">
     <value>  → {0}：{1} 秒</value>
   </data>
+  <data name="BindingsInvalid.Message" xml:space="preserve"><value>绑定文档在“{0}”处无效（规则：{1}）。</value></data>
+  <data name="BindingExtraction.Message" xml:space="preserve"><value>无法从“{0}”的 {1}:{2} 提取绑定，配置“{3}”，字段“{4}”（规则：{5}）。</value></data>
 </root>

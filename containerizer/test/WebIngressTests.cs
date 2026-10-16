@@ -19,13 +19,13 @@ public sealed class WebIngressTests : IDisposable
 	[Fact]
 	public void PackageInfersHosterAndPublishesFrontendWithoutInternalListener()
 	{
-		var manifest = this.CreateManifest("[name]\nhost=api.example.test\nbind=http://0.0.0.0:80;http://[::]:80\n[port]\nbind=http://0.0.0.0:8080,http://[::]:8080\n");
+		var manifest = this.CreateManifest(WebFixtures.CreateDocument(new WebFixtures.Site("name", ["http://0.0.0.0:80", "http://[::]:80"], ["api.example.test"]), new("port", ["http://0.0.0.0:8080", "http://[::]:8080"])));
 		var sources = ServicePlanner.Prepare(manifest);
 		var app = sources.Single(source => source.Plan.Id == "web");
 		var nginx = sources.Single(source => source.Plan.Id == "nginx");
 		Assert.Equal("nginx", manifest.Components[0]["dependences"]);
 		Assert.Empty(app.Plan.Ports);
-		Assert.Contains("8069", app.Plan.Health.Test[1]);
+		Assert.Equal(["CMD-SHELL", "kill -0 1"], app.Plan.Health.Test);
 		Assert.Equal([80, 8080], nginx.Plan.Ports.Select(port => port.Container));
 		Assert.Equal(4, nginx.Plan.Web.Sum(site => site.Bindings.Count));
 		Assert.Contains("web", nginx.Plan.Dependencies);
@@ -37,18 +37,19 @@ public sealed class WebIngressTests : IDisposable
 	}
 
 	[Theory]
-	[InlineData(null, "server {}")]
-	[InlineData("[api]\nbind=http://0.0.0.0:80", null)]
-	public void IncompleteDeclaredHosterNeverFallsBack(string bindings, string template)
+	[InlineData(false)]
+	[InlineData(true)]
+	public void IncompleteDeclaredHosterNeverFallsBack(bool hasSites)
 	{
-		var path = WebFixtures.WritePackage(Path.Combine(_root, "web.tar.gz"), "web", bindings, template);
+		var document = hasSites ? WebFixtures.CreateDocument(new WebFixtures.Site("api", ["http://0.0.0.0:80"])) : new BindingDocument();
+		var path = WebFixtures.WritePackage(Path.Combine(_root, "web.tar.gz"), "web", document, hasSites ? null : "server {}");
 		Assert.Throws<ContainerizationException>(() => PackageReader.Read(path));
 	}
 
 	[Fact]
 	public void NormalizingAgainKeepsInferredDependenciesAndComponentOrder()
 	{
-		var manifest = this.CreateManifest("[api]\nbind=http://0.0.0.0:80");
+		var manifest = this.CreateManifest(WebFixtures.CreateDocument(new WebFixtures.Site("api", ["http://0.0.0.0:80"])));
 		var names = manifest.Components.Select(component => component.Name).ToArray();
 		var dependences = manifest.Components[0]["dependences"];
 
@@ -62,19 +63,19 @@ public sealed class WebIngressTests : IDisposable
 	}
 
 	[Theory]
-	[InlineData("[api]\nbind=http://0.0.0.0:80,,http://[::]:80")]
-	[InlineData("[api]\nbind=http://0.0.0.0:80/hello:80")]
-	[InlineData("[api]\nbind=http://0.0.0.0")]
-	[InlineData("[api]\nbind=http://example.test:80")]
-	[InlineData("[api]\nbind=http://0.0.0.0:80\ndefault=http://0.0.0.0:81")]
-	[InlineData("[api]\nbind=http://0.0.0.0:80\nbind=http://0.0.0.0:81")]
-	[InlineData("state=ok\n[api]\nbind=http://0.0.0.0:80")]
-	public void RejectsInvalidHandoff(string text) => Assert.Throws<ContainerizationException>(() => this.CreateManifest(text));
+	[InlineData("[api]\nbind=http://0.0.0.0:80")]
+	[InlineData("{\"version\":1,\"bindings\":[],\"sites\":[]}")]
+	public void LegacyWebBindingsAreRejectedEvenWithValidRootJson(string legacy)
+	{
+		var document = WebFixtures.CreateDocument(new WebFixtures.Site("api", ["http://0.0.0.0:80"]));
+		var path = WebFixtures.WritePackage(Path.Combine(_root, "web.tar.gz"), "web", document, WebFixtures.Template(document), new() { [".web/nginx/.bindings"] = legacy });
+		Assert.Throws<ContainerizationException>(() => PackageReader.Read(path));
+	}
 
 	[Fact]
-	public void ListsAcceptBothSeparatorsAndPreserveIsExplicitDefaults()
+	public void JsonHostsAndExplicitDefaultsArePreserved()
 	{
-		var manifest = this.CreateManifest("[api]\nhost=a.test;b.test, c.test\nbind=http://0.0.0.0:80;http://[::]:80\ndefault=http://0.0.0.0:80,http://[::]:80");
+		var manifest = this.CreateManifest(WebFixtures.CreateDocument(new WebFixtures.Site("api", ["http://0.0.0.0:80", "http://[::]:80"], ["a.test", "b.test", "c.test"], true)));
 		var site = Assert.Single(manifest.Components[0].Package.Web.Sites);
 		Assert.Equal(["a.test", "b.test", "c.test"], site.Hosts);
 		Assert.All(site.Bindings, binding => Assert.True(binding.IsExplicitDefault));
@@ -87,17 +88,49 @@ public sealed class WebIngressTests : IDisposable
 	[InlineData("80:8080,80:none")]
 	[InlineData("80:443")]
 	[InlineData("80:8080,443:8080")]
-	public void RejectsInvalidOrConflictingPortOverrides(string text) => Assert.Throws<ContainerizationException>(() => ServicePlanner.Prepare(this.CreateManifest("[http]\nbind=http://0.0.0.0:80\n[https]\nhost=example.test\nbind=https://0.0.0.0:443", "port=" + text)));
+	public void RejectsInvalidOrConflictingPortOverrides(string text) => Assert.Throws<ContainerizationException>(() => ServicePlanner.Prepare(this.CreateManifest(WebFixtures.CreateDocument(new WebFixtures.Site("http", ["http://0.0.0.0:80"]), new("https", ["https://0.0.0.0:443"], ["example.test"])), "port=" + text)));
 
 	[Fact]
 	public void PortNoneRetainsNativeBindingsAndRemovesPublicationAndProbeRequirement()
 	{
-		var manifest = this.CreateManifest("[api]\nhost=*.example.test\nbind=https://127.0.0.1:443\n[local]\nbind=http://0.0.0.0:80", "port=80:18080,443:none");
-		var nginx = ServicePlanner.Prepare(manifest).Single(source => source.Plan.Id == "nginx");
+		var manifest = this.CreateManifest(WebFixtures.CreateDocument(new WebFixtures.Site("api", ["https://127.0.0.1:443"], ["*.example.test"]), new("local", ["http://0.0.0.0:80"])), "port=80:18080,443:none");
+		var sources = ServicePlanner.Prepare(manifest);
+		var nginx = sources.Single(source => source.Plan.Id == "nginx");
 		Assert.Equal(18080, Assert.Single(nginx.Plan.Ports).Host);
 		Assert.Null(nginx.Plan.Web[0].Bindings[0].Publication);
 		Assert.Empty(nginx.Plan.Web[0].ProbeHosts);
 		Assert.Equal("127.0.0.1", nginx.Plan.Web[0].Bindings[0].Address);
+		using var bundle = ContainerBundle.Open(this.WriteBundle(sources.Select(source => source.Plan).ToList()));
+		Assert.Equal("none", bundle.Plan.Services.Single(service => service.Id == "web").Bindings.Single(binding => binding.Endpoints.Any(endpoint => endpoint.Port == 443)).Publication);
+	}
+
+	[Theory]
+	[InlineData("auto", false)]
+	[InlineData("none", false)]
+	[InlineData("tcp://127.0.0.1:18069", true)]
+	public void DirectPublicationPolicyPreservesIngressRouteAndTemplate(string publication, bool direct)
+	{
+		var document = WebFixtures.CreateDocument(new WebFixtures.Site("api", ["http://0.0.0.0:80"]));
+		var manifest = this.CreateManifest(document);
+		manifest.Components[0]["publish!web"] = publication;
+		var sources = ServicePlanner.Prepare(manifest);
+		var application = sources.Single(source => source.Plan.Id == "web");
+		var ingress = sources.Single(source => source.Plan.Id == "nginx");
+		WebIngress.Render(sources, _root);
+
+		Assert.Equal(direct ? 1 : 0, application.Plan.Ports.Count);
+		Assert.Equal(80, Assert.Single(ingress.Plan.Ports).Host);
+		Assert.Contains("proxy_pass http://web:8069;", File.ReadAllText(ingress.Configuration["/etc/nginx/containerizer/web.conf"].Source));
+		Assert.Single(application.Plan.Bindings.Single(binding => binding.Owner == "application").Connections);
+
+		if(direct)
+		{
+			Assert.Equal(18069, application.Plan.Ports[0].Host);
+			Assert.Equal(8069, application.Plan.Ports[0].Container);
+		}
+
+		using var bundle = ContainerBundle.Open(this.WriteBundle(sources.Select(source => source.Plan).ToList()));
+		Assert.Equal(direct ? "explicit" : publication, bundle.Plan.Services.Single(service => service.Id == "web").Bindings.Single(binding => binding.Owner == "application").Publication);
 	}
 
 	[Theory]
@@ -106,39 +139,39 @@ public sealed class WebIngressTests : IDisposable
 	[InlineData("http://[::]:80")]
 	public void UnpublishableFrontendFailsMaking(string bindings)
 	{
-		var manifest = this.CreateManifest("[api]\nbind=" + bindings);
+		var manifest = this.CreateManifest(WebFixtures.CreateDocument(new WebFixtures.Site("api", [bindings])));
 		Assert.Throws<ContainerizationException>(() => ServicePlanner.Prepare(manifest));
 	}
 
 	[Fact]
 	public void UnequalDualStackIsRejected()
 	{
-		var manifest = this.CreateManifest("[a]\nhost=a.test\nbind=http://0.0.0.0:80;http://[::]:80\n[b]\nhost=b.test\nbind=http://0.0.0.0:80");
+		var manifest = this.CreateManifest(WebFixtures.CreateDocument(new WebFixtures.Site("a", ["http://0.0.0.0:80", "http://[::]:80"], ["a.test"]), new("b", ["http://0.0.0.0:80"], ["b.test"])));
 		Assert.Throws<ContainerizationException>(() => ServicePlanner.Prepare(manifest));
 	}
 
 	[Fact]
 	public void WildcardProbeMustMatchItsSiteWithoutBeingShadowed()
 	{
-		var manifest = this.CreateManifest("[tenant]\nhost=*.example.test\nbind=http://0.0.0.0:80\n[admin]\nhost=admin.example.test\nbind=http://0.0.0.0:80");
+		var manifest = this.CreateManifest(WebFixtures.CreateDocument(new WebFixtures.Site("tenant", ["http://0.0.0.0:80"], ["*.example.test"]), new("admin", ["http://0.0.0.0:80"], ["admin.example.test"])));
 		Assert.Throws<ContainerizationException>(() => ServicePlanner.Prepare(manifest));
 		manifest.Components[0]["probe-host!tenant"] = "admin.example.test";
 		Assert.Throws<ContainerizationException>(() => ServicePlanner.Prepare(manifest));
 		manifest.Components[0]["probe-host!tenant"] = "demo.example.test";
 		var nginx = ServicePlanner.Prepare(manifest).Single(source => source.Plan.Id == "nginx");
-		Assert.Equal(["demo.example.test"], nginx.Plan.Web[0].ProbeHosts);
+		Assert.Equal(["demo.example.test"], nginx.Plan.Web.Single(site => site.Name == "tenant").ProbeHosts);
 	}
 
 	[Fact]
 	public void HostlessSiteMustBeTheActualDefaultAndConflictingDefaultsFail()
 	{
-		var first = "[api]\nhost=api.test\nbind=http://0.0.0.0:80\n";
-		var second = "[local]\nbind=http://0.0.0.0:80\n";
-		Assert.Throws<ContainerizationException>(() => ServicePlanner.Prepare(this.CreateManifest(first + second)));
-		var nginx = ServicePlanner.Prepare(this.CreateManifest(first + second + "default=http://0.0.0.0:80")).Single(source => source.Plan.Id == "nginx");
+		var first = new WebFixtures.Site("api", ["http://0.0.0.0:80"], ["api.test"]);
+		var second = new WebFixtures.Site("local", ["http://0.0.0.0:80"]);
+		Assert.Throws<ContainerizationException>(() => ServicePlanner.Prepare(this.CreateManifest(WebFixtures.CreateDocument(first, second))));
+		var nginx = ServicePlanner.Prepare(this.CreateManifest(WebFixtures.CreateDocument(first, second with { Default = true }))).Single(source => source.Plan.Id == "nginx");
 		Assert.True(nginx.Plan.Web[1].Bindings[0].IsDefault);
 		Assert.False(nginx.Plan.Web[0].Bindings[0].IsDefault);
-		Assert.Throws<ContainerizationException>(() => ServicePlanner.Prepare(this.CreateManifest(first + "default=http://0.0.0.0:80\n" + second + "default=http://0.0.0.0:80")));
+		Assert.Throws<InvalidDataException>(() => WebFixtures.CreateDocument(first with { Default = true }, second with { Default = true }).Serialize());
 	}
 
 	[Fact]
@@ -146,8 +179,9 @@ public sealed class WebIngressTests : IDisposable
 	{
 		var relative = "{{zongsoft:file:" + Convert.ToBase64String(Encoding.UTF8.GetBytes("./.certificates/site.pem")) + "}}";
 		var external = "{{zongsoft:file:" + Convert.ToBase64String(Encoding.UTF8.GetBytes("/etc/tls/Trust.pem")) + "}}";
-		var template = $"ssl_certificate \"{relative}\";\nssl_certificate_key \"{relative}\";\nproxy_ssl_trusted_certificate \"{external}\";";
-		var manifest = this.CreateManifest("[api]\nbind=http://0.0.0.0:80", template: template, files: new() { [".certificates/site.pem"] = "private fixture" });
+		var document = WebFixtures.CreateDocument(new WebFixtures.Site("api", ["http://0.0.0.0:80"]));
+		var template = WebFixtures.Template(document) + $"ssl_certificate \"{relative}\";\nssl_certificate_key \"{relative}\";\nproxy_ssl_trusted_certificate \"{external}\";";
+		var manifest = this.CreateManifest(document, template: template, files: new() { [".certificates/site.pem"] = "private fixture" });
 		File.WriteAllText(Path.Combine(_root, "trust.pem"), "trust fixture");
 		manifest.Components.Single(component => component.Name == "nginx")["file!/etc/tls/Trust.pem"] = "./trust.pem";
 		var sources = ServicePlanner.Prepare(manifest);
@@ -166,8 +200,8 @@ public sealed class WebIngressTests : IDisposable
 	public void MissingResourcesAndReservedTemplateMarkersFailBeforeEngineUse()
 	{
 		var marker = "{{zongsoft:file:" + Convert.ToBase64String(Encoding.UTF8.GetBytes("./missing.pem")) + "}}";
-		Assert.Throws<ContainerizationException>(() => ServicePlanner.Prepare(this.CreateManifest("[api]\nbind=http://0.0.0.0:80", template: marker)));
-		Assert.Throws<ContainerizationException>(() => ServicePlanner.Prepare(this.CreateManifest("[api]\nbind=http://0.0.0.0:80", template: "{{zongsoft:unknown}}")));
+		Assert.Throws<ContainerizationException>(() => ServicePlanner.Prepare(this.CreateManifest(WebFixtures.CreateDocument(new WebFixtures.Site("api", ["http://0.0.0.0:80"])), template: marker)));
+		Assert.Throws<ContainerizationException>(() => ServicePlanner.Prepare(this.CreateManifest(WebFixtures.CreateDocument(new WebFixtures.Site("api", ["http://0.0.0.0:80"])), template: "{{zongsoft:unknown}}")));
 		Assert.Throws<ContainerizationException>(() => ServiceSettings.Parse("port=80:8080;port=80:none"));
 	}
 
@@ -178,12 +212,36 @@ public sealed class WebIngressTests : IDisposable
 	[InlineData("binding")]
 	[InlineData("port")]
 	[InlineData("application")]
+	[InlineData("port-application")]
+	[InlineData("port-binding")]
+	[InlineData("port-endpoint")]
+	[InlineData("port-empty")]
+	[InlineData("port-duplicate")]
+	[InlineData("connection-original")]
+	[InlineData("connection-selected")]
+	[InlineData("connection-host")]
+	[InlineData("connection-port")]
+	[InlineData("connection-protocol")]
+	[InlineData("listener-binding")]
+	[InlineData("listener-endpoint")]
+	[InlineData("listener-protocol")]
+	[InlineData("publication-none")]
+	[InlineData("publication-pending")]
+	[InlineData("declaration-duplicate")]
+	[InlineData("is-proxied")]
+	[InlineData("null-declaration")]
+	[InlineData("null-endpoint")]
+	[InlineData("null-connection")]
+	[InlineData("null-reference")]
 	public void DeliveryProtocolRejectsBrokenWebRelationships(string failure)
 	{
-		var sources = ServicePlanner.Prepare(this.CreateManifest("[api]\nbind=http://0.0.0.0:80"));
+		var sources = ServicePlanner.Prepare(this.CreateManifest(WebFixtures.CreateDocument(new WebFixtures.Site("api", ["http://0.0.0.0:80"]))));
 		var services = sources.Select(source => source.Plan).ToList();
-		using var bundle = DeliveryBundle.Open(this.WriteBundle(services));
+		using var bundle = ContainerBundle.Open(this.WriteBundle(services));
 		var nginx = services.Single(service => service.Id == "nginx");
+		var application = services.Single(service => service.Id == "web");
+		var binding = application.Bindings.Single(binding => binding.Owner == "application");
+		var connection = binding.Connections[0];
 
 		switch(failure)
 		{
@@ -205,16 +263,146 @@ public sealed class WebIngressTests : IDisposable
 			case "application":
 				nginx.Web[0].Application = "unknown";
 				break;
+			case "port-application":
+				nginx.Ports[0].Bindings[0].Application = "unknown";
+				break;
+			case "port-binding":
+				nginx.Ports[0].Bindings[0].Binding = binding.Id;
+				break;
+			case "port-endpoint":
+				nginx.Ports[0].Bindings[0].Endpoint = new string('f', 64);
+				break;
+			case "port-empty":
+				nginx.Ports[0].Bindings.Clear();
+				break;
+			case "port-duplicate":
+				nginx.Ports[0].Bindings.Add(nginx.Ports[0].Bindings[0]);
+				break;
+			case "connection-original":
+				connection.Endpoint = new string('f', 64);
+				break;
+			case "connection-selected":
+				connection.SelectedEndpoint = new string('f', 64);
+				break;
+			case "connection-host":
+				connection.Host = "127.0.0.1";
+				break;
+			case "connection-port":
+				connection.Port++;
+				break;
+			case "connection-protocol":
+				connection.Protocol = "http3";
+				break;
+			case "listener-binding":
+				nginx.Web[0].Bindings[0].Binding = binding.Id;
+				break;
+			case "listener-endpoint":
+				nginx.Web[0].Bindings[0].Endpoint = new string('f', 64);
+				break;
+			case "listener-protocol":
+				nginx.Web[0].Bindings[0].Protocol = "udp";
+				break;
+			case "publication-none":
+				application.Bindings.Single(binding => binding.Owner == "nginx").Publication = "none";
+				break;
+			case "publication-pending":
+				binding.Publication = "pending";
+				break;
+			case "declaration-duplicate":
+				application.Bindings.Add(binding);
+				break;
+			case "is-proxied":
+				binding.IsProxied = false;
+				break;
+			case "null-declaration":
+				application.Bindings.Add(null);
+				break;
+			case "null-endpoint":
+				binding.Endpoints.Add(null);
+				break;
+			case "null-connection":
+				binding.Connections.Add(null);
+				break;
+			case "null-reference":
+				nginx.Ports[0].Bindings.Add(null);
+				break;
 		}
 
-		Assert.Throws<ContainerizationException>(() => DeliveryBundle.Open(this.WriteBundle(services)));
+		Assert.Equal(4, Assert.Throws<ContainerizationException>(() => ContainerBundle.Open(this.WriteBundle(services))).Code);
+	}
+
+	[Fact]
+	public void GrpcTemplateReplacesTheWholeAuthorityAndPreservesTlsAndHost()
+	{
+		var application = BindingDocument.CreateBinding("application", ["rpc"], [new("https", "127.0.0.1", 4317, "/", ["grpc+http2"]), new("https", "0.0.0.0", 4318, "/", ["grpc+http2"])]);
+		var declared = application.Endpoints.Single(endpoint => endpoint.Host == "127.0.0.1");
+		var listener = BindingDocument.CreateBinding("nginx", [], [new("https", "0.0.0.0", 443, "/", ["http2"])]);
+		var document = new BindingDocument
+		{
+			Bindings = [application, listener],
+			Sites = [new("site:rpc", "rpc", ["rpc.example.test"], [new(listener.Id, listener.Endpoints[0].Id, false)],
+				[new("grpc", "/", new() { Kind = "binding", Binding = application.Id, Endpoint = declared.Id }, "grpc+http2", new("https", "127.0.0.1", 4317, "/"), "tenant.example.test", new(true, "backend.example.test"))])],
+		};
+		var template = "grpc_pass grpcs://{{zongsoft:binding:" + application.Id + ":" + declared.Id + "}};\ngrpc_set_header Host tenant.example.test;\ngrpc_ssl_verify on;\ngrpc_ssl_name backend.example.test;\ngrpc_ssl_trusted_certificate /etc/pki/tls/certs/ca-bundle.crt;";
+		var sources = ServicePlanner.Prepare(this.CreateManifest(document, template: template));
+		WebIngress.Render(sources, _root);
+		var nginx = sources.Single(source => source.Plan.Id == "nginx");
+		var text = File.ReadAllText(nginx.Configuration["/etc/nginx/containerizer/web.conf"].Source);
+
+		Assert.Equal("grpc_pass grpcs://web:4318;\ngrpc_set_header Host tenant.example.test;\ngrpc_ssl_verify on;\ngrpc_ssl_name backend.example.test;\ngrpc_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;".ReplaceLineEndings("\r\n"), text);
+		Assert.DoesNotContain("{{zongsoft:", text);
+		var route = Assert.Single(Assert.Single(sources.Single(source => source.Plan.Id == "web").Package.Bindings.Sites).Routes);
+		Assert.Equal("tenant.example.test", route.Host);
+		Assert.True(route.Tls.Verify);
+		Assert.Equal("backend.example.test", route.Tls.Name);
+		using var bundle = ContainerBundle.Open(this.WriteBundle(sources.Select(source => source.Plan).ToList()));
+		Assert.Equal(4318, Assert.Single(bundle.Plan.Services.Single(service => service.Id == "web").Bindings.Single(binding => binding.Owner == "application").Connections).Port);
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void QuicIngressKeepsUdpPublicationWithoutAddingTcpProbeHosts(bool includeTcp)
+	{
+		var application = BindingDocument.CreateBinding("application", ["web"], [new("http", "0.0.0.0", 8069, "/", ["http1"])]);
+		var udp = BindingDocument.CreateBinding("nginx", [], [new("https", "0.0.0.0", 443, "/", ["http3"])]);
+		var tcp = BindingDocument.CreateBinding("nginx", [], [new("https", "0.0.0.0", 443, "/", ["http1"])]);
+		var document = new BindingDocument
+		{
+			Bindings = includeTcp ? [application, udp, tcp] : [application, udp],
+			Sites = [new("site:api", "api", includeTcp ? ["api.example.test"] : ["*.example.test"],
+				includeTcp ? [new(udp.Id, udp.Endpoints[0].Id, false), new(tcp.Id, tcp.Endpoints[0].Id, false)] : [new(udp.Id, udp.Endpoints[0].Id, false)],
+				[new("http", "/", new() { Kind = "binding", Binding = application.Id, Endpoint = application.Endpoints[0].Id }, "http1", new("http", "127.0.0.1", 8069, "/"))])],
+		};
+		var sources = ServicePlanner.Prepare(this.CreateManifest(document));
+		var nginx = sources.Single(source => source.Plan.Id == "nginx");
+		var publication = Assert.Single(nginx.Plan.Ports, port => port.Protocol == "udp");
+
+		Assert.Equal(443, publication.Host);
+		Assert.Equal(443, publication.Container);
+		Assert.Equal("127.0.0.1", publication.Address);
+		Assert.Equal(udp.Id, Assert.Single(publication.Bindings).Binding);
+		Assert.Equal(includeTcp ? 2 : 1, nginx.Plan.Ports.Count);
+		Assert.Equal(includeTcp ? ["api.example.test"] : Array.Empty<string>(), Assert.Single(nginx.Plan.Web).ProbeHosts);
+		using var bundle = ContainerBundle.Open(this.WriteBundle(sources.Select(source => source.Plan).ToList()));
+		Assert.Contains(bundle.Plan.Services.Single(service => service.Id == "nginx").Web[0].Bindings, binding => binding.Protocol == "udp" && binding.Publication == publication.Name);
+	}
+
+	[Theory]
+	[InlineData("server {}")]
+	[InlineData("{{zongsoft:application}}")]
+	[InlineData("{{zongsoft:binding:missing:missing}}")]
+	public void RemovedOrUnknownApplicationMarkersFailBeforeRendering(string template)
+	{
+		var document = WebFixtures.CreateDocument(new WebFixtures.Site("api", ["http://0.0.0.0:80"]));
+		Assert.Equal(2, Assert.Throws<ContainerizationException>(() => ServicePlanner.Prepare(this.CreateManifest(document, template: template))).Code);
 	}
 
 	private string WriteBundle(List<ServicePlan> services)
 	{
 		const string NAME = "web-test";
 		var directory = Path.Combine(_root, "bundle");
-		var plan = new DeliveryPlan
+		var plan = new ContainerBundlePlan
 		{
 			Name = NAME,
 			Architecture = "x64",
@@ -245,14 +433,14 @@ public sealed class WebIngressTests : IDisposable
 			plan.Files.Add(new() { Path = file, Length = new FileInfo(path).Length, Hash = Files.Hash(path) });
 		}
 
-		Files.Save(Path.Combine(directory, DeliveryPlan.FileName), plan, ProtocolJson.Default.DeliveryPlan);
-		Files.Write(Path.Combine(directory, "checksums.sha256"), $"{Files.Hash(Path.Combine(directory, DeliveryPlan.FileName))}  {DeliveryPlan.FileName}\n{string.Join('\n', plan.Files.Select(file => $"{file.Hash}  {file.Path}"))}\n");
+		Files.Save(Path.Combine(directory, ContainerBundlePlan.FileName), plan, ProtocolJson.Default.ContainerBundlePlan);
+		Files.Write(Path.Combine(directory, "checksums.sha256"), $"{Files.Hash(Path.Combine(directory, ContainerBundlePlan.FileName))}  {ContainerBundlePlan.FileName}\n{string.Join('\n', plan.Files.Select(file => $"{file.Hash}  {file.Path}"))}\n");
 		return directory;
 	}
 
-	private ContainerManifest CreateManifest(string bindings, string settings = null, string template = "server { listen 8080; location / { proxy_pass http://{{zongsoft:application}}:8069; } }", Dictionary<string, string> files = null)
+	private ContainerManifest CreateManifest(BindingDocument bindings, string settings = null, string template = null, Dictionary<string, string> files = null)
 	{
-		var path = WebFixtures.WritePackage(Path.Combine(_root, "web.tar.gz"), "web", bindings, template, files);
+		var path = WebFixtures.WritePackage(Path.Combine(_root, "web.tar.gz"), "web", bindings, template ?? WebFixtures.Template(bindings), files);
 		var manifest = ManifestFactory.Create(CreateContext(path, "--source:" + _root, "--name:example", "--version:1.0", "--distribution:debian"));
 		if(settings != null)
 			manifest.Components.Single(component => component.Name == "nginx")["settings"] = settings;

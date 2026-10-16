@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-Hans.md)
 
-终端警告使用暗黄色正文和粗体青色参数；错误使用暗红色正文和粗体紫色参数；成功提示使用绿色正文。异常类型以紫色标示，异常消息保留原文。四个工具共用仓库 `.shared/Utility.Output.cs`：`FormatOutput` 和 `FormatError` 构造 Core `CommandOutletContent`；`WriteOutput` 和 `WriteError` 统一终端与文本写入器的输出；使用命令执行器的工具通过 `HandleFailure` 输出异常并标记已处理，退出码由各工具决定。颜色由 Terminals 渲染。重定向的输出以及调用方提供的错误写入器保留纯文本和原通道。
+终端用颜色区分警告、错误和成功提示；重定向输出为纯文本，并保留原输出通道。
 
 运行 `dotnet-migrate --help` 或 `dotnet-migrate -h` 查看常用选项：命令名为粗体青色，选项名为青色，占位符及候选值为绿色。帮助直接返回 `0`，不读取 `.env` 或处理输入文件。 升迁制包流程开始后，结束时显示一行总耗时，命令名称和秒数以粗体青色突出；失败退出也显示已用时间，耗时本身不表示成功。
 
@@ -503,47 +503,4 @@ Privileges 使用 20 项跨驱动统一操作名称。ReadWrite 包含 Execute�
 
 <a id="advanced-package-details"></a>
 
-## 高级升迁包细节
-
-<details>
-<summary>计划字段与指纹格式</summary>
-
-Steps 不再保存独立 Id：数组位置决定执行顺序，日志和状态使用从 1 开始的步骤序号。Database 同样不保存 Id：Step.DatabaseIndex 为可空整数，引用 Databases 数组位置（从零开始）。SQL 步骤必须填写范围内且 provider 匹配的索引，Amazon S3 必须省略；索引 0 仍写入 JSON。不同服务器上的同名数据库分别占用独立数组项。SQL 文件名使用不补零的十进制序号（1.sql、2.sql、…、10.sql），每次 Load 按 provider 从 1 编号；执行依据 Steps 和 Scripts 数组，不按文件名排序。源码生成 JSON 统一忽略值为 null 的模型成员，格式化计划与紧凑指纹序列化共享规则；false、空字符串、空集合仍保留。Source/Content 和计算键继续使用无条件 JsonIgnore。状态记录 phase（validation/databases/users/steps/permissions/complete）、step（从 1 开始，非步骤阶段为 null）、databaseIndex（从零开始的目标数组索引，无目标时为 null）。
-
-`migration.json` 是升迁制作工具生成、migrator 读取的 UTF-8 JSON 对象。它保存已解析的执行输入，字段名按下表输出；运行器读取属性名时忽略大小写。
-
-| 字段 | 类型 | 含义 |
-| --- | --- | --- |
-| `Name` | 字符串 | 规范升迁名称，包含自动补全的升迁后缀及 Edition（如有），例如 `zongsoft-migrate` 或 `zongsoft-migrate-enterprise`。 |
-| `Version` | 字符串 | 制作升迁产物时指定的版本。 |
-| `Runtime` | string | 目标 RID：`linux-x64`、`linux-arm64` 或 `win-x64`，参与指纹并在执行前校验 |
-| `Title` / `Summary` / `Description` | string? | 可选展示文本；未设置时不输出，参与指纹 |
-| `Steps` | 数组 | 按有效声明和来源顺序执行的 SQL/Amazon S3 任务，在建库及创建用户之后执行。 |
-| `Steps[].Provider` | 字符串 | 规范升迁器名称：`mssql`、`mysql`、`sqlite`、`duckdb`、`postgres`、`tdengine`、`amazon.s3`。 |
-| `Steps[].Settings` | 字符串键值对象 | Amazon S3 连接参数；数据库任务为空对象，数据库参数保存于 Databases。 |
-| `Steps[].DatabaseIndex` | 整数? | Databases 数组索引（从零开始）；SQL 步骤必填并校验范围及 provider，Amazon S3 省略。 |
-| `Databases` | 数组 | 仅包含被引用并去重的数据库初始化描述。 |
-| `Databases[].Provider` / `Name` | 字符串 | 规范 provider 名与实际目标库名；初始化描述通过数组位置引用。 |
-| `Databases[].Settings` | 字符串键值对象 | 已展开并填充默认值的管理员连接设置。 |
-| `Databases[].Options` | 字符串键值对象 | 有效建库设置和命令超时。 |
-| `Databases[].Users` | 数组 | 此引用数据库下声明的全部用户。 |
-| `Databases[].Users[].Name` / `Password` / `Permission` | 字符串 | 账号名、初始密码、规范权限配置。 |
-| `Databases[].Users[].Privileges` / `Roles` | 字符串数组 | 规范化、去重并包含 Permission 预设的有效统一能力，以及已有角色名。 |
-| `Databases[].Users[].Host` | 字符串? | MySQL 账号主机，默认 `%`；其他 provider 省略。 |
-| `Steps[].Scripts` | 数组 | 数据库任务的有序批次列表；Amazon S3 任务为 `[]`。 |
-| `Steps[].Scripts[].Path` | 字符串 | 相对于升迁归档解压根目录的批次路径，例如 `.artifacts/mysql/1.sql`。同类任务共享目录和连续编号。 |
-| `Steps[].Scripts[].Checksum` | 字符串 | 包内批次实际 UTF-8 字节的 SHA-256，使用大写十六进制；执行前校验内容完整性。 |
-| `Steps[].Buckets` | 数组 | Amazon S3 任务的桶描述列表；数据库任务为 `[]`。 |
-| `Steps[].Buckets[].Name` | 字符串 | Bucket 名称，例如 hosting 的 `attachments`。 |
-| `Steps[].Buckets[].Public` | 布尔值 | `true` 表示配置公共读取策略；`false` 表示私有桶。 |
-| `Steps[].Buckets[].Encryption` | 对象，可省略 | 默认加密配置，包含 `Mode` 和可选 `Key`。 |
-| `Steps[].Buckets[].Encryption.Mode` | 字符串 | `sse-s3` 或 `sse-kms`。 |
-| `Steps[].Buckets[].Encryption.Key` | 字符串，可省略 | SSE-KMS 使用的已有密钥标识；仅适用于 `sse-kms`。 |
-| `Steps[].Buckets[].Versioning` | 字符串，可省略 | `enabled` 或 `suspended`。 |
-| `Steps[].Buckets[].Tags` | 字符串键值对象，可省略 | 桶标签，键名区分大小写；不是 INI 中带 `tag.` 前缀的原始选项名。 |
-
-省略的桶配置不发送对应配置请求。`Script.Source` 和 `Script.Content` 只供升迁生成端使用，不写入 JSON；原始 INI/ENV 路径和本机 SQL 源路径也不作为协议字段保存。连接参数可能包含密码或密钥，文件权限为 `0600`。
-
-计划指纹不保存在 JSON 内：升迁制作工具对模型的无缩进 JSON UTF-8 字节计算 SHA-256，将大写十六进制结果写入 `id`；运行器全部执行成功后写入状态目录的 `ready`。它不是对带缩进的 `migration.json` 文件直接计算摘要。有效数据库设置及用户、参数、脚本路径、校验和、桶配置以及数组顺序均参与指纹；缩进和文件换行不参与。指纹用于当前安装计划的完成判断，不是签名或逐脚本执行历史。
-
-</details>
+执行归档中的 `migration.json` 和 `id` 由工具生成，请通过源清单修改配置并重新制作。现场执行与恢复使用归档携带的计划和状态；开发者可查阅 [计划字段与指纹](docs/implementation.zh-Hans.md#plan-fields-and-fingerprint)。

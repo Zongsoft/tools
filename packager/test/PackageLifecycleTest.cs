@@ -67,9 +67,10 @@ public sealed class PackageLifecycleTest
 		Assert.Equal("Web", metadata.GlobalExtendedAttributes["Category"]);
 		Assert.Equal(INSTALL_PATH, metadata.GlobalExtendedAttributes["InstallPath"]);
 		Assert.Equal("runtime:[10.0,11.0) | alternative:[9.0); libssl:[1:3.0-1,1:4.0)", metadata.GlobalExtendedAttributes["Dependencies"]);
-		Assert.Equal("0", metadata.GlobalExtendedAttributes["PackageSize"]);
+		Assert.Equal("38", metadata.GlobalExtendedAttributes["PackageSize"]);
 		Assert.False(metadata.GlobalExtendedAttributes.ContainsKey("BuildTime"));
 		Assert.Null(metadata.DataStream);
+		Assert.Equal(".bindings", reader.GetNextEntry().Name);
 		Assert.Equal("install.sh", reader.GetNextEntry().Name);
 		Assert.Equal("uninstall.sh", reader.GetNextEntry().Name);
 		Assert.Null(reader.GetNextEntry());
@@ -98,7 +99,7 @@ public sealed class PackageLifecycleTest
 		using var gzip = new GZipStream(stream, CompressionMode.Decompress);
 		using var reader = new TarReader(gzip);
 		var metadata = Assert.IsType<PaxGlobalExtendedAttributesTarEntry>(reader.GetNextEntry());
-		var size = 1025 + Encoding.UTF8.GetByteCount(content) + version.Length;
+		var size = 1025 + Encoding.UTF8.GetByteCount(content) + version.Length + 38;
 		Assert.Equal(size.ToString(System.Globalization.CultureInfo.InvariantCulture), metadata.GlobalExtendedAttributes["PackageSize"]);
 		Assert.Equal("1.2.3.4", metadata.GlobalExtendedAttributes["Version"]);
 		var files = new List<string>();
@@ -114,7 +115,7 @@ public sealed class PackageLifecycleTest
 				Assert.Equal(identity, ApplicationIdentifier.Load(entry.DataStream));
 		}
 
-		Assert.Equal(["application.txt", ".root/etc/zongsoft/settings.conf", ".version", "install.sh", "uninstall.sh"], files);
+		Assert.Equal(["application.txt", ".root/etc/zongsoft/settings.conf", ".version", ".bindings", "install.sh", "uninstall.sh"], files);
 	}
 
 	[Fact]
@@ -245,6 +246,7 @@ public sealed class PackageLifecycleTest
 					Assert.Equal("Hosting Maintainer", metadata.GlobalExtendedAttributes["Maintainer"]);
 					Assert.Equal("https://example.test/product", metadata.GlobalExtendedAttributes["Homepage"]);
 					Assert.Null(metadata.DataStream);
+					Assert.Equal(".bindings", reader.GetNextEntry().Name);
 					Assert.Equal("install.sh", reader.GetNextEntry().Name);
 					Assert.Equal("uninstall.sh", reader.GetNextEntry().Name);
 					Assert.Null(reader.GetNextEntry());

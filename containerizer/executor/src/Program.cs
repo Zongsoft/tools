@@ -46,7 +46,7 @@ internal static class Program
 	{
 		if(arguments.Length == 1 && arguments[0] == "--protocol")
 		{
-			Console.WriteLine($"{{\"tool\":\"containerizer\",\"minimum\":{DeliveryPlan.ProtocolVersion},\"maximum\":{DeliveryPlan.ProtocolVersion}}}");
+			Console.WriteLine($"{{\"tool\":\"containerizer\",\"minimum\":{ContainerBundlePlan.ProtocolVersion},\"maximum\":{ContainerBundlePlan.ProtocolVersion}}}");
 			return 0;
 		}
 

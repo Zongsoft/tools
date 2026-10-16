@@ -29,6 +29,8 @@ This guide covers the complete `web.profile` syntax, examples, Nginx mapping, an
 <a id="overview"></a>
 ## Capabilities and quick start
 
+Application listeners come from zongsoft.tools.binding processing instructions in the final packaged .option files. Web routes and Nginx listeners join those declarations in the installation-root [.bindings JSON document](implementation.md#binding-document). Omitted or empty server inherits, then automatically selects applicable application bindings.
+
 `--web` converts abstract sites, bindings, routes, and backends into configuration for the selected Web hoster. Nginx is implemented; `iis` is recognized but selecting it reports unimplemented.
 
 Each package generates one `.web/nginx/<PackageName>.conf` containing its sites, routes, application-specific pools, and health match blocks. It is a fragment for an existing Nginx `http` include, with no outer `http { ... }`. It is not a full nginx.conf. Instance settings such as worker_processes/events and arbitrary native http directives/blocks are unsupported.
@@ -39,18 +41,18 @@ For the application and Nginx on one machine, create:
 [api]
 host = api.example.com
 bind!legacy = http://*,http://[::]
-server = ~
+server = http://127.0.0.1:8069
 ```
 
 With Example.Web.dll and its runtime files in publish, run this single-line command from Windows or Linux. The application version is an example:
 
 ```shell
-dotnet-pack deb --name:Example.Web --version:1.0.0 --platform:linux --architecture:x64 --framework:net10.0 --source:publish --output:../packages --daemon:example.web --listen:8069 --web:nginx --exclude:*.profile
+dotnet-pack deb --name:Example.Web --version:1.0.0 --platform:linux --architecture:x64 --framework:net10.0 --source:publish --output:../packages --daemon:example.web --web:nginx --exclude:*.profile
 ```
 
-The generated application service listens on http://127.0.0.1:8069, reused by `~`. Nginx listens on IPv4/IPv6 HTTP port 80. bind controls Nginx; --listen controls the application.
+Configure the application to listen on http://127.0.0.1:8069; server explicitly selects that connection address. Nginx listens on IPv4/IPv6 HTTP port 80, controlled by bind.
 
-Containerizer adapts server=~ through the generated semantic template. To deliberately supply a fixed backend, use its service name:
+For containers, use a fixed application service name from the deployment network; an explicit address is not rewritten:
 
 ```ini
 [api]
@@ -59,7 +61,7 @@ bind!legacy = http://*,http://[::]
 server = http://app:8069
 ```
 
-The application must accept connections from other containers, for example with --listen:http://0.0.0.0:8069 when generating its service. Deployment provides networking and name resolution. Container builds disable Web activation and read the configuration from the known installation root; see [installation](#installation).
+Application runtime configuration must bind an interface reachable by other containers, such as http://0.0.0.0:8069. Deployment provides app name resolution and networking. Container builds disable Web activation; see [installation](#installation).
 
 Packager does not start Nginx on the build machine, probe backends, issue certificates, or maintain runtime balancing state. Static-site hosting, a general rewrite language, certificate installation, and IIS/MSI are outside current common capabilities.
 
@@ -112,7 +114,7 @@ websocket = true
 
 - Section part one identifies a site; part two identifies a route. Separate them with spaces or a Tab. Dots are literal: hub.devices does not imply /hub/devices.
 - At most two levels are allowed; [api hub devices] fails. Section names cannot contain /, :, or !; [api /hub/devices] is invalid, so put the URL in path. Site identifiers do not infer domains, directories, or service names.
-- Fields, section identifiers, and named-entry identifiers are case-insensitive. Values retain their field-specific semantics, including path case.
+- Fields, section identifiers, and named-entry identifiers are case-insensitive. Values retain their field-specific semantics, with literal base paths normalized case-insensitively.
 - Root defaults precede the first section. They do not create sites; at least one valid site is required.
 - Lines beginning with # or ; are comments. #@import is a directive. Inline comments are not stripped and become part of the value.
 - The first = separates name and value; later equals signs remain, as in weight=3.
@@ -129,9 +131,9 @@ Root → site → route means an omitted child field inherits; an explicit decla
 | `host` | Site | Optional request hosts or IP literals separated by commas or semicolons. |
 | `bind!name` | Site | A common binding or selected hoster's native listener is required. |
 | `certificate`, `certificate-key` | Site | Frontend HTTPS certificate/key references. |
-| `path` | Route | Missing/empty means / for prefix/exact; required for regex. |
-| `match` | Route | prefix; also exact/regex; explicit empty fails. |
-| `server`, `server!name` | Root → site → route | Group inheritance/replacement; ~ if absent everywhere. |
+| `path` | Route | Missing/empty means /; literal base paths only. |
+| `match` | Route | prefix only; exact/regex and explicit empty fail. |
+| `server`, `server!name` | Root → site → route | Group inheritance/replacement; automatic bindings if absent everywhere. |
 | `server-balance`, `server-failure-*`, `server-retry*`, `server-affinity*` | Root → site → route | Individual [policy fields](#policies). |
 | `server-tls-*` | Root → site → route | Only HTTPS backends consume [TLS settings](#tls). |
 | `server-health`, `server-health-*` | Root → site → route | Only an effective nonempty path enables [checks](#health). |
@@ -214,7 +216,7 @@ Every comma/semicolon element must be complete: http://*,[::] fails. Mixed separ
 
 Only http/https are supported. WebSocket uses websocket=true on routes, not ws/wss bind schemes. host=192.0.2.10 does not restrict the listening interface. Omitted host adds no common host-name restriction or inferred domain; Nginx virtual-host selection still applies.
 
-host accepts comma and semicolon separators, trims surrounding spaces and deduplicates names case-insensitively. Explicit empty, empty list elements, and names containing whitespace fail. Supply host names or IPs without scheme, path, or port; listening ports belong in bind. Use native settings for more complex Nginx server_name expressions.
+host accepts comma and semicolon separators, trims surrounding spaces and deduplicates names case-insensitively. Explicit empty, empty list elements, and names containing whitespace fail. Supply host names or IPs without scheme, path, or port; listening ports belong in bind. Regex or dynamic server_name expressions cannot be exported and fail. Port-only sites omit host; _ is not a host name.
 
 A local same-name binding group replaces the whole imported group. Replacing `bind!legacy=http://*,http://[::]` with `bind!legacy=http://127.0.0.1:8080` leaves one listener. Different groups are combined and normalized duplicates within a site emitted once.
 
@@ -302,204 +304,56 @@ file: references a Linux **target absolute path**, not a Windows build path. It 
 Tar default references follow actual INSTALL_PATH relocation and exclude DESTDIR. Explicit absolute references remain unchanged. Disabling activation still resolves default paths. When moving configuration across containers, make its referenced paths valid in the Nginx container.
 
 <a id="routes"></a>
-## Paths and matching
+## Paths and request kinds
 
-### Default route and explicit fallback
+Sites automatically combine HTTP-carried application bindings. Ordinary HTTP and native gRPC are independent request kinds; gRPC is selected from application/grpc Content-Type (including a +suffix and parameters), not grpc-web. Within a kind, the longest declared literal base path wins.
 
-A site without route sections gets an automatic / prefix route using its effective backend. Once route sections exist, only those routes are generated, with no extra fallback.
-
-```ini
+~~~ini
 [api]
-bind!legacy = http://*
-server = http://app:8069
+host = api.example.test
+bind!plain = http://*
 
-[api root]
+[api reports]
+path = /reports
+server = http://reports.internal:8080/reports
+~~~
 
-[api devices]
-path = /hub/devices
-websocket = true
-```
+The site uses packaged declarations for the other paths. The reports override forwards ordinary HTTP under /reports to the explicit remote endpoint; it does not add or strip /reports. For example, /REPORTS/2026?id=7 matches case-insensitively and reaches the backend unchanged. /reports-old does not match this scope. The query is retained but does not select a route.
 
-[api root] explicitly retains the root fallback while omitting path/match. These alternatives are equivalent in prefix/exact mode; choose one:
+Paths contain ASCII letters/digits and / - . _ ~ only. Empty segments, dot segments, percent escapes, queries, fragments and regex syntax are rejected. A trailing slash is optional and the canonical base path is lowercase. match supports prefix only; exact/regex cannot express the binding contract.
 
-```ini
-[api root]
-```
+Dispatch uses maps in the http context, the original $request_uri, and named locations. The redirect preserves method, URI and query. No matching HTTP route returns 404; no matching gRPC route returns HTTP 200 with grpc-status 12, grpc-message and application/grpc. One kind never falls back to the other.
 
-```ini
-[api root]
-path =
-```
-
-```ini
-[api root]
-path = /
-```
-
-root has no special identifier semantics. Different identifiers resolving to the same match/path still fail as duplicates.
-
-Nonempty prefix/exact paths must begin with / and cannot contain queries, fragments, or control characters. Query parameters belong to requests, not the matching field. Packager does not add a slash or convert identifier dots into path separators.
-
-### Three matching modes
-
-match values are case-insensitive. Omission means prefix; explicit empty and unknown values fail.
-
-| match | Meaning | Nginx structure |
-| --- | --- | --- |
-| `prefix` | Case-sensitive prefix. | `location /api { ... }` |
-| `exact` | Case-sensitive exact path. | `location = /health { ... }` |
-| `regex` | Case-insensitive regular expression. | <code>location ~* "^/orders/[0-9]+&#36;" { ... }</code> |
-
-Prefix example:
-
-```ini
-[api products]
-path = /api
-```
-
-Matches /api, /api/orders, and /apix, but not /API. Use /api/ or a regex for a segment boundary. Trailing slashes matter; certain slash-ending Nginx proxy locations redirect requests missing that slash. See [Nginx location](https://nginx.org/en/docs/http/ngx_http_core_module.html#location).
-
-Exact example:
-
-```ini
-[api health]
-path = /health
-match = exact
-```
-
-Matches /health and /health?full=true, but not /health/, /health/live, or /Health. Queries do not participate in path matching.
-
-Regex examples:
-
-```ini
-[api orders]
-path = ^/orders/[0-9]+$
-match = regex
-
-[api segment]
-path = ^/api(/|$)
-match = regex
-
-[api json]
-path = ^/files/.*\.json$
-match = regex
-```
-
-These select numeric order IDs, the api segment boundary, and JSON paths. /Orders/123 and /FILES/a.JSON also match. Regex requires an explicit nonempty path; Packager adds no anchors and does not infer match from path contents. Write one backslash for `\.`, no Markdown `\_` escapes, and no Nginx ~* prefix in path. A suffix pattern such as <code>\.json&#36;</code> is valid; regex need not start with /.
-
-### Precedence and overlap
-
-For generated flat routes, exact matches win. Otherwise Nginx remembers the longest prefix, checks regex routes in declaration order, and uses the first matching regex. The remembered prefix is used only when no regex matches.
-
-```ini
-[api]
-bind!legacy = http://*
-server = http://app:8069
-
-[api root]
-
-[api resources]
-path = /resources/
-
-[api json]
-path = \.json$
-match = regex
-
-[api health]
-path = /health
-match = exact
-```
-
-| Request | Selected rule |
-| --- | --- |
-| /health?full=true | Exact health. |
-| /resources/a.json | Regex json, ahead of the resources prefix. |
-| /resources/a.txt | Longest prefix resources. |
-| /other | Root prefix. |
-
-Put narrow overlapping regex rules before broad ones:
-
-```ini
-[api order-number]
-match = regex
-path = ^/orders/[0-9]+$
-
-[api order-any]
-match = regex
-path = ^/orders/.*$
-```
-
-Reversing them lets the broad rule capture numeric orders first. Imports preserve first appearance: shared A/B followed by overriding A and adding C remains A/B/C, not B/A/C.
-
-Identical match/path fails. Packager does not prove equivalence or overlap between different regexes. The target engine performs matching, including URI normalization; preserving an expression does not promise bytewise matching of the original request line. Packager does not additionally decode, concatenate, or rewrite it.
-
-### Forwarded path and portability
-
-Common server settings generate a target without a replacement URI:
-
-```text
-Client:  /api/orders/123?detail=true
-Backend: http://app:8069/api/orders/123?detail=true
-```
-
-The prefix is not removed; the query is preserved. Regex selection adds no capture substitution or business-path rewrite. This does not bypass the hoster's own URI processing.
-
-Common syntax has no ^~, user-defined named/nested locations, or capture rewrite language. Regex is not a file wildcard. Nginx uses PCRE/PCRE2; future IIS support must adapt URL Rewrite's ECMAScript regex and relative-path input. .NET Regex validation cannot replace the target engine, and arbitrary expressions are not guaranteed equivalent across engines. See [IIS URL Rewrite](https://learn.microsoft.com/en-us/iis/extensions/url-rewrite-module/url-rewrite-module-configuration-reference).
+For example, application bindings at / (http1), /metrics (http1), and /opentelemetry (grpc+http2) produce three independent mappings. /metrics is selected before /; an unknown gRPC path does not reach the ordinary root application. Conflicting logical bindings for the same kind and canonical path fail.
 
 <a id="servers"></a>
-## Backend addresses, application address, and weights
+## Backend selectors and remote pools
 
-### Single backend and URI
-
-server accepts an HTTP/HTTPS scheme, host, and optional port. A sole trailing / is removed rather than used as a business path:
-
-| Value | Result |
+| server value | Meaning |
 | --- | --- |
-| `http://app`, `http://app:80/` | The same HTTP 80 backend. |
-| `https://api.internal` | HTTPS 443. |
-| `http://192.0.2.20:8069` | IPv4 address and port. |
-| `https://[2001:db8::20]:8443` | IPv6 address and port. |
-| `http://app/api` | Invalid business path. |
-| `http://app?q=1`, `http://app#part` | Invalid query or fragment. |
-| `http://user:password@app` | Invalid user information. |
-| `http://*:8069`, `http://0.0.0.0:8069`, `http://[::]:8069` | Invalid: wildcard listeners are not connection targets. |
+| Omitted, empty or evaluated whitespace | Inherit an effective parent target; otherwise automatically combine application bindings. |
+| web | Select the application alias web, then resolve by path and request kind. |
+| http://remote:8080/api | Explicit ordinary HTTP/1.1 remote connection for /api. |
+| https://remote:8443/api | The same over TLS. |
+| grpc://remote:4317/opentelemetry | Explicit native gRPC over HTTP/2; the port is required. |
+| grpcs://remote:4317/opentelemetry | The same over TLS; the port is required. |
 
-Names, IPs, and default ports are normalized; build-time reachability is not tested. server= is invalid. Omission inherits; omission everywhere defaults to ~.
+An alias must exist and resolve uniquely for each mapping. A site selector restricts the whole site; a route selector restricts that literal scope. Remote URI paths restrict scope and are never replacement URI prefixes. User info, query, fragment, zone identifiers and wildcard remote hosts are rejected.
 
-### Resolving ~
+One application binding may contain alternative addresses for the same service. They are not a load-balancing pool. Selection is deterministic: explicit IPv4, explicit IPv6, wildcard, then DNS, with stable host/port/identity ties. A wildcard connects to the same-family loopback for host installation. DNS stays DNS; no network probe or configuration rewrite occurs.
 
-~ means the connection address of the application service generated by this command:
-
-| Application service | server=~ |
-| --- | --- |
-| Generated systemd service with --listen:8069 | http://127.0.0.1:8069. |
-| Generated service with one concrete HTTP/HTTPS listen address | Use that address. |
-| Existing .service file | Error; do not parse ExecStart to guess. |
-| --daemon:none, or no host found/service generated | Error. |
-| Missing listen, multiple addresses, wildcard listener | Error: no unique connection target. |
-
-A service file is a systemd .service, possibly containing ExecStart=dotnet ... . Existing files may use scripts, environment variables, or other launch methods and are not inference sources. Specify server=http://127.0.0.1:8069 instead; there is no requirement to delete the service file.
-
-No application port is inferred from bind or a guessed application default. A route overridden by native nginx:proxy_pass no longer consumes its common server; other routes using ~ still need valid inference.
-
-### Pools and weights
-
-```ini
+~~~ini
 [api]
-bind!legacy = http://*
-server!app1 = http://app1:8069 weight=3
-server!app2 = http://app2:8069
-server-balance = round-robin
-```
+bind!plain = http://*
+server!east = http://east.internal:8080/api weight=3
+server!west = http://west.internal:8080/api
+~~~
 
-app1/app2 are identifiers. Omitted weight is 1, yielding relative weights 3:1. This does not promise a fixed order in each group of four requests; runtime state and algorithm affect selection.
+east/west are explicit independent remote instances with weights 3:1. A pool requires at least two members with the same scheme, protocol and base path; ports may differ. Duplicate normalized addresses fail. Weights are positive integers bounded by the target implementation. Replacing a pool requires the entire new member set.
 
-- Single-member pools are valid. Members use concrete addresses, not ~.
-- weight is a positive integer; zero, negatives, and fractions fail. No arbitrary common upper bound is imposed, but values beyond the target hoster's range fail without truncation.
-- All members need the same scheme; ports may differ. HTTP/HTTPS mixing fails.
-- Normalized duplicates fail even with different names, such as http://app and http://APP:80/.
-- One input file cannot mix server and server!name at the same scope. Cross-file replacement is allowed.
-- Only used application-specific upstreams are emitted, with names isolated across packages. They share the existing http include; arbitrary native upstream definitions remain unsupported.
+The upstream protocol is selected from declared capabilities. Ordinary semantics sharing a service require a common HTTP version; native gRPC uses HTTP/2. The Nginx adapter supports ordinary HTTP/1.1 and HTTP/2. HTTP/2 proxying requires Nginx 1.29.4 or later and the HTTP/2 module; this is a minimum syntax requirement, not a pinned dependency. HTTP/3-only upstreams fail with an implementation-capability error. WebSocket requires an available HTTP/1 upstream.
+
+Frontend and upstream versions are independent. gRPC routes enable frontend http2 unless an explicit contradictory setting causes failure. Native QUIC listeners export UDP/http3 capabilities; frontend HTTP/3 requires TLS, the target Nginx QUIC module and Nginx 1.29.3 or later. On QUIC sites the default upstream Host uses $http_host when present, otherwise $host$is_request_port$request_port reconstructs HTTP/3 :authority including an explicit port. The fallback normalizes hostname case; explicit header!Host remains unchanged. The [request_port and is_request_port variables](https://nginx.org/en/docs/http/ngx_http_core_module.html#var_request_port) require that minimum Nginx version. Generation does not verify or install target modules.
 
 <a id="inheritance"></a>
 ## Backend replacement and inheritance examples
@@ -536,7 +390,7 @@ shared/site.profile:
 ```ini
 [api]
 bind!legacy = http://*
-server = ~
+server = web
 ```
 
 web.profile:
@@ -549,7 +403,7 @@ server!app1 = http://app1:8069 weight=3
 server!app2 = http://app2:8069
 ```
 
-Only app1/app2 remain. The replaced ~ no longer requires --listen or a generated service. A shared concrete scalar address behaves identically.
+Only app1/app2 remain. The replaced web selector is not resolved. A shared concrete scalar address behaves identically.
 
 ### Example 3: local pool replaces shared pool
 
@@ -632,115 +486,23 @@ api root uses app3/app4 only; reports uses reports only; admin inherits shared1/
 <a id="tls"></a>
 ## Backend HTTPS and certificate verification
 
-certificate controls client → Nginx; server-tls-* controls Nginx → HTTPS backend. The two connections are independent: frontend HTTPS may proxy HTTP, and frontend HTTP may proxy HTTPS.
+TLS fields inherit separately and only apply to HTTPS connections. server-tls-verify defaults to true; false explicitly disables verification. server-tls-name supplies SNI and verification identity, independently of the upstream connection and HTTP Host/:authority.
 
-| Field | Default | Rules |
-| --- | --- | --- |
-| `server-tls-verify` | false | true/false or 1/0; text is case-insensitive; empty fails. |
-| `server-tls-trust` | Unspecified | Optional file:/target/absolute/path referencing PEM CA certificates; empty clears Profile inheritance. |
-| `server-tls-name` | Inferred | Optional SNI/verification name; empty clears inheritance and restores inference. |
-
-These inherit individually and apply to the effective scalar or every pool member. HTTP backends do not consume TLS fields.
-
-### Verification and trust
-
-Default false explicitly emits proxy_ssl_verify off so an outer enabled setting cannot unexpectedly change it. Encryption alone does not verify backend identity. With true, the target must provide usable CA trust and a certificate name.
-
-```ini
-server-tls-verify = true
-server-tls-trust = file:/etc/tls/internal-ca.pem
-
+~~~ini
 [api]
-bind!legacy = http://*
-server = https://api.internal:8443
-
-[api root]
-
-[api health]
-path = /health
-match = exact
-server-tls-verify = false
-```
-
-The root verifies; health explicitly disables verification. internal-ca.pem contains trust certificates, not the frontend private key.
-
-server-tls-trust is optional: omission relies on effective outer Nginx trust configuration. It does not mean trust-all or promise automatic system CA discovery. Verification without effective proxy_ssl_trusted_certificate fails Nginx validation. Packager does not find CA files on the build machine. See [Nginx backend verification](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_verify).
-
-Clear a shared CA reference for a different backend:
-
-```ini
-server-tls-verify = true
-server-tls-trust = file:/etc/tls/internal-ca.pem
-
-[api]
-bind!legacy = http://*
-server = https://api.internal:8443
-
-[api root]
-
-[api external]
-path = /external
-server = https://external.example.com
-server-tls-trust =
-```
-
-external emits no internal CA reference but still verifies; outer configuration must provide appropriate trust. Empty neither restores the Profile parent value nor disables verification.
-
-### SNI and verification name
-
-Inference uses only effective backend DNS names, not frontend host, site/member identifiers, or generated upstream names:
-
-| Backend | Missing/empty server-tls-name |
-| --- | --- |
-| Single DNS backend, including a one-member DNS pool | Use that DNS name. |
-| All members share one DNS name but use different ports | Use the common DNS name. |
-| IP backend or different DNS names | No inferred name; with verification off, SNI is off; verification on requires an explicit name. |
-
-Same DNS name, different ports:
-
-```ini
-[api]
-bind!legacy = http://*
-server!a = https://api.internal:8443
-server!b = https://api.internal:9443
-server-tls-verify = true
-server-tls-trust = file:/etc/tls/internal-ca.pem
-```
-
-Two IP targets sharing one verified name:
-
-```ini
-[api]
-bind!legacy = http://*
-server!a = https://192.0.2.20:8443
-server!b = https://192.0.2.21:8443
+bind!plain = http://*
+server = https://192.0.2.20:8443/api
 server-tls-name = api.internal
-server-tls-verify = true
 server-tls-trust = file:/etc/tls/internal-ca.pem
-```
+~~~
 
-An explicit name enables SNI and supplies the verification name when verification is on. It does not enable verification itself, change connection addresses, or rewrite HTTP Host. All certificates must satisfy that common name. An IP pool whose servers need neither SNI nor verification can omit all TLS fields.
+The socket connects to 192.0.2.20:8443. The certificate must be trusted by internal-ca.pem and match api.internal. The incoming Host is forwarded unchanged unless header!Host explicitly overrides it. The /api prefix remains in the request.
 
-server-tls-name takes one host name or IP literal, not a full URL, port, or path; invalid explicit names fail. Changing backends does not clear an inherited name: explicitly empty it to restore inference.
+An omitted/empty name is inferred only when all effective targets share one DNS name. IPs and wildcard-to-loopback connections require an explicit verification name. Clearing an inherited name restores this inference; clearing trust removes the inherited explicit file, while verification remains enabled.
 
-Clear an inherited name to infer from a new backend:
+Without explicit trust, generated host configuration uses the system CA bundle: /etc/ssl/certs/ca-certificates.crt for tar/deb and /etc/pki/tls/certs/ca-bundle.crt for rpm. The target must provide that file; select an explicit trust file for another layout. These system paths are not relocatable package resources. Container generation adapts the default to the selected Nginx image.
 
-```ini
-server-tls-name = api.internal
-
-[api]
-bind!legacy = http://*
-server = https://192.0.2.20:8443
-
-[api root]
-
-[api external]
-path = /external
-server = https://external.example.com
-server-tls-name =
-```
-
-Root uses api.internal; external uses external.example.com rather than the inherited name.
+The tool does not read target certificates or perform TLS handshakes during generation. Native proxy_ssl_*/grpc_ssl_* overrides are rejected because they could contradict the recorded policy. Use the structured fields instead.
 
 <a id="policies"></a>
 ## Balancing, failures, retries, and affinity
@@ -749,7 +511,7 @@ Policies inherit individually from root → site → route. Changing server does
 
 | Field | Default | Constraints and Nginx behavior |
 | --- | --- | --- |
-| `server-balance` | round-robin | Weighted round robin, or least-connections. least-requests has no exact mapping and fails. |
+| `server-balance` | round-robin | Weighted round robin, or least-connections. least-requests has no prefix mapping and fails. |
 | `server-failure-count` | 3 | Nonnegative per-member integer; 0 disables passive failure accounting/isolation; maps to max_fails. |
 | `server-failure-timeout` | 30s | Positive duration; fail_timeout accounting window and exclusion period. |
 | `server-retry` | error,timeout | Retry condition list, or off alone. |
@@ -774,7 +536,7 @@ Core TimeSpanUtility.Parse/TryParse defines the syntax. Packager then enforces p
 | 30 | Standard TimeSpan interprets this as 30 days, not 30 seconds. |
 | Empty, zero, negative | Fails these fields' positive-duration requirement, even if Core parses it. |
 
-Use explicit units. Nginx failure-timeout requires exact whole seconds; health intervals and connect/send/read timeouts require exact whole milliseconds. Thus server-failure-timeout=1.5s fails, while server-health-interval=1.5s can emit 1500ms. Values are never rounded/truncated; target range overflow fails.
+Use explicit units. Nginx failure-timeout requires prefix whole seconds; health intervals and connect/send/read timeouts require prefix whole milliseconds. Thus server-failure-timeout=1.5s fails, while server-health-interval=1.5s can emit 1500ms. Values are never rounded/truncated; target range overflow fails.
 
 ### Balancing and passive failures
 
@@ -1011,88 +773,32 @@ Use ws://.../hub/devices or wss://.../hub/devices on the same route; ordinary HT
 <a id="native"></a>
 ## Native hoster settings
 
-### Syntax, scope, and empty values
+Native leaf directives use nginx:name=value or nginx:name!argument=value in site or path scope. Do not include the final semicolon or inline comments; quoted tokens and runtime expressions follow Nginx syntax. Arbitrary blocks, nested directives and instance settings such as worker_processes are rejected.
 
-hoster:directive=arguments describes a native leaf directive; a ! suffix is its first argument:
-
-```ini
+~~~ini
 [api]
-nginx:listen!80
-nginx:listen![::]:80
-nginx:server_name = api.example.com
-server = http://app:8069
-
-[api root]
-nginx:proxy_set_header!Upgrade = $http_upgrade
-nginx:proxy_set_header!Connection = 'upgrade'
-nginx:proxy_set_header!Host = $host
-nginx:proxy_set_header!X-Real-IP = $remote_addr
-nginx:proxy_set_header!X-Forwarded-For = $proxy_add_x_forwarded_for
-nginx:proxy_set_header!X-Forwarded-Proto = $scheme
-nginx:proxy_read_timeout = 300s
-```
-
-nginx:listen!80 and nginx:listen!80= both emit listen 80;. Do not declare both in one section. nginx:listen!443=ssl emits listen 443 ssl;. Prefer websocket=true for complete automatic WebSocket setup.
-
-In common bind!legacy/server!app1 the suffix is an identifier; in native nginx:listen!80 it is an actual parameter. An empty nginx:proxy_set_header!X-Optional, with or without =, emits `proxy_set_header X-Optional "";` to suppress that header, not an incomplete directive.
-
-Site entries belong to server context; route entries belong to location context. Arbitrary site directives are not copied into every route; only explicitly modeled behavior such as header merging does that. Root native entries and dotted nesting such as nginx:http.server.listen are unsupported.
-
-Known directives have context/cardinality checks. Unknown leaf directives may be passed to target Nginx/modules for validation, without guaranteeing support. Instance settings and user-injected http/server/location/upstream/match/map/if/limit_except blocks are forbidden; structural blocks are generated by the configurator.
-
-For example, listen/server_name belong only to a site, and proxy_pass only to a route. Known single-value directives such as proxy_pass/ssl_certificate cannot use different ! suffixes to bypass duplicate or argument-count checks. Empty native values mean no additional arguments, not an implicit boolean true; the directive's syntax determines whether zero arguments are allowed.
-
-Native parameters may preserve Nginx quotes and expressions, but **omit the final semicolon**. Unbalanced quotes, newline, NUL, or unquoted semicolon/comment/block delimiters fail. Profile does not strip inline comments. Do not paste whole Nginx configuration blocks into a value.
-
-### Native overrides
-
-| Native entry | Replaced common output |
-| --- | --- |
-| Any site nginx:listen, including named entries | All bind groups, not just one. |
-| Site nginx:server_name | Entire host list. |
-| Route nginx:proxy_pass | Effective scalar/pool target. |
-| Site nginx:ssl_certificate and nginx:ssl_certificate_key | Common certificate/key as a pair; both native entries required. |
-
-Listener replacement:
-
-```ini
-[api]
-host = api.example.com
-bind!legacy = http://*
-bind!secure = https://*
+bind!plain = http://*
 nginx:listen!8080
-server = http://app:8069
-```
+nginx:server_name = api.example.test
+nginx:client_max_body_size = 16m
+nginx:proxy_set_header!X-Request-Id = $request_id
+~~~
 
-Only 8080 remains, not 80/443. Native server_name likewise replaces rather than appends to host.
+The effective listener is 8080, replacing the entire common bind collection; the final server_name replaces host. These effective values are exported, including explicit default_server. Native certificates likewise replace the complete certificate/key pair.
 
-Replacing application-address inference:
+The following cannot override structured mappings: proxy_pass, grpc_pass, include, rewrite, try_files, return, error_page, recursive_error_pages, proxy_http_version, proxy_method, proxy_set_body, upstream TLS and retry directives, and grpc_set_header. They fail before publication. Use server, server-tls-*, server-retry* and header!Host. Dynamic or empty upstream Host cannot be represented; a literal Host and the default $http_host are supported.
 
-```ini
-[api]
-bind!legacy = http://*
-server = ~
+Literal numeric listeners accept ssl, default_server, bind, ipv6only=on, http2, quic and reuseport. TCP and UDP at the same numeric port remain separate sockets. DNS/Unix listeners, regex or dynamic names, unsupported flags, contradictory TLS/QUIC settings and duplicate defaults fail; a partial binding document is never emitted.
 
-[api root]
-nginx:proxy_pass = http://remote:8069
-```
+~~~ini
+[secure]
+host = api.example.test
+nginx:listen!443 = ssl
+nginx:listen!0.0.0.0:443 = quic reuseport
+nginx:http2 = on
+~~~
 
-This route no longer resolves ~ or requires --listen. Another unoverridden route would still require inference. Native proxy_pass URI rewriting follows Nginx semantics; regex routes reject a static proxy_pass containing a URI part. Common server always disallows URI replacement.
-
-Certificate pair replacement:
-
-```ini
-[api]
-bind!secure = https://*
-certificate = file:/unused/public.pem
-nginx:ssl_certificate = /etc/tls/native/fullchain.pem
-nginx:ssl_certificate_key = /etc/tls/native/private.key
-server = http://app:8069
-```
-
-Only the native pair is used. Supplying only one fails even if common configuration could supply the other half. Pair completeness is checked after import merging.
-
-Completely overridden common values with no other consumers are not evaluated or used for dependencies/default references; diagnostics identify the sources. Structural validation still applies. Native entries can change common semantics, so inspect the result; they are not a way to bypass structural checks.
+Use numeric named arguments for repeated listen directives, for example nginx:listen!443=ssl and nginx:listen!0.0.0.0:443=quic reuseport. The ! suffix is the first directive argument, not a descriptive label. Supply the normal certificate/key settings. http2 on and http3 on/off are literal switches; generated metadata describes their effective capabilities.
 
 <a id="variables"></a>
 ## Variables and escaping
@@ -1244,7 +950,7 @@ HOSTER_WEB_ACTIVATION=false rpm -Uvh /tmp/application.rpm
 HOSTER_WEB_ACTIVATION=0 sh /tmp/application.sh
 ```
 
-Containerizer reads the packaged .bindings and .conf.template companions before building images. Make adapts current-application backends and known file references, collects required resources and persists sites/publications/probe identities in containerizer.json. Run consumes that result. A declared hoster without a complete handoff fails; application Listen is not an ingress fallback. The ordinary .conf remains available for installation on a host.
+Containerizer reads the packaged .bindings and .conf.template companions before building images. Make adapts current-application backends and known file references, collects required resources and persists sites/publications/probe identities in containerizer.json. Run consumes that result. A declared hoster without a complete handoff fails; no launch-argument inference is used as an ingress fallback. The ordinary .conf remains available for installation on a host.
 
 ### Bare-metal automatic activation
 
@@ -1349,11 +1055,11 @@ DESTDIR is excluded from default references. Path resolution still occurs with a
 | web.profile missing | Default lookup is directly under final source; correct source or use an explicit file. |
 | Missing/incorrect import | Resolve the evaluated full path from the declaring file; check variables and the target file, and do not enclose the path in quotes. |
 | Mixed server forms | Pick scalar or named members per file/scope; changing forms is allowed across imported files. |
-| ~ cannot resolve | Require a generated service and one usable listen address, or specify server explicitly. |
+| A binding cannot resolve | Check the final .option PI, alias, request kind and literal base path. |
 | Route not selected | Check match, case, slash, regex order, and explicit root fallback. |
 | Input Profiles are packaged | Ordinary payload behavior; use --exclude:*.profile. |
 | Generated target conflict | Check source payload and aliases for the same .web target. |
-| least-requests capability error | Select a supported algorithm; Nginx has no exact current mapping. |
+| least-requests capability error | Select a supported algorithm; Nginx has no prefix current mapping. |
 | Unknown sticky/health_check | Check target version/modules; generation does not install them. |
 | HTTPS load error | Distinguish frontend certificate/key from backend CA/name; check target files. |
 | Backend verification still fails | Verification requires usable CA trust and a matching name; it is not unconditional trust. |
@@ -1380,19 +1086,13 @@ Inspect archives/generated files and validate the main configuration in an Nginx
 
 ## Container handoff files
 
-Each generated Nginx configuration has a `.conf.template` companion, including static configurations. It is produced from the same final directive model. Reserved `{{zongsoft:application}}` markers identify current-application backend hosts, retaining scheme and port; quoted `{{zongsoft:file:BASE64}}` markers identify known certificate/trust paths encoded as UTF-8 Base64. A decoded `./` path is relative to the application installation root; an absolute path retains its meaning. Explicit backend addresses are never rewritten. Reserved marker collisions fail generation.
+Every generated .conf has a .conf.template from the same final directive model. Application authorities use {{zongsoft:binding:BINDING_ID:ENDPOINT_ID}}; both identities refer to the root JSON document. For example, the normal http://127.0.0.1:8069 becomes http://{{zongsoft:binding:B:E}} in the template, with B/E standing for complete recorded SHA-256 identities. The consumer supplies the selected connection authority, including the original port. Explicit remote targets retain their identity.
 
-The same directory contains `.bindings` when the complete final frontend can be represented. This UTF-8-without-BOM, CRLF INI file has no root status/version fields. Each site has its own ordered section: optional `host`, required `bind`, optional `default`. `host` and `bind` in both web.profile and .bindings accept commas and semicolons; `default` accepts both as well. Output uses commas. Bindings are `http(s)://IP:port` with bracketed IPv6; wildcards normalize to `0.0.0.0`. `default` is a subset of bind and records explicit `default_server`, without inventing an implicit default.
+Quoted {{zongsoft:file:BASE64}} markers identify known certificate/trust files. BASE64 encodes the UTF-8 path; ./ is relative to the application installation root and absolute paths retain their meaning. User input cannot contain reserved markers.
 
-```ini
-[api]
-host=api.example.test,api-alt.example.test
-bind=https://0.0.0.0:443,https://[::]:443
-default=https://0.0.0.0:443,https://[::]:443
-[local]
-bind=http://0.0.0.0:8080
-```
+The installation-root .bindings describes application and Nginx bindings, site listeners, request-kind routes, references and policy. It is the same ordinary UTF-8 JSON payload in tar, deb and rpm; no package header duplicates it. The old .web/nginx/.bindings is removed from payload and installation companions. Existing configuration, template, certificate and lifecycle responsibilities remain.
 
-The export reflects imports, inheritance, evaluated variables and final native listen/server_name overrides. Valid native configurations that cannot be fully represented (such as regex server names, listener hostnames, unsupported listener options or site includes) keep their configuration/template, emit a diagnostic and omit the entire .bindings file. No partial or status-only file is emitted. Stale .bindings payloads are removed when export is unavailable; installation prunes obsolete .bindings/template companions regardless of Web activation.
+See the [file contract](implementation.md#binding-document) for complete field examples and provenance, and the [Containerizer contract](../../containerizer/README.md#web-handoff-and-publication) for topology and publication. Generation validates references and representability; it does not prove DNS, TLS, Nginx syntax availability or runtime reachability.
 
-All three package formats carry these files as ordinary payload, without duplicate package-header metadata. See the [containerizer Web contract](../../containerizer/README.md#web-handoff-and-publication) for make/run, port mappings, file inputs and wildcard probe identities.
+
+Native gRPC currently rejects cookie affinity and active HTTP health checks with an explicit mapping-capability error; no HTTP probe is fabricated for an RPC endpoint.

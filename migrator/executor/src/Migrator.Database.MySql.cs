@@ -187,7 +187,7 @@ partial class Migrator
 			}
 
 			private static string Quote(string name) => "`" + name.Replace("`", "``") + "`";
-			private static string Account(MigrationPlan.User user, Func<string, string> quote) => quote(user.Name) + "@" + quote(user.Host);
+			private static string Account(MigrationPlan.Database.User user, Func<string, string> quote) => quote(user.Name) + "@" + quote(user.Host);
 			private static async Task<Func<string, string>> GetLiteralAsync(DbConnection connection, int timeout, CancellationToken cancellation)
 			{
 				var rows = await QueryAsync(connection, "SELECT @@SESSION.sql_mode", timeout, cancellation);

@@ -7,7 +7,7 @@
 
 [English](README.md) | [简体中文](README.zh-Hans.md)
 
-终端警告使用暗黄色正文和粗体青色参数；错误使用暗红色正文和粗体紫色参数；成功提示使用绿色正文。异常类型以紫色标示，异常消息保留原文。四个工具共用仓库 `.shared/Utility.Output.cs`：`FormatOutput` 和 `FormatError` 构造 Core `CommandOutletContent`；`WriteOutput` 和 `WriteError` 统一终端与文本写入器的输出；使用命令执行器的工具通过 `HandleFailure` 输出异常并标记已处理，退出码由各工具决定。颜色由 Terminals 渲染。重定向的输出以及调用方提供的错误写入器保留纯文本和原通道。
+终端用颜色区分警告、错误和成功提示；重定向输出为纯文本，并保留原输出通道。
 
 运行 `dotnet-pack --help` 或 `dotnet-pack -h` 查看常用选项：命令名为粗体青色，选项名为青色，占位符及候选值为绿色。帮助直接返回 `0`，不读取 `.env` 或处理输入文件。 也支持 `dotnet-pack tar --help`、`dotnet-pack deb --help` 和 `dotnet-pack rpm --help`，各子命令同样支持 `-h`。 打包流程开始后，结束时显示一行总耗时，命令名称和秒数以粗体青色突出；失败退出也显示已用时间，耗时本身不表示成功。
 
@@ -29,6 +29,7 @@
 - [systemd 服务](#systemd-服务)
 - [生命周期脚本](#生命周期脚本)
 - [Web 托管配置](#web-托管配置)
+- [应用网络绑定](#application-bindings)
 - [升迁产物集成](#升迁产物集成)
 - [变量](#变量)
 - [包格式](#包格式)
@@ -39,8 +40,10 @@
 
 ## 功能特性
 
+> 应用网络绑定：三种包均交付应用根 `.bindings` 文件。通过配置中的声明生成 Web/gRPC 转发并供容器端口发布使用，见 [用法与示例](#application-bindings)。
+
 - **一套命令，三种格式**：`tar`、`deb`、`rpm` 子命令共享同一套元数据、变量、文件条目、服务脚本和输出命名规则。
-- **自动生成服务**：未提供 `.service` 文件时自动生成 systemd 服务，可用 `--listen` 设置监听地址。
+- **自动生成服务**：未提供 .service 文件时生成 systemd 服务；监听地址由应用运行配置管理。
 - **完整的生命周期**：为所有格式生成安装和卸载脚本，支持自定义钩子及前置/后置脚本片段。
 - **灵活的载荷选择**：支持显式文件、递归目录、路径段通配（含 `**`）、排除模式、目标别名，以及 `/etc/nginx/conf.d/zongsoft.web.conf` 这类根路径条目。
 - **应用版本管理**：读取并回写源目录的 `.edition` 清单（回退 `.version`），支持多个 发行版 _(**E**dition)_。
@@ -161,7 +164,6 @@ dotnet-pack deb ^
 	--Environment:production ^
 	--DOTNET_ENVIRONMENT:production ^
 	--ASPNETCORE_ENVIRONMENT:production ^
-	--listen:8069 ^
 	--daemon:zongsoft.web ^
 	--web:nginx ^
 	--daemon-environments:Environment,DOTNET_ENVIRONMENT,ASPNETCORE_ENVIRONMENT ^
@@ -183,7 +185,6 @@ dotnet-pack deb ^
 | `--version:1.0.0` | 示例发行版本号，请按实际版本号设置。 |
 | `--compilation`、`framework` | 编译配置由选项传入，框架从组合变量来源（本例为 hosting `.env`）读取；供 `--exclude` 和载荷参数中的 `${compilation}`、`${framework}` 引用。 |
 | `--Environment`、`--DOTNET_ENVIRONMENT`、`--ASPNETCORE_ENVIRONMENT` | 自定义变量，经 `--daemon-environments` 写入生成服务的环境变量。 |
-| `--listen:8069` | 生成的服务监听 `http://127.0.0.1:8069`。 |
 | `--daemon:zongsoft.web` | 软件包和服务标识为 `zongsoft.web`，安装目录为 `/opt/zongsoft/web`。 |
 | `--web:nginx` | 依据宿主的 `web.profile` 生成 Nginx 站点配置。 |
 | `--exclude` | 跳过日志目录和构建产生的静态 Web 资产清单。 |
@@ -275,7 +276,6 @@ dotnet-pack rpm <选项...> [打包项...]
 | `--install-path:<path>` | `/opt/<标识路径>` | Linux 安装目录。标识转为小写并把每个点号替换为 `/`：`Zongsoft.Hosting.Web` 对应 `/opt/zongsoft/hosting/web`；指定未禁用的 `--daemon:zongsoft.web` 时改用 daemon 标识，得到 `/opt/zongsoft/web`。 |
 | `--daemon:<名称或文件>` | 自动查找/生成 | systemd 服务标识或现有 `.service` 文件；`none`、`disable`、`disabled` 禁用服务。 |
 | `--daemon-environments:<名称列表>` | 空 | 生成服务时从变量视图读取这些名称的值，写入 `Environment=`；用 `,` 或 `;` 分隔。 |
-| `--listen:<port-or-url>` | 空 | 生成服务的监听端口或地址；纯端口绑定 `127.0.0.1`，完整地址原样传给宿主 `--urls`。 |
 
 ### 包描述
 
@@ -378,7 +378,6 @@ dotnet-pack tar \
 dotnet-pack tar \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
-  --listen:8069 \
   --daemon:zongsoft.web \
   --version:1.0.0 \
   --platform:linux \
@@ -400,7 +399,6 @@ dotnet-pack tar \
 dotnet-pack rpm \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
-  --listen:8069 \
   --daemon:zongsoft.web \
   --version:1.0.0 \
   --platform:linux \
@@ -425,7 +423,6 @@ dotnet-pack rpm \
 dotnet-pack deb \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
-  --listen:8069 \
   --daemon:zongsoft.web \
   --version:1.0.0 \
   --platform:linux \
@@ -524,7 +521,6 @@ Zongsoft.Hosting.Web=Enterprise
 dotnet-pack deb \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
-  --listen:8069 \
   --daemon:zongsoft.web \
   --version:1.0.0 \
   --platform:linux \
@@ -539,7 +535,6 @@ dotnet-pack deb \
 dotnet-pack deb \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
-  --listen:8069 \
   --daemon:zongsoft.web \
   --version:1.0.0 \
   --platform:linux \
@@ -588,7 +583,6 @@ dotnet-pack deb \
 dotnet-pack deb \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
-  --listen:8069 \
   --daemon:zongsoft.web \
   --version:1.0.0 \
   --platform:linux \
@@ -650,25 +644,7 @@ ExecStart=dotnet /opt/zongsoft/web/Zongsoft.Hosting.Web.dll
 
 ### 监听地址
 
-`--listen:<value>` 会作为 `--urls` 传给应用。省略时不追加 `--urls`；使用已有 `.service` 文件时不改写其 `ExecStart`。
-
-| 取值 | 生成的 `--urls` |
-| --- | --- |
-| `--listen:8069`（纯端口） | `http://127.0.0.1:8069` |
-| `--listen:http://0.0.0.0:8069`（完整地址） | 原样使用 |
-| `--listen:"http://0.0.0.0:8069;https://0.0.0.0:8443"`（多个地址） | 以分号分隔，整个值加引号 |
-
-例如 `--listen:8069` 生成：
-
-```ini
-ExecStart=dotnet /opt/zongsoft/web/Zongsoft.Hosting.Web.dll --urls http://127.0.0.1:8069
-```
-
-> 💡 提示：纯端口默认绑定 `127.0.0.1`，适合由本机反向代理转发。需要应用直接接受网络连接时，使用 `http://0.0.0.0:8069` 这样的完整地址。
-
-HTTPS 需要在宿主中配置可用的默认服务器证书，打包器不生成或配置证书，要求见 [Kestrel 端点说明](https://github.com/dotnet/AspNetCore.Docs/blob/main/aspnetcore/fundamentals/servers/kestrel/endpoints.md)。上表中的 HTTPS 为可选配置，hosting 当前脚本并未启用。
-
-> 🚨 注意：宿主没有可用的默认服务器证书时，HTTPS 端点将无法启动。请在应用运行环境中配置并妥善保护证书。
+应用从运行配置读取监听地址，HTTPS 证书也由应用配置。打包保留应用启动参数。通过配置中的处理指令提供绑定声明，详见 [应用网络绑定](#application-bindings)。
 
 ### 服务环境变量
 
@@ -678,7 +654,6 @@ HTTPS 需要在宿主中配置可用的默认服务器证书，打包器不生�
 dotnet-pack deb \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
-  --listen:8069 \
   --daemon:zongsoft.web \
   --version:1.0.0 \
   --platform:linux \
@@ -767,7 +742,7 @@ bind!legacy = http://*,http://[::]
 server = http://app:8069
 ```
 
-在 Web 宿主中，`server=~` 表示使用生成服务的监听端口（如 `8069`）；站点设置应按实际环境调整。
+省略 server 自动组合包内应用绑定；可用别名限制选择，或用完整 URL 指定远程目标。HTTP 与原生 gRPC 分开路由。站点设置应按实际环境调整。
 
 ### 载荷与转换相互独立
 
@@ -883,7 +858,6 @@ export APP_NAME=Zongsoft.Hosting.Web
 export APP_VERSION=1.0.0
 
 dotnet-pack deb \
-  --listen:8069 \
   --daemon:zongsoft.web \
   --name:"$APP_NAME" \
   --version:"$APP_VERSION" \
@@ -943,11 +917,10 @@ tar 命令生成 `.tar.gz` 包及同名 `.sh` 安装脚本。tar 包包含应用
 | `Summary` | 摘要；为空时依次回退到标题、应用名。 |
 | `Description` | 完整描述；为空时回退到有效摘要，通过下述文本转义保留 Unicode 和换行。 |
 | `InstallPath` | 默认安装路径；支持安装时覆盖的场景仍按既有规则执行。 |
-| `Listen` | 自动生成宿主的有效监听地址；已有服务、禁用宿主或空值时省略。 |
 | `Dependencies` | 校验后的统一输入语法，各组以 `; ` 分隔，仅作声明。 |
 | `Category` | 显式包分类，不套用 Debian 或 RPM 的默认分类。 |
 
-可选值（`License`、`Homepage`、`Maintainer`、`InstallPath`、`Listen`、`Dependencies`、`Category`）为空白时省略；空载荷的 `PackageSize` 为 `0`。不写入 `BuildTime` 属性。
+可选值（`License`、`Homepage`、`Maintainer`、`InstallPath`、`Dependencies`、`Category`）为空白时省略；PackageSize 包含生成的 .bindings（空文档为 38 字节）。不写入 `BuildTime` 属性。
 
 .NET PAX 写入器不接受属性值中的实际换行，因此 `Summary` 和 `Description` 将反斜杠、回车、换行分别转义为 `\\`、`\r`、`\n`；读取时应解码这些序列以还原原文。其他属性沿用普通文本表示。
 
@@ -1021,14 +994,13 @@ sudo rpm -Uvh ./.packages/zongsoft.web@1.0.0-x64.rpm
 | 许可证 | `License` | `License`（自定义） | `LICENSE`（1014） |
 | 摘要 | `Summary` | `Description` 首行 | `SUMMARY`（1004） |
 | 完整描述 | `Description` | `Description` 续行；没有续行时取首行 | `DESCRIPTION`（1005） |
-| 默认安装路径 | `InstallPath` | `InstallPath`（自定义） | 应用字符串标签 `1000002`；保留旧 `DEFAULTPREFIX`（1056） |
-| 生成宿主监听地址 | `Listen` | `Listen`（自定义） | 应用字符串标签 `1000001` |
+| 默认安装路径 | `InstallPath` | `InstallPath`（自定义） | 应用字符串标签 `1000003`；保留旧 `DEFAULTPREFIX`（1056） |
 | 依赖 | `Dependencies` | `Depends` | `REQUIRENAME` / `REQUIREFLAGS` / `REQUIREVERSION`（1049 / 1048 / 1050） |
 | 分类 | `Category` | `Section` | `GROUP`（1016） |
 
 三格式的摘要都按 `Summary`、`Title`、应用名顺序选择首个非空白值；描述为空白时回退到该摘要。Debian 写入单行摘要，并在完整描述与摘要不同时写入独立的长描述；多行摘要合并为单行。长描述将换行统一为 LF，保留内部缩进，空行写为 ` .`。Tar 使用前述转义，RPM 保留原始文本。
 
-架构名称遵循目标格式，例如 `x64` / `amd64` / `x86_64`，以及 `arm64` / `arm64` / `aarch64`。`PackageSize` 始终表示载荷文件字节数，不表示压缩包大小或文件系统占用。Debian 保留原生 `Installed-Size` 估计值，向上取整为 KiB 且最小为 1；额外的字节字段避免精度损失，空载荷为 `0`。RPM 大小查询应使用 `%{LONGSIZE}`，它也能读取使用 32 位 `SIZE` 标签的包。
+架构名称遵循目标格式，例如 `x64` / `amd64` / `x86_64`，以及 `arm64` / `arm64` / `aarch64`。`PackageSize` 始终表示载荷文件字节数，不表示压缩包大小或文件系统占用。Debian 保留原生 `Installed-Size` 估计值，向上取整为 KiB 且最小为 1；额外的字节字段避免精度损失，包含生成的 .bindings 文件。RPM 大小查询应使用 `%{LONGSIZE}`，它也能读取使用 32 位 `SIZE` 标签的包。
 
 三格式均省略空白许可证和主页。Debian 必须提供 `Maintainer`，空白时使用 `Unknown`；tar 与 RPM 省略空白维护者。分类为空白时 tar 省略，Debian 使用 `utils`，RPM 使用 `Applications/System`。这些默认值及 Debian 的空白规范化属于格式差异。
 
@@ -1038,7 +1010,7 @@ RPM 额外记录 `RELEASE`、`OS`、`BUILDTIME`、`BUILDHOST`、文件摘要、�
 
 当前 RPM 的 `newc` 载荷编码单文件最多支持 `4 GiB - 1` 字节，超限在产物发布前拒绝；总载荷与归档大小在需要时使用 64 位 RPM 标签。这是所选载荷编码的限制，不是 RPM 缺少 64 位大小元数据。
 
-`dpkg-deb --info` 和 `rpm -qip` 是格式化概览。完整 Debian 字段可用 `dpkg-deb -f <安装包.deb>` 查看；已注册的 RPM 字段用 `--queryformat` 查看。未注册的 RPM 监听及安装路径标签需要识别应用标签 `1000001`、`1000002` 的 Header 读取器；现代 RPM 查询不识别已弃用的 `DEFAULTPREFIX` 名称。这些路径字段描述制包时的默认安装路径，不将包声明为可重定位包。
+`dpkg-deb --info` 和 `rpm -qip` 是格式化概览。完整 Debian 字段可用 `dpkg-deb -f <安装包.deb>` 查看；已注册的 RPM 字段用 `--queryformat` 查看。未注册的 RPM 安装路径标签需要识别应用标签 `1000003` 的 Header 读取器；监听绑定从载荷中的 .bindings 读取。现代 RPM 查询不识别已弃用的 `DEFAULTPREFIX` 名称。这些路径字段描述制包时的默认安装路径，不将包声明为可重定位包。
 
 Debian 文本字段遵循既有规范化规则：去除外围空白，纯空白的厂家字段不写入；tar 与 RPM 保留厂家值。这些字段属于格式元数据，不增加安装目录文件。
 
@@ -1058,7 +1030,7 @@ RPM 的 `PACKAGER` 标签（1015）保存的是 `--maintainer` 维护者信息�
 
 1. **准备应用。** 编译应用并部署插件，直接以应用目录作为 `--source`，用位置参数选择所需的程序、配置、插件和静态文件，无需另建暂存目录。递归打包全部文件时，请把输出目录放在源目录之外，避免旧安装包意外进入载荷。
 2. **选择载荷范围。** 不提供位置参数时会包含 `--source` 下的全部文件；需要更小、更易审查的包时，明确列出文件和目录，并用 `--exclude` 排除不应入包的文件。
-3. **确认软件包身份。** 检查 `--name`、`--version`、可选的 `--edition`、平台和架构；确认生成的服务标识、`--install-path` 与 `--listen` 地址符合目标环境。
+3. **确认软件包身份。** 检查 `--name`、`--version`、可选的 `--edition`、平台和架构；确认生成的服务标识、`--install-path` 与应用监听配置符合目标环境。
 4. **检查生成物。** 使用 `tar -tzf`、`dpkg-deb --info`/`--contents` 或 `rpm -qip`/`-qlp`/`-qp --scripts` 检查文件和元数据；包会管理服务时，同时复核生命周期脚本和 systemd 单元。
 5. **在预发布环境安装验证。** 测试安装、服务启动、配置路径和卸载行为；可对 tar 包使用 `DESTDIR`，或使用一次性主机。记录环境相关配置，不依赖只有生产机才具备的隐式条件。
 6. **谨慎发布到生产。** 生产安装前备份应用数据并确认恢复步骤。启用 `--migration` 后，安装会执行升迁，可能修改数据库和 Amazon S3 桶；不同版本的软件包之间要保留同一个升迁状态目录。
@@ -1101,3 +1073,163 @@ RPM 的 `PACKAGER` 标签（1015）保存的是 `--maintainer` 维护者信息�
 ## 许可证
 
 本项目采用 [MIT](https://github.com/Zongsoft/tools/blob/main/LICENSE) 许可证。
+
+<a id="application-bindings"></a>
+
+## 应用网络绑定
+
+在实际交付的 `.option` 中，用 `<?zongsoft.tools.binding ...?>` 声明应用已经配置的监听。打包时无需另外列出监听端口；Web 入口可自动接纳这些声明，Containerizer 可据此配置宿主端口。指令本身不会启动服务器或修改应用监听。
+
+### Web 与 gRPC
+
+以下文件声明普通 Web 根入口和 OTLP gRPC 接收区域：
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<?zongsoft.tools.binding name="kestrel" path="Kestrel/Endpoints/*"
+	template="${option.Url}" protocols="${option.Protocols}" required="true"?>
+<options>
+	<option path="kestrel">
+		<endpoints>
+			<http url="http://*:8069" protocols="http1" />
+			<telemetry url="http://*:4317/opentelemetry" protocols="grpc+http2" />
+		</endpoints>
+	</option>
+</options>
+```
+
+| 数据 | 来源与使用方式 |
+| --- | --- |
+| `8069`、`4317` | 来自两个运行配置的 URL；分别供 Web 和 OTLP 接收端监听。 |
+| `*` | IPv4 通配监听；IPv6 须单独写 `[::]`。 |
+| `/`、`/opentelemetry` | Web URL 没有路径，使用根路径；OTLP 的基路径来自完整 URL。 |
+| `http1`、`grpc+http2` | 来自各项 `Protocols`；后者只声明 gRPC，不额外开放普通 HTTP 路由。 |
+| 默认别名 | `kestrel/endpoints/http`、`kestrel/endpoints/telemetry`，来自配置路径。 |
+| 具名别名 | `name=kestrel` 为每项加入 `kestrel` 和 `kestrel/http` 或 `kestrel/telemetry`；选择共同别名可能有歧义。 |
+
+提供以下 `web.profile` 可自动转发这两类请求：
+
+```ini
+[api]
+host = api.example.test
+bind = http://*:8080
+nginx:http2 = on
+```
+
+`8080` 来自入口配置，与应用的 `8069`、`4317` 分别设置。普通 HTTP 请求转到 Web；gRPC 的 `/opentelemetry/<完整服务名>/<方法名>` 转到接收端。请求路径和查询字符串保留，未匹配的 gRPC 不回退到 Web。添加独立监听的插件时，在插件自身的 `.option` 提供声明即可；共用宿主监听的 Controller、OpenAPI、SignalR 等无需各自增加绑定。
+
+`server = kestrel/http` 可显式选择唯一别名；`server = https://upstream.example.test:9443/orders` 指定远程 HTTP 上游；远程 gRPC 使用 `grpc://` 或 `grpcs://` 并显式指定端口。更完整的入口、证书、路径和上游策略见 [Web 托管](docs/web.zh-Hans.md)。
+
+### 指令参数
+
+| 参数 | 用法 |
+| --- | --- |
+| `path` | 必填。配置根的精确路径，或以 `/*` 选择直接子项；不是 XPath，不递归展开。`/` 选择根。 |
+| `template` | 必填。完整监听 URL 的模板，如 `${option.Url}`。 |
+| `protocols` | 可选。协议能力模板，如 `${option.Protocols}`，或常量 `tcp`。省略不补充 HTTP 版本。 |
+| `name` | 可选。增加别名；集合选择同时增加 `name/子项键`，保留配置路径别名。 |
+| `filter` | 可选。先筛选候选项，再读取地址及协议。 |
+| `separators` | 地址结果的分隔字符集合，默认 `,;\|`；指定后替换默认集合，不允许空值。协议列表始终以逗号分隔。 |
+| `required` | 默认 `false`，允许零结果；`true` 要求本条声明至少产生一项有效结果。两者都拒绝选中项的错误。 |
+
+指令名忽略大小写，示例统一使用完整的小写名称。位置可在 XML 文件头或合法的元素内部，`path` 始终从本次配置根定位。参数拒绝重复或未知名称。缺失地址字段、无效 URL、空地址项、未求值表达式、冲突协议和错误的 Settings 文本均会中止打包。
+
+### 模板、设置文本与筛选
+
+| 表达式 | 读取位置 |
+| --- | --- |
+| `${option.Url}` | 当前候选项的 `Url`。 |
+| `${option.Network.Address}` | 当前候选项的 `Network/Address`。 |
+| `${option['/Network/Address']}` | 本文件及显式导入完成后的配置根。 |
+| `${option.Settings['urls']}` | 当前项 `Settings` 文本中的 `urls` 设置键。 |
+| `tcp://${option.Value['address']}` | 从 `Value` 的 `address` 键取得地址和端口，再添加 `tcp://`。 |
+
+固定设置键使用引号，例如 `['urls']`。这些表达式只读取选中的配置视图，不读取制作机环境变量，也不从其他独立入包文件查找缺失字段。
+
+过滤条件使用 [deployer 的过滤语法](../deployer/README.zh-Hans.md#过滤)：`Enabled` 判断字段存在，`Enabled:true` 判断值，`!Enabled | Enabled:true` 表示缺失时启用，`Driver:prometheus,custom` 匹配任一候选值。`&` 和 `|` 从左到右计算，不支持括号分组；XML 属性中的 `&` 写为 `&amp;`。过滤字段可以写 `/Server/Enabled` 或 `Settings[enabled]`。
+
+在 `.option.template` 中，要将留给 Packager 求值的表达式写成 `\${option.Url}`、`\${option.Protocols}`。deployer 去掉这层转义，生成 `.option` 中的 `${...}`；运行配置自身的部署变量仍正常求值。例如：
+
+```xml
+<?zongsoft.tools.binding path="Kestrel/Endpoints/http"
+	template="\${option.Url}" protocols="\${option.Protocols}" required="true"?>
+<options>
+	<option path="kestrel">
+		<endpoints>
+			<http url="${web:url#xml}" protocols="${web:protocols#xml}" />
+		</endpoints>
+	</option>
+</options>
+```
+
+`${web:url#xml}` 来自部署变量，并转义为 XML 属性值；`\${option.Url}` 保留到生成的配置文件中，打包时读取这个最终值。不要把 `.option.template` 当成已展开的配置交付。
+
+### Prometheus、多地址与非 HTTP 监听
+
+Prometheus 示例从同一运行配置读取完整抓取 URL：
+
+```xml
+<?zongsoft.tools.binding name="prometheus"
+	path="Diagnostics/Diagnostor/Meters/Exporters/*" filter="Driver:prometheus"
+	template="${option.Settings['urls']}" protocols="http1"?>
+<options>
+	<option path="Diagnostics/Diagnostor/Meters/Exporters">
+		<exporter exporter.name="prometheus" driver="prometheus"
+			settings="urls='http://127.0.0.1:9464/metrics;http://localhost:9464/metrics';totalSuffix=true;cacheDuration=300ms" />
+	</option>
+</options>
+```
+
+`Driver` 选中 exporter；Settings 的引号保留 `urls` 中的分号，模板取得完整值后再拆成两个地址。`9464` 和 `/metrics` 均来自 URL；`http1` 是此抓取服务明确的能力。两个地址属于同一服务，不是两个负载均衡实例。`totalSuffix`、`cacheDuration` 不影响绑定；出站 OTLP 目标也不是监听。跨容器使用时，运行监听必须配置为容器网络可达的地址。
+
+下表中的输入字段和 PI 应与所交付的服务器配置一致；端口都是示例配置值，不是工具推测的默认值：
+
+| 服务与配置输入 | PI 参数 | 结果与边界 |
+| --- | --- | --- |
+| Garnet：`Externals/Garnet/default/Value=address=0.0.0.0:6379` | `name="garnet" path="Externals/Garnet/default" template="tcp://${option.Value['address']}" protocols="tcp" required="true"` | `6379/tcp`；插件选中的设置名称也须为 `default`。认证、TLS、持久化仍在 Garnet 配置中。 |
+| MQTT：`Messaging/Mqtt/Server` 的 `enabled=true`、`url=tcp://0.0.0.0:1883` | `name="mqtt" path="Messaging/Mqtt/Server" filter="enabled:true" template="${option.Url}" protocols="tcp"` | `1883/tcp`；需交付并启用 daemon 插件，不声明 WebSocket 或 TLS。 |
+| OPC UA：`Externals/Opc/Server` 的 `enabled=true`、`urls=opc.tcp://0.0.0.0:4840/FactoryA` | `name="opc" path="Externals/Opc/Server" filter="enabled:true" template="${option.Urls}" separators="," protocols="opc.tcp"` | `4840/tcp` 并保留 `/FactoryA`；`Discovery` 是注册目标，不提取为监听。 |
+| UDP：`Network/Receiver/Url=udp://0.0.0.0:9000` | `name="receiver" path="Network/Receiver" template="${option.Url}" protocols="udp"` | `9000/udp`；不增加 TCP 映射或 HTTP 代理。 |
+
+ZeroMQ 的四个角色应分别声明，不能作为一个地址列表合并：
+
+```xml
+<?zongsoft.tools.binding name="zeromq/control" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${option.Control}" protocols="tcp"?>
+<?zongsoft.tools.binding name="zeromq/incoming" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${option.Incoming}" protocols="tcp"?>
+<?zongsoft.tools.binding name="zeromq/outgoing" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${option.Outgoing}" protocols="tcp"?>
+<?zongsoft.tools.binding name="zeromq/discovery" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${option.Discovery}" protocols="tcp"?>
+<options>
+	<option path="Messaging/ZeroMQ">
+		<server name="QueueServer" enabled="true" storage="QueueServer"
+			control="tcp://0.0.0.0:32100" incoming="tcp://0.0.0.0:32101"
+			outgoing="tcp://0.0.0.0:32102" discovery="tcp://0.0.0.0:7969" />
+	</option>
+</options>
+```
+
+四个端口分别来自 Control、Incoming、Outgoing、Discovery，代表 ROUTER、XSUB、XPUB、REP 监听。可靠模式还需 `Storage` 指定的存储工厂；仅广播时可同时省略 Control 和 Storage。发现协议返回端口，客户端沿用发现主机，因此这些角色应通过同一发布主机、同号端口访问，不能假定任意 NAT 端口转换可用。
+
+### 协议与路径选择
+
+| 声明 | 使用结果 |
+| --- | --- |
+| `http1,http2` | 普通 HTTP 的两种版本能力。 |
+| `grpc` 或 `http2+grpc` | 等价于 `grpc+http2`。 |
+| `http2,grpc` | 普通 HTTP/2 和 gRPC 两类服务，分别匹配请求。 |
+| `protobuf` | `protobuf+http`，尚未指定 HTTP 版本；按需改为 `protobuf+http1` 等具体能力。 |
+| `https` URL，`http1,http3` | 同一监听端口需要 TCP 和 UDP；HTTP/3 要求 HTTPS。 |
+| `tcp` URL，`protobuf+tcp` | 直接 TCP 连接；不自动转换为 HTTP 或 gRPC。 |
+
+支持 `http`、`https`、`tcp`、`udp`、`opc.tcp` 监听 URL；TCP/UDP 只接受根路径，固定端口必须为 1–65535。HTTP/HTTPS 可省略端口，分别为 80/443；其他 scheme 必须写端口。不接受 userinfo、query、fragment 或 Unix socket 声明。未知能力不会被猜成 TCP。
+
+HTTP 基路径按字面路径段匹配，忽略大小写及非根尾斜杠：`/metrics` 匹配自身和 `/metrics/...`，不匹配 `/metrics-extra`。同类请求优先匹配最长范围；同范围的不同独立后端会报冲突。普通 HTTP 与 gRPC 分别匹配；Protobuf 编码本身不建立第三类请求或业务路径。
+
+### 输入范围、导入与错误定位
+
+每个最终入包 `.option` 都独立读取其显式 `<?import ...?>`；文件名或目录名不建立运行环境覆盖关系。相对导入相对于交付后的声明文件，绝对导入相对于安装文件系统根。例如 `/opt/demo/web.option` 中 `./shared.option` 和 `/opt/demo/shared.option` 指向同一文件。排除该文件后，打包不能读取制作机上残留的副本。
+
+共享文件可只保存配置值，在最终使用文件放 binding 声明。如果基础文件与覆盖文件都带声明且都入包，两者会各自产生结果；例如分别声明 8069 和 8070，就会得到两个监听，而不会互相覆盖。同内容声明会合并别名；别名指向多个独立绑定时，显式选择会报歧义。
+
+错误信息用声明文件、行列、配置路径和参数定位问题。不要把凭据放入地址；绑定只需要监听信息。修正配置后重新打包。`.bindings` 由工具生成，三种包均安装到应用根，权限 `0644`；最大 1 MiB，无声明时也生成有效空文档。不要自行提供同名载荷或手工编辑生成文件。
+
+容器发布示例见 [Containerizer](../containerizer/README.zh-Hans.md#binding-publication)。文件格式和开发细节见 [实现说明](docs/implementation.zh-Hans.md#binding-document)。

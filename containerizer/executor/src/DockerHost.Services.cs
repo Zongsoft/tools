@@ -50,7 +50,7 @@ namespace Zongsoft.Tools.Containerizer.Execution;
 partial class DockerHost
 {
 	#region 公共方法
-	public async Task PrepareImagesAsync(DeliveryBundle bundle, CancellationToken cancellation)
+	public async Task PrepareImagesAsync(ContainerBundle bundle, CancellationToken cancellation)
 	{
 		var sources = mirrors ?? ReadRuntimeMirrors();
 		foreach(var service in bundle.Plan.Services)
@@ -98,7 +98,7 @@ partial class DockerHost
 			throw new ContainerizationException(4, Properties.Resources.DockerHost_14_Message);
 	}
 
-	public async Task StartServiceAsync(DeliveryBundle bundle, ServicePlan service, CancellationToken cancellation)
+	public async Task StartServiceAsync(ContainerBundle bundle, ServicePlan service, CancellationToken cancellation)
 	{
 		var arguments = new List<string> { "up", "-d", "--no-deps", "--pull", "never", "--no-build" };
 
@@ -141,7 +141,7 @@ partial class DockerHost
 		await this.RunCommandAsync(ENGINE, ["update", $"--restart={(service.Kind == "infrastructure" ? service.Restart : "no")}", containerIds[0]], null, cancellation);
 	}
 
-	public async Task WaitForHealthAsync(DeliveryBundle bundle, ServicePlan service, CancellationToken cancellation)
+	public async Task WaitForHealthAsync(ContainerBundle bundle, ServicePlan service, CancellationToken cancellation)
 	{
 		var deadline = DateTime.UtcNow.AddSeconds(service.Health.StartSeconds + service.Health.Retries * service.Health.IntervalSeconds + service.Health.TimeoutSeconds);
 
@@ -195,7 +195,7 @@ partial class DockerHost
 		}
 	}
 
-	public async Task RestoreRestartPoliciesAsync(DeliveryBundle bundle, CancellationToken cancellation)
+	public async Task RestoreRestartPoliciesAsync(ContainerBundle bundle, CancellationToken cancellation)
 	{
 		var installation = store.Load(bundle.Plan.Name);
 
@@ -206,7 +206,7 @@ partial class DockerHost
 		}
 	}
 
-	public async Task RestartServiceAsync(DeliveryBundle bundle, ServicePlan service, CancellationToken cancellation)
+	public async Task RestartServiceAsync(ContainerBundle bundle, ServicePlan service, CancellationToken cancellation)
 	{
 		var containerIds = await this.GetContainerIdsAsync(bundle.Plan.Name, service.Id, cancellation);
 		if(containerIds.Length != 1)
@@ -223,7 +223,7 @@ partial class DockerHost
 		if(assets == null)
 			throw new ContainerizationException(2, Properties.Resources.DockerHost_24_Message);
 
-		using var bundle = DeliveryBundle.Open(assets);
+		using var bundle = ContainerBundle.Open(assets);
 		if(arguments.Component != null && !bundle.Plan.Services.Any(service => service.Id == arguments.Component))
 			throw new ContainerizationException(2, Properties.Resources.DockerHost_25_Message);
 
@@ -261,9 +261,9 @@ partial class DockerHost
 		return sources;
 	}
 
-	private async Task CheckPortAvailabilityAsync(DeliveryBundle bundle, Installation installation, CancellationToken cancellation)
+	private async Task CheckPortAvailabilityAsync(ContainerBundle bundle, Installation installation, CancellationToken cancellation)
 	{
-		var ownedPorts = new List<PortPlan>();
+		var ownedPorts = new List<ServicePlan.PortMapping>();
 
 		if(installation?.Current != null)
 		{
@@ -286,7 +286,7 @@ partial class DockerHost
 						ownedPorts.Add(new()
 						{
 							Protocol = port.Name.Split('/')[1],
-							Address = binding.GetProperty("HostIp").GetString(),
+							Address = binding.GetProperty("HostIp").GetString() is { Length: > 0 } address ? address : "0.0.0.0",
 							Host = int.Parse(binding.GetProperty("HostPort").GetString(),
 							System.Globalization.CultureInfo.InvariantCulture)
 						});
@@ -296,7 +296,7 @@ partial class DockerHost
 
 		foreach(var port in bundle.Plan.Services.SelectMany(service => service.Ports).Where(port => port.Host > 0))
 		{
-			if(ownedPorts.Any(item => item.Protocol == port.Protocol && item.Host == port.Host && (item.Address == port.Address || item.Address is "" or "0.0.0.0" or "::")))
+			if(ownedPorts.Any(item => ServicePlan.PortMapping.Conflicts(item, port)))
 				continue;
 
 			try
@@ -328,8 +328,8 @@ partial class DockerHost
 		return SplitLines(await this.RunCommandAsync(ENGINE, arguments, null, cancellation));
 	}
 
-	private static string[] GetComposeArguments(DeliveryBundle bundle, IReadOnlyList<string> command) => ["compose", "--project-name", bundle.Plan.Project, "--project-directory", bundle.Directory, "-f", Path.Combine(bundle.Directory, "compose.yaml"), .. command];
+	private static string[] GetComposeArguments(ContainerBundle bundle, IReadOnlyList<string> command) => ["compose", "--project-name", bundle.Plan.Project, "--project-directory", bundle.Directory, "-f", Path.Combine(bundle.Directory, "compose.yaml"), .. command];
 
-	private Task<string> RunComposeAsync(DeliveryBundle bundle, IReadOnlyList<string> command, CancellationToken cancellation) => this.RunCommandAsync(ENGINE, GetComposeArguments(bundle, command), bundle.Directory, cancellation);
+	private Task<string> RunComposeAsync(ContainerBundle bundle, IReadOnlyList<string> command, CancellationToken cancellation) => this.RunCommandAsync(ENGINE, GetComposeArguments(bundle, command), bundle.Directory, cancellation);
 	#endregion
 }

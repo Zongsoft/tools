@@ -14,7 +14,7 @@ This document describes responsibilities, execution order, and maintenance const
 | Linked `tools/.shared` source | `Utility.cs` compiles into this project's `partial Utility`; it composes Core variable sources and provides command helpers. `ArtifactPublisher` manages staging and publication; deployment copies and reports use its atomic single-file replacement. Boolean option values follow Core `Switch` semantics; enums use Core conversion. |
 | `Deployer.cs` | Coordinate one invocation, traverse manifests, and collect requests and preflight failures. |
 | `DeploymentSession.cs` | Own counters, active manifest paths, package requests, selected versions, and expansion buffers. |
-| `DeploymentPlan.cs`, `DeploymentOperation.cs`, `PackageSelection.cs` | Store the plan, operation origins, selected packages, and hashes in separate types/files. |
+| `DeploymentPlan.cs`, `DeploymentPlan.Operation.cs`, `DeploymentPlan.Package.cs` | Store the plan, operation origins, selected packages, and hashes with Operation and Package nested in DeploymentPlan and maintained in their partial files. |
 | `Deployer.Execution.cs` | Validate destinations, locks, and previous records; execute operations. |
 | `DeploymentResolverBase`, `DeploymentResolverManager`, `NugetResolver` | Convert local paths, delete/remove entries, and NuGet entries into operations. |
 | `DeploymentPath` | Enforce destination boundaries, reject write-path links, and identify deployment manifest paths. |
@@ -71,6 +71,8 @@ Templates use Core `TemplateEvaluator.Evaluate` / `TryEvaluate` directly, with `
 All variables, including `framework`, use the first successful lookup: null, empty strings, false and zero never trigger fallback to a lower source. Only a missing value continues lookup. Operations requiring a valid value validate it and report an error when they cannot proceed.
 
 Core `TemplateEvaluator` expands `${name}` without changing URL slashes. Undefined variables fail during deployment-path expansion, while filtered-out branches need not provide their variables. Combined filters retain left-to-right evaluation; both source and destination filters must match.
+
+[.shared/FilterExpression.cs](../../.shared/FilterExpression.cs) supplies common parsing, existence/negation, comma-separated candidate matching and logical combination, shared with Packager binding filters. Utility.Requisition retains deployer variable/option lookup and framework-specific comparison; NuGet framework logic does not enter the shared filter. Every condition is evaluated, with no separate precedence for & and |. The surrounding .deploy filter syntax is unchanged.
 
 `NugetAssets.ResolveLibraryPath` handles explicit cache-path adaptation in one place. It examines paths relative to the NuGet_Packages root and locates the lib directory. A framework in the path takes precedence over the Framework variable; the official NuGetFrameworkUtility.GetNearest selects the nearest framework while subsequent subpaths are retained. Paths outside the cache, paths without a target framework, or paths with no applicable directory are returned unchanged.
 
@@ -164,7 +166,7 @@ Core Save() without an explicit destination writes changed declarations in the r
 
 ## Hosting invocation boundaries
 
-Hosting deploy.cmd builds and deploys plugins; pack.cmd independently creates installation packages. The root `deploy.cmd` and `pack.cmd` select the host source directory. deploy.cmd passes an explicit framework override to Cake and deployer; enter the same override in pack.cmd. Without an override, Cake uses its `build.cake` default while the tools read their variable providers. Deployer resolves the framework from its own variable providers, including destination `appsettings.json` in the final merge. Keep the build value consistent with deployment and packaging. A framework used in an output expression must already be available during output bootstrap; configuration loaded afterward cannot redefine that output. Deployer neither synchronizes Cake arguments nor invokes packager or migrator. See the [README example](../README.md#framework-and-variables-in-hosting-scripts).
+Hosting deploy.cmd builds and deploys plugins; pack.cmd independently creates installation packages. The root `deploy.cmd` and `pack.cmd` select the host source directory. deploy.cmd passes an explicit framework override to Cake and deployer; enter the same override in pack.cmd. Without an override, Cake uses its `build.cake` default while the tools read their variable providers. Deployer resolves the framework from its own variable providers, including destination `appsettings.json` in the final merge. Keep the build value consistent with deployment and packaging. A framework used in an output expression must already be available during output bootstrap; configuration loaded afterward cannot redefine that output. Deployer neither synchronizes Cake arguments nor invokes packager or migrator. See the [README example](../README.md#source-paths-imports-and-hosting).
 
 ## Local search and source links
 

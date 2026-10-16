@@ -2,7 +2,7 @@
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
- *   / /__/ /_/ / / / / /_/ /\_ \/ /_/ / __/ /_
+ *   / /__/ /_/ / / / /_/ /\_ \/ /_/ / __/ /_
  *  /____/\____/_/ /_/\__  /____/\____/_/  \__/
  *                   /____/
  *
@@ -11,7 +11,7 @@
  *
  * The MIT License (MIT)
  *
- * Copyright (C) 2015-2026 Zongsoft Corporation <http://www.zongsoft.com>
+ * Copyright (C) 2026 Zongsoft Corporation <http://www.zongsoft.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -31,18 +31,27 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
-namespace Zongsoft.Tools.Deployer;
+namespace Zongsoft.Tools.Containerizer.Protocol;
 
-/// <summary>记录选中包的身份、目标框架、内容摘要及引用原因，供部署计划和锁定校验使用。</summary>
-public sealed class PackageSelection
+partial class ServicePlan
 {
-	#region 公共属性
-	public string Id { get; set; }
-	public string Version { get; set; }
-	public string Framework { get; set; }
-	public string Hash { get; set; }
-	public List<string> RequiredBy { get; set; } = [];
+	#region 嵌套类型
+	/// <summary>表示服务的文件、目录或临时存储挂载。</summary>
+	internal sealed class Mount
+	{
+		#region 公共属性
+		public string Source { get; set; }
+		public string Target { get; set; }
+		public bool ReadOnly { get; set; }
+		public bool Temporary { get; set; }
+		public bool Owned { get; set; }
+		public string User { get; set; }
+		public string Selinux { get; set; }
+		#endregion
+	}
 	#endregion
 }

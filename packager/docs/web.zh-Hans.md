@@ -29,6 +29,8 @@
 <a id="overview"></a>
 ## 能力与快速开始
 
+应用监听来自最终入包 .option 文件中的 zongsoft.tools.binding 处理指令；Web 路由和 Nginx 监听与它们共同写入安装根的 [.bindings JSON 文档](implementation.zh-Hans.md#binding-document)。server 未填写或为空时先继承，再自动选择适用的应用绑定。
+
 `--web` 把抽象的站点、绑定、路径和后端定义转换成所选 Web 托管器的配置。当前实现 Nginx；`iis` 是已识别但尚未实现的名称，选择它会报错。
 
 一个应用包生成一份 `.web/nginx/<PackageName>.conf`，其中可包含多个站点、路径、应用专属后端池及健康判定块。它是供现有 Nginx 主配置的 `http` 上下文包含的片段，不是完整 `nginx.conf`；不含外层 `http { ... }`。不支持 `worker_processes`、`events` 等实例配置，也不允许任意原始 `http` 指令或块。
@@ -39,18 +41,18 @@
 [api]
 host = api.example.com
 bind!legacy = http://*,http://[::]
-server = ~
+server = http://127.0.0.1:8069
 ```
 
 假设 `publish` 中已有 `Example.Web.dll` 及运行所需文件，以下单行命令可从 Windows 或 Linux 终端执行；`1.0.0` 为示例应用版本：
 
 ```shell
-dotnet-pack deb --name:Example.Web --version:1.0.0 --platform:linux --architecture:x64 --framework:net10.0 --source:publish --output:../packages --daemon:example.web --listen:8069 --web:nginx --exclude:*.profile
+dotnet-pack deb --name:Example.Web --version:1.0.0 --platform:linux --architecture:x64 --framework:net10.0 --source:publish --output:../packages --daemon:example.web --web:nginx --exclude:*.profile
 ```
 
-生成的应用服务监听 `http://127.0.0.1:8069`，`server=~` 复用该地址。Nginx 的 IPv4/IPv6 HTTP 入口监听 80 端口。`bind` 控制 Nginx 入口，`--listen` 控制应用进程，二者互不替代。
+应用运行配置应监听 http://127.0.0.1:8069；server 显式引用该连接地址。Nginx 的 IPv4/IPv6 HTTP 入口监听 80，bind 仅控制代理入口。
 
-containerizer 通过生成的语义模板适配 server=~。如需显式固定后端，可使用部署网络中的应用服务名：
+容器场景使用部署网络中的固定应用服务名；该显式地址不会自动改写：
 
 ```ini
 [api]
@@ -59,7 +61,7 @@ bind!legacy = http://*,http://[::]
 server = http://app:8069
 ```
 
-应用自身需监听其他容器可访问的接口，例如生成应用服务时使用 `--listen:http://0.0.0.0:8069`。`app` 的解析和容器网络由部署系统提供。容器构建时关闭 Web 激活，并从已知安装根读取配置，详见[安装流程](#installation)。
+应用运行配置应监听其他容器可访问的接口，如 http://0.0.0.0:8069。部署系统提供 app 的解析和网络；容器构建时关闭 Web 激活，见[安装流程](#installation)。
 
 打包器生成配置，不在构建机启动 Nginx、探测后端、签发证书或维护负载均衡运行状态。静态文件服务、通用重写语言、证书安装和 IIS/MSI 不属于当前公共配置能力。
 
@@ -92,416 +94,96 @@ dotnet-pack deb "--web:nginx:config files/web.profile"
 <a id="profile"></a>
 ## Profile 语法、作用域与导入
 
-### 文本和段落
+通过 Core Profile 读取 UTF-8 文本。根默认值位于首个段落之前；[api] 定义站点，[api reports] 定义该站点的路径作用域。最多两级，名称中的点号不推导 URL，路径单独填写 path。字段名与段落名忽略大小写。
 
-输入由 Zongsoft.Core 的 `Profile` 加载。建议使用 UTF-8 文本：
-
-```ini
-# 根级公共默认值
+~~~ini
 forwarded = true
-server = http://app:8069
-
-[api]
-host = api.example.com
-bind!legacy = http://*
-
-[api hub.devices]
-path = /hub/devices
-websocket = true
-```
-
-- 第一部分 `api` 是站点标识，第二部分 `hub.devices` 是路径规则标识，以空格或 Tab 分开。点号是标识的一部分，不表示嵌套，也不推导 `/hub/devices`。
-- 最多两个层级，`[api hub devices]` 非法。段落名不允许 `/`、`:`、`!`，不能写 `[api /hub/devices]`；路径写在 `path` 字段中。站点标识不自动成为域名、安装目录或服务名。
-- 字段名、段落标识和具名条目的标识忽略大小写；值仍按相应字段解释，路径和原始参数不会统一转为小写。
-- 根级公共字段位于第一个段落之前。根级默认值不创建站点，至少需要一个有效站点。
-- `#`、`;` 开头的整行是注释；`#@import` 是导入指令。不要在值后添加行尾注释，它会成为值的一部分。
-- 条目以第一个 `=` 分开名称和值；后续 `=` 保留，例如 `server!a=http://app weight=3`。
-- Profile 不剥除值外的引号，不提供多行值或通用反斜线转义。公共字段通常不加引号；`header!X-Name='hello'` 的值包含两个单引号。
-- `key` 和 `key=` 都表示显式声明空值；它们不等于未声明。是否允许空值由字段决定。
-- 同一文件、同一段落内重复完整键会报错；跨导入的覆盖按读取顺序处理。后端单值与池的限制见[后端继承](#inheritance)。
-
-### 字段位置速查
-
-“根 → 站点 → 路径”表示子层缺失时继承，子层声明时按该字段的覆盖规则处理。
-
-| 字段 | 可用层级 | 缺省或主要规则 |
-| --- | --- | --- |
-| `host` | 站点 | 可省略；逗号或分号分隔请求主机名或 IP。 |
-| `bind!名称` | 站点 | 至少有公共绑定或当前托管器原始监听；不隐式补端口入口。 |
-| `certificate`、`certificate-key` | 站点 | HTTPS 的证书/私钥引用。 |
-| `path` | 路径 | prefix/exact 缺失或空为 `/`；regex 必填。 |
-| `match` | 路径 | `prefix`，也可 `exact`、`regex`；显式空值非法。 |
-| `server` 或 `server!名称` | 根 → 站点 → 路径 | 目标整组继承/替换，全部缺失时为 `~`。 |
-| `server-balance`、`server-failure-*`、`server-retry*`、`server-affinity*` | 根 → 站点 → 路径 | 策略逐字段继承，见[策略表](#policies)。 |
-| `server-tls-*` | 根 → 站点 → 路径 | 仅由 HTTPS 后端消费，见[TLS 表](#tls)。 |
-| `server-health`、`server-health-*` | 根 → 站点 → 路径 | 仅有效的非空探测路径启用检查，见[健康检查](#health)。 |
-| `forwarded`、`websocket` | 根 → 站点 → 路径 | 分别默认 true、false。 |
-| `header!名称`、`server-health-header!名称` | 根 → 站点 → 路径 | 两个独立的头集合，各自按名称合并。 |
-| `nginx:...`、`iis:...` | 站点或路径 | 当前托管器原始设置，不能写在根级。 |
-
-未知公共字段、错误层级、缺失具名后缀（如 `bind=...`、`header!=...`）均报错，不静默忽略。
-
-### 导入顺序与路径
-
-共享文件 `shared/common.profile`：
-
-```ini
-forwarded = true
-header!X-Application = example-api
-
-[api]
-bind!legacy = http://*
-server = http://shared:8069
-```
-
-宿主 `web.profile`：
-
-```ini
 #@import shared/common.profile
 
 [api]
-host = api.example.com
-server = http://local:8069
-```
+host = api.example.test
+bind!plain = http://*
 
-最终使用 local 后端，保留共享的绑定和请求头。导入在指令出现处执行，通常把导入放在前面，把本地覆盖放在后面；本地写在导入前面时也可能被后续导入覆盖。
+[api reports]
+path = /reports
+server = http://reports.internal:8080/reports
+~~~
 
-导入路径相对**声明该指令的文件**解析。`shared/common.profile` 再导入 `backend.profile` 时，目标为 `shared/backend.profile`。导入始终把目标文件合并到 Profile 根，不以当前段落作为目标前缀，也不自动重命名目标站点。
+import 相对于声明文件，按读取顺序合并，必须存在；循环和超深导入失败。导入参数使用 Core 模板求值，不自动展开通配符、去引号或搜索父目录。单文件同段落重复字段、未知字段、错误层级都失败。行首 # 或 ; 是注释，行尾注释属于值。Profile 不自动去除值的引号；首个等号之后的内容保留。
 
-`#@import` 可用空白、Tab 或 `|` 分隔多个目标：
-
-```ini
-#@import shared/common.profile
-#@import shared/sites.profile
-```
-
-导入参数通过 `Directives.Processing` 评估模板，每条指令导入一个完整路径；内部空格属于文件名，不移除引号，不展开通配符。跨平台共享文件建议使用 `/` 分隔路径。
-
-所有直接和递归导入目标都必须存在且可读。循环导入失败；默认最大深度为 64（包含顶层文件）。一个已完成的文件可再次导入，不等于递归循环。错误保留来源文件、段落、条目、行号及底层详情。
+host、bind!名称、certificate、certificate-key 属于站点；path、match 属于路径；server、策略、header!名称、forwarded、websocket 按根→站点→路径继承。nginx: 原始设置只用于站点或路径。显式空值的含义由字段决定；server 空值继续继承，header 空值则覆盖原值。
 
 <a id="bindings"></a>
 ## 站点、主机名与绑定
 
-`host` 表示请求中的主机名或 IP，`bind` 表示 Nginx 监听的本地地址：
+host 是请求域名，bind 是本地入口监听，不决定应用监听。host 支持具体 DNS/IP、*.example.test、.example.test、example.*；省略表示不增加名称约束，端口站点应省略 host，不能以 _ 充当域名。
 
-```ini
+~~~ini
 [api]
-host = api.example.com,192.0.2.10
-bind!legacy = http://*:80
-bind!secure = https://*:443
-server = http://app:8069
-```
+host = api.example.test,www.example.test
+bind!plain = http://*,http://[::]
+bind!secure = https://*:443,https://[::]:443
+~~~
 
-`legacy`、`secure` 是可自定义的绑定组名称。HTTP 80、HTTPS 443 可省略：
+plain/secure 是用户自定组名。每个逗号或分号分隔项必须是完整 URI；HTTP/HTTPS 默认端口分别为 80/443。* 只代表 IPv4，IPv6 通配需要 [::]。入口仅接受 IP，不能包含路径、查询或片段。端口范围 1–65535，空项失败。
 
-```ini
-[api]
-host = api.example.com
-bind!legacy = http://*,http://[::]
-bind!secure = https://*,https://[::]
-server = http://app:8069
-```
-
-| 写法 | 含义 |
-| --- | --- |
-| `http://*`、`http://0.0.0.0:80` | IPv4 任意地址的 HTTP 80。 |
-| `http://[::]` | IPv6 任意地址的 HTTP 80。 |
-| `https://*`、`https://[::]:443` | 分别为 IPv4、IPv6 HTTPS 443。 |
-| `http://127.0.0.1:8080` | 仅 IPv4 回环地址 8080。 |
-| `https://[2001:db8::10]:8443` | 指定 IPv6 地址及非默认端口。 |
-
-每个逗号或分号分隔项都是完整地址，不能写 `http://*,[::]`。可混用两种分隔符并在两侧留空白，空元素和尾随分隔符非法。端口范围为 1–65535。IPv6 必须有方括号；绑定不接受域名、路径、查询或片段。`*` 只表示 IPv4，不把 IPv6 绑定当成跨平台的双栈捷径。
-
-绑定协议仅支持 http/https。WebSocket 使用路径上的 `websocket=true`，不写 `bind!x=ws://...` 或 `wss://...`。
-
-`host` 不是网卡地址，`host=192.0.2.10` 不会使 Nginx 只监听该 IP。省略时不附加公共主机名限制，不根据站点名补出域名；仍受同一监听入口的 Nginx 虚拟主机选择规则影响。
-
-host 支持逗号和分号混用，两侧空白会去掉，同名值忽略大小写去重；显式空值、列表空元素和含空白的主机名报错。它只填写主机名或 IP，不带协议、路径和端口；监听端口放在 bind 中。更复杂的 Nginx server_name 表达式使用原始设置。
-
-同名绑定组在导入后整体替换。例如共享文件的 `bind!legacy=http://*,http://[::]` 被本地 `bind!legacy=http://127.0.0.1:8080` 替换后，legacy 只剩一个监听。不同组展开后合并；同站点规范化后重复绑定只输出一次。
-
-站点至少需要一个公共绑定或所选托管器的原始监听。`iis:...` 不满足 Nginx 的监听要求。跨站点同入口、同 Host 的静态冲突报错，不同 Host 可共享入口。系统中其他配置文件的冲突由目标环境的 Nginx 校验发现。
+同名 bind 组整体替换，异名组合；同站点重复端点去重。相同 socket 与域名的跨站点冲突失败，不同域名可以共享监听。实际默认关系仅记录显式 default_server，不伪造隐式默认站点。
 
 <a id="certificates"></a>
 ## 入口 HTTPS 与证书
 
-这些字段配置客户端连接 Nginx 时使用的证书，与[后端 TLS](#tls)无关。每个站点的一组证书供该站点全部 HTTPS 绑定使用；HTTP 绑定不消费它们。
+HTTPS 入口默认引用安装根 .certificates/<PackageName>.pem 中的合并证书及私钥。它是目标路径，不会在制作机自动生成。
 
-| 字段 | 未声明 | 显式空值 |
-| --- | --- | --- |
-| `certificate` | 使用实际安装根下 `.certificates/<PackageName>.pem`。 | 报错。 |
-| `certificate-key` | 使用最终有效的 certificate 文件。 | 清除继承的独立私钥，改用最终 certificate 文件。 |
-
-### 默认合并 PEM
-
-```ini
+~~~ini
 [api]
-host = api.example.com
-bind!secure = https://*
-server = http://app:8069
-```
-
-假设包名为 `zongsoft.web`，安装根为 `/opt/zongsoft/web`，生成的证书指令如下（站点配置摘录）：
-
-```nginx
-ssl_certificate "/opt/zongsoft/web/.certificates/zongsoft.web.pem";
-ssl_certificate_key "/opt/zongsoft/web/.certificates/zongsoft.web.pem";
-```
-
-同一个 PEM 文件需包含证书链和相应私钥。工具不生成该文件、不转换 PFX，也不安装系统证书。多个 HTTPS 站点都省略字段时，共用这个默认文件；其证书需覆盖实际域名。
-
-### 自定义合并文件与分离文件
-
-自定义合并 PEM：
-
-```ini
-[api]
-host = api.example.com
-bind!secure = https://*
-certificate = file:/etc/tls/api/combined.pem
-server = http://app:8069
-```
-
-证书和私钥分离：
-
-```ini
-[api]
-host = api.example.com
-bind!secure = https://*
+bind!secure = https://*:443
 certificate = file:/etc/tls/api/fullchain.pem
 certificate-key = file:/etc/tls/api/private.key
-server = http://app:8069
-```
+~~~
 
-也可只填写 `certificate-key`，使默认证书文件配合独立私钥使用。公共字段不要求成对填写；原始 Nginx 证书指令另有[成组覆盖规则](#native)。
-
-### 导入后清除独立私钥
-
-共享 `shared/site.profile`：
-
-```ini
-[api]
-bind!secure = https://*
-certificate = file:/etc/tls/shared/fullchain.pem
-certificate-key = file:/etc/tls/shared/private.key
-server = http://app:8069
-```
-
-宿主 `web.profile`：
-
-```ini
-#@import shared/site.profile
-
-[api]
-certificate = file:/etc/tls/api/combined.pem
-certificate-key =
-```
-
-最终两个指令都指向 combined.pem。如果只改 certificate 而省略 certificate-key，共享的 private.key 仍会继承，不会自动清除。
-
-`file:` 后是 Linux **目标环境绝对路径**，不按 Windows 构建机路径转换。构建时不读取、不要求存在、不自动加入载荷；需通过普通打包参数、安装钩子或部署挂载提供。缺文件、缺私钥、密钥不匹配等由启用激活时的 `nginx -t` 校验发现。
-
-Tar 的默认证书路径随实际 `INSTALL_PATH` 重定位；`DESTDIR` 暂存前缀不会写入配置。显式绝对引用保持原样。关闭 Web 激活仍完成默认路径定位，跨容器复制配置时须使引用的证书路径在 Nginx 容器中成立。
+file: 后面是目标 Linux 绝对路径。省略 certificate-key 时使用 certificate 的同一 PEM 文件；显式空值清除继承的单独私钥。Nginx 原始证书设置必须同时提供 ssl_certificate 和 ssl_certificate_key，整对覆盖公共设置。入口证书与后端 CA 信任用途不同。
 
 <a id="routes"></a>
-## 路径与匹配规则
+## 路径与请求类别
 
-### 默认路径与显式兜底
+每个站点自动组合应用的 HTTP 承载绑定。普通 HTTP 与原生 gRPC 分开选择；application/grpc Content-Type（含 +后缀和参数）归入 gRPC，grpc-web 不归入。每个类别独立选择最长字面基路径。
 
-站点没有任何路径段落时，自动生成 `/` 前缀路由，使用站点的有效后端。只要声明了路径段落，就仅生成声明的路径，不额外生成兜底。
+前面的 /reports 配置只覆盖普通 HTTP 的该路径范围，其余路径继续自动组合。例如 /REPORTS/2026?id=7 忽略大小写匹配并原样转发，/reports-old 不命中。查询不参与选路，仍随请求转发。
 
-```ini
-[api]
-bind!legacy = http://*
-server = http://app:8069
+path 只接受 ASCII 字母数字以及 / - . _ ~；不接受空路径段、点段、百分号转义、查询、片段或正则语法。尾斜杠可选，规范基路径转为小写。match 仅支持 prefix，exact/regex 无法表达绑定契约，明确失败。
 
-[api root]
+生成器以 http 上下文的 map 读取原始 $request_uri，再跳转到命名 location，保留方法、原始 URI 和查询。HTTP 未命中返回 404；gRPC 未命中返回 HTTP 200、grpc-status 12、grpc-message 与 application/grpc，两类请求互不兜底。
 
-[api devices]
-path = /hub/devices
-websocket = true
-```
-
-`[api root]` 的 path 和 match 都可省略，它明确保留根路径兜底。下面三种写法在 prefix/exact 模式下等价，分别选用一项即可：
-
-```ini
-[api root]
-```
-
-```ini
-[api root]
-path =
-```
-
-```ini
-[api root]
-path = /
-```
-
-规则标识 `root` 不具有特殊语义。不同标识默认成相同 match/path 时仍会报重复；改名字不能创建两个相同路由。
-
-prefix/exact 的非空 path 必须以 `/` 开头，不能含查询字符串、片段或控制字符；查询参数属于请求，不写进路径匹配字段。工具不自动补斜杠或把段落名中的点号转换为路径。
-
-### 三种匹配模式
-
-`match` 值忽略大小写，缺失为 prefix，显式空值或未知值报错。
-
-| match | 含义 | Nginx 结构 |
-| --- | --- | --- |
-| `prefix` | 区分大小写的前缀匹配。 | `location /api { ... }` |
-| `exact` | 区分大小写的精确匹配。 | `location = /health { ... }` |
-| `regex` | 忽略大小写的正则匹配。 | <code>location ~* "^/orders/[0-9]+&#36;" { ... }</code> |
-
-前缀示例：
-
-```ini
-[api products]
-path = /api
-```
-
-匹配 `/api`、`/api/orders`、`/apix`，不匹配 `/API`。如需路径段边界，可用 `/api/`，或使用下文的正则。尾随 `/` 有意义；Nginx 对某些以 `/` 结束的代理路径会重定向省略尾斜杠的请求，具体以其 [location 规则](https://nginx.org/en/docs/http/ngx_http_core_module.html#location)为准。
-
-精确示例：
-
-```ini
-[api health]
-path = /health
-match = exact
-```
-
-匹配 `/health` 和 `/health?full=true`，不匹配 `/health/`、`/health/live` 或 `/Health`。查询字符串不参与路径匹配。
-
-正则示例：
-
-```ini
-[api orders]
-path = ^/orders/[0-9]+$
-match = regex
-
-[api segment]
-path = ^/api(/|$)
-match = regex
-
-[api json]
-path = ^/files/.*\.json$
-match = regex
-```
-
-分别匹配数字订单号、api 路径段边界和 JSON 文件路径；`/Orders/123`、`/FILES/a.JSON` 也匹配。正则模式必须显式提供非空 path；不会自动增加 `^`、<code>&#36;</code>，也不会从 path 的外观猜测 match。`\.` 在 Profile 中直接写一个反斜线，不写 Markdown 转义 `\_`，不在 path 前加 Nginx 的 `~*`。后缀模式如 <code>\.json&#36;</code> 也合法，不强制以 `/` 开头。
-
-### 优先级与重叠示例
-
-在本工具生成的平级路由中，精确匹配优先；否则 Nginx 记住最长前缀，按声明顺序检查正则，采用第一个命中的正则；没有正则命中时才使用记住的前缀。
-
-```ini
-[api]
-bind!legacy = http://*
-server = http://app:8069
-
-[api root]
-
-[api resources]
-path = /resources/
-
-[api json]
-path = \.json$
-match = regex
-
-[api health]
-path = /health
-match = exact
-```
-
-| 请求 | 选中的规则 |
-| --- | --- |
-| `/health?full=true` | 精确 health。 |
-| `/resources/a.json` | 正则 json，优先于 resources 前缀。 |
-| `/resources/a.txt` | 最长前缀 resources。 |
-| `/other` | 根前缀 root。 |
-
-多个正则重叠时，较窄规则应放在较宽规则前面：
-
-```ini
-[api order-number]
-match = regex
-path = ^/orders/[0-9]+$
-
-[api order-any]
-match = regex
-path = ^/orders/.*$
-```
-
-若交换顺序，较宽规则会先匹配数字订单。导入保留段落首次出现顺序：共享文件为 A、B，本地覆盖 A 并新增 C，最终顺序仍为 A、B、C；覆盖 A 不会把它移到末尾。
-
-相同 match/path 报错；工具不尝试证明两个不同正则是否等价或是否重叠。匹配由目标引擎执行，Nginx 的 URI 规范化也适用，不能把配置中保留的表达式理解为逐字节匹配原始请求行。工具不额外解码、拼接或改写用户表达式。
-
-### 转发路径与可移植边界
-
-公共 server 生成不带替换 URI 的代理目标：
-
-```text
-客户端：/api/orders/123?detail=true
-后端：  http://app:8069/api/orders/123?detail=true
-```
-
-匹配前缀不会被删除；查询参数保留。正则匹配也不隐式做捕获替换或业务路径重写。此约定不承诺绕过托管器自身的 URI 处理。
-
-公共配置不提供 `^~`、用户命名 location、嵌套 location 或捕获变量重写语法。正则不是文件通配符。Nginx 使用 PCRE/PCRE2；未来 IIS URL Rewrite 需适配其 ECMAScript 正则和相对路径输入，不能用 .NET Regex 校验代替目标引擎，也不能保证任意表达式跨引擎完全等价。详见 [IIS URL Rewrite](https://learn.microsoft.com/en-us/iis/extensions/url-rewrite-module/url-rewrite-module-configuration-reference)。
+例如应用分别声明 / 的 http1、/metrics 的 http1 和 /opentelemetry 的 grpc+http2，会产生三条独立映射。/metrics 优先于 /，未知 gRPC 路径不会落入普通 Web 根路由。同类别、同规范路径的不同逻辑绑定冲突时失败。
 
 <a id="servers"></a>
-## 后端地址、应用地址与权重
+## 后端选择与远程池
 
-### 单后端与 URI
-
-`server` 支持 HTTP/HTTPS 的协议、主机和可选端口。仅有一个尾随 `/` 时去掉它，不把它当作业务路径：
-
-| 值 | 结果 |
+| server 值 | 含义 |
 | --- | --- |
-| `http://app`、`http://app:80/` | 同一 HTTP 80 后端。 |
-| `https://api.internal` | HTTPS 443。 |
-| `http://192.0.2.20:8069` | 指定 IPv4 和端口。 |
-| `https://[2001:db8::20]:8443` | 指定 IPv6 和端口。 |
-| `http://app/api` | 非法：不允许后端业务路径。 |
-| `http://app?q=1`、`http://app#part` | 非法：不允许查询和片段。 |
-| `http://user:password@app` | 非法：不允许用户信息。 |
-| `http://*:8069`、`http://0.0.0.0:8069`、`http://[::]:8069` | 非法：通配监听地址不是连接目标。 |
+| 省略、空值或求值后空白 | 继承有效父级目标；最终无目标时自动组合应用绑定。 |
+| web | 按应用别名 web 筛选，再按路径和请求类别确定目标。 |
+| http://remote:8080/api | /api 范围的显式普通 HTTP/1.1 远程目标。 |
+| https://remote:8443/api | 同上，连接使用 TLS。 |
+| grpc://remote:4317/opentelemetry | 显式原生 gRPC HTTP/2，必须写端口。 |
+| grpcs://remote:4317/opentelemetry | 同上，连接使用 TLS，必须写端口。 |
 
-域名、IP、默认端口按有效地址规范化；不在构建机检测后端可达性。`server=` 非法，省略才继承，所有层都省略才使用 `~`。
+别名必须存在，每项具体映射必须唯一。站点选择限制整个站点，路径选择只覆盖对应范围。远程 URI 的路径限制服务范围，不是替换前缀；禁止用户信息、查询、片段、zone 与通配远程主机。旧 ~ 和前缀式选择器已移除。
 
-### `~` 的推导条件
+同一 binding 的多个端点表示同服务的替代地址，不作为负载均衡实例。稳定选择顺序为明确 IPv4、明确 IPv6、通配、DNS，再按主机、端口、身份排序。本机安装时通配连接同地址族回环，DNS 保留原义；不探测、不修改应用监听配置。
 
-`~` 是“本次生成的应用服务的连接地址”，不是任意名称占位符：
-
-| 本次应用服务情况 | `server=~` |
-| --- | --- |
-| 生成 systemd 服务，`--listen:8069` | `http://127.0.0.1:8069`。 |
-| 生成服务，listen 为单个具体 HTTP/HTTPS 连接地址 | 使用该地址。 |
-| 使用已有 `.service` 文件 | 报错；不解析其中 ExecStart 来猜测。 |
-| `--daemon:none`，或未找到宿主而没有生成服务 | 报错。 |
-| listen 缺失、多地址、通配地址 | 报错；不能唯一确定连接目标。 |
-
-这里的服务文件是 systemd 的 `.service`，其中可以含 `ExecStart=dotnet ...`。用户已有服务文件可能采用脚本、环境变量或其他启动方式，因此它不提供自动推导依据。此时显式写 `server=http://127.0.0.1:8069` 即可；不是要求删除服务文件。
-
-不从站点 bind 推导应用端口；不从应用默认端口猜测。某一路径被原始 `nginx:proxy_pass` 覆盖后不再消费其公共 server，但其他仍消费 `~` 的路径继续要求满足推导条件。
-
-### 后端池与权重
-
-```ini
+~~~ini
 [api]
-bind!legacy = http://*
-server!app1 = http://app1:8069 weight=3
-server!app2 = http://app2:8069
-server-balance = round-robin
-```
+bind!plain = http://*
+server!east = http://east.internal:8080/api weight=3
+server!west = http://west.internal:8080/api
+~~~
 
-app1/app2 是成员标识，省略 weight 为 1。上例相对权重为 3:1；它不是每四个请求必然严格按固定顺序分配的承诺，运行状态和算法也会影响选择。
+east/west 是两个独立远程实例，权重为 3:1。显式池至少两个成员，方案、协议、基路径必须相同，端口可以不同；规范化后重复地址失败。权重必须是目标实现可表达的正整数。替换池需声明完整的新成员集合。
 
-- 单成员池合法；成员写具体地址，不在 `server!名称` 中使用 `~`。
-- weight 必须为正整数，0、负数、小数非法。公共模型不设随意的固定上限；超出目标托管器整数范围时报错，不截断。
-- 同一池协议必须一致，端口可以不同；不能混合 HTTP 与 HTTPS。
-- 规范化后相同的成员地址报错，即使成员名称不同；例如 `http://app` 与 `http://APP:80/`。
-- 同一输入文件、同一层级不能混用 `server` 与 `server!名称`。跨导入文件的替换允许，见下一节。
-- 只为有效引用生成应用专属 upstream，避免跨包名称冲突；它与 server 块同处现有 http include 中，不开放任意原始 upstream。
+上游版本只能从声明能力中选择；同服务普通语义取共同 HTTP 版本，原生 gRPC 使用 HTTP/2。Nginx 适配支持普通 HTTP/1.1 和 HTTP/2；HTTP/2 上游语法最低要求 Nginx 1.29.4 及 HTTP/2 模块，该版本是语法最低要求。仅 HTTP/3 上游会报告实现能力限制。WebSocket 要求可用的 HTTP/1 上游。
+
+入口版本与上游版本独立。gRPC 路由自动开启入口 http2；显式矛盾设置失败。原始 QUIC 监听导出 UDP/http3 能力，需要 TLS、目标 Nginx QUIC 模块以及 Nginx 1.29.3 或更高版本。QUIC 站点的默认上游 Host 优先使用 $http_host；为空时通过 $host$is_request_port$request_port 从 HTTP/3 :authority 恢复主机及显式端口。回退时主机名大小写被规范化；显式 header!Host 保持原值。[request_port 与 is_request_port 变量](https://nginx.org/en/docs/http/ngx_http_core_module.html#var_request_port)要求上述最低版本。配置生成不验证或安装目标模块。
 
 <a id="inheritance"></a>
 ## 后端替换与继承实例
@@ -538,7 +220,7 @@ server = http://single:8069
 ```ini
 [api]
 bind!legacy = http://*
-server = ~
+server = web
 ```
 
 `web.profile`：
@@ -551,7 +233,7 @@ server!app1 = http://app1:8069 weight=3
 server!app2 = http://app2:8069
 ```
 
-最终只有 app1/app2 池。共享 `~` 已被替换，不再要求 --listen 或本次生成应用服务。共享文件写具体单后端地址时也是同样行为。
+最终只有 app1/app2 池。共享 web 别名已被替换，不再解析。
 
 ### 例三：本地池替换共享池
 
@@ -574,7 +256,7 @@ server!app3 = http://app3:8069
 server!app4 = http://app4:8069
 ```
 
-最终只有 app3/app4，不是四个成员。即使本地只写 app3，也只剩 app3。若要修改 app1 权重并保留 app2，必须在本地重写整个池：
+最终只有 app3/app4，不是四个成员。替换后的池仍必须至少包含两个成员。若要修改 app1 权重并保留 app2，必须在本地重写整个池：
 
 ```ini
 #@import shared/site.profile
@@ -635,115 +317,23 @@ api 根路径只用 app3/app4；reports 只用 reports；admin 继承 shared1/sh
 <a id="tls"></a>
 ## 后端 HTTPS 与证书验证
 
-`certificate` 用于客户端 → Nginx；`server-tls-*` 用于 Nginx → HTTPS 后端。两段连接独立，入口 HTTPS 可以代理 HTTP 后端，入口 HTTP 也可以代理 HTTPS 后端。
+TLS 字段独立继承，仅用于 HTTPS。server-tls-verify 默认 true，false 明确关闭验证；server-tls-name 决定 SNI 与证书身份，独立于连接地址和 HTTP Host/:authority。
 
-| 字段 | 默认值 | 规则 |
-| --- | --- | --- |
-| `server-tls-verify` | false | true/false、1/0，文本忽略大小写；空值非法。 |
-| `server-tls-trust` | 未指定 | 可选 `file:/目标绝对路径`，引用 PEM CA 信任证书；空值清除 Profile 继承值。 |
-| `server-tls-name` | 自动推导 | 可选 TLS SNI/验证名称；空值清除继承名称并重新推导。 |
-
-这些设置逐字段继承，对有效单后端或池内全部成员统一生效。HTTP 后端不消费 TLS 字段。
-
-### 验证开关和信任来源
-
-缺省 false 会显式生成 `proxy_ssl_verify off`，不被外层的开启设置意外改变。HTTPS 加密连接不等于验证了后端身份；设置 true 后，目标环境须提供可用的 CA 信任和证书名称。
-
-```ini
-server-tls-verify = true
-server-tls-trust = file:/etc/tls/internal-ca.pem
-
+~~~ini
 [api]
-bind!legacy = http://*
-server = https://api.internal:8443
-
-[api root]
-
-[api health]
-path = /health
-match = exact
-server-tls-verify = false
-```
-
-api 根路径验证后端证书，health 路径显式关闭。internal-ca.pem 是信任 CA，不是入口私钥。
-
-`server-tls-trust` 可不填，表示由目标 Nginx 的有效外层配置提供信任来源，不表示“信任所有证书”，也不保证自动采用系统 CA。若开启验证但最终没有可用的 `proxy_ssl_trusted_certificate`，Nginx 校验会失败。打包器不在构建机寻找 CA 文件。参见 [Nginx 后端证书验证](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_verify)。
-
-例如根级使用内部 CA，而某一路径需清除该引用：
-
-```ini
-server-tls-verify = true
-server-tls-trust = file:/etc/tls/internal-ca.pem
-
-[api]
-bind!legacy = http://*
-server = https://api.internal:8443
-
-[api root]
-
-[api external]
-path = /external
-server = https://external.example.com
-server-tls-trust =
-```
-
-external 不再输出内部 CA 引用，仍保持验证开启，需外层环境提供适用信任。空值不会重新继承 Profile 的内部 CA，也不会关闭验证。
-
-### SNI 与验证名称
-
-自动推导只依据最终后端 DNS 名称，不使用站点 host、站点/成员标识或生成的 upstream 名称：
-
-| 有效后端 | 未填写或清空 server-tls-name |
-| --- | --- |
-| 单个 DNS 后端，或只有一个 DNS 成员的池 | 使用该 DNS 名称。 |
-| 池内全部成员是同一个 DNS 名称，端口不同 | 使用共同 DNS 名称。 |
-| IP 地址后端，或不同 DNS 名称的池 | 不自动选名称；验证关闭时不发送 SNI，验证开启时报错并要求显式名称。 |
-
-同域名不同端口可直接推导：
-
-```ini
-[api]
-bind!legacy = http://*
-server!a = https://api.internal:8443
-server!b = https://api.internal:9443
-server-tls-verify = true
-server-tls-trust = file:/etc/tls/internal-ca.pem
-```
-
-使用两个 IP 连接但共同验证 api.internal：
-
-```ini
-[api]
-bind!legacy = http://*
-server!a = https://192.0.2.20:8443
-server!b = https://192.0.2.21:8443
+bind!plain = http://*
+server = https://192.0.2.20:8443/api
 server-tls-name = api.internal
-server-tls-verify = true
 server-tls-trust = file:/etc/tls/internal-ca.pem
-```
+~~~
 
-显式名称启用 SNI；当 verify=true 时也用于验证，但不会自行开启验证、改变连接地址或改写 HTTP Host。各后端证书需满足这个共同名称。若后端不需要 SNI 且不要求验证，IP 池可以省略全部 TLS 字段。
+实际连接 192.0.2.20:8443，证书需受 internal-ca.pem 信任并匹配 api.internal。除非 header!Host 显式覆盖，原请求 Host 保持不变；/api 前缀仍在请求中。
 
-server-tls-name 填一个主机名或 IP 字面量，不填写完整 URL、端口或路径；显式非法名称报错。更换后端不会自动清除继承的名称，需要恢复推导时显式留空。
+名称省略或为空时，仅当全部有效目标具有相同 DNS 名称才自动推导。IP 及通配转回环连接需要显式验证名称。清空继承名称恢复推导；清空 trust 删除继承的显式文件，验证仍保持开启。
 
-覆盖继承名称时，空值可恢复新后端的推导：
+未指定 trust 时使用系统 CA：tar/deb 为 /etc/ssl/certs/ca-certificates.crt，rpm 为 /etc/pki/tls/certs/ca-bundle.crt。目标必须提供该文件，其他布局请明确指定信任文件。系统路径不作为可重定位包资源；容器制作按 Nginx 镜像调整默认位置。
 
-```ini
-server-tls-name = api.internal
-
-[api]
-bind!legacy = http://*
-server = https://192.0.2.20:8443
-
-[api root]
-
-[api external]
-path = /external
-server = https://external.example.com
-server-tls-name =
-```
-
-根路径使用 api.internal，external 使用 external.example.com，不继续发送继承的 api.internal。
+生成时不读取目标证书、不执行握手。原始 proxy_ssl_*/grpc_ssl_* 设置可能与记录策略矛盾，因此拒绝；请使用上述结构化字段。
 
 <a id="policies"></a>
 ## 调度、故障、重试与会话保持
@@ -1014,88 +604,32 @@ websocket = true
 <a id="native"></a>
 ## 托管器原始设置
 
-### 语法、作用域和空值
+站点或路径使用 nginx:指令=值、nginx:指令!首参数=其余参数。不要包含末尾分号或行尾注释；引号和运行时表达式遵循 Nginx 语法。禁止任意块、嵌套指令与 worker_processes 等实例配置。
 
-`hoster:指令=参数` 表示原始叶子指令；`!` 后的内容是该指令的第一个参数：
-
-```ini
+~~~ini
 [api]
-nginx:listen!80
-nginx:listen![::]:80
-nginx:server_name = api.example.com
-server = http://app:8069
-
-[api root]
-nginx:proxy_set_header!Upgrade = $http_upgrade
-nginx:proxy_set_header!Connection = 'upgrade'
-nginx:proxy_set_header!Host = $host
-nginx:proxy_set_header!X-Real-IP = $remote_addr
-nginx:proxy_set_header!X-Forwarded-For = $proxy_add_x_forwarded_for
-nginx:proxy_set_header!X-Forwarded-Proto = $scheme
-nginx:proxy_read_timeout = 300s
-```
-
-`nginx:listen!80` 和 `nginx:listen!80=` 等价，生成 `listen 80;`。不要在同一段落同时写两行等价键。`nginx:listen!443=ssl` 生成 `listen 443 ssl;`；如需自动完整 WebSocket 配置，优先使用 websocket 字段。
-
-公共 `bind!legacy`、`server!app1` 的后缀是标识；原始 `nginx:listen!80` 的后缀则是实际参数，二者语义不同。`nginx:proxy_set_header!X-Optional` 或同项空值生成 `proxy_set_header X-Optional "";`，表示不发送该头，不会生成缺参数指令。
-
-站点原始项进入 server 上下文，路径原始项进入 location 上下文。不把任意站点原始项复制到每个路径，只有请求头等明确规则由公共模型处理。不能在根级写原始项；不支持 `nginx:http.server.listen` 这类点号层级。
-
-工具限制已知指令的上下文、单值/重复参数及结构。未知叶子指令可以交给目标 Nginx/模块校验，并不保证它在目标环境可用。禁止 worker_processes、events 等实例配置，也禁止用户定义 http、server、location、upstream、match、map、if、limit_except 等块注入；站点和路径结构由配置器生成。
-
-例如 listen/server_name 只能放在站点，proxy_pass 只能放在路径；proxy_pass、ssl_certificate 等已知单值指令不能借不同的 `!` 后缀重复声明或添加多余参数。普通原始指令的空值表示没有额外参数，不像公共布尔值那样自动取 true；是否允许零参数仍由该指令的语法决定。
-
-原始参数可保留 Nginx 引号和表达式，但**不写末尾分号**。未闭合引号、换行、NUL、未引用的分号、注释符或块符号报错。Profile 行尾注释也不会被剥除。不要把完整 Nginx 配置粘贴到字段值中。
-
-### 原始设置覆盖公共设置
-
-| 原始项 | 覆盖范围 |
-| --- | --- |
-| 站点任意 `nginx:listen`（含具名项） | 替换全部 bind 组生成的监听集合。 |
-| 站点 `nginx:server_name` | 替换完整 host 列表。 |
-| 路径 `nginx:proxy_pass` | 替换有效单后端/后端池目标。 |
-| 站点 `nginx:ssl_certificate` 和 `nginx:ssl_certificate_key` | 两项成组替换公共证书及私钥，必须完整提供。 |
-
-监听替换例子：
-
-```ini
-[api]
-host = api.example.com
-bind!legacy = http://*
-bind!secure = https://*
+bind!plain = http://*
 nginx:listen!8080
-server = http://app:8069
-```
+nginx:server_name = api.example.test
+nginx:client_max_body_size = 16m
+nginx:proxy_set_header!X-Request-Id = $request_id
+~~~
 
-最终仅监听 8080，不再生成 80/443。原始 server_name 同样不与公共 host 叠加。
+最终监听 8080，整个公共 bind 集合被替换；最终 server_name 覆盖 host。导出使用最终值并保留显式 default_server。原始证书设置同样整对覆盖公共证书与私钥。
 
-原始代理替换默认应用地址：
+proxy_pass、grpc_pass、include、rewrite、try_files、return、error_page、recursive_error_pages、proxy_http_version、proxy_method、proxy_set_body、上游 TLS/重试指令及 grpc_set_header 不得覆盖结构化映射，发布前即失败。请使用 server、server-tls-*、server-retry* 与 header!Host。动态或空的上游 Host 无法表示；支持字面 Host 以及默认 $http_host。
 
-```ini
-[api]
-bind!legacy = http://*
-server = ~
+字面 IP 监听可使用 ssl、default_server、bind、ipv6only=on、http2、quic、reuseport。TCP/UDP 同号端口是不同 socket。DNS/Unix 监听、正则或动态名称、不支持的选项、矛盾 TLS/QUIC 与重复默认关系都会失败，不生成缺项的绑定文档。
 
-[api root]
-nginx:proxy_pass = http://remote:8069
-```
+~~~ini
+[secure]
+host = api.example.test
+nginx:listen!443 = ssl
+nginx:listen!0.0.0.0:443 = quic reuseport
+nginx:http2 = on
+~~~
 
-此路径不再推导 ~，不要求 --listen；如果另加未覆盖的路径，则那个路径仍需推导。原始 proxy_pass 的 URI 改写属于 Nginx 语义；正则路由不允许静态 proxy_pass 带 URI 部分，公共 server 本身始终禁止 URI 替换。
-
-原始证书成组替换：
-
-```ini
-[api]
-bind!secure = https://*
-certificate = file:/unused/public.pem
-nginx:ssl_certificate = /etc/tls/native/fullchain.pem
-nginx:ssl_certificate_key = /etc/tls/native/private.key
-server = http://app:8069
-```
-
-最终只用原始两项。仅写其中一项会报错，即使公共字段可提供另一半也不补全；配套完整性在导入合并后判定。
-
-被完全覆盖且无其他使用处的公共值不展开变量、不检查相关依赖、不产生默认引用；报告覆盖来源。结构错误仍然检查。原始指令可改变公共语义，使用者需确认生成结果；不是绕过字段结构检查的方式。
+两个 listen 的 ! 后均是实际首参数，不是描述性名称。该例为同号 TCP/UDP 443，配套填写普通证书/私钥设置。http2 on 与 http3 on/off 必须是字面开关，元数据反映最终能力。
 
 <a id="variables"></a>
 ## 变量与转义
@@ -1247,7 +781,7 @@ HOSTER_WEB_ACTIVATION=false rpm -Uvh /tmp/application.rpm
 HOSTER_WEB_ACTIVATION=0 sh /tmp/application.sh
 ```
 
-containerizer 在构建镜像前读取包内 .bindings 和 .conf.template。make 适配当前应用后端及已知文件引用、收集资源，并将站点、发布关系和探测身份写入 containerizer.json；run 使用该中间结果。声明托管器但交接不完整时失败，不回退到应用 Listen。普通 .conf 继续用于主机安装。
+containerizer 在构建镜像前读取包内 .bindings 和 .conf.template。make 适配当前应用后端及已知文件引用、收集资源，并将站点、发布关系和探测身份写入 containerizer.json；run 使用该中间结果。声明托管器但交接不完整时失败，不从启动参数推导入口。普通 .conf 继续用于主机安装。
 
 ### 裸机自动激活条件
 
@@ -1352,8 +886,8 @@ DESTDIR 前缀不写入默认引用；关闭激活或跳过生命周期仍必须
 | 找不到 web.profile | 默认只查最终 source 直属文件；使用显式路径或纠正 source。 |
 | import 缺失/路径异常 | 按声明文件的目录解析评估后的完整路径；检查变量来源和目标文件，不要给路径添加引号。 |
 | 同文件 server 混用 | 选择单后端或具名池；跨文件覆盖时才允许更换形式。 |
-| ~ 无法解析 | 检查是否本次生成服务、listen 是否唯一可连接；也可显式填写 server。 |
-| 路径未命中 | 检查 match、大小写、尾斜杠、正则顺序及是否显式保留根兜底。 |
+| 绑定无法解析 | 检查最终 .option PI、别名、请求类别与字面基路径。 |
+| 路径未命中 | 检查请求类别、基路径段边界、别名选择及应用声明。 |
 | 输入 Profile 被打进包 | 这是普通载荷收集行为；用 --exclude:*.profile 排除。 |
 | 生成目标冲突 | 检查源载荷/目标别名是否占用 .web 下同一路径。 |
 | least-requests 报能力错误 | Nginx 没有当前公共语义的准确映射，选择受支持算法。 |
@@ -1383,19 +917,13 @@ DESTDIR 前缀不写入默认引用；关闭激活或跳过生命周期仍必须
 
 ## 容器交接文件
 
-每份生成的 Nginx 配置均有配套 `.conf.template`，静态配置也生成。两者来自同一份最终指令模型。保留标记 `{{zongsoft:application}}` 标识当前应用后端主机，协议及端口保持；引号中的 `{{zongsoft:file:BASE64}}` 标识已知证书/信任文件路径，以 UTF-8 Base64 编码。解码后的 `./` 相对于应用安装根，绝对路径保持原义；显式后端地址不改写。用户内容与保留标记冲突时生成失败。
+每份 .conf 都有来自同一最终指令模型的 .conf.template。应用连接 authority 使用 {{zongsoft:binding:BINDING_ID:ENDPOINT_ID}}，两个身份均引用根 JSON。例如普通配置 http://127.0.0.1:8069，在模板中为 http://{{zongsoft:binding:B:E}}；B/E 代表记录中的完整 SHA-256 身份，消费端填入所选连接 authority（包含原端口）。显式远程目标保持原义。
 
-能完整表达最终前端时，同目录生成 `.bindings`。该文件采用无 BOM UTF-8、CRLF 的 INI，没有根级状态/版本字段。每个站点为有序段落：host 可选、bind 必填、default 可选。web.profile 与 .bindings 的 host、bind 均支持逗号与分号，default 也支持两者；输出统一逗号。绑定格式为 `http(s)://IP:port`，IPv6 使用方括号，IPv4 通配规范化为 0.0.0.0。default 必须是 bind 的子集，只记录显式 default_server，不伪造隐式默认关系。
+引号中的 {{zongsoft:file:BASE64}} 标记已知证书/信任文件，BASE64 是路径的 UTF-8 编码；./ 相对应用安装根，绝对路径保持原义。用户文本不得含保留标记。
 
-```ini
-[api]
-host=api.example.test,api-alt.example.test
-bind=https://0.0.0.0:443,https://[::]:443
-default=https://0.0.0.0:443,https://[::]:443
-[local]
-bind=http://0.0.0.0:8080
-```
+安装根 .bindings 描述应用与 Nginx 的监听、站点入口、请求类别路由、引用与策略。tar、deb、rpm 均以相同的普通 UTF-8 JSON 载荷携带，不写入包头。配置、模板、证书及生命周期资产共同随包交付。
 
-导出反映导入、继承、变量求值以及原始 listen/server_name 覆盖后的最终配置。合法原始配置无法完整表达时，例如正则主机名、监听域名、未支持的监听选项或站点 include，仍生成配置/模板，输出诊断并省略整份 .bindings，不生成部分内容或状态文件。无法导出时移除旧 .bindings 载荷；安装时清理不再交付的 .bindings/模板，不受 Web 激活开关控制。
+字段示例和来源见[文件规范](implementation.zh-Hans.md#binding-document)，拓扑和发布见 [Containerizer 契约](../../containerizer/README.zh-Hans.md#web-交接与端口发布)。生成阶段校验引用和可表达性，不代表现场 DNS、TLS、Nginx 语法能力或网络已验证。
 
-三种包格式均按普通载荷携带这些文件，不向包头重复写入绑定。make/run、端口映射、额外文件及通配域名探测身份见 [containerizer Web 契约](../../containerizer/README.zh-Hans.md#web-交接与端口发布)。
+
+原生 gRPC 当前不映射 cookie 会话保持和主动 HTTP 健康检查，遇到这些组合明确报告能力限制，不为 RPC 端点伪造 HTTP 探测。

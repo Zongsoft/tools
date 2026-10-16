@@ -69,7 +69,7 @@ partial class Configurator
 
 				foreach(var name in Names(site))
 				{
-					var key = address + "/" + name;
+					var key = (directive.Arguments.Any(argument => Literal(argument.Value) == "quic") ? "udp:" : "tcp:") + address + "/" + name;
 					if(listeners.TryGetValue(key, out var previous))
 					{
 						var error = DefinitionException.Create("Duplicate", site.Source, key);
@@ -112,21 +112,6 @@ partial class Configurator
 			}
 
 			return host + ":" + port.ToString(CultureInfo.InvariantCulture);
-		}
-
-		private static void ValidateProxy(Definition.Route route, IReadOnlyList<Directive> directives)
-		{
-			if(route.Match != Definition.MatchKind.Regex)
-				return;
-
-			var proxy = directives.FirstOrDefault(item => item.Name == "proxy_pass");
-			var address = proxy == null ? null : Literal(proxy.Arguments[0].Value);
-			if(address == null)
-				return;
-
-			var scheme = address.IndexOf("://", StringComparison.Ordinal);
-			if(scheme >= 0 && address.IndexOfAny(['/', '?', '#'], scheme + 3) >= 0)
-				throw DefinitionException.Create("Directive", route.Source, "proxy_pass " + address);
 		}
 	}
 }

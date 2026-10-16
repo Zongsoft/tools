@@ -67,7 +67,7 @@
     <value>缺少选项值。</value>
   </data>
   <data name="Arguments.7.Message" xml:space="preserve">
-    <value>必须指定且只能指定一个节点交付物路径。</value>
+    <value>必须指定且只能指定一个容器包路径。</value>
   </data>
   <data name="Arguments.8.Message" xml:space="preserve">
     <value>最多指定一个组件。</value>
@@ -100,7 +100,7 @@
     <value>Bootstrap 包架构与配置档不一致。</value>
   </data>
   <data name="Bundle.1.Message" xml:space="preserve">
-    <value>需要节点交付目录或 .tar.gz 归档。</value>
+    <value>需要容器包目录或 .tar.gz 归档。</value>
   </data>
   <data name="Bundle.10.Message" xml:space="preserve">
     <value>服务身份或类型无效。</value>
@@ -136,10 +136,10 @@
     <value>文件校验记录无效或重复。</value>
   </data>
   <data name="Bundle.5.Message" xml:space="preserve">
-    <value>交付物完整性校验失败：{0}</value>
+    <value>容器包完整性校验失败：{0}</value>
   </data>
   <data name="Bundle.6.Message" xml:space="preserve">
-    <value>缺少必需的交付资产：{0}</value>
+    <value>缺少必需的容器包资产：{0}</value>
   </data>
   <data name="Bundle.7.Message" xml:space="preserve">
     <value>checksums.sha256 无效。</value>
@@ -148,7 +148,7 @@
     <value>校验清单与节点锁不一致。</value>
   </data>
   <data name="Bundle.9.Message" xml:space="preserve">
-    <value>节点交付物中存在未登记文件。</value>
+    <value>容器包中存在未登记文件。</value>
   </data>
   <data name="DockerHost.1.Message" xml:space="preserve">
     <value>安装执行器需要 Linux。</value>
@@ -226,7 +226,7 @@
     <value>请求的网络接口或宿主端口不可用。</value>
   </data>
   <data name="DockerHost.4.Message" xml:space="preserve">
-    <value>交付物面向不同的 Linux 发行版配置档。</value>
+    <value>容器包面向不同的 Linux 发行版配置档。</value>
   </data>
   <data name="DockerHost.5.Message" xml:space="preserve">
     <value>存储空间不足，无法保存受管资产及暂存镜像。</value>
@@ -310,7 +310,7 @@
     <value>受管发行身份不一致。</value>
   </data>
   <data name="Installation.Phase.StageInstallation" xml:space="preserve">
-    <value>暂存交付文件</value>
+    <value>暂存容器包文件</value>
   </data>
   <data name="Installation.Phase.PrepareBootstrap" xml:space="preserve">
     <value>准备容器引擎及运行依赖</value>
@@ -343,7 +343,7 @@
     <value>确认当前发行版本</value>
   </data>
   <data name="Lifecycle.1.Message" xml:space="preserve">
-    <value>--name 与交付物身份不同。</value>
+    <value>--name 与容器包身份不同。</value>
   </data>
   <data name="Lifecycle.10.Message" xml:space="preserve">
     <value>原事务资产发生变化。</value>
@@ -352,7 +352,7 @@
     <value>--retry-migration 必须选择当前事务中一个失败或中断的升迁。</value>
   </data>
   <data name="Lifecycle.12.Message" xml:space="preserve">
-    <value>应用已卸载，请先从保留交付物重新安装。</value>
+    <value>应用已卸载，请先从保留容器包重新安装。</value>
   </data>
   <data name="Lifecycle.13.Message" xml:space="preserve">
     <value>目标事务未达到 ReadyToStart；仅 prepare 不能允许启动。</value>
@@ -376,7 +376,7 @@
     <value>应用升级不支持改变基础设施。</value>
   </data>
   <data name="Lifecycle.2.Message" xml:space="preserve">
-    <value>--name 与脚本交付物身份不同。</value>
+    <value>--name 与脚本容器包身份不同。</value>
   </data>
   <data name="Lifecycle.20.Message" xml:space="preserve">
     <value>升级改变了 bootstrap 依赖。</value>
@@ -388,7 +388,7 @@
     <value>upgrade 需要已有注册记录。</value>
   </data>
   <data name="Lifecycle.4.Message" xml:space="preserve">
-    <value>另一个事务尚未完成，请恢复或完成原事务后再选择其它交付物。</value>
+    <value>另一个事务尚未完成，请恢复或完成原事务后再选择其它容器包。</value>
   </data>
   <data name="Lifecycle.5.Message" xml:space="preserve">
     <value>失败事务必须使用 recover；install 不清除失败状态。</value>
@@ -649,7 +649,7 @@
     <value>工具模板缺失：{0}</value>
   </data>
   <data name="ApplicationHealth.Invalid.Message" xml:space="preserve">
-    <value>{0}：应用监听地址或 HTTP 健康检查配置无效（{1}）。</value>
+    <value>{0}：应用绑定、端口发布或健康检查配置无效（{1}）。</value>
   </data>
   <data name="Manifest.19.Message" xml:space="preserve">
     <value>无效或未验证的 Linux 发行版配置。</value>
@@ -664,7 +664,7 @@
 升迁版本：{5}。
 
 1. 请由交付负责人明确不同节点的执行顺序、远端就绪条件和停机窗口。
-2. 校验交付归档，然后运行 `containerizer prepare {6}.tar.gz --name {0}`。
+2. 校验容器包归档，然后运行 `containerizer prepare {6}.tar.gz --name {0}`。
 3. 使用 `containerizer stop --name {0}` 停止受影响的应用节点。
 4. 按约定的升迁顺序使用 `--no-start` 安装或升级。
 5. 全部升迁成功后，在每个节点运行 `containerizer start --name {0}`。
@@ -693,7 +693,7 @@
     <value>用法：dotnet-containerize run &lt;archive.tar.gz&gt; [--engine:{0}]</value>
   </data>
   <data name="Run.Verify" xml:space="preserve">
-    <value>校验交付包：{0}</value>
+    <value>校验容器包：{0}</value>
   </data>
   <data name="Run.Unsuccessful.Message" xml:space="preserve">
     <value>验证未成功结束，请查看前面的诊断信息。</value>
@@ -752,7 +752,7 @@
     <value>  {0}：内部健康检查通过；请通过日志验证业务行为。</value>
   </data>
   <data name="Run.WebMetadata.Message" xml:space="preserve">
-    <value>{0} 缺少 Web 入口元信息；请重新制作交付包后再验证本机 Web 就绪。</value>
+    <value>{0} 缺少 Web 入口元信息；请重新制作容器包后再验证本机 Web 就绪。</value>
   </data>
   <data name="Run.TooManyPorts.Message" xml:space="preserve">
     <value>验证环境声明的发布端口过多。</value>
@@ -767,13 +767,13 @@
     <value>{0}：仅验证 TCP 访问；自定义入口配置缺少浏览器入口元信息。请另行验证应用已声明的 Web 入口。</value>
   </data>
   <data name="Run.Help" xml:space="preserve">
-    <value>run 将已有交付包安装到全新的本机验证容器中。Web 入口发布到所有 IPv4 接口，其他已发布的 TCP 入口绑定 127.0.0.1。请保留窗口，按 Ctrl+C 清除环境和测试数据。首次准备底图可能需要联网。</value>
+    <value>run 将已有容器包安装到全新的本机验证容器中。Web 入口发布到所有 IPv4 接口，其他已发布的 TCP 入口绑定 127.0.0.1。请保留窗口，按 Ctrl+C 清除环境和测试数据。首次准备底图可能需要联网。</value>
   </data>
   <data name="Engine.Podman.Guidance" xml:space="preserve">
     <value>{0}：请用 {0} info 检查连接；Windows 上请用 {0} machine list 查看虚拟机，再用 {0} machine start &lt;名称&gt; 启动选定虚拟机。</value>
   </data>
   <data name="Engine.Compose.Requirement" xml:space="preserve">
-    <value>制作交付物还需要所选引擎的 Compose provider 可用。</value>
+    <value>制作容器包还需要所选引擎的 Compose provider 可用。</value>
   </data>
   <data name="Engine.Docker.Guidance" xml:space="preserve">
     <value>{0}：请用 {0} info 检查连接；Windows 上请启动 {1}，并确认 Linux 引擎已就绪。</value>
@@ -782,7 +782,7 @@
     <value>  → {0}：{1} 秒</value>
   </data>
   <data name="Run.StageVerify" xml:space="preserve">
-    <value>解包及校验交付包</value>
+    <value>解包及校验容器包</value>
   </data>
   <data name="Run.StageBase" xml:space="preserve">
     <value>准备验证底图</value>
@@ -791,7 +791,7 @@
     <value>准备镜像缓存</value>
   </data>
   <data name="Run.StageCopy" xml:space="preserve">
-    <value>复制交付资产</value>
+    <value>复制容器包资产</value>
   </data>
   <data name="Run.StageInstall" xml:space="preserve">
     <value>安装及检查服务</value>
@@ -843,13 +843,13 @@
     <value>完整制作</value>
   </data>
   <data name="Build.Checksums" xml:space="preserve">
-    <value>校验交付资产</value>
+    <value>校验容器包资产</value>
   </data>
   <data name="Build.Compression" xml:space="preserve">
-    <value>压缩交付包</value>
+    <value>压缩容器包</value>
   </data>
   <data name="Build.Publish" xml:space="preserve">
-    <value>发布交付物</value>
+    <value>发布容器包</value>
   </data>
   <data name="Web.Invalid.Message" xml:space="preserve">
     <value>{0}：Web 交接信息无效或不完整（{1}）。</value>
@@ -857,4 +857,5 @@
   <data name="Run.WebBrowser" xml:space="preserve"><value>  域名浏览访问需 DNS 指向本机、实际端口 {0} 及可信 HTTPS 证书。已请求引擎按 0.0.0.0 发布；局域网接入还取决于虚拟机转发与防火墙。</value></data>
   <data name="Web.Plan" xml:space="preserve"><value>  {0} / {1}：{2}；主机名={3}；发布={4}</value></data>
   <data name="Run.WebInterfaces" xml:space="preserve"><value>  本机网卡/端口（局域网可达性未探测；具名站点仍需正确的 Host/SNI）：{0}</value></data>
+  <data name="BindingsInvalid.Message" xml:space="preserve"><value>绑定文档在“{0}”处无效（规则：{1}）。</value></data>
 </root>

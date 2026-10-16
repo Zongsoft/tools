@@ -35,6 +35,7 @@ using System;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Numerics;
 using System.Globalization;
 using System.Collections.Generic;
@@ -62,7 +63,9 @@ partial class Configurator
 			var listeners = new Dictionary<string, Diagnostic.Location>(StringComparer.OrdinalIgnoreCase);
 			var cookies = new Dictionary<string, string>(StringComparer.Ordinal);
 
-			foreach(var site in model.Sites)
+			var sites = model.Sites.Select(site => Routing.Resolve(site, context)).ToArray();
+
+			foreach(var site in sites)
 				this.GenerateSite(site, context, blocks, listeners, cookies);
 
 			var path = $".web/nginx/{context.PackageName}.conf";
@@ -72,19 +75,21 @@ partial class Configurator
 				new(path + ".template", Writer.Generate(blocks, true), Utility.Unix.Mode644),
 			};
 
-			var diagnostics = model.Diagnostics.ToList();
-			var bindings = Bindings.Export(model.Sites, blocks, diagnostics);
+			var bindings = Bindings.Export(sites, blocks, context.Bindings);
+			_ = bindings.Serialize();
 
-			if(bindings != null)
-				files.Add(new(".web/nginx/.bindings", new([new(bindings)]), Utility.Unix.Mode644));
-
-			return new(this.Name, files, diagnostics);
+			return new(this.Name, files, model.Diagnostics) { Bindings = bindings };
 		}
 
 		private void GenerateSite(Definition.Site site, Context context, List<Directive> blocks, Dictionary<string, Diagnostic.Location> listeners, Dictionary<string, string> cookies)
 		{
 			var body = new List<Directive>();
 			var native = Native(site.Directives, true);
+			var name = "binding_" + Hash(context.PackageName + "\n" + site.Name.ToLowerInvariant());
+			var kind = "$" + name + "_kind";
+			var target = "$" + name + "_target";
+			var missingHttp = "@" + name + "_http_missing";
+			var missingGrpc = "@" + name + "_grpc_missing";
 
 			foreach(var binding in site.Bindings)
 			{
@@ -101,85 +106,152 @@ partial class Configurator
 				body.Add(Resource("ssl_certificate_key", site.Certificates.Key));
 			}
 
+			var http2 = native.FirstOrDefault(item => item.Name == "http2");
+
+			if(site.Routes.Any(route => route.Mapping.RequestKind == "grpc"))
+			{
+				if(http2 != null && (http2.Arguments.Count != 1 || Literal(http2.Arguments[0].Value) != "on"))
+					throw DefinitionException.Create("Capability", site.Source, "gRPC ingress requires http2 on");
+
+				if(http2 == null)
+					body.Add(Leaf("http2", "on"));
+			}
+
 			body.AddRange(native);
 			ValidateListeners(site, body, listeners);
+			var authority = "$http_host";
+
+			if(body.Any(item => item.Name == "listen" && item.Arguments.Any(argument => Literal(argument.Value) == "quic")))
+			{
+				authority = "$" + name + "_authority";
+				blocks.Add(new("map", [new("$http_host", ArgumentKind.Expression), new(authority, ArgumentKind.Expression)],
+				[
+					Expression("default", "$http_host"),
+					Expression("\"\"", "$host$is_request_port$request_port"),
+				]));
+			}
+
+			blocks.Add(new("map", [new("$http_content_type", ArgumentKind.Expression), new(kind, ArgumentKind.Expression)],
+			[
+				Leaf("default", "http"),
+				Leaf("\"~*^application/grpc(?:[+][^;[:space:]]+)?(?:[[:space:]]*;|[[:space:]]*$)\"", "grpc"),
+			]));
+
+			var dispatch = new List<Directive> { Leaf("default", missingHttp) };
 			var pools = new Dictionary<string, string>(StringComparer.Ordinal);
+			var index = 0;
 
 			foreach(var route in site.Routes)
 			{
-				var directives = new List<Directive>();
+				var location = "@" + name + "_" + (index++).ToString(CultureInfo.InvariantCulture);
+				var pattern = "~*^" + route.Mapping.RequestKind + ":" +
+					(route.Path == "/" ? "/" : Regex.Escape(route.Path) + "(?:/|[?]|$)");
 
-				if(route.Server != null)
-				{
-					var group = route.Server;
-					var policy = group.Policy;
-
-					if(policy.Balance == "least-requests")
-						throw DefinitionException.Create("Capability", route.Source, "server-balance=least-requests");
-
-					Number(policy.FailureCount, route.Source, context.MaximumInteger);
-					Duration(policy.FailureTimeout, true, route.Source, context.MaximumInteger);
-
-					string target;
-					var pooled = group.Kind == Definition.ServerKind.Pool || policy.Affinity.Kind == "cookie" || policy.Health != null || policy.Balance != "round-robin" ||
-						policy.FailureCount != 3 || policy.FailureTimeout != TimeSpan.FromSeconds(30);
-
-					if(pooled)
-					{
-						var key = Fingerprint(group);
-
-						if(!pools.TryGetValue(key, out var pool))
-						{
-							pool = "hoster_" + Hash(context.PackageName + "\n" + site.Name.ToLowerInvariant() + "\n" + key);
-							pools.Add(key, pool);
-							this.GeneratePool(site, route, group, pool, blocks, cookies, context.MaximumInteger);
-
-							if(policy.Health != null)
-								body.Add(Health(group, pool, context.MaximumInteger));
-						}
-
-						target = group.Members[0].Endpoint.Scheme + "://" + pool;
-					}
-					else
-						target = group.Members[0].Endpoint.Address;
-
-					directives.Add(new("proxy_pass", [new(target, !pooled && group.Kind == Definition.ServerKind.Application ? ArgumentKind.Application : ArgumentKind.Literal)]));
-					Tls(policy.Tls, directives);
-
-					if(policy.Retry.Count == 0 || policy.Retry.Conditions.Contains("off"))
-						directives.Add(Leaf("proxy_next_upstream", "off"));
-					else
-					{
-						directives.Add(Leaf("proxy_next_upstream", policy.Retry.Conditions.ToArray()));
-						directives.Add(Leaf("proxy_next_upstream_tries", (policy.Retry.Count + 1).ToString(CultureInfo.InvariantCulture)));
-					}
-				}
-
-				if(route.WebSocket)
-					directives.Add(Leaf("proxy_http_version", "1.1"));
-
-				foreach(var header in route.Headers)
-					directives.Add(new("proxy_set_header", [new(header.Name), new(header.Value, header.Expression ? ArgumentKind.Raw : ArgumentKind.Literal)]));
-
-				var routeNative = Native(route.Directives, false);
-				ValidateProxy(route, routeNative);
-
-				foreach(var raw in routeNative)
-					directives.RemoveAll(item => item.Name == raw.Name);
-
-				directives.AddRange(routeNative);
-				var arguments = route.Match switch
-				{
-					Definition.MatchKind.Exact => new Argument[] { new("="), new(route.Path) },
-					Definition.MatchKind.Regex => [new("~*"), new(route.Path, ArgumentKind.Pattern)],
-					_ => [new(route.Path)],
-				};
-
-				body.Add(new("location", arguments, directives));
+				dispatch.Add(Leaf("\"" + pattern.Replace("\\", "\\\\") + "\"", location));
+				body.Add(new("location", [new(location)], this.GenerateRoute(site, route, context, authority, blocks, body, pools, cookies)));
 			}
 
+			dispatch.Add(Leaf("\"~^grpc:\"", missingGrpc));
+			blocks.Add(new("map", [new("\"" + kind + ":$request_uri\"", ArgumentKind.Expression), new(target, ArgumentKind.Expression)], dispatch));
+
+			// 命名位置跳转保留原始 URI、查询参数和请求方法。
+			body.Add(new("location", [new("/")], [Expression("error_page", "418", "=", target), Leaf("return", "418")]));
+			body.Add(new("location", [new(missingHttp)], [Leaf("return", "404")]));
+			body.Add(new("location", [new(missingGrpc)],
+			[
+				.. GrpcChecks(),
+				Leaf("default_type", "application/grpc"),
+				Leaf("add_header", "grpc-status", "12", "always"),
+				Leaf("add_header", "grpc-message", "Unimplemented", "always"),
+				Leaf("return", "200"),
+			]));
 			blocks.Add(new("server", [], body));
 		}
+
+		private static Directive[] GrpcChecks() =>
+		[
+			new("if", [new("($server_protocol !~ \"^HTTP/[23][.]\")", ArgumentKind.Expression)], [Leaf("return", "400")]),
+			new("if", [new("($request_method != POST)", ArgumentKind.Expression)], [Leaf("add_header", "Allow", "POST", "always"), Leaf("return", "405")]),
+		];
+
+		private IReadOnlyList<Directive> GenerateRoute(Definition.Site site, Definition.Route route, Context context, string authority, List<Directive> blocks,
+			List<Directive> body, Dictionary<string, string> pools, Dictionary<string, string> cookies)
+		{
+			var directives = new List<Directive>();
+			var group = route.Server;
+			var policy = group.Policy;
+			var grpc = route.Mapping.RequestKind == "grpc";
+			var prefix = grpc ? "grpc" : "proxy";
+
+			if(grpc)
+				directives.AddRange(GrpcChecks());
+
+			if(policy.Balance == "least-requests" || grpc && (policy.Health != null || policy.Affinity.Kind == "cookie"))
+				throw DefinitionException.Create("Capability", route.Source, "Nginx upstream policy");
+
+			Number(policy.FailureCount, route.Source, context.MaximumInteger);
+			Duration(policy.FailureTimeout, true, route.Source, context.MaximumInteger);
+			Number(policy.Retry.Count + 1, route.Source, context.MaximumInteger);
+
+			string address;
+			var pooled = group.Kind == Definition.ServerKind.Pool || policy.Affinity.Kind == "cookie" || policy.Health != null || policy.Balance != "round-robin" ||
+				policy.FailureCount != 3 || policy.FailureTimeout != TimeSpan.FromSeconds(30);
+			var scheme = grpc ? group.Members[0].Endpoint.Scheme == "https" ? "grpcs" : "grpc" : group.Members[0].Endpoint.Scheme;
+
+			if(pooled)
+			{
+				var key = Fingerprint(group) + route.Mapping.Target.Binding + route.Mapping.Target.Endpoint;
+
+				if(!pools.TryGetValue(key, out var pool))
+				{
+					pool = "hoster_" + Hash(context.PackageName + "\n" + site.Name.ToLowerInvariant() + "\n" + key);
+					pools.Add(key, pool);
+					this.GeneratePool(site, route, group, pool, blocks, cookies, context.MaximumInteger);
+
+					if(policy.Health != null)
+						body.Add(Health(group, pool, context));
+				}
+
+				address = scheme + "://" + pool;
+			}
+			else
+				address = scheme + "://" + group.Members[0].Endpoint.Authority;
+
+			directives.Add(new(prefix + "_pass", [Target(address, route, !pooled)]));
+			Tls(policy.Tls, directives, prefix, context.SystemTrust);
+
+			if(!grpc)
+				directives.Add(Leaf("proxy_http_version", Zongsoft.Communication.NetworkProtocol.Parse(route.Mapping.Protocol).HttpVersion == 2 ? "2" : "1.1"));
+
+			if(policy.Retry.Count == 0 || policy.Retry.Conditions.Contains("off"))
+				directives.Add(Leaf(prefix + "_next_upstream", "off"));
+			else
+			{
+				directives.Add(Leaf(prefix + "_next_upstream", policy.Retry.Conditions.ToArray()));
+				directives.Add(Leaf(prefix + "_next_upstream_tries", (policy.Retry.Count + 1).ToString(CultureInfo.InvariantCulture)));
+			}
+
+			foreach(var header in route.Headers)
+			{
+				if(grpc && (header.Name.Equals("Connection", StringComparison.OrdinalIgnoreCase) || header.Name.Equals("Upgrade", StringComparison.OrdinalIgnoreCase)))
+					continue;
+
+				var value = header.Expression && header.Value == "$http_host" && header.Name.Equals("Host", StringComparison.OrdinalIgnoreCase) ? authority : header.Value;
+				directives.Add(new(prefix + "_set_header", [new(header.Name), new(value, header.Expression ? ArgumentKind.Raw : ArgumentKind.Literal)]));
+			}
+
+			var native = Native(route.Directives, false);
+
+			foreach(var directive in native)
+				directives.RemoveAll(item => item.Name == directive.Name);
+
+			directives.AddRange(native);
+			return directives;
+		}
+
+		private static Argument Target(string value, Definition.Route route, bool reference = true) =>
+			reference && route.Mapping.Target.Kind == "binding" ?
+			new(value, ArgumentKind.Binding, Binding: route.Mapping.Target.Binding, Endpoint: route.Mapping.Target.Endpoint) : new(value);
 
 		private void GeneratePool(Definition.Site site, Definition.Route route, Definition.ServerGroup group, string name, List<Directive> blocks, Dictionary<string, string> cookies, long maximum)
 		{
@@ -198,7 +270,7 @@ partial class Configurator
 				Number(policy.FailureCount, route.Source, maximum);
 
 				body.Add(new("server", [
-					new(member.Endpoint.Authority, group.Kind == Definition.ServerKind.Application ? ArgumentKind.Application : ArgumentKind.Literal),
+					Target(member.Endpoint.Authority, route),
 					new("weight=" + member.Weight.ToString(CultureInfo.InvariantCulture)),
 					new("max_fails=" + policy.FailureCount.ToString(CultureInfo.InvariantCulture)),
 					new("fail_timeout=" + Duration(policy.FailureTimeout, true, route.Source, maximum)),
@@ -233,9 +305,10 @@ partial class Configurator
 				blocks.Add(new("match", [new(name + "_health")], [Leaf("status", Status(policy.Health.Status))]));
 		}
 
-		private static Directive Health(Definition.ServerGroup group, string pool, long maximum)
+		private static Directive Health(Definition.ServerGroup group, string pool, Context context)
 		{
 			var health = group.Policy.Health;
+			var maximum = context.MaximumInteger;
 			Number(health.FailureCount, default, maximum);
 			Number(health.RecoveryCount, default, maximum);
 
@@ -263,7 +336,7 @@ partial class Configurator
 			foreach(var header in headers)
 				body.Add(Leaf("proxy_set_header", header.Key, header.Value));
 
-			Tls(group.Policy.Tls, body);
+			Tls(group.Policy.Tls, body, "proxy", context.SystemTrust);
 
 			body.Add(Leaf("health_check", "uri=" + health.Path,
 				"interval=" + Duration(health.Interval, false, default, maximum),
@@ -274,19 +347,21 @@ partial class Configurator
 			return new("location", [new("@" + pool + "_health")], body);
 		}
 
-		private static void Tls(Definition.TlsPolicy tls, List<Directive> directives)
+		private static void Tls(Definition.TlsPolicy tls, List<Directive> directives, string prefix, string systemTrust)
 		{
 			if(tls == null)
 				return;
 
-			directives.Add(Leaf("proxy_ssl_verify", tls.Verify ? "on" : "off"));
-			directives.Add(Leaf("proxy_ssl_server_name", string.IsNullOrEmpty(tls.Name) ? "off" : "on"));
+			directives.Add(Leaf(prefix + "_ssl_verify", tls.Verify ? "on" : "off"));
+			directives.Add(Leaf(prefix + "_ssl_server_name", string.IsNullOrEmpty(tls.Name) ? "off" : "on"));
 
 			if(!string.IsNullOrEmpty(tls.Name))
-				directives.Add(Leaf("proxy_ssl_name", tls.Name));
+				directives.Add(Leaf(prefix + "_ssl_name", tls.Name));
 
 			if(tls.Trust is { } trust)
-				directives.Add(Resource("proxy_ssl_trusted_certificate", trust));
+				directives.Add(Resource(prefix + "_ssl_trusted_certificate", trust));
+			else if(tls.Verify)
+				directives.Add(Leaf(prefix + "_ssl_trusted_certificate", systemTrust));
 		}
 
 		private static void Number(BigInteger number, Diagnostic.Location source, long maximum)

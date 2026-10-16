@@ -165,92 +165,26 @@ internal static partial class Utility
 		/// <returns>条件为空或条件满足时为真。</returns>
 		public static bool IsRequisites(TemplateEvaluator evaluator, ReadOnlySpan<char> requisites)
 		{
-			if(requisites.IsEmpty)
-				return true;
+			FilterExpression filter;
 
-			var combiner = '|';
-			var position = 0;
-			bool? result = null;
-
-			for(int i = 0; i < requisites.Length; i++)
+			try
 			{
-				if(requisites[i] == '|' || requisites[i] == '&')
-				{
-					var requisite = requisites[position..i].Trim();
-					var matched = IsRequisite(evaluator, requisite);
-					result = GetResult(result, matched, combiner);
-
-					combiner = requisites[i];
-					position = i + 1;
-				}
+				filter = FilterExpression.Parse(requisites);
+			}
+			catch(FormatException exception)
+			{
+				throw new FormatException(string.Format(Properties.Resources.Review_InvalidFilter, requisites.ToString()), exception);
 			}
 
-			if(position < requisites.Length)
+			return filter.Evaluate((name, values) =>
 			{
-				var matched = IsRequisite(evaluator, requisites[position..].Trim());
+				if(values == null)
+					return evaluator.TryGetVariable(Utility.NormalizeVariableName(name), out _);
+				if(name.Equals(FRAMEWORK_VARIABLE, StringComparison.OrdinalIgnoreCase))
+					return IsTargetFramework(evaluator, string.Join(',', values));
 
-				return GetResult(result, matched, combiner);
-			}
-
-			throw new FormatException(string.Format(Properties.Resources.Review_InvalidFilter, requisites.ToString()));
-
-			static bool GetResult(bool? result, bool value, char combiner)
-			{
-				if(result == null)
-					return value;
-
-				if(combiner == '|')
-					return result.Value || value;
-				else
-					return result.Value && value;
-			}
-		}
-
-		private static bool IsRequisite(TemplateEvaluator evaluator, ReadOnlySpan<char> requisite)
-		{
-			if(requisite.IsEmpty || requisite.SequenceEqual("!"))
-				throw new FormatException(string.Format(Properties.Resources.Review_InvalidFilter, requisite.ToString()));
-
-			bool result;
-			ReadOnlySpan<char> name, value;
-			var index = requisite.IndexOf(':');
-
-			switch(index)
-			{
-				case 0:
-					return false;
-				case < 0:
-					name = requisite[0] == '!' ? requisite[1..].Trim() : requisite.Trim();
-					result = evaluator.TryGetVariable(Utility.NormalizeVariableName(name.ToString()), out _);
-					return requisite[0] == '!' ? !result : result;
-				default:
-					name = requisite[0] == '!' ? requisite[1..index].Trim() : requisite[0..index].Trim();
-					value = requisite[(index + 1)..].Trim();
-
-					if(value.IsEmpty)
-					{
-						result = evaluator.TryGetVariable(Utility.NormalizeVariableName(name.ToString()), out _);
-
-						return requisite[0] == '!' ? !result : result;
-					}
-
-					if(name.Equals(FRAMEWORK_VARIABLE, StringComparison.OrdinalIgnoreCase))
-					{
-						result = IsTargetFramework(evaluator, value.ToString());
-
-						return requisite[0] == '!' ? !result : result;
-					}
-
-					if(evaluator.TryGetOption(name.ToString(), out var variable))
-					{
-						var parts = value.ToString().Split(',', StringSplitOptions.TrimEntries);
-						result = parts.Contains(variable?.Trim(), StringComparer.OrdinalIgnoreCase);
-
-						return requisite[0] == '!' ? !result : result;
-					}
-
-					return requisite[0] == '!';
-			}
+				return evaluator.TryGetOption(name, out var value) && FilterExpression.Matches(value, values);
+			});
 		}
 	}
 	#endregion

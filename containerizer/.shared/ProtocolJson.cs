@@ -37,7 +37,7 @@ using System.Text.Json.Serialization;
 
 namespace Zongsoft.Tools.Containerizer.Protocol;
 
-[JsonSerializable(typeof(DeliveryPlan))]
+[JsonSerializable(typeof(ContainerBundlePlan))]
 [JsonSerializable(typeof(Installation))]
 [JsonSerializable(typeof(ServicePlan))]
 [JsonSerializable(typeof(BootstrapPlan))]

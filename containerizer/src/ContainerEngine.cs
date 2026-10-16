@@ -281,6 +281,12 @@ internal sealed class ContainerEngine(string executable, IProcessRunner runner, 
 				arguments = ["buildx", "build", "--builder", builder, "--load"];
 			}
 
+			foreach(var name in new[] { "HTTP_PROXY", "HTTPS_PROXY", "FTP_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "ftp_proxy", "all_proxy", "no_proxy" })
+			{
+				if(Environment.GetEnvironmentVariable(name) is { } value)
+					arguments.AddRange(["--build-arg", $"{name}={value}"]);
+			}
+
 			arguments.AddRange(["--platform", platform, "-t", reference]);
 
 			if(target != null)

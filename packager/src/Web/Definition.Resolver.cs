@@ -41,6 +41,7 @@ using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
 using Zongsoft.Common;
+using Zongsoft.Communication;
 
 namespace Zongsoft.Tools.Packager.Web;
 
@@ -61,7 +62,7 @@ partial class Definition
 			if(sites.Count == 0)
 				throw DefinitionException.Create("Required", root.Source, "site");
 
-			var defaults = Merge(null, root);
+			var defaults = this.Merge(null, root);
 			var result = new List<Site>();
 
 			foreach(var site in sites)
@@ -72,13 +73,13 @@ partial class Definition
 
 		private Site ResolveSite(Scope scope, Settings defaults)
 		{
-			var values = Merge(defaults, scope);
+			var values = this.Merge(defaults, scope);
 			var native = this.Native(scope);
 			var rawListen = native.Where(item => item.Name == "listen").ToArray();
 			var rawHosts = native.Any(item => item.Name == "server_name");
 			var bindings = rawListen.Length == 0 ? this.Bindings(values) : [];
 			var hosts = rawHosts ? [] : this.Hosts(values);
-			var secure = bindings.Any(item => item.Scheme == "https") || rawListen.Any(item => this.RawValue(item).Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains("ssl", StringComparer.OrdinalIgnoreCase));
+			var secure = bindings.Any(item => item.Scheme == "https") || rawListen.Any(item => this.RawValue(item).Split(' ', StringSplitOptions.RemoveEmptyEntries).Any(item => item is "ssl" or "quic"));
 			var rawCertificate = native.Where(item => item.Name is "ssl_certificate" or "ssl_certificate_key").ToArray();
 
 			if(bindings.Count == 0 && rawListen.Length == 0)
@@ -107,7 +108,8 @@ partial class Definition
 			}
 
 			var routes = new List<Route>();
-			var children = scope.Children.Count == 0 ? [new Scope(string.Empty, 2, scope.Source)] : scope.Children;
+			var fallback = this.ResolveRoute(new Scope(string.Empty, 2, scope.Source), values, native);
+			var children = scope.Children;
 			var seen = new HashSet<(MatchKind, string)>();
 
 			foreach(var child in children)
@@ -120,12 +122,12 @@ partial class Definition
 			}
 
 			return new(scope.Name, hosts, bindings, certificate, routes.AsReadOnly(),
-				native.Where(item => item.Name != "proxy_set_header").Select(this.ExpandRaw).ToArray(), scope.Source);
+				native.Where(item => item.Name != "proxy_set_header").Select(this.ExpandRaw).ToArray(), scope.Source, fallback);
 		}
 
 		private Route ResolveRoute(Scope scope, Settings parent, IReadOnlyList<RawDirective> siteNative)
 		{
-			var values = Merge(parent, scope);
+			var values = this.Merge(parent, scope);
 			var native = this.Native(scope);
 			var match = this.Choice(values, "match", "prefix", ["prefix", "exact", "regex"]) switch
 			{
@@ -221,32 +223,14 @@ partial class Definition
 
 		private static Endpoint Address(string value, Diagnostic.Location source)
 		{
-			var match = _address.Match(value);
-			if(!match.Success)
+			if(!NetworkAddress.TryParse(value, out var address) || address.Scheme is not ("http" or "https" or "grpc" or "grpcs") ||
+			   address.Host is "0.0.0.0" or "::" || address.Zone != null)
 				throw DefinitionException.Create("Value", source, value);
 
-			var scheme = match.Groups["scheme"].Value.ToLowerInvariant();
-			var host = match.Groups["host"].Value;
-
-			if(host.StartsWith('[') && (!IPAddress.TryParse(host[1..^1], out var ipv6) || ipv6.AddressFamily != AddressFamily.InterNetworkV6))
-				throw DefinitionException.Create("Value", source, value);
-
-			host = host.Trim('[', ']');
-			if(IPAddress.TryParse(host, out var ip))
-			{
-				if(ip.Equals(IPAddress.Any) || ip.Equals(IPAddress.IPv6Any) || ip.AddressFamily == AddressFamily.InterNetworkV6 && ip.ScopeId != 0)
-					throw DefinitionException.Create("Value", source, value);
-
-				host = ip.ToString();
-			}
-			else if(Uri.CheckHostName(host) != UriHostNameType.Dns || host == "*")
-				throw DefinitionException.Create("Value", source, value);
-			else
-				host = new IdnMapping().GetAscii(host).ToLowerInvariant();
-
-			return new(scheme, host, GetPort(match, scheme, source));
+			var grpc = address.Scheme is "grpc" or "grpcs";
+			return new(address.Scheme is "https" or "grpcs" ? "https" : "http", address.Host, address.Port,
+				Routing.NormalizePath(address.Path, source), grpc ? "grpc+http2" : "http1");
 		}
-
 		private ResourceReference? Resource(Declaration entry, bool optional)
 		{
 			var value = this.Value(entry);
@@ -263,9 +247,10 @@ partial class Definition
 		#region 后端策略
 		private ServerGroup Server(Settings values, Diagnostic.Location source)
 		{
-			var members = new List<ServerMember>();
+			var members = new List<ServerGroup.Member>();
 			var pool = values.Servers.Count > 0 && values.Servers[0].Name.Contains('!');
-			var kind = pool ? ServerKind.Pool : ServerKind.Single;
+			var kind = pool ? ServerKind.Pool : ServerKind.Application;
+			string selector = null;
 
 			if(pool)
 			{
@@ -285,7 +270,7 @@ partial class Definition
 					if(!seen.Add(endpoint))
 						throw DefinitionException.Create("Duplicate", entry.Source, endpoint.Address);
 
-					if(members.Count > 0 && members[0].Endpoint.Scheme != endpoint.Scheme)
+					if(members.Count > 0 && (members[0].Endpoint.Scheme != endpoint.Scheme || members[0].Endpoint.Protocol != endpoint.Protocol || members[0].Endpoint.Path != endpoint.Path))
 						throw DefinitionException.Create("Value", entry.Source, endpoint.Scheme);
 
 					members.Add(new(entry.Name[(entry.Name.IndexOf('!') + 1)..], endpoint, weight));
@@ -294,24 +279,27 @@ partial class Definition
 			else
 			{
 				var entry = values.Servers.FirstOrDefault();
-				var address = entry == null ? "~" : this.Value(entry);
+				var address = entry == null ? "" : this.Value(entry);
 				var location = entry?.Source ?? source;
 
-				if(address == "~")
-				{
-					kind = ServerKind.Application;
-					address = context.ApplicationAddress;
-					if(string.IsNullOrWhiteSpace(address))
-						throw DefinitionException.Create("Required", location, "server=~ / listen");
-				}
+				if(address.StartsWith('~'))
+					throw DefinitionException.Create("Value", location, "server: obsolete selector");
 
-				members.Add(new(string.Empty, Address(address, location), BigInteger.One));
+				if(address.Contains("://", StringComparison.Ordinal))
+				{
+					kind = ServerKind.Single;
+					members.Add(new(string.Empty, Address(address, location), BigInteger.One));
+				}
+				else if(address.Length > 0)
+					selector = address.ToLowerInvariant();
 			}
 
-			return new(kind, members.AsReadOnly(), this.Policy(values, members));
-		}
+			if(pool && members.Count < 2)
+				throw DefinitionException.Create("Value", source, "server: pool requires at least two members");
 
-		private ServerPolicy Policy(Settings values, IReadOnlyList<ServerMember> members)
+			return new(kind, members.AsReadOnly(), this.Policy(values, members), selector);
+		}
+		private ServerPolicy Policy(Settings values, IReadOnlyList<ServerGroup.Member> members)
 		{
 			var balance = this.Choice(values, "server-balance", "round-robin", ["round-robin", "least-connections", "least-requests"]);
 			var affinity = this.Choice(values, "server-affinity", "none", ["none", "cookie"]);
@@ -338,24 +326,24 @@ partial class Definition
 				new(retry, retryCount), new(affinity, cookie), tls, health);
 		}
 
-		private TlsPolicy Tls(Settings values, IReadOnlyList<ServerMember> members)
+		private TlsPolicy Tls(Settings values, IReadOnlyList<ServerGroup.Member> members)
 		{
-			if(members[0].Endpoint.Scheme != "https")
+			if(members.Count > 0 && members[0].Endpoint.Scheme != "https")
 				return null;
 
-			var verify = this.Boolean(values, "server-tls-verify", false);
+			var verify = this.Boolean(values, "server-tls-verify", true);
 			var trust = values.Get("server-tls-trust") is { } trustEntry ? this.Resource(trustEntry, true) : null;
 			var name = this.Value(values, "server-tls-name");
 
-			if(string.IsNullOrEmpty(name))
+			if(string.IsNullOrEmpty(name) && members.Count > 0)
 			{
 				var host = members[0].Endpoint.Host;
 				name = !IPAddress.TryParse(host, out _) && members.All(item => string.Equals(item.Endpoint.Host, host, StringComparison.OrdinalIgnoreCase)) ? host : null;
 			}
-			else if(Uri.CheckHostName(name) is not (UriHostNameType.Dns or UriHostNameType.IPv4 or UriHostNameType.IPv6))
+			else if(!string.IsNullOrEmpty(name) && Uri.CheckHostName(name) is not (UriHostNameType.Dns or UriHostNameType.IPv4 or UriHostNameType.IPv6))
 				throw DefinitionException.Create("Value", values.Source("server-tls-name"), name);
 
-			if(verify && string.IsNullOrEmpty(name))
+			if(members.Count > 0 && verify && string.IsNullOrEmpty(name))
 				throw DefinitionException.Create("Required", values.Source("server-tls-name", values.Scope.Source), "server-tls-name");
 
 			return new(verify, trust, name);
@@ -421,11 +409,10 @@ partial class Definition
 
 		private IReadOnlyList<Header> Headers(Settings values, IReadOnlyList<RawDirective> siteNative, IReadOnlyList<RawDirective> routeNative, bool forwarded, bool websocket)
 		{
-			var headers = new Dictionary<string, Header>(StringComparer.OrdinalIgnoreCase);
+			var headers = new Dictionary<string, Header>(StringComparer.OrdinalIgnoreCase) { ["Host"] = new("Host", "$http_host", true, default) };
 
 			if(forwarded)
 			{
-				headers["Host"] = new("Host", "$http_host", true, default);
 				headers["X-Real-IP"] = new("X-Real-IP", "$remote_addr", true, default);
 				headers["X-Forwarded-For"] = new("X-Forwarded-For", "$proxy_add_x_forwarded_for", true, default);
 				headers["X-Forwarded-Proto"] = new("X-Forwarded-Proto", "$scheme", true, default);
@@ -528,7 +515,7 @@ partial class Definition
 		#endregion
 
 		#region 声明合并
-		private static Settings Merge(Settings parent, Scope scope)
+		private Settings Merge(Settings parent, Scope scope)
 		{
 			var values = parent == null ? new Dictionary<string, Declaration>(StringComparer.OrdinalIgnoreCase) : new(parent.Values, StringComparer.OrdinalIgnoreCase);
 			var groups = new Dictionary<object, List<Declaration>>(ReferenceEqualityComparer.Instance);
@@ -542,10 +529,18 @@ partial class Definition
 						groups.Add(entry.Owner, group = []);
 
 					group.Add(entry);
-					servers = group;
 				}
 				else if(!entry.Name.Contains(':'))
 					values[entry.Name] = entry;
+			}
+
+			foreach(var group in scope.Declarations.Where(entry => entry.IsServer).Reverse().Select(entry => entry.Owner).Distinct(ReferenceEqualityComparer.Instance).Select(owner => groups[owner]))
+			{
+				if(group[0].Name.Contains('!') || this.Value(group[0]).Length > 0)
+				{
+					servers = group;
+					break;
+				}
 			}
 
 			return new(values, servers, parent, scope);

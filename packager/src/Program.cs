@@ -53,7 +53,7 @@ internal class Program
 				"[--name:<name>] [--edition:<edition>] [--version:<version>]",
 				"[--compilation:Release|Debug] [--framework:<framework>] [--architecture:x64|arm64]",
 				"[--exclude:<patterns>] [--overwrite:true|false]",
-				"[--daemon:<name>] [--listen:<address>] [--install-path:<directory>]",
+				"[--daemon:<name>] [--install-path:<directory>]",
 				"[--web:nginx] [--migration:<name-or-path>]",
 				"[--title:<text>] [--summary:<text>] [--description:<text>]",
 				"[--dependencies:<dependencies>] [--<variable>:<value>]"));

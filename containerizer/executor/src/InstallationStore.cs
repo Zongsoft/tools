@@ -52,7 +52,7 @@ internal sealed class InstallationStore(string stateRoot = Installation.Paths.St
 	#region 公共方法
 	public string GetApplicationPath(string name)
 	{
-		DeliveryBundle.ValidateIdentity(name);
+		ContainerBundle.ValidateIdentity(name);
 		return Files.ResolveRelativePath(this.StateRoot, $"apps/{name}");
 	}
 
@@ -67,7 +67,7 @@ internal sealed class InstallationStore(string stateRoot = Installation.Paths.St
 			return required ? throw new ContainerizationException(2, Properties.Resources.InstallationStore_1_Message) : null;
 
 		var installation = Files.Load(path, ProtocolJson.Default.Installation);
-		if(installation.Schema != DeliveryPlan.ProtocolVersion || installation.Name != name)
+		if(installation.Schema != ContainerBundlePlan.ProtocolVersion || installation.Name != name)
 			throw new ContainerizationException(3, Properties.Resources.InstallationStore_2_Message);
 
 		return installation;
@@ -111,7 +111,7 @@ internal sealed class InstallationStore(string stateRoot = Installation.Paths.St
 
 	public FileStream AcquireApplicationLock(string name)
 	{
-		DeliveryBundle.ValidateIdentity(name);
+		ContainerBundle.ValidateIdentity(name);
 		return this.AcquireLock($"{name}.lock");
 	}
 
@@ -127,7 +127,7 @@ internal sealed class InstallationStore(string stateRoot = Installation.Paths.St
 			yield return this.Load(Path.GetFileName(app));
 	}
 
-	public string StageBundle(DeliveryBundle bundle)
+	public string StageBundle(ContainerBundle bundle)
 	{
 		var releases = Path.Combine(this.GetApplicationPath(bundle.Plan.Name), "releases");
 		Files.CreatePrivateDirectory(releases);
@@ -135,7 +135,7 @@ internal sealed class InstallationStore(string stateRoot = Installation.Paths.St
 
 		if(Directory.Exists(destination))
 		{
-			using var existing = DeliveryBundle.Open(Path.Combine(destination, "assets"));
+			using var existing = ContainerBundle.Open(Path.Combine(destination, "assets"));
 			if(existing.Id != bundle.Id)
 				throw new ContainerizationException(4, Properties.Resources.InstallationStore_4_Message);
 
@@ -149,7 +149,7 @@ internal sealed class InstallationStore(string stateRoot = Installation.Paths.St
 		try
 		{
 			Files.CopyTree(bundle.Directory, Path.Combine(staging, "assets"));
-			using var verified = DeliveryBundle.Open(Path.Combine(staging, "assets"));
+			using var verified = ContainerBundle.Open(Path.Combine(staging, "assets"));
 			SetReadOnlyMountPermissions(verified);
 
 			Directory.Move(staging, destination);
@@ -167,11 +167,11 @@ internal sealed class InstallationStore(string stateRoot = Installation.Paths.St
 	#region 私有方法
 	private string GetOwnedPath(string root, string name)
 	{
-		DeliveryBundle.ValidateIdentity(name);
+		ContainerBundle.ValidateIdentity(name);
 		return Files.ResolveRelativePath(root, name);
 	}
 
-	private static void SetReadOnlyMountPermissions(DeliveryBundle bundle)
+	private static void SetReadOnlyMountPermissions(ContainerBundle bundle)
 	{
 		if(OperatingSystem.IsWindows())
 			return;

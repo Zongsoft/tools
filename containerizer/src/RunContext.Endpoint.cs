@@ -50,11 +50,11 @@ namespace Zongsoft.Tools.Containerizer;
 
 internal sealed partial class RunContext
 {
-	private sealed class Endpoint(ServicePlan service, PortPlan port, int relayPort)
+	private sealed class Endpoint(ServicePlan service, ServicePlan.PortMapping port, int relayPort)
 	{
 		#region 公共属性
 		public ServicePlan Service { get; } = service;
-		public PortPlan Port { get; } = port;
+		public ServicePlan.PortMapping Port { get; } = port;
 		public int RelayPort { get; } = relayPort;
 		public int HostPort { get; private set; }
 		public bool IsWeb => this.ProbeTargets.Any();
@@ -69,13 +69,13 @@ internal sealed partial class RunContext
 		#region 私有属性
 		private IEnumerable<(string Application, string Site, string Scheme, string Host)> ProbeTargets =>
 			this.Service.Web.SelectMany(site => site.Bindings
-				.Where(binding => binding.Publication == this.Port.Name && binding.Address == "0.0.0.0")
+				.Where(binding => binding.Publication == this.Port.Name && binding.Protocol == "tcp" && binding.Address == "0.0.0.0")
 				.SelectMany(binding => site.ProbeHosts.Select(host => (site.Application, $"{site.Application}({site.Name})", binding.Scheme, host)))
 			).Distinct();
 		#endregion
 
 		#region 公共方法
-		public static List<Endpoint> Create(DeliveryPlan plan)
+		public static List<Endpoint> Create(ContainerBundlePlan plan)
 		{
 			var reserved = plan.Services.SelectMany(service => service.Ports).Select(port => port.Host).ToHashSet();
 			var endpoints = new List<Endpoint>();

@@ -61,6 +61,24 @@ namespace Zongsoft.Tools.Packager.Properties {
         }
 
         /// <summary>
+        ///   Looks up a localized string similar to Cannot extract a binding from &quot;{0}&quot; at {1}:{2}, configuration &quot;{3}&quot;, field &quot;{4}&quot; (rule: {5})..
+        /// </summary>
+        internal static string BindingExtraction_Message {
+            get {
+                return ResourceManager.GetString("BindingExtraction.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Invalid bindings document at &quot;{0}&quot; (rule: {1})..
+        /// </summary>
+        internal static string BindingsInvalid_Message {
+            get {
+                return ResourceManager.GetString("BindingsInvalid.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
         ///   Looks up a localized string similar to The command line is empty..
         /// </summary>
         internal static string CommandLineEmpty_Message {

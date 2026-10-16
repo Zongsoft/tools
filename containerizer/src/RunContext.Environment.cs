@@ -218,11 +218,6 @@ internal sealed partial class RunContext
 			if(service.Kind == "application" && service.Ports.Count == 0 && !_bundle.Plan.Services.Any(ingress => ingress.Web.Any(site => site.Application == service.Id)))
 				_output(Utility.FormatOutput(Properties.Resources.Run_Daemon, service.Id));
 		}
-
-		var unknown = _bundle.Plan.Services.Where(service => service.Kind == "application" && service.Ports.Count > 0 && service.Web.Count == 0).ToArray();
-
-		if(unknown.Length != 0)
-			throw new ContainerizationException(4, string.Format(Properties.Resources.Run_WebMetadata_Message, string.Join(", ", unknown.Select(service => service.Id))));
 	}
 
 	private async Task<bool> ForwardEndpointAsync(Endpoint endpoint, JsonElement ports, CancellationToken cancellation)

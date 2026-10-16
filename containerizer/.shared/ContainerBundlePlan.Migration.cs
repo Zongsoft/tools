@@ -37,13 +37,18 @@ using System.Text.Json.Serialization;
 
 namespace Zongsoft.Tools.Containerizer.Protocol;
 
-internal sealed class PortPlan
+partial class ContainerBundlePlan
 {
-	#region 公共属性
-	public string Address { get; set; } = "127.0.0.1";
-	public string Name { get; set; }
-	public int Host { get; set; }
-	public int Container { get; set; }
-	public string Protocol { get; set; } = "tcp";
+	#region 嵌套类型
+	/// <summary>表示容器包携带的升迁归档及其执行脚本。</summary>
+	internal sealed class Migration
+	{
+		#region 公共属性
+		public string Version { get; set; }
+		public string Archive { get; set; }
+		public string Script { get; set; }
+		public string Identity { get; set; }
+		#endregion
+	}
 	#endregion
 }

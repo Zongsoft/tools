@@ -10,14 +10,15 @@
 
 - PackCommand 解析源目录，VersionFile 优先用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) ApplicationManifest 读取直属 .edition，仅缺失时以 ApplicationIdentifier 读取 .version；清单按显式 Edition、Current、唯一 Edition 或顶层版本选择。成功后清单输入成组回写 .edition 和 .version，缺失的 .version 创建；标识输入只更新 .version；两者均无则成组创建两者，不覆盖并发创建的文件。保存清单时将选中 Edition 设为 Current，标识保存最终身份。最终身份确定后建立本次命令独立的 PackageOptions 选项对象，并传给包、脚本和文本来源，不保留进程级变量状态。tar 归档与脚本成组发布，deb/rpm 单文件发布；成功制包后才保存源版本文件，单文件原子保存，双文件失败回滚，保存失败保留包并报错。
 - 源直属 .edition 及安装根 .edition 目标不进入载荷。包内 .version 通过 ApplicationIdentifier.Save(Stream) 写入内存，强制替换同目标旧条目；验证解析后的身份，不约束末尾有无换行。所有编码器经 Entry.OpenRead 读取。
-- Package 是跨格式模型，Generator 编码容器；ApplicationHost 一次解析宿主、服务来源及最终 listen，Scriptor.Systemd 负责服务与生命周期组合。自动生成的服务文件直接以内存条目入包，先验证文件名和存在的宿主候选目录。tar/deb/rpm 保持路径、排除、权限和阶段意图一致，各自遵循格式规范。
+- Package 是跨格式模型，Generator 编码容器；ApplicationHost 一次解析宿主及服务来源，Scriptor.Systemd 负责服务与生命周期组合。自动生成的服务文件直接以内存条目入包，先验证文件名和存在的宿主候选目录。tar/deb/rpm 保持路径、排除、权限和阶段意图一致，各自遵循格式规范。
 - Web/Definition 通过 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Profile 的 Directives = { ProfileDirectiveOptions.Import(ProfileDirectiveBehavior.Strict) } 和读取回调收集声明，先处理覆盖再求值。Configurator.Nginx 生成安装根 .web/nginx/<PackageName>.conf；普通载荷是否包含 Profile 仍由 arguments/exclude 决定，生成目标冲突失败。Delivered 在生命周期之前完成弃用清理与 Tar 重定位，DESTDIR 只交付；HOSTER_WEB_ACTIVATION 控制新链接与 Nginx 操作，弃用和普通卸载仍清理本包文件/匹配链接。Web 步骤独立于自定义主钩子和 daemon 开关。
 - Migration 仅按 --migration 输入名称、最终 Edition/Version/Runtime 查找并验证既有 tar.gz 与脚本；先展开变量；无 / 或 \ 时从最终 source 逐级查找父目录至根，每层先查目录本身，再查直属 `.migration/`，不遍历其他子目录；有分隔符时只定位显式目录，相对目录基于 source。按输入原名定位 `<name>[-<edition>](migrate)@<version>_<RID>` 配套文件；只有两文件都缺失才继续查下一位置，半套或元数据/RID 错误立即失败，不能跨目录拼配或选择其他身份。全部缺失报告预期文件名和已检查目录。--migration 空值或全空白视为未指定。升迁输入解析和 Native AOT 发布由独立 migrator 工具负责。
 - packager 不引用独立 migrator 项目或共享升迁协议，不分发原生产物；通用变量来源组合源码由 tools/.shared 链接到四个制作工具。两个输入文件原样加入安装根 .migration/，脚本 0755、归档 0600，载荷冲突失败。
 - 安装调用外部脚本 apply，systemd 门禁调用 check，均明确传入 /var/lib/<包名>/packager。升迁失败阻止启动；无 daemon 也执行，DESTDIR 不执行钩子；卸载保留状态。
 - 三格式的安装/升级/覆盖/卸载阶段不同，保留 Debian configure 和 RPM 剩余实例语义。根路径别名、符号链接与安装目录必须规范化，避免越界目标。
 - [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Searcher 处理本地通配与链接，按逻辑来源定位相对路径。变量按显式选项、source 直属 `.env`（含显式导入）、系统环境的顺序查询，全部缺失后再查询描述符默认值；共享 Utility 用 Profile.Load 加载，章节层级以点号连接为命名空间，条目名中的点号和连字符改为下划线。先解析并固定 source，再加载 `.env`，不反向推导源目录；身份仍仅来自显式选项与源版本文件。TextSource 的 file:/text: 只解释一次。
-- --listen 生成宿主 --urls，完整地址保留；已有服务 ExecStart 不改写。仅 Generated 宿主将有效监听地址写入包头：tar PAX Listen、Debian control Listen、RPM 应用字符串标签 1000001；未使用及空值省略，不增加安装文件。--dependencies 统一使用 name[:range]：NuGet 风格区间及 [v) 下限简写，区间外逗号/分号为 AND、| 为 OR；Dependency 保留原生版本端点。Debian 展开为关系组，RPM 双边范围用 with、替代用 or，并声明相应 rpmlib 能力。其他关系选项保留原生语法。
+- 监听来自运行配置；生成的服务与已有服务均保留应用启动参数。BindingExtractor 在发布前从最终安装路径视图逐文件读取 .option 及显式 Import，按 filter、template/protocols、required 提取并归并应用绑定；不加载 .option.template，不访问制作机文件或环境变量。相对 Import 基于声明文件，/ 指虚拟安装文件系统根。共享 FilterExpression 保留 deployer 的从左到右规则，框架比较仍由 deployer 适配。包级字段与承载参见 [文件规范](docs/implementation.zh-Hans.md#binding-document)；Web/Routing 按声明组合 HTTP/gRPC 基路径映射，Nginx 以原始 URI map 与命名位置分派；最终监听、站点、目标和策略合入根 JSON，模板以 binding/endpoint 双身份引用应用连接，统一交付根 JSON。
+- --dependencies 统一使用 name[:range]：NuGet 风格区间及 [v) 下限简写，区间外逗号/分号为 AND、| 为 OR；Dependency 保留原生版本端点。Debian 展开为关系组，RPM 双边范围用 with、替代用 or，并声明相应 rpmlib 能力。其他关系选项保留原生语法。
 - 主页选项及变量为 homepage；manufacturer 未定义、null 或空字符串默认 Zongsoft，纯空白不触发默认值。厂家分别写入 tar PAX 全局 Manufacturer、Debian 自定义 Manufacturer、RPM VENDOR(1011)，与 maintainer 独立；maintainer 选项默认 Zongsoft。
 - 安装包来源元数据使用 Packager:程序集名@版本，独立于应用 .version。大载荷使用 DeleteOnClose 临时流和增量摘要，不分配完整包体。
 
@@ -28,3 +29,7 @@
 Cake restore/build/test 使用同一 edition，默认 test；build 只构建本工具并制 NuGet 包，不启动容器。pack 会推送 NuGet，未获明确授权不能运行。Debug 引用本地 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core)，Release 使用 NuGet，测试不能混用。
 
 文件系统测试使用临时目录，包内容检查不等于安装；不得擅自执行安装、systemd、sudo 或真实数据库/存储操作。交接集成通过产物或独立进程，不跨工具引用协议类型。公开行为修改同步双语 README、实现说明、资源和测试。
+
+## 绑定契约
+
+使用完整 PI 名称 `zongsoft.tools.binding`；只在各最终 option 与显式导入加载完成后求值，不在指令回调即时读取尚未完成的配置，也不注册全局业务处理器。输入仅限最终交付虚拟视图。格式和身份见 [实现说明](docs/implementation.zh-Hans.md#binding-document)，用户语法见 [README](README.zh-Hans.md#application-bindings)。同内容合并与错误处理分开，required=false 不掩盖选中项错误；后端能力取信于声明，适配器不能静默补协议或伪造映射。`Definition.ServerGroup.Member` 归属具体上游组，避免新增平行的孤立成员类型。

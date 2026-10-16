@@ -37,25 +37,17 @@ using System.Text.Json.Serialization;
 
 namespace Zongsoft.Tools.Containerizer.Protocol;
 
-internal sealed class DeliveryPlan
+partial class ContainerBundlePlan
 {
-	public const int ProtocolVersion = 1;
-	public const string FileName = "containerizer.json";
-
-	#region 公共属性
-	public int Schema { get; set; } = ProtocolVersion;
-	public string Name { get; set; }
-	public string Tag { get; set; }
-	public string Version { get; set; }
-	public string Distribution { get; set; }
-	public string Architecture { get; set; }
-	public string Project { get; set; }
-	public string DataRoot { get; set; }
-	public string SourceHash { get; set; }
-	public string ToolVersion { get; set; }
-	public List<ServicePlan> Services { get; set; } = [];
-	public List<MigrationPlan> Migrations { get; set; } = [];
-	public BootstrapPlan Bootstrap { get; set; } = new();
-	public List<FileRecord> Files { get; set; } = [];
+	#region 嵌套类型
+	/// <summary>表示容器包内文件的相对路径、长度及内容摘要。</summary>
+	internal sealed class FileEntry
+	{
+		#region 公共属性
+		public string Path { get; set; }
+		public string Hash { get; set; }
+		public long Length { get; set; }
+		#endregion
+	}
 	#endregion
 }

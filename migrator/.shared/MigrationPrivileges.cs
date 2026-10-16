@@ -51,7 +51,7 @@ internal static class MigrationPrivileges
 	#endregion
 
 	#region 公共方法
-	public static string[] Resolve(MigrationPlan.User user)
+	public static string[] Resolve(MigrationPlan.Database.User user)
 	{
 		var requested = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -80,7 +80,7 @@ internal static class MigrationPrivileges
 	}
 
 	public static bool UsesSequences(IEnumerable<string> privileges) => privileges.Any(name => name is "Select" or "Insert" or "Update" or "Delete");
-	public static void Validate(MigrationPlan.Database database, MigrationPlan.User user)
+	public static void Validate(MigrationPlan.Database database, MigrationPlan.Database.User user)
 	{
 		user.Privileges = Resolve(user);
 

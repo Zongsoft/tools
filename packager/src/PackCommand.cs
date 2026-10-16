@@ -68,7 +68,6 @@ namespace Zongsoft.Tools.Packager;
 [CommandOption(DESCRIPTION_OPTION, typeof(string))]
 [CommandOption(DEPENDENCIES_OPTION, typeof(string))]
 [CommandOption(INSTALL_PATH_OPTION, typeof(string))]
-[CommandOption(LISTEN_OPTION, typeof(string))]
 [CommandOption(DAEMON_OPTION, typeof(string))]
 [CommandOption(DAEMON_ENVIRONMENTS_OPTION, typeof(string))]
 [CommandOption(INSTALLING_OPTION, typeof(string))]
@@ -109,7 +108,6 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 	protected const string WEB_OPTION = "web";
 	protected const string OVERWRITE_OPTION = "overwrite";
 	protected const string INSTALL_PATH_OPTION = "install-path";
-	protected const string LISTEN_OPTION = PackageOptions.LISTEN;
 	protected const string DAEMON_OPTION = PackageOptions.DaemonOptions.DAEMON;
 	protected const string DAEMON_ENVIRONMENTS_OPTION = PackageOptions.DaemonOptions.DAEMON_ENVIRONMENTS;
 	protected const string INSTALLING_OPTION = PackageOptions.ScriptOptions.INSTALLING;
@@ -192,7 +190,7 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		if(!string.IsNullOrWhiteSpace(migration))
 			package.Migration = Migration.Load(package, migration);
 
-		//服务与 Web 配置器共用本次宿主解析结果。
+		//固定本次宿主与服务来源。
 		package.Host = ApplicationHost.Resolve(package);
 
 		//加载安装条目
@@ -202,28 +200,10 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 
 		package.Migration?.Attach(package);
 
-		var web = Web.Configurator.Parse(context.Options.GetValue<string>(WEB_OPTION, null), source, options);
-		if(web.Enabled)
-		{
-			var configurator = Web.Configurator.Get(web.Hoster);
-			var definition = Web.Definition.Load(web.FilePath, options.Evaluator);
-			var configuration = new Web.Configurator.Context(package.PackageName, package.InstallPath, options.Evaluator,
-				package.Host.Kind == ApplicationHost.HostKind.Generated ? package.Host.Listen : null, package.Architecture);
-			var result = configurator.Configure(definition, configuration);
-			Web.Installation.Attach(package, result);
+		//生成代理前提取最终载荷中的应用声明。
+		package.Bindings = BindingExtractor.Extract(package);
 
-			foreach(var diagnostic in result.Diagnostics)
-			{
-				var color = diagnostic.Level == Web.Diagnostic.Severity.Error ? CommandOutletColor.DarkRed : CommandOutletColor.DarkYellow;
-				var content = Utility.FormatOutput("{0}: {1}: ", color, diagnostic.Source, diagnostic.Code)
-					.Last.Append(color, diagnostic.Message);
-
-				if(diagnostic.Related is { } related)
-					content.Append(Utility.FormatOutput(" ({0})", color, related));
-
-				Terminal.WriteLine(content);
-			}
-		}
+		ConfigureWeb();
 
 		//交付、应用服务、升迁和 Web 步骤按各格式的生命周期组合。
 		package.Scriptor.Script();
@@ -245,6 +225,34 @@ public abstract partial class PackCommand<TPackage> : CommandBase<CommandContext
 		Terminal.WriteLine(Utility.FormatOutput(Properties.Resources.PackageGeneratedSuccessfully_Message, CommandOutletColor.DarkGreen, Path.Combine(output, package.FileName)));
 		//返回安装包的文件路径
 		return ValueTask.FromResult<object>(Path.Combine(output, package.FileName));
+
+		void ConfigureWeb()
+		{
+			var web = Web.Configurator.Parse(context.Options.GetValue<string>(WEB_OPTION, null), source, options);
+			if(web.Enabled)
+			{
+				var configurator = Web.Configurator.Get(web.Hoster);
+				var definition = Web.Definition.Load(web.FilePath, options.Evaluator);
+				var configuration = new Web.Configurator.Context(package.PackageName, package.InstallPath, options.Evaluator, package.Bindings, package.Architecture)
+				{
+					SystemTrust = package is Package.Rpm ? "/etc/pki/tls/certs/ca-bundle.crt" : "/etc/ssl/certs/ca-certificates.crt",
+				};
+				var result = configurator.Configure(definition, configuration);
+				Web.Installation.Attach(package, result);
+
+				foreach(var diagnostic in result.Diagnostics)
+				{
+					var color = diagnostic.Level == Web.Diagnostic.Severity.Error ? CommandOutletColor.DarkRed : CommandOutletColor.DarkYellow;
+					var content = Utility.FormatOutput("{0}: {1}: ", color, diagnostic.Source, diagnostic.Code)
+						.Last.Append(color, diagnostic.Message);
+
+					if(diagnostic.Related is { } related)
+						content.Append(Utility.FormatOutput(" ({0})", color, related));
+
+					Terminal.WriteLine(content);
+				}
+			}
+		}
 
 		string ResolveIdentity(string key) => evaluator.GetOption(key);
 	}

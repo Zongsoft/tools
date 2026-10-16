@@ -40,7 +40,7 @@ namespace Zongsoft.Tools.Containerizer.Protocol;
 internal sealed partial class Installation
 {
 	#region 公共属性
-	public int Schema { get; set; } = DeliveryPlan.ProtocolVersion;
+	public int Schema { get; set; } = ContainerBundlePlan.ProtocolVersion;
 	public string Name { get; set; }
 	public string DataRoot { get; set; }
 	public string Current { get; set; }

@@ -17,6 +17,88 @@ namespace Zongsoft.Tools.Packager.Tests.Web;
 
 public class WebPackageTest
 {
+	[Fact]
+	public async Task ApplicationRoutesAndTemplatesShareRootReferencesAcrossFormatsAsync()
+	{
+		using var files = new MigrationTestDirectory();
+		files.Write(".version", "example@1.0.0");
+		files.Write("web.profile", "[api]\nhost=api.example.test\nbind!public=http://*");
+		files.Write("web.option", "<?zongsoft.tools.binding name=\"web\" path=\"Server\" template=\"${option.Url}\" protocols=\"${option.Protocols}\" required=\"true\"?>\n<configuration><option><server url=\"http://*:8069\" protocols=\"Http1\" /></option></configuration>");
+		files.Write("metrics.option", "<?zongsoft.tools.binding name=\"metrics\" path=\"Metrics\" template=\"${option.Url}\" protocols=\"${option.Protocols}\" required=\"true\"?>\n<configuration><option><metrics url=\"http://*:9464/metrics\" protocols=\"Http1\" /></option></configuration>");
+		files.Write("telemetry.option", "<?zongsoft.tools.binding name=\"telemetry\" path=\"Telemetry\" template=\"${option.Url}\" protocols=\"${option.Protocols}\" required=\"true\"?>\n<configuration><option><telemetry url=\"http://*:4317/opentelemetry\" protocols=\"grpc+http2\" /></option></configuration>");
+		var stale = files.Write(".web/nginx/.bindings", "[legacy]\nbind=http://*:9");
+		var originalLegacy = File.ReadAllBytes(stale);
+		byte[] baseline = null;
+		string baselineTemplate = null;
+
+		foreach(var format in new[] { "tar", "deb", "rpm" })
+		{
+			var archive = await ExecuteAsync(format, files, ["--web:nginx", "--version:1.0.0", "--exclude:out"]);
+			var entries = PackageArtifactTest.ReadArchive(archive, format);
+			var prefix = format == "tar" ? "" : "opt/example/";
+			var entry = Assert.Single(entries, item => item.Name == prefix + ".bindings");
+			var document = BindingDocument.Deserialize(entry.Content);
+			var site = Assert.Single(document.Sites);
+			var applications = document.Bindings.Where(binding => binding.Owner == "application").ToArray();
+			var configuration = Encoding.UTF8.GetString(Assert.Single(entries, item => item.Name == prefix + ".web/nginx/example.conf").Content);
+			var template = Encoding.UTF8.GetString(Assert.Single(entries, item => item.Name == prefix + ".web/nginx/example.conf.template").Content);
+
+			Assert.Equal(Utility.Unix.Mode644, entry.Mode);
+			Assert.Equal(3, applications.Length);
+			Assert.Equal(4, site.Routes.Length);
+			Assert.Equal(["api.example.test"], site.Hosts);
+			Assert.DoesNotContain(entries, item => item.Name == prefix + ".web/nginx/.bindings");
+			Assert.DoesNotContain("{{zongsoft:", configuration);
+			Assert.DoesNotContain("{{zongsoft:application", template);
+
+			foreach(var route in site.Routes)
+			{
+				var binding = Assert.Single(applications, binding => binding.Id == route.Target.Binding);
+				var endpoint = Assert.Single(binding.Endpoints, endpoint => endpoint.Id == route.Target.Endpoint);
+				Assert.Equal("0.0.0.0", endpoint.Host);
+				Assert.Equal("127.0.0.1", route.Connection.Host);
+				Assert.Equal(endpoint.Port, route.Connection.Port);
+				Assert.Contains("{{zongsoft:binding:" + binding.Id + ":" + endpoint.Id + "}}", template);
+			}
+
+			Assert.Contains("grpc_pass grpc://127.0.0.1:4317;", configuration);
+			Assert.Contains("proxy_pass http://127.0.0.1:9464;", configuration);
+			Assert.Equal(originalLegacy, File.ReadAllBytes(stale));
+
+			if(baseline == null)
+			{
+				baseline = entry.Content;
+				baselineTemplate = template;
+			}
+			else
+			{
+				Assert.Equal(baseline, entry.Content);
+				Assert.Equal(baselineTemplate, template);
+			}
+
+			PackageArtifactTest.AssertOrdinaryConfiguration(archive, format, "/opt/example/.bindings");
+		}
+	}
+
+	[Theory]
+	[InlineData("tar")]
+	[InlineData("deb")]
+	[InlineData("rpm")]
+	public async Task OrdinaryRootBindingsConflictBeforePublicationAsync(string format)
+	{
+		using var files = new MigrationTestDirectory();
+		files.Write(".version", "example@1.0.0");
+		files.Write("web.profile", "[api]\nbind!public=http://*\nserver=http://backend");
+		var path = files.Write(".bindings", "[legacy]\nbind=http://*:10");
+		var original = File.ReadAllBytes(path);
+
+		await Assert.ThrowsAsync<InvalidOperationException>(() => ExecuteAsync(format, files, ["--web:nginx"]));
+
+		Assert.Equal(original, File.ReadAllBytes(path));
+		Assert.False(Directory.Exists(Path.Combine(files.Path, "out")));
+		Assert.Equal("example@1.0.0", File.ReadAllText(Path.Combine(files.Path, ".version")));
+	}
+
 	[Theory]
 	[InlineData("tar", false)]
 	[InlineData("tar", true)]
@@ -42,9 +124,12 @@ public class WebPackageTest
 		var configuration = Assert.Single(entries, item => item.Name == prefix + ".web/nginx/example.conf");
 		Assert.Equal(Utility.Unix.Mode644, configuration.Mode);
 
-		var bindings = Assert.Single(entries, item => item.Name == prefix + ".web/nginx/.bindings");
+		var bindings = Assert.Single(entries, item => item.Name == prefix + ".bindings");
 		Assert.Equal(Utility.Unix.Mode644, bindings.Mode);
-		Assert.Equal("[api]\r\nhost=api.example.com\r\nbind=http://0.0.0.0:80,http://[::]:80\r\n\r\n", Encoding.UTF8.GetString(bindings.Content));
+		var document = BindingDocument.Deserialize(bindings.Content);
+		Assert.Equal(["api.example.com"], Assert.Single(document.Sites).Hosts);
+		Assert.Equal(2, document.Bindings.Length);
+		Assert.DoesNotContain(entries, item => item.Name == prefix + ".web/nginx/.bindings");
 
 		var template = Assert.Single(entries, item => item.Name == prefix + ".web/nginx/example.conf.template");
 		Assert.Equal(configuration.Content, template.Content);
@@ -73,11 +158,8 @@ public class WebPackageTest
 		files.Write("web.profile", "[api]\nbind!legacy=http://*\nserver=http://app\nnginx:listen=80 proxy_protocol");
 
 		var stale = files.Write(".web/nginx/.bindings", "[old]\nbind=http://0.0.0.0:9");
-		var path = await ExecuteAsync(format, files, ["--web:nginx"]);
-		var entries = PackageArtifactTest.ReadArchive(path, format);
-
-		Assert.DoesNotContain(entries, item => item.Name.EndsWith("/.bindings", StringComparison.Ordinal));
-		Assert.Contains(entries, item => item.Name.EndsWith(".conf.template", StringComparison.Ordinal));
+		await Assert.ThrowsAsync<DefinitionException>(() => ExecuteAsync(format, files, ["--web:nginx"]));
+		Assert.False(Directory.Exists(Path.Combine(files.Path, "out")));
 		Assert.Equal("[old]\r\nbind=http://0.0.0.0:9", File.ReadAllText(stale));
 	}
 
@@ -111,25 +193,21 @@ public class WebPackageTest
 	}
 
 	[Fact]
-	public void ApplicationReferenceUsesOnlyTheGeneratedServiceListen()
+	public void GeneratedServiceUsesItsConfigurationWithoutInjectingUrls()
 	{
 		using var files = new MigrationTestDirectory();
 		files.Write("example.dll", "");
-		var options = new PackageOptions(Utility.CreateEvaluator(new global::Zongsoft.Common.Variables { ["source"] = files.Path.Replace('\\', '/'), ["listen"] = "8069" }));
+		var options = new PackageOptions(Utility.CreateEvaluator(new global::Zongsoft.Common.Variables { ["source"] = files.Path.Replace('\\', '/') }));
 		var package = new Package.Tar("example", null, new Version(1, 0), Platform.Linux, Architecture.X64, options);
 		package.Host = ApplicationHost.Resolve(package);
 		package.Scriptor.Script();
 		var host = package.Host;
 
 		Assert.Equal(ApplicationHost.HostKind.Generated, host.Kind);
-		Assert.Equal("http://127.0.0.1:8069", host.Listen);
-
-		var definition = Definition.Load(files.Write("web.profile", "[api]\nbind!legacy=http://*"));
-		var content = new Configurator.Nginx().Configure(definition, new("example", "/opt/example", options.Evaluator, host.Listen)).Files[0].Content.Render("/opt/example");
-		Assert.Contains("proxy_pass http://127.0.0.1:8069;", content);
-
 		using var reader = new StreamReader(Assert.Single(package.Entries, entry => entry.EntryName.EndsWith(".service", StringComparison.Ordinal)).OpenRead());
-		Assert.Contains("--urls http://127.0.0.1:8069", reader.ReadToEnd());
+		var content = reader.ReadToEnd();
+		Assert.Contains("ExecStart=dotnet /opt/example/example.dll", content);
+		Assert.DoesNotContain("--urls", content);
 	}
 
 	[Theory]

@@ -37,7 +37,7 @@ using System.Text.Json.Serialization;
 
 namespace Zongsoft.Tools.Containerizer.Protocol;
 
-internal sealed class ServicePlan
+internal sealed partial class ServicePlan
 {
 	#region 公共属性
 	public string Id { get; set; }
@@ -48,7 +48,7 @@ internal sealed class ServicePlan
 	public List<string> Aliases { get; set; } = [];
 	public string ConfigurationHash { get; set; }
 	public ImagePlan Image { get; set; } = new();
-	public PackagePlan Package { get; set; }
+	public PackageInfo Package { get; set; }
 	public string[] Entrypoint { get; set; }
 	public string[] Command { get; set; }
 	public string WorkingDirectory { get; set; }
@@ -57,10 +57,11 @@ internal sealed class ServicePlan
 	public string StopSignal { get; set; } = "SIGTERM";
 	public int StopSeconds { get; set; } = 30;
 	public List<string> Dependencies { get; set; } = [];
-	public List<PortPlan> Ports { get; set; } = [];
-	public List<WebSitePlan> Web { get; set; } = [];
-	public List<MountPlan> Mounts { get; set; } = [];
-	public HealthPlan Health { get; set; } = new();
+	public List<PortMapping> Ports { get; set; } = [];
+	public List<Binding> Bindings { get; set; } = [];
+	public List<WebSite> Web { get; set; } = [];
+	public List<Mount> Mounts { get; set; } = [];
+	public HealthCheck Health { get; set; } = new();
 	public string Memory { get; set; }
 	public string Cpus { get; set; }
 	public string LogSize { get; set; } = "10m";

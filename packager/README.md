@@ -7,7 +7,7 @@
 
 [English](README.md) | [简体中文](README.zh-Hans.md)
 
-Terminal warnings use dark-yellow text with bold cyan parameters; errors use dark-red text with bold magenta parameters; success messages use green text. Exception types are highlighted in magenta and messages retain their original text. All four tools share the repository’s `.shared/Utility.Output.cs`: `FormatOutput` and `FormatError` construct Core `CommandOutletContent`; `WriteOutput` and `WriteError` route terminal and text-writer output; tools using the command executor call `HandleFailure` to display exceptions and mark them handled, while retaining their own exit codes. Terminals renders the colors. Redirected output and caller-provided error writers preserve plain text and their original streams.
+Terminal colors distinguish warnings, errors and success messages. Redirected output remains plain text on its original stream.
 
 Run `dotnet-pack --help` or `dotnet-pack -h` for common options: the command name is bold cyan, option names are cyan, and placeholders and candidate values are green. Help returns `0` without reading `.env` or processing input files. The `tar`, `deb`, and `rpm` subcommands also accept `--help` or `-h`. Once packaging starts, it ends with one elapsed-time line, with the command name and seconds in bold cyan. Failed operations also report elapsed time; timing alone does not indicate success.
 
@@ -28,6 +28,7 @@ Package formats are written directly in .NET without calling external `tar`, `dp
 - [Package entries](#package-entries)
 - [systemd services](#systemd-services)
 - [Lifecycle scripts](#lifecycle-scripts)
+- [Application network bindings](#application-bindings)
 - [Web hosting configuration](#web-hosting-configuration)
 - [Migration artifact integration](#migration-artifact-integration)
 - [Variables](#variables)
@@ -39,8 +40,10 @@ Package formats are written directly in .NET without calling external `tar`, `dp
 
 ## Features
 
+> Application network bindings: all three formats ship `.bindings` at the application root. Configuration declarations support Web/gRPC routing and container port publication; see [usage and examples](#application-bindings).
+
 - **One command, three formats:** the `tar`, `deb`, and `rpm` subcommands share one set of metadata, variables, file entries, service scripts, and output naming rules.
-- **Generated services:** creates a systemd service when no `.service` file is supplied; `--listen` sets the listening address.
+- **Generated services:** creates a systemd service when no .service file is supplied; the application configuration controls its listeners.
 - **Complete lifecycle:** generates install and uninstall scripts for every format, with custom hooks and pre/post snippets.
 - **Flexible payload selection:** explicit files, recursive directories, path-segment globbing (including `**`), exclusion patterns, target aliases, and root-level entries such as `/etc/nginx/conf.d/zongsoft.web.conf`.
 - **Application versioning:** reads and updates the source directory's `.edition` manifest (falling back to `.version`), including multiple _**E**ditions_.
@@ -161,7 +164,6 @@ dotnet-pack deb ^
 	--Environment:production ^
 	--DOTNET_ENVIRONMENT:production ^
 	--ASPNETCORE_ENVIRONMENT:production ^
-	--listen:8069 ^
 	--daemon:zongsoft.web ^
 	--web:nginx ^
 	--daemon-environments:Environment,DOTNET_ENVIRONMENT,ASPNETCORE_ENVIRONMENT ^
@@ -183,7 +185,6 @@ dotnet-pack deb ^
 | `--version:1.0.0` | Example release version number; use your actual version number. |
 | `--compilation`, `framework` | The option supplies the build configuration; combined variable providers supply the framework (hosting `.env` in this example). Both are referenced by `${compilation}` and `${framework}` in exclusions and payload arguments. |
 | `--Environment`, `--DOTNET_ENVIRONMENT`, `--ASPNETCORE_ENVIRONMENT` | Custom variables written into the generated service environment through `--daemon-environments`. |
-| `--listen:8069` | The generated service listens on `http://127.0.0.1:8069`. |
 | `--daemon:zongsoft.web` | Package and service identifier `zongsoft.web`; install path `/opt/zongsoft/web`. |
 | `--web:nginx` | Generates an Nginx site configuration from the host's `web.profile`. |
 | `--exclude` | Skips log directories and the static web asset manifests produced by the build. |
@@ -275,7 +276,6 @@ Ordinary file packaging needs neither `--framework` nor `--compilation`; these o
 | `--install-path:<path>` | `/opt/<identifier path>` | Linux install directory. The identifier is lowercased and every dot becomes `/`: `Zongsoft.Hosting.Web` maps to `/opt/zongsoft/hosting/web`. With a non-disabled `--daemon:zongsoft.web`, the daemon identifier is used instead, giving `/opt/zongsoft/web`. |
 | `--daemon:<name-or-file>` | auto-detect/generate | systemd service identifier or an existing `.service` file; `none`, `disable`, or `disabled` turns the service off. |
 | `--daemon-environments:<names>` | empty | When generating a service, reads these names from the variable view and writes them as `Environment=`; separate with `,` or `;`. |
-| `--listen:<port-or-url>` | empty | Listening port or address of the generated service; a port binds to `127.0.0.1`, a complete address is passed to the host's `--urls` unchanged. |
 
 ### Package description
 
@@ -378,7 +378,6 @@ Build a portable tarball:
 dotnet-pack tar \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
-  --listen:8069 \
   --daemon:zongsoft.web \
   --version:1.0.0 \
   --platform:linux \
@@ -400,7 +399,6 @@ Build an RPM package with dependency metadata:
 dotnet-pack rpm \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
-  --listen:8069 \
   --daemon:zongsoft.web \
   --version:1.0.0 \
   --platform:linux \
@@ -425,7 +423,6 @@ Build a Debian package with Nginx configuration (see [Web hosting configuration]
 dotnet-pack deb \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
-  --listen:8069 \
   --daemon:zongsoft.web \
   --version:1.0.0 \
   --platform:linux \
@@ -524,7 +521,6 @@ Package entries are the files written into the package payload, specified as pos
 dotnet-pack deb \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
-  --listen:8069 \
   --daemon:zongsoft.web \
   --version:1.0.0 \
   --platform:linux \
@@ -539,7 +535,6 @@ dotnet-pack deb \
 dotnet-pack deb \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
-  --listen:8069 \
   --daemon:zongsoft.web \
   --version:1.0.0 \
   --platform:linux \
@@ -588,7 +583,6 @@ An alias starting with `/` or `\` is a **root-level entry** and installs to an a
 dotnet-pack deb \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
-  --listen:8069 \
   --daemon:zongsoft.web \
   --version:1.0.0 \
   --platform:linux \
@@ -648,27 +642,9 @@ The generated service runs:
 ExecStart=dotnet /opt/zongsoft/web/Zongsoft.Hosting.Web.dll
 ```
 
-### Listening address
+### Listening addresses
 
-`--listen:<value>` is passed to the application as `--urls`. When omitted, no `--urls` is added; an existing `.service` file keeps its `ExecStart`.
-
-| Value | Resulting `--urls` |
-| --- | --- |
-| `--listen:8069` (port only) | `http://127.0.0.1:8069` |
-| `--listen:http://0.0.0.0:8069` (complete address) | Used unchanged |
-| `--listen:"http://0.0.0.0:8069;https://0.0.0.0:8443"` (multiple addresses) | Semicolon-separated; quote the whole value |
-
-For example, `--listen:8069` generates:
-
-```ini
-ExecStart=dotnet /opt/zongsoft/web/Zongsoft.Hosting.Web.dll --urls http://127.0.0.1:8069
-```
-
-> 💡 **Tip:** A port-only value binds to `127.0.0.1`, which suits a local reverse proxy. Use a complete address such as `http://0.0.0.0:8069` when the application must accept direct network connections.
-
-HTTPS requires a usable default server certificate configured in the host; the packager does not generate or configure certificates. See [Kestrel endpoint configuration](https://github.com/dotnet/AspNetCore.Docs/blob/main/aspnetcore/fundamentals/servers/kestrel/endpoints.md). HTTPS in the table above is optional; the current hosting scripts do not enable it.
-
-> 🚨 **Warning:** HTTPS endpoints fail to start if the host has no usable default certificate. Configure and protect the certificate in the application environment.
+The application reads listener addresses and HTTPS certificates from its runtime configuration. Packaging preserves application startup arguments. Supply declarations through configuration instructions; see [Application network bindings](#application-bindings).
 
 ### Service environment variables
 
@@ -678,7 +654,6 @@ Values of the variables listed in `--daemon-environments` are written to the gen
 dotnet-pack deb \
   --name:Zongsoft.Hosting.Web \
   --title:Zongsoft.Web \
-  --listen:8069 \
   --daemon:zongsoft.web \
   --version:1.0.0 \
   --platform:linux \
@@ -767,7 +742,7 @@ bind!legacy = http://*,http://[::]
 server = http://app:8069
 ```
 
-For the Web host, `server=~` uses the generated service's listening port (such as `8069`); adjust site settings for your environment.
+Omit server to combine packaged application bindings automatically; use an alias to restrict selection or an explicit URL for a remote backend. HTTP and native gRPC are routed independently. Adjust site settings for your environment.
 
 ### Payload and conversion are independent
 
@@ -883,7 +858,6 @@ export APP_NAME=Zongsoft.Hosting.Web
 export APP_VERSION=1.0.0
 
 dotnet-pack deb \
-  --listen:8069 \
   --daemon:zongsoft.web \
   --name:"$APP_NAME" \
   --version:"$APP_VERSION" \
@@ -943,11 +917,10 @@ The archive records the following metadata as PAX global attributes. All attribu
 | `Summary` | Summary, falling back to the title and then the application name when blank. |
 | `Description` | Full description, falling back to the effective summary when blank; Unicode and line breaks are preserved through the text escaping described below. |
 | `InstallPath` | Default installation path; installation-time overrides still apply where supported. |
-| `Listen` | Effective listening address of the generated host; omitted for an existing service, disabled host, or blank value. |
 | `Dependencies` | Validated dependency declarations in the shared input syntax, with required groups separated by `; `; informational only. |
 | `Category` | Explicit package category, without Debian or RPM default categories. |
 
-Blank optional values (`License`, `Homepage`, `Maintainer`, `InstallPath`, `Listen`, `Dependencies`, and `Category`) are omitted. `PackageSize` is `0` for an empty payload. No `BuildTime` attribute is written.
+Blank optional values (`License`, `Homepage`, `Maintainer`, `InstallPath`, `Dependencies`, and `Category`) are omitted. PackageSize includes the generated .bindings file (38 bytes for the empty document). No `BuildTime` attribute is written.
 
 The .NET PAX writer rejects literal line breaks in attribute values. `Summary` and `Description` therefore escape backslashes, carriage returns, and line feeds as `\\`, `\r`, and `\n`, respectively; readers must decode these sequences to restore the original text. Other attributes retain their existing plain-text representation.
 
@@ -1021,14 +994,13 @@ Root-level entries under `/etc/` are marked as RPM configuration files.
 | License | `License` | `License` (custom) | `LICENSE` (1014) |
 | Summary | `Summary` | First line of `Description` | `SUMMARY` (1004) |
 | Full description | `Description` | Continuation lines of `Description`; synopsis if absent | `DESCRIPTION` (1005) |
-| Default installation path | `InstallPath` | `InstallPath` (custom) | Application string tag `1000002`; legacy `DEFAULTPREFIX` (1056) retained |
-| Generated host listener | `Listen` | `Listen` (custom) | Application string tag `1000001` |
+| Default installation path | `InstallPath` | `InstallPath` (custom) | Application string tag `1000003`; legacy `DEFAULTPREFIX` (1056) retained |
 | Dependencies | `Dependencies` | `Depends` | `REQUIRENAME` / `REQUIREFLAGS` / `REQUIREVERSION` (1049 / 1048 / 1050) |
 | Category | `Category` | `Section` | `GROUP` (1016) |
 
 Summary selects the first nonblank value from `Summary`, `Title`, and application name in every format. A blank description falls back to that summary. Debian writes a single-line synopsis and a separate long description when it differs; multiline summaries are flattened to one line. Long descriptions normalize line endings to LF, preserve internal indentation, and encode blank lines as ` .`. Tar uses the escaping described above; RPM retains literal text.
 
-Architecture names follow the target format: for example, `x64` / `amd64` / `x86_64`, and `arm64` / `arm64` / `aarch64`. `PackageSize` always means payload file bytes, not compressed package size or filesystem allocation. Debian retains its native `Installed-Size` estimate, rounded up to KiB with a minimum of 1; the additional byte field avoids losing precision, including an empty payload's `0`. RPM size queries should use `%{LONGSIZE}`, which also reads packages storing the 32-bit `SIZE` tag.
+Architecture names follow the target format: for example, `x64` / `amd64` / `x86_64`, and `arm64` / `arm64` / `aarch64`. `PackageSize` always means payload file bytes, not compressed package size or filesystem allocation. Debian retains its native `Installed-Size` estimate, rounded up to KiB with a minimum of 1; the additional byte field avoids losing precision, including the generated .bindings file. RPM size queries should use `%{LONGSIZE}`, which also reads packages storing the 32-bit `SIZE` tag.
 
 Blank license and homepage values are omitted in every format. Debian requires `Maintainer` and uses `Unknown` when blank; tar and RPM omit a blank maintainer. A blank category is omitted in tar, while Debian uses `utils` and RPM uses `Applications/System`. These defaults and Debian whitespace normalization are format differences.
 
@@ -1038,7 +1010,7 @@ RPM additionally records `RELEASE`, `OS`, `BUILDTIME`, `BUILDHOST`, file digests
 
 The current RPM `newc` payload supports at most `4 GiB - 1` bytes per file and rejects larger files before publication. Total payload and archive sizes use 64-bit RPM tags when necessary. This limit belongs to the selected payload encoding, not a lack of 64-bit size metadata in RPM.
 
-`dpkg-deb --info` and `rpm -qip` are formatted summaries. Inspect the full Debian stanza with `dpkg-deb -f <package.deb>`; inspect registered RPM fields with `--queryformat`. The unregistered RPM listener and installation-path tags require a header reader that knows application tags `1000001` and `1000002`. Modern RPM does not recognize the deprecated `DEFAULTPREFIX` name in queries. These path fields describe the built-in installation path and do not mark the package as relocatable.
+`dpkg-deb --info` and `rpm -qip` are formatted summaries. Inspect the full Debian stanza with `dpkg-deb -f <package.deb>`; inspect registered RPM fields with `--queryformat`. The unregistered RPM installation-path tag requires a header reader that knows application tag `1000003`; listener bindings are read from the payload's .bindings file. Modern RPM does not recognize the deprecated `DEFAULTPREFIX` name in queries. These path fields describe the built-in installation path and do not mark the package as relocatable.
 
 Debian text fields follow the existing normalization rules: surrounding whitespace is trimmed, and a whitespace-only manufacturer field is omitted. Tar and RPM retain the manufacturer value. These fields are format metadata and add no installed files.
 
@@ -1058,7 +1030,7 @@ The RPM `PACKAGER` tag (1015) holds the `--maintainer` value. This metadata live
 
 1. **Prepare the application.** Build the application and deploy its plugins, use the application directory itself as `--source`, and select the required binaries, configuration, plugins, and static files with positional arguments; no staging directory is needed. When packaging every file, keep the output directory outside the source so older packages cannot become payload.
 2. **Choose the payload.** Without positional entries, every file under `--source` is included. For a smaller, reviewable package, list files and directories explicitly and use `--exclude` for files that must stay out.
-3. **Verify the package identity.** Check `--name`, `--version`, the optional `--edition`, platform, and architecture; confirm the generated service identifier, `--install-path`, and `--listen` address match the target environment.
+3. **Verify the package identity.** Check `--name`, `--version`, the optional `--edition`, platform, and architecture; confirm the generated service identifier, `--install-path`, and application listener configuration match the target environment.
 4. **Inspect the output.** Use `tar -tzf`, `dpkg-deb --info`/`--contents`, or `rpm -qip`/`-qlp`/`-qp --scripts`; for service-managing packages, also review lifecycle scripts and the systemd unit.
 5. **Validate in staging.** Test installation, service startup, configuration paths, and removal, using `DESTDIR` with tar packages or a disposable host. Record environment-specific configuration instead of relying on production-only conditions.
 6. **Release to production carefully.** Back up application data and confirm recovery steps first. With `--migration`, installation runs migrations that may change databases and Amazon S3 buckets; keep the same migration state directory across package versions.
@@ -1101,3 +1073,163 @@ Run these commands from the `packager` directory of the tools repository.
 ## License
 
 This project is licensed under the [MIT](https://github.com/Zongsoft/tools/blob/main/LICENSE) license.
+
+<a id="application-bindings"></a>
+
+## Application network bindings
+
+Declare configured listeners with `<?zongsoft.tools.binding ...?>` in the `.option` files you ship. Web ingress can discover these declarations, and Containerizer can use them to publish host ports. The instruction does not start servers or change application listeners.
+
+### Web and gRPC
+
+This configuration declares an ordinary Web root and an OTLP gRPC region:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<?zongsoft.tools.binding name="kestrel" path="Kestrel/Endpoints/*"
+	template="${option.Url}" protocols="${option.Protocols}" required="true"?>
+<options>
+	<option path="kestrel">
+		<endpoints>
+			<http url="http://*:8069" protocols="http1" />
+			<telemetry url="http://*:4317/opentelemetry" protocols="grpc+http2" />
+		</endpoints>
+	</option>
+</options>
+```
+
+| Value | Origin and use |
+| --- | --- |
+| `8069`, `4317` | The runtime URLs specify the Web and OTLP receiver ports. |
+| `*` | An IPv4 wildcard; declare `[::]` separately for IPv6. |
+| `/`, `/opentelemetry` | The Web URL defaults to the root; the OTLP URL supplies its literal base path. |
+| `http1`, `grpc+http2` | Each item's `Protocols`; the latter declares only gRPC, without ordinary HTTP routes. |
+| Default aliases | `kestrel/endpoints/http` and `kestrel/endpoints/telemetry`, from the configuration paths. |
+| Named aliases | `name=kestrel` also adds `kestrel` and `kestrel/http` or `kestrel/telemetry`. Selecting the shared alias may be ambiguous. |
+
+Use this `web.profile` to route both request categories automatically:
+
+```ini
+[api]
+host = api.example.test
+bind = http://*:8080
+nginx:http2 = on
+```
+
+Ingress port `8080` comes from the profile and is independent of application ports `8069` and `4317`. Ordinary HTTP reaches Web; gRPC requests under `/opentelemetry/<full-service-name>/<method>` reach the receiver. Paths and query strings are preserved. Unmatched gRPC does not fall back to Web. A plugin with its own listener supplies its own declaration; Controllers, OpenAPI and SignalR sharing the host listener need no separate binding.
+
+Set `server = kestrel/http` to select a unique alias, or `server = https://upstream.example.test:9443/orders` for a remote HTTP upstream. Remote gRPC uses `grpc://` or `grpcs://` with an explicit port. See [Web hosting](docs/web.md) for ingress, certificates, paths and upstream policies.
+
+### Instruction attributes
+
+| Attribute | Usage |
+| --- | --- |
+| `path` | Required. An exact configuration path or trailing `/*` for immediate children. `/` selects the root. This is neither XPath nor recursive expansion. |
+| `template` | Required. A complete listener URL template, such as `${option.Url}`. |
+| `protocols` | Optional. A capability template such as `${option.Protocols}`, or a constant such as `tcp`. Omission does not add HTTP versions. |
+| `name` | Optional additional alias. Collection selections also add `name/child-key`; configuration path aliases remain available. |
+| `filter` | Optional. Select candidates before reading addresses and protocols. |
+| `separators` | Address-result separator characters, default `,;\|`. An explicit nonempty value replaces the defaults. Protocol lists always use commas. |
+| `required` | Default `false` allows no results; `true` requires at least one valid result from this declaration. Both reject errors in selected items. |
+
+The instruction name is case insensitive; examples use the complete lowercase name. It can appear at the file level or inside an XML element. `path` always starts at the configuration root. Unknown or duplicate attributes, missing selected fields, invalid URLs, empty address items, unresolved expressions, conflicting protocols and invalid Settings text stop packaging.
+
+### Templates, settings and filters
+
+| Expression | Source |
+| --- | --- |
+| `${option.Url}` | The current candidate's `Url`. |
+| `${option.Network.Address}` | Its `Network/Address` child. |
+| `${option['/Network/Address']}` | The root of this file and its explicit imports. |
+| `${option.Settings['urls']}` | The `urls` key parsed from its `Settings` text. |
+| `tcp://${option.Value['address']}` | The `address` setting in `Value`, prefixed with `tcp://`. |
+
+Quote fixed settings keys, as in `['urls']`. Expressions read only the selected configuration view; they do not read the build machine's environment or missing fields from unrelated packaged files.
+
+Filters use the [deployer syntax](../deployer/README.md#filtering): `Enabled` tests presence, `Enabled:true` tests a value, `!Enabled | Enabled:true` enables missing values, and `Driver:prometheus,custom` accepts either value. `&` and `|` evaluate left to right, without grouping parentheses. Write `&amp;` inside XML attributes. Filter field references also support `/Server/Enabled` and `Settings[enabled]`.
+
+In `.option.template`, escape expressions intended for Packager as `\${option.Url}` or `\${option.Protocols}`. Deployer removes that escape and produces `${...}` in the final `.option`. Deployment variables in the runtime configuration are evaluated normally:
+
+```xml
+<?zongsoft.tools.binding path="Kestrel/Endpoints/http"
+	template="\${option.Url}" protocols="\${option.Protocols}" required="true"?>
+<options>
+	<option path="kestrel">
+		<endpoints>
+			<http url="${web:url#xml}" protocols="${web:protocols#xml}" />
+		</endpoints>
+	</option>
+</options>
+```
+
+`${web:url#xml}` comes from deployment variables and is escaped for an XML attribute. `\${option.Url}` survives in the generated configuration for packaging to read that final value. Do not ship an unevaluated `.option.template` as a finished configuration.
+
+### Prometheus, multiple addresses and non-HTTP listeners
+
+Prometheus reads complete scrape URLs from the same runtime settings:
+
+```xml
+<?zongsoft.tools.binding name="prometheus"
+	path="Diagnostics/Diagnostor/Meters/Exporters/*" filter="Driver:prometheus"
+	template="${option.Settings['urls']}" protocols="http1"?>
+<options>
+	<option path="Diagnostics/Diagnostor/Meters/Exporters">
+		<exporter exporter.name="prometheus" driver="prometheus"
+			settings="urls='http://127.0.0.1:9464/metrics;http://localhost:9464/metrics';totalSuffix=true;cacheDuration=300ms" />
+	</option>
+</options>
+```
+
+`Driver` selects the exporter. Settings quotes retain the semicolon inside `urls`; the evaluated value then splits into two addresses. Both `9464` and `/metrics` come from the URLs; `http1` explicitly describes this scrape server. These are alternative addresses for one service, not two load-balancing instances. `totalSuffix` and `cacheDuration` do not affect bindings. Outbound OTLP targets are not listeners. Container access requires a listener reachable on the container network.
+
+The following fields and instructions must match the shipped server configuration. Ports are example configuration values, not tool-inferred defaults:
+
+| Service and input | Instruction attributes | Result and boundary |
+| --- | --- | --- |
+| Garnet: `Externals/Garnet/default/Value=address=0.0.0.0:6379` | `name="garnet" path="Externals/Garnet/default" template="tcp://${option.Value['address']}" protocols="tcp" required="true"` | `6379/tcp`; the plugin must select settings named `default`. Authentication, TLS and persistence remain Garnet configuration. |
+| MQTT: `Messaging/Mqtt/Server`, `enabled=true`, `url=tcp://0.0.0.0:1883` | `name="mqtt" path="Messaging/Mqtt/Server" filter="enabled:true" template="${option.Url}" protocols="tcp"` | `1883/tcp`; ship and enable the daemon plugin. This declares neither WebSocket nor TLS. |
+| OPC UA: `Externals/Opc/Server`, `enabled=true`, `urls=opc.tcp://0.0.0.0:4840/FactoryA` | `name="opc" path="Externals/Opc/Server" filter="enabled:true" template="${option.Urls}" separators="," protocols="opc.tcp"` | `4840/tcp`, retaining `/FactoryA`. `Discovery` is a registration target, not a listener. |
+| UDP: `Network/Receiver/Url=udp://0.0.0.0:9000` | `name="receiver" path="Network/Receiver" template="${option.Url}" protocols="udp"` | `9000/udp`; no extra TCP mapping or HTTP proxy. |
+
+Declare ZeroMQ's four roles separately rather than combining their URLs:
+
+```xml
+<?zongsoft.tools.binding name="zeromq/control" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${option.Control}" protocols="tcp"?>
+<?zongsoft.tools.binding name="zeromq/incoming" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${option.Incoming}" protocols="tcp"?>
+<?zongsoft.tools.binding name="zeromq/outgoing" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${option.Outgoing}" protocols="tcp"?>
+<?zongsoft.tools.binding name="zeromq/discovery" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${option.Discovery}" protocols="tcp"?>
+<options>
+	<option path="Messaging/ZeroMQ">
+		<server name="QueueServer" enabled="true" storage="QueueServer"
+			control="tcp://0.0.0.0:32100" incoming="tcp://0.0.0.0:32101"
+			outgoing="tcp://0.0.0.0:32102" discovery="tcp://0.0.0.0:7969" />
+	</option>
+</options>
+```
+
+Control, Incoming, Outgoing and Discovery supply the ROUTER, XSUB, XPUB and REP listener ports respectively. Reliable mode also requires the selected `Storage` factory. Broadcast-only mode can omit both Control and Storage. Discovery returns ports and clients reuse the discovery host, so all roles must be available through the same published host with unchanged port numbers; arbitrary NAT port translation is not implied.
+
+### Protocol and path selection
+
+| Declaration | Meaning |
+| --- | --- |
+| `http1,http2` | Two ordinary HTTP version capabilities. |
+| `grpc` or `http2+grpc` | Equivalent to `grpc+http2`. |
+| `http2,grpc` | Ordinary HTTP/2 and gRPC, matched separately. |
+| `protobuf` | `protobuf+http`, without a concrete HTTP version; specify `protobuf+http1` etc. when needed. |
+| An `https` URL with `http1,http3` | The same port requires TCP and UDP. HTTP/3 requires HTTPS. |
+| A `tcp` URL with `protobuf+tcp` | Direct TCP, without automatic HTTP or gRPC conversion. |
+
+Listener URLs support `http`, `https`, `tcp`, `udp` and `opc.tcp`. TCP/UDP require root paths; fixed ports range from 1 to 65535. HTTP/HTTPS default to ports 80/443; other schemes require an explicit port. Userinfo, queries, fragments and Unix socket declarations are rejected. Unknown capabilities are not guessed as TCP.
+
+HTTP base paths match literal path segments, ignoring case and a non-root trailing slash: `/metrics` matches itself and `/metrics/...`, not `/metrics-extra`. The longest range wins within a request category; independent backends claiming the same range conflict. Ordinary HTTP and gRPC match separately. Protobuf encoding does not create a third request category or business path.
+
+### Input scope, imports and diagnostics
+
+Each final packaged `.option` independently reads its explicit `<?import ...?>` chain. Names and directories do not establish runtime-environment precedence. Relative imports use the installed declaring file's directory; absolute imports use the virtual installation filesystem root. In `/opt/demo/web.option`, `./shared.option` and `/opt/demo/shared.option` identify the same file. Excluding it prevents packaging from reading a leftover build-machine copy.
+
+A shared file can supply values, with the binding in its final consumer. If both a base file and an override file contain declarations and are packaged independently, both contribute results: 8069 and 8070 remain two listeners. Equivalent content merges aliases. An alias identifying multiple independent bindings is ambiguous when selected.
+
+Diagnostics identify the declaration file, line/column, configuration path and attribute. Keep credentials out of addresses. Correct the configuration and package again. The generated `.bindings` file is installed at the application root in all three formats, with mode `0644` and a 1 MiB limit. Even no declarations produce a valid empty document. Do not supply a payload at that reserved path or edit generated files manually.
+
+See [Containerizer publication](../containerizer/README.md#binding-publication) for host-port examples and the [implementation reference](docs/implementation.md#binding-document) for the file contract.

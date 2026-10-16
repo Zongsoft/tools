@@ -43,8 +43,8 @@ partial class Configurator
 	partial class Nginx
 	{
 		internal sealed record Directive(string Name, IReadOnlyList<Argument> Arguments, IReadOnlyList<Directive> Children = null);
-		internal readonly record struct Argument(string Value, ArgumentKind Kind = ArgumentKind.Literal, bool Relative = false);
-		internal enum ArgumentKind { Literal, Raw, Expression, Resource, Pattern, Application }
+		internal readonly record struct Argument(string Value, ArgumentKind Kind = ArgumentKind.Literal, bool Relative = false, string Binding = null, string Endpoint = null);
+		internal enum ArgumentKind { Literal, Raw, Expression, Resource, Pattern, Binding }
 
 		internal static IReadOnlyList<string> Tokenize(string text, Diagnostic.Location source)
 		{
@@ -143,6 +143,11 @@ partial class Configurator
 
 				if(site && entry.Name == "proxy_pass" || !site && entry.Name is "listen" or "server_name")
 					throw DefinitionException.Create("Directive", entry.Source, entry.Name);
+
+				if(entry.Name is "proxy_pass" or "grpc_pass" or "fastcgi_pass" or "uwsgi_pass" or "scgi_pass" or "memcached_pass" or "include" or "rewrite" or "try_files" or "return" or "error_page" or "recursive_error_pages" or
+					"proxy_http_version" or "proxy_method" or "proxy_set_body" or "grpc_set_header" or "proxy_next_upstream" or "proxy_next_upstream_tries" or
+					"grpc_next_upstream" or "grpc_next_upstream_tries" || entry.Name.StartsWith("proxy_ssl_", StringComparison.Ordinal) || entry.Name.StartsWith("grpc_ssl_", StringComparison.Ordinal))
+					throw DefinitionException.Create("Capability", entry.Source, "structured binding mapping: " + entry.Name);
 
 				var parameters = new List<string>();
 				if(entry.Suffix != null)

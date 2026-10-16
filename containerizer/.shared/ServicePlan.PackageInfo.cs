@@ -31,14 +31,27 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+using System;
+using System.Collections.Generic;
+using System.Text.Json.Serialization;
+
 namespace Zongsoft.Tools.Containerizer.Protocol;
 
-internal sealed class WebBindingPlan
+partial class ServicePlan
 {
-	public string Scheme { get; set; }
-	public string Address { get; set; }
-	public int Port { get; set; }
-	public bool IsExplicitDefault { get; set; }
-	public bool IsDefault { get; set; }
-	public string Publication { get; set; }
+	#region 嵌套类型
+	/// <summary>表示应用服务所使用的安装包及其运行时信息。</summary>
+	internal sealed class PackageInfo
+	{
+		#region 公共属性
+		public string Name { get; set; }
+		public string Version { get; set; }
+		public string Architecture { get; set; }
+		public string Format { get; set; }
+		public string Hash { get; set; }
+		public string Runtime { get; set; }
+		public string BaseImageReference { get; set; }
+		#endregion
+	}
+	#endregion
 }

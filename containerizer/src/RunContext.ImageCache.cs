@@ -44,7 +44,7 @@ namespace Zongsoft.Tools.Containerizer;
 
 internal sealed partial class RunContext
 {
-	private sealed class ImageCache(ContainerEngine engine, DeliveryPlan plan, string session)
+	private sealed class ImageCache(ContainerEngine engine, ContainerBundlePlan plan, string session)
 	{
 		#region 常量定义
 		private const string LABEL = "org.zongsoft.containerizer.run-cache";

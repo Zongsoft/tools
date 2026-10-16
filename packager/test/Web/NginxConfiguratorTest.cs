@@ -26,13 +26,13 @@ public class NginxConfiguratorTest
 	}
 
 	[Fact]
-	public void NativeGroupsMaskUnusedCommonValuesAndApplicationInference()
+	public void NativeListenersMaskUnusedCommonValues()
 	{
 		using var files = new MigrationTestDirectory();
-		var result = Configure(files, "[api]\nbind!legacy=${absent}\nhost=${absent}\nnginx:listen!80\nnginx:server_name=example.com\nserver=~\n[api home]\nnginx:proxy_pass=http://app");
+		var result = Configure(files, "[api]\nbind!legacy=${absent}\nhost=${absent}\nnginx:listen!80\nnginx:server_name=example.com\nserver=http://app");
 		var text = Assert.Single(result.Files, file => file.Path.EndsWith(".conf", StringComparison.Ordinal)).Content.Render("/opt/example");
 		Assert.Contains("listen 80;", text);
-		Assert.Contains("proxy_pass http://app;", text);
+		Assert.Contains("proxy_pass http://app:80;", text);
 		Assert.NotEmpty(result.Diagnostics);
 	}
 
@@ -57,7 +57,7 @@ public class NginxConfiguratorTest
 	[InlineData("nginx:charset=utf-8;", "Directive")]
 	[InlineData("nginx:worker_cpu_affinity=auto", "Directive")]
 	[InlineData("nginx:log_format=custom '$request'", "Directive")]
-	[InlineData("nginx:proxy_next_upstream_tries!2=3", "Directive")]
+	[InlineData("nginx:proxy_next_upstream_tries!2=3", "Capability")]
 	public void NativeBlockOrStatementInjectionIsRejected(string entry, string code)
 	{
 		using var files = new MigrationTestDirectory();
@@ -66,12 +66,12 @@ public class NginxConfiguratorTest
 	}
 
 	[Fact]
-	public void RegexAndHeaderPriorityArePreserved()
+	public void LiteralScopeAndHeaderPriorityArePreserved()
 	{
 		using var files = new MigrationTestDirectory();
-		var result = Configure(files, "[api]\nbind!legacy=http://*\nserver=http://app\nnginx:proxy_set_header!Host=${unused}\n[api route]\nmatch=regex\npath=^/items/[0-9]{2}$\nheader!Host=literal.example\nnginx:proxy_set_header!X-Remote=$remote_addr");
+		var result = Configure(files, "[api]\nbind!legacy=http://*\nserver=http://app\nnginx:proxy_set_header!Host=parent.example\n[api route]\npath=/Items/\nheader!Host=literal.example\nnginx:proxy_set_header!X-Remote=$remote_addr");
 		var text = Assert.Single(result.Files, file => file.Path.EndsWith(".conf", StringComparison.Ordinal)).Content.Render("/opt/example");
-		Assert.Contains("location ~* \"^/items/[0-9]{2}$\"", text);
+		Assert.Contains("~*^http:/items(?:/|[?]|$)", text);
 		Assert.Contains("proxy_set_header Host literal.example;", text);
 		Assert.Contains("proxy_set_header X-Remote $remote_addr;", text);
 		Assert.DoesNotContain("${unused}", text);
@@ -97,15 +97,15 @@ public class NginxConfiguratorTest
 	{
 		using var files = new MigrationTestDirectory();
 		var profile = "[api]\nnginx:listen!80\n[api route]\nmatch=regex\npath=^/api\nnginx:proxy_pass=" + target;
-		Assert.Equal("Directive", Assert.Throws<DefinitionException>(() => Configure(files, profile)).Diagnostic.Code);
+		Assert.Equal("Value", Assert.Throws<DefinitionException>(() => Configure(files, profile)).Diagnostic.Code);
 	}
 
 	[Fact]
 	public void NativeHeaderCanUseAQuotedNameAndAnEmptyValue()
 	{
 		using var files = new MigrationTestDirectory();
-		var result = Configure(files, "[api]\nbind!legacy=http://*\nserver=http://app\nnginx:proxy_set_header='Host'");
-		Assert.Contains("proxy_set_header Host \"\";", result.Files[0].Content.Render("/opt/app"));
+		var result = Configure(files, "[api]\nbind!legacy=http://*\nserver=http://app\nnginx:proxy_set_header='X-Empty'");
+		Assert.Contains("proxy_set_header X-Empty \"\";", result.Files[0].Content.Render("/opt/app"));
 	}
 
 

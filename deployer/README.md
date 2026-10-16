@@ -7,7 +7,7 @@
 
 [English](README.md) | [简体中文](README.zh-Hans.md)
 
-Terminal warnings use dark-yellow text with bold cyan parameters; errors use dark-red text with bold magenta parameters; success messages use green text. Exception types are highlighted in magenta and messages retain their original text. All four tools share the repository’s `.shared/Utility.Output.cs`: `FormatOutput` and `FormatError` construct Core `CommandOutletContent`; `WriteOutput` and `WriteError` route terminal and text-writer output; tools using the command executor call `HandleFailure` to display exceptions and mark them handled, while retaining their own exit codes. Terminals renders the colors. Redirected output and caller-provided error writers preserve plain text and their original streams. Custom TextWriter output and deployment reports also remain plain text.
+Terminal colors distinguish warnings, errors and success messages. Redirected output remains plain text on its original stream.
 
 Run `dotnet deploy --help` or `dotnet deploy -h` for common options: the command name is bold cyan, option names are cyan, and placeholders and candidate values are green. Help returns `0` without reading `.env` or processing input files. Once deployment starts, it ends with one elapsed-time line, with the command name and seconds in bold cyan. Failed operations also report elapsed time; timing alone does not indicate success.
 

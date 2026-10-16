@@ -46,7 +46,7 @@ namespace Zongsoft.Tools.Containerizer.Execution;
 partial class InstallationManager
 {
 	#region 私有方法
-	private async Task InstallAsync(DeliveryBundle input, ExecutorArguments arguments, CancellationToken cancellation)
+	private async Task InstallAsync(ContainerBundle input, ExecutorArguments arguments, CancellationToken cancellation)
 	{
 		var installation = store.Load(input.Plan.Name, false);
 
@@ -98,11 +98,11 @@ partial class InstallationManager
 			store.Save(installation);
 		}
 
-		using var bundle = DeliveryBundle.Open(installation.Pending.Assets);
+		using var bundle = ContainerBundle.Open(installation.Pending.Assets);
 		await this.ContinueAsync(installation, bundle, arguments.Command == "prepare", arguments.NoStart || wasInMaintenance, null, cancellation);
 	}
 
-	private async Task ContinueAsync(Installation installation, DeliveryBundle bundle, bool prepareOnly, bool suppressStart, string retryMigrationVersion, CancellationToken cancellation)
+	private async Task ContinueAsync(Installation installation, ContainerBundle bundle, bool prepareOnly, bool suppressStart, string retryMigrationVersion, CancellationToken cancellation)
 	{
 		var requiresMaintenance = false;
 

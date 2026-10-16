@@ -49,7 +49,7 @@ namespace Zongsoft.Tools.Containerizer.Execution;
 partial class DockerHost
 {
 	#region 公共方法
-	public async Task InstallExecutorAsync(DeliveryBundle bundle, CancellationToken cancellation)
+	public async Task InstallExecutorAsync(ContainerBundle bundle, CancellationToken cancellation)
 	{
 		using var hostLock = store.AcquireHostLock();
 		var target = Installation.Paths.ExecutorPath;
@@ -70,7 +70,7 @@ partial class DockerHost
 
 		foreach(var installation in store.List())
 		{
-			if(installation.Schema != DeliveryPlan.ProtocolVersion)
+			if(installation.Schema != ContainerBundlePlan.ProtocolVersion)
 				throw new ContainerizationException(3, Properties.Resources.DockerHost_7_Message);
 		}
 
@@ -80,7 +80,7 @@ partial class DockerHost
 		using(var json = JsonDocument.Parse(protocol))
 		{
 			if(json.RootElement.GetProperty("tool").GetString() != "containerizer" ||
-				json.RootElement.GetProperty("minimum").GetInt32() != DeliveryPlan.ProtocolVersion ||
+				json.RootElement.GetProperty("minimum").GetInt32() != ContainerBundlePlan.ProtocolVersion ||
 				json.RootElement.GetProperty("maximum").GetInt32() < bundle.Plan.Schema)
 				throw new ContainerizationException(3, Properties.Resources.DockerHost_8_Message);
 		}
@@ -120,7 +120,7 @@ partial class DockerHost
 		finally { if(File.Exists(staging)) File.Delete(staging); }
 	}
 
-	public async Task PrepareBootstrapAsync(DeliveryBundle bundle, Installation installation, CancellationToken cancellation)
+	public async Task PrepareBootstrapAsync(ContainerBundle bundle, Installation installation, CancellationToken cancellation)
 	{
 		var engineProbe = await runner.RunAsync("sh", ["-c", "command -v docker"], null, cancellation, 30);
 		if(engineProbe.ExitCode == 0)
@@ -149,6 +149,35 @@ partial class DockerHost
 		using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(30) };
 
 		foreach(var package in plan.Packages)
+			paths.Add(await PreparePackageAsync(package));
+
+		var usesDebianPackages = bundle.Plan.Distribution.StartsWith("debian", StringComparison.Ordinal) || bundle.Plan.Distribution.StartsWith("ubuntu", StringComparison.Ordinal);
+		var arguments = usesDebianPackages ? new List<string>
+		{
+			"-y",
+			"--no-download",
+			"--no-remove",
+			"--no-install-recommends",
+			"-o",
+			"Dir::Etc::sourcelist=/dev/null",
+			"-o",
+			"Dir::Etc::sourceparts=-",
+			"-o",
+			$"Dir::Cache::archives={PreparePackageCache(paths, Path.Combine(cache, "apt"))}",
+			"install"
+		} : PrepareRpmArguments();
+
+		if(usesDebianPackages)
+			arguments.AddRange(paths);
+		var result = await runner.RunAsync(usesDebianPackages ? "apt-get" : "dnf", arguments, null, cancellation, 1800);
+
+		if(result.ExitCode != 0)
+			throw new ContainerizationException(5, string.Format(Properties.Resources.DockerHost_13_Message, result.ExitCode));
+
+		await this.RunCommandAsync("systemctl", ["enable", "--now", ENGINE], null, cancellation);
+		await this.RunCommandAsync(ENGINE, ["compose", "version"], null, cancellation);
+
+		async Task<string> PreparePackageAsync(BootstrapPlan.Package package)
 		{
 			var path = plan.Mode == "offline" ? Files.ResolveRelativePath(bundle.Directory, package.Path) : Path.Combine(cache, Path.GetFileName(package.Path));
 
@@ -181,38 +210,43 @@ partial class DockerHost
 			if(new FileInfo(path).Length != package.Length || Files.Hash(path) != package.Hash)
 				throw new ContainerizationException(4, Properties.Resources.DockerHost_12_Message);
 
-			paths.Add(path);
+			return path;
 		}
 
-		var usesDebianPackages = bundle.Plan.Distribution.StartsWith("debian", StringComparison.Ordinal) || bundle.Plan.Distribution.StartsWith("ubuntu", StringComparison.Ordinal);
-		var arguments = usesDebianPackages ? new List<string>
+		List<string> PrepareRpmArguments()
 		{
-			"-y",
-			"--no-download",
-			"--no-remove",
-			"--no-install-recommends",
-			"-o",
-			"Dir::Etc::sourcelist=/dev/null",
-			"-o",
-			"Dir::Etc::sourceparts=-",
-			"-o",
-			$"Dir::Cache::archives={PrepareAptCache(paths, Path.Combine(cache, "apt"))}",
-			"install"
-		} : ["-y", "--disablerepo=*", "--setopt=install_weak_deps=False", "install"];
+			var metadata = ContainerBundle.ValidateBootstrapRepository(plan, bundle.Directory);
+			var repository = PreparePackageCache(paths, Path.Combine(cache, "rpm"));
+			var target = Path.Combine(repository, "repodata");
 
-		arguments.AddRange(paths);
-		var result = await runner.RunAsync(usesDebianPackages ? "apt-get" : "dnf", arguments, null, cancellation, 1800);
+			foreach(var file in Files.EnumerateFiles(metadata))
+			{
+				var destination = Files.ResolveRelativePath(target, Path.GetRelativePath(metadata, file).Replace('\\', '/'));
+				Directory.CreateDirectory(Path.GetDirectoryName(destination));
+				File.Copy(file, destination, true);
+			}
 
-		if(result.ExitCode != 0)
-			throw new ContainerizationException(5, string.Format(Properties.Resources.DockerHost_13_Message, result.ExitCode));
+			List<string> arguments =
+			[
+				"-y",
+				"--disablerepo=*",
+				$"--repofrompath=containerizer,{new Uri(repository + Path.DirectorySeparatorChar).AbsoluteUri}",
+				"--enablerepo=containerizer",
+				"--setopt=containerizer.gpgcheck=0",
+				"--setopt=containerizer.repo_gpgcheck=0",
+				"--setopt=install_weak_deps=False",
+				"install"
+			];
 
-		await this.RunCommandAsync("systemctl", ["enable", "--now", ENGINE], null, cancellation);
-		await this.RunCommandAsync(ENGINE, ["compose", "version"], null, cancellation);
+			// Resolve capabilities so installed providers such as coreutils-single remain eligible.
+			arguments.AddRange(plan.Requirements.Select(name => $"{name} >= 0"));
+			return arguments;
+		}
 	}
 	#endregion
 
 	#region 私有方法
-	private static string PrepareAptCache(IReadOnlyList<string> packages, string directory)
+	private static string PreparePackageCache(IReadOnlyList<string> packages, string directory)
 	{
 		var names = new HashSet<string>(StringComparer.Ordinal);
 		foreach(var package in packages)

@@ -47,7 +47,7 @@ public sealed class RunContextTests : IDisposable
 				retained.TrySetResult();
 		});
 
-		var original = Files.Hash(Path.Combine(bundle.Directory, DeliveryPlan.FileName));
+		var original = Files.Hash(Path.Combine(bundle.Directory, ContainerBundlePlan.FileName));
 		var task = run.ExecuteAsync(stopping.Token);
 		await retained.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
@@ -61,7 +61,7 @@ public sealed class RunContextTests : IDisposable
 		Assert.Equal(expected, await task);
 		Assert.Equal(executable, Assert.Single(runner.Streams).Executable);
 		Assert.Equal(cleanupFailure, runner.Owned);
-		Assert.Equal(original, Files.Hash(Path.Combine(bundle.Directory, DeliveryPlan.FileName)));
+		Assert.Equal(original, Files.Hash(Path.Combine(bundle.Directory, ContainerBundlePlan.FileName)));
 		Assert.False(Directory.Exists(runner.Workspace));
 		Assert.All(runner.Calls.Where(call => call[0] == "rm"), call => Assert.Equal(["rm", "--force", "--volumes", "owned-id"], call));
 		Assert.DoesNotContain(runner.Calls, call => call.Contains("prune") || call.Contains("unrelated-id") || call.Contains("/var/run/docker.sock"));
@@ -134,7 +134,7 @@ public sealed class RunContextTests : IDisposable
 		runner.Streams.Clear();
 		var mirrors = new RegistryMirrors { Registries = new() { ["docker.io"] = ["mirror.example.com/docker.io"] } };
 		var engine = new ContainerEngine("podman", runner) { Mirrors = mirrors };
-		var hash = Files.Hash(Path.Combine(bundle.Directory, DeliveryPlan.FileName));
+		var hash = Files.Hash(Path.Combine(bundle.Directory, ContainerBundlePlan.FileName));
 
 		var run = new RunContext(engine, bundle, content =>
 		{
@@ -147,7 +147,7 @@ public sealed class RunContextTests : IDisposable
 
 		var copy = Assert.Single(runner.Calls, call => call[0] == "cp" && call[^1].EndsWith("/run/containerizer-mirrors.json", StringComparison.Ordinal));
 		Assert.False(File.Exists(copy[1]));
-		Assert.Equal(hash, Files.Hash(Path.Combine(bundle.Directory, DeliveryPlan.FileName)));
+		Assert.Equal(hash, Files.Hash(Path.Combine(bundle.Directory, ContainerBundlePlan.FileName)));
 		Assert.DoesNotContain(bundle.Plan.Files, file => file.Path.Contains("mirrors", StringComparison.Ordinal));
 	}
 
@@ -357,7 +357,39 @@ public sealed class RunContextTests : IDisposable
 		}
 	}
 
-	private static WebSitePlan CreateWebSite() => new() { Application = "web", Name = "api", ProbeHosts = ["example.invalid"], Bindings = [new() { Scheme = "http", Address = "0.0.0.0", Port = 80, Publication = "web" }] };
+
+	[Fact]
+	public async Task QuicOnlyIngressDoesNotCreateTcpForwardersOrRequireHttpProbesAsync()
+	{
+		using var bundle = this.CreateBundle();
+		var service = bundle.Plan.Services[0];
+		service.Id = "nginx";
+		service.Web.Add(new() { Application = "web", Name = "api", Hosts = ["*.example.invalid"], Bindings = [new() { Scheme = "https", Address = "0.0.0.0", Port = 443, Protocol = "udp", Publication = "quic" }] });
+		service.Ports.Add(new() { Name = "quic", Host = 443, Container = 443, Protocol = "udp" });
+		var runner = new Runner();
+		using var stopping = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+		var ready = false;
+		var warnings = 0;
+		var run = new RunContext(new("podman", runner), bundle, content =>
+		{
+			if(HasColor(content, CommandOutletColor.Magenta))
+				warnings++;
+
+			if(HasColor(content, CommandOutletColor.Green))
+			{
+				ready = true;
+				stopping.Cancel();
+			}
+		});
+
+		Assert.Equal(0, await run.ExecuteAsync(stopping.Token));
+		Assert.True(ready);
+		Assert.Equal(0, warnings);
+		Assert.DoesNotContain("--publish", Assert.Single(runner.Calls, call => call[0] == "create"));
+		Assert.DoesNotContain(runner.Calls, call => call.Any(argument => argument.Contains("socat", StringComparison.Ordinal)));
+	}
+
+	private static ServicePlan.WebSite CreateWebSite() => new() { Application = "web", Name = "api", ProbeHosts = ["example.invalid"], Bindings = [new() { Scheme = "http", Address = "0.0.0.0", Port = 80, Publication = "web" }] };
 
 	private static string GetText(CommandOutletContent content)
 	{
@@ -378,10 +410,10 @@ public sealed class RunContextTests : IDisposable
 		return false;
 	}
 
-	private DeliveryBundle CreateBundle()
+	private ContainerBundle CreateBundle()
 	{
 		var name = $"run-test-{Guid.NewGuid():N}";
-		var plan = new DeliveryPlan
+		var plan = new ContainerBundlePlan
 		{
 			Name = name,
 			Architecture = "x64",
@@ -400,9 +432,9 @@ public sealed class RunContextTests : IDisposable
 			plan.Files.Add(new() { Path = file, Length = new FileInfo(path).Length, Hash = Files.Hash(path) });
 		}
 
-		Files.Save(Path.Combine(_root, DeliveryPlan.FileName), plan, ProtocolJson.Default.DeliveryPlan);
-		Files.Write(Path.Combine(_root, "checksums.sha256"), $"{Files.Hash(Path.Combine(_root, DeliveryPlan.FileName))}  {DeliveryPlan.FileName}\n{string.Join('\n', plan.Files.Select(file => $"{file.Hash}  {file.Path}"))}\n");
-		return DeliveryBundle.Open(_root);
+		Files.Save(Path.Combine(_root, ContainerBundlePlan.FileName), plan, ProtocolJson.Default.ContainerBundlePlan);
+		Files.Write(Path.Combine(_root, "checksums.sha256"), $"{Files.Hash(Path.Combine(_root, ContainerBundlePlan.FileName))}  {ContainerBundlePlan.FileName}\n{string.Join('\n', plan.Files.Select(file => $"{file.Hash}  {file.Path}"))}\n");
+		return ContainerBundle.Open(_root);
 	}
 
 	private sealed class Runner : IProcessRunner

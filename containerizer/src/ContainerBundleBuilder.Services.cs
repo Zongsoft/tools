@@ -47,7 +47,7 @@ using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer;
 
-partial class DeliveryBuilder
+partial class ContainerBundleBuilder
 {
 	#region 私有方法
 	private static void CollectConfiguration(ServiceBuildContext source, string delivery)

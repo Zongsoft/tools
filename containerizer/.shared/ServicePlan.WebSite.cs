@@ -31,19 +31,37 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-using System;
 using System.Collections.Generic;
-using System.Text.Json.Serialization;
 
 namespace Zongsoft.Tools.Containerizer.Protocol;
 
-internal sealed class HealthPlan
+partial class ServicePlan
 {
-	#region 公共属性
-	public string[] Test { get; set; }
-	public int IntervalSeconds { get; set; } = 10;
-	public int TimeoutSeconds { get; set; } = 5;
-	public int Retries { get; set; } = 12;
-	public int StartSeconds { get; set; } = 30;
+	#region 嵌套类型
+	/// <summary>表示服务提供的 Web 站点及其入口绑定。</summary>
+	internal sealed class WebSite
+	{
+		public string Application { get; set; }
+		public string Name { get; set; }
+		public List<string> Hosts { get; set; } = [];
+		public List<string> ProbeHosts { get; set; } = [];
+		public List<BindingInfo> Bindings { get; set; } = [];
+
+		#region 嵌套类型
+		/// <summary>表示站点入口的监听地址及关联的应用绑定身份。</summary>
+		internal sealed class BindingInfo
+		{
+			public string Scheme { get; set; }
+			public string Binding { get; set; }
+			public string Endpoint { get; set; }
+			public string Protocol { get; set; } = "tcp";
+			public string Address { get; set; }
+			public int Port { get; set; }
+			public bool IsExplicitDefault { get; set; }
+			public bool IsDefault { get; set; }
+			public string Publication { get; set; }
+		}
+		#endregion
+	}
 	#endregion
 }

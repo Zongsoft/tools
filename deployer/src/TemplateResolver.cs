@@ -63,7 +63,7 @@ public sealed class TemplateResolver : DeploymentResolverBase
 		return name.EndsWith(".template", StringComparison.OrdinalIgnoreCase) ? name[..^9] : name;
 	}
 
-	protected override async Task PrepareAsync(DeploymentContext context, DeploymentOperation operation, CancellationToken cancellation)
+	protected override async Task PrepareAsync(DeploymentContext context, DeploymentPlan.Operation operation, CancellationToken cancellation)
 	{
 		var bytes = await File.ReadAllBytesAsync(operation.Source, cancellation);
 		using var reader = new StreamReader(new MemoryStream(bytes), new UTF8Encoding(false, true), true);

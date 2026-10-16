@@ -43,14 +43,14 @@ partial class Configurator
 {
 	internal sealed class Context
 	{
-		internal Context(string packageName, string installPath, TemplateEvaluator evaluator, string applicationAddress = null, Architecture architecture = Architecture.X64)
+		internal Context(string packageName, string installPath, TemplateEvaluator evaluator, BindingDocument bindings = null, Architecture architecture = Architecture.X64)
 		{
 			ArgumentException.ThrowIfNullOrEmpty(packageName);
 			ArgumentException.ThrowIfNullOrEmpty(installPath);
 
 			this.PackageName = packageName;
 			this.InstallPath = installPath;
-			this.ApplicationAddress = applicationAddress;
+			this.Bindings = bindings ?? new();
 			this.MaximumInteger = architecture is Architecture.X86 or Architecture.Arm ? int.MaxValue : long.MaxValue;
 			this.Evaluator = evaluator ?? Utility.CreateEvaluator();
 		}
@@ -58,7 +58,8 @@ partial class Configurator
 		internal string PackageName { get; }
 		internal string InstallPath { get; }
 		internal long MaximumInteger { get; }
-		internal string ApplicationAddress { get; }
+		internal BindingDocument Bindings { get; }
+		internal string SystemTrust { get; init; } = "/etc/ssl/certs/ca-certificates.crt";
 		internal TemplateEvaluator Evaluator { get; }
 
 		internal string Expand(string value, Diagnostic.Location source)

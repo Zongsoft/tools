@@ -13,7 +13,7 @@ Containerizer 管理单节点交付。Packager 负责应用安装包，Migrator 
 | 制作输入 | `ManifestFactory` 整理命令上下文、变量、路径、版本冲突和输入选择；`ContainerManifest` 保存模型、读取 Profile、补全依赖并校验自身 |
 | 服务规划 | `ServicePlanner` 为 plan/make 准备服务，报告缺值，调用 Web 规划并检查依赖和端口 |
 | 应用与模板 | `ApplicationPlanner` 推导应用入口、环境、健康检查及构建时运行时；静态 `TemplateCatalog` 读取基础设施/入口模板 |
-| 制作协调 | `DeliveryBuilder` 管理工作区、镜像阶段、bootstrap、升迁收集、校验与发布；`ServiceBuildContext` 保存创建时确定的只读组件关联 |
+| 制作协调 | `ContainerBundleBuilder` 管理工作区、镜像阶段、bootstrap、升迁收集、校验与发布；`ServiceBuildContext` 保存创建时确定的只读组件关联 |
 | 引擎与镜像 | `ContainerEngine` 执行实际引擎操作；`ImageReference` 管理仓库/tag/digest 规则；`ServiceImagePreparer` 适配健康检查、Redis/Valkey 认证和数据账号 |
 | 应用镜像 | `ApplicationImageBuilder` 安装应用包并生成最终镜像；`RuntimeEnvironmentCache` 管理可复用的系统与运行时文件系统 |
 | 本机预演 | `RunContext` 管理一个完整会话，其私有 `Endpoint`、`ImageCache` 负责转发与内部镜像存储 |
@@ -24,6 +24,33 @@ Containerizer 管理单节点交付。Packager 负责应用安装包，Migrator 
 
 会话、锁、资源生命周期和安装事务各有完整的协调边界；纯规则用无状态类型，副作用通过现有引擎/宿主/进程边界执行。可见性取决于生产调用：私有成员不因测试改成 internal/public，也不增加仅供测试使用的入口。
 
+## 容器包与服务模型
+
+`ContainerBundle` 表示已打开并通过校验的容器包，负责归档提取、资产校验和临时目录释放；其 `Plan` 属性为 `ContainerBundlePlan`，对应 `containerizer.json`。制作端由 `ContainerBundleBuilder` 生成完整容器包。`ServicePlan.PackageInfo` 只描述输入的应用安装包，保存在 `ServicePlan.Package` 中。
+
+服务的端口映射和应用绑定采用嵌套类，按所属关系组织：
+
+```text
+ContainerBundlePlan
+├─ Files: FileEntry
+├─ Migrations: Migration
+└─ Services: ServicePlan
+   ├─ Package: PackageInfo
+   ├─ Mounts: Mount
+   ├─ Health: HealthCheck
+   ├─ Web: WebSite
+   │  └─ Bindings: BindingInfo
+   ├─ Ports: PortMapping
+   │  └─ Bindings: BindingReference
+   └─ Bindings: Binding
+      ├─ Endpoints: Endpoint
+      └─ Connections: Connection
+```
+
+`ServicePlan.PortMapping` 保存在 `ServicePlan.PortMapping.cs` 中，描述宿主地址、宿主端口、容器端口和传输协议。例如 `Address=127.0.0.1`、`Host=18080`、`Container=8080`、`Protocol=tcp` 表示将宿主回环地址的 TCP 18080 映射到该服务容器的 TCP 8080。其 `BindingReference` 记录来源应用、绑定和端点的身份；共享同一物理映射的多个声明可保留各自引用。
+
+`ServicePlan.Binding` 保存在 `ServicePlan.Binding.cs` 中，记录应用安装包声明的绑定（归属 application 或 nginx）与发布策略；其 `Endpoint` 保存声明的监听端点，`Connection` 保存代理路由的原始端点、选定连接端点和连接参数。这些模型使用可变引用类型，缺失对象及集合由容器包校验统一拒绝。类型嵌套不增加 JSON 层级：服务仍使用 `ports`、`bindings` 集合，端点和连接仍使用 `endpoints`、`connections` 集合。
+
 ## 制作数据流
 
 ```text
@@ -31,7 +58,7 @@ Containerizer 管理单节点交付。Packager 负责应用安装包，Migrator 
   → ManifestFactory / ContainerManifest
   → ServicePlanner
       ├─ plan：保存草稿
-      └─ make：DeliveryBuilder
+      └─ make：ContainerBundleBuilder
           → 解析固定镜像 → 制作应用 / 导出镜像 → 服务镜像适配
           → bootstrap / 配置 / 升迁 / Compose
           → 完成清单 / JSON / 校验和 → 压缩 → 发布
@@ -64,9 +91,9 @@ source 的 CLI 值相对于调用目录；其他受管本地路径相对于最�
 
 ### 包和升迁输入
 
-`PackageReader.Select` 返回路径与已读描述；同一次准备复用该描述，组件包路径变更后重新读取。Web 资源提取仍重新读取包，交付文件仍做完整性校验，不建立跨命令包元数据缓存。
+`PackageReader.Select` 返回路径与已读描述；同一次准备复用该描述，组件包路径变更后重新读取。Web 资源提取仍重新读取包，容器包文件仍做完整性校验，不建立跨命令包元数据缓存。
 
-支持 Packager 的 tar + 同名 Shell、deb 和 rpm；读取包身份、架构、安装目录、服务文件、`runtimeconfig` 与 Web 元数据。`Listen` 分别来自 tar PAX、Debian control 或 RPM 自定义标签。目录候选按当前目录、`.packages` 顺序查找，各层优先发行版原生格式再 tar；只对目标架构和名称前缀匹配项进行选择，候选项多于一个时交互选择，绝不按文件日期选择版本。
+支持 Packager 的 tar + 同名 Shell、deb 和 rpm；读取包身份、架构、安装目录、服务文件、`runtimeconfig` 与 Web 元数据。三格式均从 InstallPath 下读取普通 JSON .bindings 文件，限长 1 MiB 并通过共享模型校验，保存在 Descriptor.Bindings。目录候选按当前目录、`.packages` 顺序查找，各层优先发行版原生格式再 tar；只对目标架构和名称前缀匹配项进行选择，候选项多于一个时交互选择，绝不按文件日期选择版本。
 
 应用要求唯一且可解析的服务定义、`ExecStart` 和 `WorkingDirectory`。入口为前台参数数组；有歧义的 Shell 包装或复杂命令应在上游修正。应用配置随原包安装进镜像，不按文件扩展名拆成现场配置挂载。
 
@@ -74,7 +101,7 @@ source 的 CLI 值相对于调用目录；其他受管本地路径相对于最�
 
 ### 发布与输出
 
-制作临时文件位于独立系统工作区；输出目录只接收完成清单、交付归档及需要补缺的 `.settings`。默认完整制作不先写草稿。只有按组件列表完整制作成功才把缺失的服务 tag 补入 `.settings`；plan、失败制作和清单回放都不重新合并或写入该文件。
+制作临时文件位于独立系统工作区；输出目录只接收完成清单、容器包归档及需要补缺的 `.settings`。默认完整制作不先写草稿。只有按组件列表完整制作成功才把缺失的服务 tag 补入 `.settings`；plan、失败制作和清单回放都不重新合并或写入该文件。
 
 发布由输出锁与 `ArtifactPublisher` 协调，核对输入哈希，防止构建期间编辑被覆盖。外部清单与归档内副本字节一致；失败清理本次临时资源并保留既有输入。多个最终文件不能由一次文件系统操作原子提交，不宣称断电时具有跨文件事务保证。归档使用 gzip Fastest。
 
@@ -92,7 +119,7 @@ source 的 CLI 值相对于调用目录；其他受管本地路径相对于最�
 | --- | --- | --- |
 | 引擎镜像 | 来源镜像、平台、摘要及已验证关联 | 内容/平台证据不匹配时重新解析；基础服务 tag 不受 --refresh 控制 |
 | 应用公共运行环境 | 按引擎、发行版、架构、运行时家族及主次版本分组；系统文件、curl/CA 和运行时，不含应用 | 签名包含底图 digest、平台与安装配方；校验归档哈希、长度、环境及运行时要求 |
-| bootstrap | 用户缓存中按规范化 source 哈希、发行版、架构隔离的系统包集合 | 显式导入优先，其次缓存；不受 --refresh 控制 |
+| bootstrap | 用户缓存中按规范化 source 哈希、发行版、架构及收集脚本哈希隔离的系统包集合 | 显式导入优先，其次缓存；不受 --refresh 控制 |
 | run 底图 | 外层引擎中的 systemd/转发工具底图，以配方和架构标识 | 校验归属；不包含任何已安装应用状态 |
 | run 镜像存储 | 按应用隔离的内部 Docker 存储卷 | 仅在完整清理、环境匹配及干净标记成立时复用 |
 
@@ -106,7 +133,9 @@ source 的 CLI 值相对于调用目录；其他受管本地路径相对于最�
 
 `RegistryMirrorSettings` 从指定目录读 Core Profile；共享 `RegistryMirrors` 处理精确 registry 匹配、来源顺序和取消。配置拒绝段落、重复仓库条目和空的候选地址。镜像源只改变获取路径，不改变逻辑仓库、固定摘要或平台。没有固定摘要时，第一个可用来源可解析 tag；身份确定后，其他来源必须匹配。
 
-Podman 构建使用已验证的本地镜像并禁止拉取；Docker 使用独立 BuildKit builder 与临时配置，完成后清除 builder 及其缓存。run 将镜像源规则通过交付资产之外的临时 JSON 交给内部在线拉取流程。`.mirrors` 和实际镜像源地址不进入完成清单或交付 JSON；不修改全局引擎配置、软件包源或凭据。
+Podman 构建使用已验证的本地镜像并禁止拉取；Docker 使用独立 BuildKit builder 与临时配置，完成后清除 builder 及其缓存。run 将镜像源规则通过容器包资产之外的临时 JSON 交给内部在线拉取流程。`.mirrors` 和实际镜像源地址不进入完成清单或交付 JSON；不修改全局引擎配置、软件包源或凭据。
+
+调用 Docker 或 Podman 构建前，`ContainerEngine.BuildAsync` 将制作进程明确设置的 HTTP/HTTPS/FTP/ALL/NO 代理环境变量（大写和小写）传入 `--build-arg`，远程引擎同样适用。未设置的变量不传递，显式空值原样传递；代理值不进入清单、Compose 环境或 Dockerfile 的 `ENV` 指令。
 
 ## 应用、Web 与服务准备
 
@@ -116,30 +145,27 @@ Podman 构建使用已验证的本地镜像并禁止拉取；Docker 使用独立
 
 应用包在构建环境执行原安装流程，服务启动被构建适配控制；最终镜像只保留运行所需文件和前台入口，不把现场执行器作为应用启动器。
 
-`Listen` 缺失或为空时使用 `kill -0 1` 检查进程。非空 `Listen` 必须为分号分隔的 HTTP/HTTPS 根 URL，不带凭据、非根路径、查询或片段。容器绑定从回环/通配/DNS 转换为全部接口；固定非回环 IP 不接受。
+### 应用绑定与健康检查
 
-健康检查优先第一个 HTTP，否则第一个 HTTPS，在容器内 GET /；任何 HTTP 响应表示监听存活，不跟随跳转。HTTPS 必须有 DNS 身份，使用 SNI 和镜像信任库。连接、超时与 TLS 验证失败为不健康。默认检查间隔 10 秒、超时 5 秒、重试 12 次、启动宽限 30 秒；这不代表业务功能就绪。
+应用入口和环境值保留包内配置，Containerizer 不注入或改写 --urls。默认健康命令为 ["CMD-SHELL","kill -0 1"]；应用组件可以用 health 提供以 CMD 或 CMD-SHELL 开头的 JSON 命令数组。只执行明确声明的检查；指标、OTLP 导出及 gRPC 反射均不自动视为业务健康检查。
+
+ApplicationBindings 消费已校验的根 .bindings。每项 ServicePlan.Bindings 保存 owner、身份、别名、原始端点、直接发布模式和选定的代理连接。publish!<binding-id-or-alias> 接受 auto、none 或分号分隔的 transport://字面主机:端口。选择器必须唯一指向一个应用绑定；同时通过 ID 和别名重复覆盖会失败。auto 对已代理绑定只保留内部访问，其余绑定默认按原端口发布到 127.0.0.1。none 取消直接发布但保留代理路由。显式地址必须使用已声明的 TCP/UDP 传输并指向唯一容器端口；包含多个目标端口的绑定需要拆成明确声明。
+
+生成的容器网络使用 IPv4。跨容器连接和直接映射因此要求存在 0.0.0.0 声明；同一绑定中符合条件的替代端点可以承担连接。选择保留 scheme、路径及路由选定协议。回环、固定 IP、DNS 和仅 IPv6 的声明不能证明在该网络中可达，需要连接或发布时失败。none 可保留仅内部使用的声明，但不能使经代理的回环后端可达。宿主发布地址可独立使用字面 IPv4 或 IPv6。工具不修改应用配置中的地址。
+
+ServicePlan.PortMapping 保存地址、传输、宿主/容器端口及按应用限定的 binding/endpoint 引用。同一应用内相同物理映射合并引用，矛盾映射失败。socket 冲突按传输、地址族、地址和宿主端口判断，TCP/UDP 可同号。ContainerBundle 通过仅依赖 BCL 的模型校验身份、端点引用、选定连接和发布关系；执行器不依赖 Core。
 
 ### nginx 交接与渲染
 
-`WebPackage` 只接受一个应用根下的 `.web/nginx/`，其中必须具有：
+WebPackage 要求安装根 JSON .bindings，以及 .web/nginx/<包名>.conf 和对应 .template。sites 引用 nginx 所属监听端点和 application 所属路由目标。空 sites 不要求 Web 资产，非空 sites 要求完整交接。工具不从任意 nginx 指令反向推断元数据。
 
-| 文件 | 含义 |
-| --- | --- |
-| `.bindings` | Profile/INI 格式的站点、域名、原始绑定和显式默认关系 |
-| `<包名>.conf` | Packager 生成的本机配置 |
-| `<包名>.conf.template` | 保留语义占位符的容器化渲染输入 |
+WebIngress 将 {{zongsoft:binding:B:E}} 替换为选定的应用 DNS authority。两个身份必须属于已声明路由，每个被引用的路由目标都必须出现在模板中。TLS 名称和 HTTP Host 策略保持原样。RPM 原生宿主的系统 CA bundle 路径适配为 nginx 镜像内的系统 CA bundle；显式信任文件走受管文件标记。
 
-每个 .bindings 站点段只接受 host、bind、default；列表用逗号或分号分隔。bind 使用带显式端口的 HTTP/HTTPS IP URL；default 必须引用同站点已声明绑定。host 支持具体名称以及 `*.example.com`、`.example.com`、`example.*` 形式。Containerizer 不重新解析任意 nginx 正文来猜测绑定。
+{{zongsoft:file:BASE64}} 编码的 UTF-8 路径替换为受管资源路径。包内相对资源以应用根为基准且必须是普通文件；外部绝对路径要求在 nginx 组件中用 file! 显式提供。链接、非法路径、目标重叠和未知标记均失败。
 
-`WebIngress` 把应用 ID 替入 `{{zongsoft:application}}`，将 `{{zongsoft:file:BASE64}}` 中的 UTF-8 路径替换为受管资源路径；未识别或未消除的标记报错。包内相对资源以应用根为基准，必须是存在的普通文件；外部绝对路径必须在 nginx 组件以 file! 显式提供。拒绝链接、非法路径和目标重叠，不从制作主机对应系统路径隐式取文件。
+nginx 主配置按应用 ID 排序 include；资产以只读方式挂载到 config/nginx 下，用户输出仍按组件顺序。监听按传输、地址和端口识别；唯一显式默认站点优先，否则取实际 include/声明顺序中的第一个站点。共享监听校验主机名归属及实际探测路由。
 
-nginx 主配置按应用 ID 排序 include 各应用配置。交付使用 `config/nginx/nginx.conf`、`config/nginx/sites/<application>.conf` 及去冲突资源，均为只读挂载；应用声明顺序仍用于用户输出。
-
-入口规划按监听地址/端口检查协议一致性、默认站点、主机名冲突及实际路由归属。同一监听优先采用唯一的显式 default；未声明时，按应用 ID 排序后的配置加载顺序和站点声明顺序选取首个站点，与生成的 include 顺序一致。发布端口要求 IPv4 通配监听；对应 IPv6 通配绑定存在时，站点/默认关系必须一致。nginx port 设置按原端口重映射或关闭，不修改原监听定义。仅通配域名且已发布的站点必须提供匹配的具体 probe-host；无域名站点按实际默认路由校验，不能因端口可连接就认定站点正确。
-
-协议中 `ServicePlan.Web` 保存应用与站点身份、Hosts、ProbeHosts、Bindings；绑定包含 `IsExplicitDefault`、`IsDefault` 和 Publication。`PortPlan` 只表达物理映射。没有托管资产的应用由 `Listen` 直接生成 Web 记录及回环发布；声明 nginx 依赖却没有完整托管资产会失败。caddy/haproxy 不参与这套交接。
-
+nginx settings 沿用 port=80:18080,443:none。覆盖同时作用于该容器端口的各项已声明传输，因此 TCP 和 QUIC/UDP 可同号。发布要求 IPv4 通配监听，可选 IPv6 通配监听须有一致的站点/默认关系；显式 none 记录在源绑定上。仅通配主机名的 TCP Web 入口需要具体探测名。UDP 保留在 Compose 和交付协议中，不冒充通过 TCP/HTTP 探测。Caddy/haproxy 不消费这套交接资产。
 ### 基础服务
 
 `ServiceOptions` 管理环境合并、参数、端口、存储及 Redis/Valkey 持久化/认证命令。`ServiceImagePreparer` 在镜像固定后确认具有模板健康检查或镜像自带健康检查，设置认证环境并解析数字 UID/GID；`ContainerEngine` 保留实际引擎操作。
@@ -150,11 +176,11 @@ data-owner 可指定数字 UID:GID 或固定镜像中的账号/组；镜像以 r
 
 ## bootstrap 与交付协议
 
-bootstrap 为目标发行版/架构收集 Docker、Compose 及依赖，记录包名、版本、架构、来源 HTTPS URL、依赖、哈希和长度。Debian/Ubuntu 与 RPM 系列分别使用匹配的包收集脚本。RHEL 不用 Rocky/Alma 包冒充，必须导入经准备的集合。
+bootstrap 为目标发行版/架构收集 Docker、Compose 及依赖，记录包名、版本、架构、来源 HTTPS URL、依赖、哈希和长度。Debian/Ubuntu 与 RPM 系列分别使用匹配的包收集脚本。RHEL 不用 Rocky/Alma 包冒充，必须导入经准备的集合。RPM 集合另含 `requirements.txt` 和 `createrepo_c` 生成的 `repodata/`；计划通过 `requirements` 记录根依赖包名，通过 `repository` 记录仓库元数据的相对目录。
 
 显式集合位置为 `source/.containerizer/bootstrap/<distribution>_<architecture>/`，包含 `bootstrap.lock.json` 和 packages。`build/Import-Bootstrap.ps1` 用 Collection、Profile、BaseImageReference、Destination 参数从带 `metadata.tsv` 的集合生成此结构；BaseImageReference 必须是精确 `repository@sha256:...`。导入和缓存均在消费时校验，不因存在锁文件就跳过文件检查。
 
-offline 携带包文件；online 保留同样的锁与元数据，在现场按记录下载并校验，再禁用在线软件源执行本地安装事务。已有 Docker 时，当前实现检查 daemon、Compose 和命令能力后复用，不按锁逐包重装或自动升级已有引擎。
+offline 携带包文件；online 保留同样的锁与元数据，在现场按记录下载并校验，再禁用在线软件源执行本地安装事务。RPM 元数据在两种模式中均随包携带，并纳入容器包完整性校验。执行器将已校验的 RPM 与元数据放入私有缓存仓库，禁用其他仓库，只将根依赖作为 `包名 >= 0` 能力要求交给 DNF；依赖集合是可选候选，不强制逐包安装，已有兼容提供者（如 `coreutils-single`）可继续满足要求。本地仓库不启用 GPG 检查；执行前验证容器包和包文件的 SHA-256 完整性，不启用强制删除或跳过依赖。已有 Docker 时，当前实现检查 daemon、Compose 和命令能力后复用，不按锁逐包重装或自动升级已有引擎。
 
 交付根布局如下；只包含实际需要的可选目录：
 
@@ -162,7 +188,7 @@ offline 携带包文件；online 保留同样的锁与元数据，在现场按�
 containerizer                  原生执行器
 zh-Hans/                       本地化资源
 install.sh / uninstall.sh       薄启动入口
-README.md / README.zh-Hans.md   该交付物的操作说明
+README.md / README.zh-Hans.md   该容器包的操作说明
 name[-tag]@version-arch.container
 containerizer.json             执行计划
 checksums.sha256                完整文件校验
@@ -196,7 +222,7 @@ Compose 项目名来自规范化 name 加 name 哈希，不包含 tag 或版本�
 
 prepare 在镜像准备后返回 `Prepared`；可能已安装共享执行器及系统依赖，不是纯只读检查。它不进入停机/升迁阶段。再次安装同一已成功发行会检查镜像与健康，不重新执行 SQL。
 
-升级比较 name、distribution、architecture、project、dataRoot；基础设施 ID、image ID/digest、有效配置哈希及 bootstrap 包名/版本/哈希集合必须一致。有效配置涵盖环境、参数、端口、挂载、模板产生的运行字段与配置文件内容。普通卸载再安装也不能绕过这些检查。
+升级比较 name、distribution、architecture、project、dataRoot；基础设施 ID、image ID/digest、有效配置哈希、bootstrap 包名/版本/哈希集合及根依赖集合必须一致。有效配置涵盖环境、参数、端口、挂载、模板产生的运行字段与配置文件内容。普通卸载再安装也不能绕过这些检查。
 
 ### 维护和失败
 
@@ -218,7 +244,7 @@ purge 顺序为：保存 `Uninstalling` → 维护/宿主资源清理 → 保存
 
 ## 预演会话与进程执行
 
-run 先由共享 `DeliveryBundle` 验证归档，再创建带会话及应用归属标签的特权 systemd 容器，不挂载外层引擎 socket。外层原生架构必须匹配交付；内部 Docker 使用 overlay2 和独立存储，containerd 使用会话匿名卷。
+run 先由共享 `ContainerBundle` 验证归档，再创建带会话及应用归属标签的特权 systemd 容器，不挂载外层引擎 socket。外层原生架构必须匹配交付；内部 Docker 使用 overlay2 和独立存储，containerd 使用会话匿名卷。
 
 安装状态与业务数据每次新建。内部 `ImageCache` 清除容器、业务卷、自定义网络、应用/旧镜像及多余标签，只保留当前基础设施/入口 image ID；停止内部引擎后才写干净标记。纯应用交付不保留空镜像存储。复用检查归属、挂载占用、环境、干净标记及镜像身份；清理失败则丢弃本次缓存，未知归属或仍被占用的卷报错。
 
@@ -235,7 +261,7 @@ TCP 转发通过内部 socat 接到实际宿主发布端口，外层读取真实
 | 源码实现 | 制作端 Windows/Linux 路径处理；Docker/Podman 制作与预演分支；目标 Linux x64/ARM64；发行版接受范围见 README |
 | 自动化验证 | 制作端全部项目目标框架严格构建；两个测试项目；执行器 Linux 测试；配置、缓存、Web、进程取消、安装状态与清理失败路径 |
 | 原生编译 | Linux x64、ARM64 Native AOT 可编译；x64 协议入口可运行；ARM64 编译不代表 ARM64 运行 |
-| 隔离实际运行 | Windows + rootful Podman + Debian 13 x64 的制作/预演路径，包含 Web 和基础服务访问、端口避让、会话数据隔离及清理 |
+| 隔离实际运行 | Windows + rootful Podman 下，Debian 13 x64 的 tar/deb 与 Rocky 9 x64 的 rpm 制作/预演；包含 daemon、Web、离线 bootstrap、隔离 MySQL/对象存储升迁、HTTP/指标访问、端口避让、会话数据隔离及清理 |
 | 尚无完整目标验收 | 外层 Docker、rootless、其他发行版组合、真实 ARM64、域名 HTTPS 完整应用、独立生产主机及真实业务升迁 |
 
 内置模板的架构列表是输入能力声明，不是每个镜像 tag 的兼容保证。Native AOT 仍有 Linux 系统库依赖；预演底图准备 ICU 等所需库，独立目标也须满足其运行依赖。用专属隔离环境验证软件包事务和生命周期，不把单元测试、交叉编译或共享内核预演描述为生产环境验收。
@@ -243,3 +269,13 @@ TCP 转发通过内部 socat 接到实际宿主发布端口，外层读取真实
 退出码由当前入口保留：0 成功；2 输入；3 平台/能力；4 获取、完整性或执行；5 bootstrap 事务；6 健康；7 升迁、恢复或执行器取消；8 现场锁冲突；9 卸载清理；制作/预演启动取消为 130。具体命令的阶段诊断与残留状态应和退出码一起判断。
 
 终端警告使用暗黄色正文和粗体青色参数；错误使用暗红色正文和粗体紫色参数；成功提示使用绿色正文。异常类型以紫色标示，异常消息保留原文。四个工具共用仓库 `.shared/Utility.Output.cs`：`FormatOutput` 和 `FormatError` 构造 Core `CommandOutletContent`；`WriteOutput` 和 `WriteError` 统一终端与文本写入器的输出；使用命令执行器的工具通过 `HandleFailure` 输出异常并标记已处理，退出码由各工具决定。颜色由 Terminals 渲染。重定向的输出以及调用方提供的错误写入器保留纯文本和原通道。 同一共享文件还提供帮助文本高亮 `HighlightSyntax` 和阶段计时 `MeasureOutput`。计时由调用方提供本地化格式与阶段名称，在首次释放时输出，阶段失败时也保留耗时信息。
+
+### 模型的所有者与序列化
+
+`ServicePlan.PackageInfo`、`Mount`、`HealthCheck`、`WebSite` 只描述所属服务的输入包、挂载、健康检查和站点；站点的 `BindingInfo` 保存入口监听与源 binding/endpoint 引用。`ContainerBundlePlan.FileEntry` 保存包内相对路径、长度与哈希，`Migration` 保存本包携带的升迁归档、脚本、版本及组合身份。它们在所有者的分部文件中维护，嵌套关系不增加 JSON 层级或修改字段名称。
+
+`ImagePlan` 也用于引擎解析及运行环境缓存，`BootstrapPlan` 可作为独立缓存/导入文档，因此保留独立类型。计划只保存声明；归档读取和释放由 `ContainerBundle` 负责，制作过程由 `ContainerBundleBuilder` 负责。
+
+绑定文档的字段、身份算法和完整数据来源示例统一见 [Packager 实现说明](../../packager/docs/implementation.zh-Hans.md#binding-document)。例如 Web 的 `0.0.0.0:8069` 是源监听，代理连接 `demo-app:8069` 来自容器服务名，宿主的 `127.0.0.1:18080` 来自发布覆盖；三者分别保存在端点、连接及端口映射中。`none` 只取消直接发布，不能改变代理连接的可达性。
+
+校验 `ports[].bindings` 与源应用、绑定、端点的归属，校验 `bindings[].connections` 的源端点和可连接替代端点，按 owner、地址族、IP、transport、宿主/容器端口检查冲突。`8443/tcp` 与 `8443/udp` 可并存；IPv4 与 IPv6 不互相补全。HTTP/3 发布需要 UDP，不能以 TCP 探测替代。默认进程检查仅表示 PID 1 存活；指标抓取、反射成功和业务处理成功有不同含义。ZeroMQ 发现、OPC 注册和公网 Endpoint 仍由组件运行配置负责，发布覆盖不改写这些协议字段。

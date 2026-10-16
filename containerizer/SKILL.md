@@ -20,9 +20,10 @@ README 面向使用者；implementation 解释当前契约和实现；本文件�
 | Web 交接及资源 | src/WebPackage.cs、`WebIngress`*；核对 Packager 实际生成资产 |
 | 应用镜像、运行环境缓存 | src/ApplicationImageBuilder*、RuntimeEnvironmentCache.cs |
 | 引擎操作、服务镜像适配 | src/ContainerEngine.cs、ServiceImagePreparer.cs、BuildResources.cs |
-| bootstrap、最终交付与发布 | src/BootstrapPackageBuilder.cs、`DeliveryBuilder`*、BuildStorage.cs、ComposeWriter.cs |
+| bootstrap、最终交付与发布 | src/BootstrapPackageBuilder.cs、`ContainerBundleBuilder`*、BuildStorage.cs、ComposeWriter.cs |
 | 预演会话、端口和内部缓存 | src/RunCommand.cs、`RunContext`* |
-| 协议、完整性及进程 | .shared 下的模型、DeliveryBundle.cs、Files.cs、IProcessRunner.cs、ProcessRunner.cs |
+| 服务绑定与端口模型 | .shared/ServicePlan.Binding.cs、.shared/ServicePlan.PortMapping.cs |
+| 协议、完整性及进程 | .shared 下的模型、ContainerBundle.cs、Files.cs、IProcessRunner.cs、ProcessRunner.cs |
 | 安装状态、恢复和卸载 | executor/src/InstallationManager*、InstallationStore.cs、`DockerHost`* |
 
 制作端可用 Core；执行端保持 BCL-only。共享内容继续源码链接，不引入共享 DLL、DI 容器或通用状态机。已有 `IProcessRunner` 和 `IInstallationHost` 是生产调用边界；不为测试增加接口、回调、反射访问或包装入口。原本只需 private 的成员保持 private，覆盖不到的细节如实说明。
@@ -80,7 +81,7 @@ foreach($project in $projects)
 | --- | --- |
 | 输入与默认值 | source 相对路径、变量逐值求值/转义、显式空值、默认合并、包选择、组件顺序、自动 nginx、plan 无引擎、成功补缺及失败保留草稿 |
 | 镜像与缓存 | 目标 digest 与 index/ID 区分、固定回放、平台拒绝、镜像源回退、缓存锁/校验/refresh 失败保留、临时资源及匿名卷清理 |
-| 应用和 Web | 包格式、入口/运行时歧义、`Listen`、绑定默认关系、通配探测名、资源归属、重复/冲突映射、Host/SNI、证书、404/5xx 与重定向 |
+| 应用和 Web | 包格式、入口/运行时歧义、根 .bindings、publish! 覆盖和引用、绑定默认关系、通配探测名、资源归属、重复/冲突映射、Host/SNI、证书、404/5xx 与重定向 |
 | 进程与预演 | stdout/stderr、退出码与取消、创建中断、失败现场保留、就绪后退出、独立清理令牌、端口占用、数据隔离和缓存复用 |
 | 执行器 | 在宿主调用边界检查磁盘状态；保存失败、部分停机失败、原事务恢复、升迁不自动重跑、普通卸载重装及 purge 中断重试 |
 
@@ -147,3 +148,5 @@ git status --short
 保留任务开始时的未提交修改；不重置、覆盖或提交用户工作。报告本次变更、已验证范围及实际限制，不把未执行的验收写成通过。
 
 输出逻辑统一复用仓库 `.shared/Utility.Output.cs`：FormatOutput/FormatError 负责格式化，WriteOutput/WriteError 负责终端与文本写入器分流，HandleFailure 负责命令异常输出和已处理标记；HighlightSyntax 统一帮助语法高亮，MeasureOutput 统一阶段计时，计时的本地化格式和阶段名称由调用方提供；各工具只决定退出码和业务诊断，不另建相同的包装层。用 Core CommandOutletContent 分段保存正文和参数：警告为暗黄色正文配粗体青色参数，错误为暗红色正文配粗体紫色参数。追加内容时从 Last 节点追加。Terminals 负责颜色；重定向和调用方提供的错误写入器保留原通道及纯文本；不要把 ANSI 序列写入报告或诊断回调。
+
+绑定改动同时阅读 [Packager 文件契约](../packager/docs/implementation.zh-Hans.md#binding-document) 和 [回归矩阵](../packager/SKILL.md#binding-validation)。从包读取到 ServicePlan 的映射必须保留 owner、原始身份、别名、连接及发布决策；对每项声明明确代理、直接发布或禁用直接发布。用明确配置验证健康命令，不把指标/反射/进程检查提升为业务就绪结论。共享协议模型调整后更新 Linux 两架构的原生载荷再制工具包。

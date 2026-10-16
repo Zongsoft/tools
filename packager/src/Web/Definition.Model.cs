@@ -40,9 +40,12 @@ namespace Zongsoft.Tools.Packager.Web;
 partial class Definition
 {
 	internal sealed record Model(IReadOnlyList<Site> Sites, IReadOnlyList<Diagnostic> Diagnostics);
-	internal sealed record Site(string Name, IReadOnlyList<string> Hosts, IReadOnlyList<Binding> Bindings, Certificate Certificates, IReadOnlyList<Route> Routes, IReadOnlyList<RawDirective> Directives, Diagnostic.Location Source);
-	internal sealed record Route(string Name, string Path, MatchKind Match, ServerGroup Server, IReadOnlyList<Header> Headers, bool WebSocket, IReadOnlyList<RawDirective> Directives, Diagnostic.Location Source);
-	internal sealed record ServerGroup(ServerKind Kind, IReadOnlyList<ServerMember> Members, ServerPolicy Policy);
+	internal sealed record Site(string Name, IReadOnlyList<string> Hosts, IReadOnlyList<Binding> Bindings, Certificate Certificates, IReadOnlyList<Route> Routes, IReadOnlyList<RawDirective> Directives, Diagnostic.Location Source, Route Default = null);
+	internal sealed record Route(string Name, string Path, MatchKind Match, ServerGroup Server, IReadOnlyList<Header> Headers, bool WebSocket, IReadOnlyList<RawDirective> Directives, Diagnostic.Location Source, BindingDocument.SiteRoute Mapping = null);
+	internal sealed record ServerGroup(ServerKind Kind, IReadOnlyList<ServerGroup.Member> Members, ServerPolicy Policy, string Selector = null)
+	{
+		internal readonly record struct Member(string Name, Endpoint Endpoint, BigInteger Weight);
+	}
 	internal sealed record ServerPolicy(string Balance, BigInteger FailureCount, TimeSpan FailureTimeout, RetryPolicy Retry, AffinityPolicy Affinity, TlsPolicy Tls, HealthPolicy Health);
 	internal sealed record RetryPolicy(IReadOnlyList<string> Conditions, BigInteger Count);
 	internal sealed record AffinityPolicy(string Kind, string Cookie);
@@ -50,13 +53,12 @@ partial class Definition
 	internal sealed record HealthPolicy(string Path, TimeSpan Interval, TimeSpan ConnectTimeout, TimeSpan SendTimeout, TimeSpan ReadTimeout, BigInteger FailureCount, BigInteger RecoveryCount, IReadOnlyList<int> Status, IReadOnlyList<Header> Headers);
 	internal sealed record Certificate(ResourceReference File, ResourceReference Key);
 	internal readonly record struct Binding(string Scheme, string Address, int Port);
-	internal readonly record struct Endpoint(string Scheme, string Host, int Port)
+	internal readonly record struct Endpoint(string Scheme, string Host, int Port, string Path = "/", string Protocol = "http1")
 	{
 		internal string Authority => $"{(this.Host.Contains(':') ? "[" + this.Host + "]" : this.Host)}:{this.Port}";
 		internal string Address => $"{this.Scheme}://{this.Authority}";
 	}
 
-	internal readonly record struct ServerMember(string Name, Endpoint Endpoint, BigInteger Weight);
 	internal readonly record struct Header(string Name, string Value, bool Expression, Diagnostic.Location Source);
 	internal readonly record struct ResourceReference(string Path, bool Relative = false);
 	internal readonly record struct RawDirective(string Name, string Suffix, string Value, Diagnostic.Location Source);

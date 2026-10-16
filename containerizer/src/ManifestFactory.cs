@@ -70,94 +70,11 @@ internal static class ManifestFactory
 		var evaluator = Utility.CreateEvaluator(context, start);
 		evaluator.SetVariable("source", start.Replace('\\', '/'));
 
-		foreach(var key in ContainerManifest.RootKeys)
-		{
-			if(options.Contains(key))
-				result[key] = options.GetValue<string>(key);
-			if(result.Root.ContainsKey(key) && (!result.IsComplete || options.Contains(key)))
-				result[key] = ContainerManifest.Evaluate(result[key], evaluator);
-		}
-
-		result["source"] = start.Replace('\\', '/');
-		result["output"] = Path.GetFullPath(string.IsNullOrEmpty(result["output"]) ? "." : result["output"], start).Replace('\\', '/');
-		result["architecture"] = string.IsNullOrEmpty(result["architecture"]) ? "x64" : result["architecture"].ToLowerInvariant();
-		result["distribution"] = Distribution.Normalize(result["distribution"]);
-
-		string[] acquisitionOptions = ["bootstrap", "imaging", "engine"];
-		foreach(var key in acquisitionOptions)
-			result[key] = string.IsNullOrEmpty(result[key]) ? key == "engine" ? ContainerEngine.AUTO : "offline" : result[key].ToLowerInvariant();
-
-		ContainerManifest.ValidateIdentity(result["name"]);
-
-		if(!string.IsNullOrEmpty(result["tag"]))
-			ContainerManifest.ValidateIdentity(result["tag"]);
-
-		if(result["architecture"] is not ("x64" or "arm64") ||
-		   result["imaging"] is not ("online" or "offline") ||
-		   result["bootstrap"] is not ("online" or "offline") ||
-		   result["engine"] is not (ContainerEngine.AUTO or ContainerEngine.DOCKER or ContainerEngine.PODMAN))
-			throw new ContainerizationException(2, Properties.Resources.Manifest_3_Message);
-
-		var automatic = string.IsNullOrEmpty(result["version"]);
-		result["version"] = automatic ? ContainerManifest.GetDateVersion(DateTime.Today) : result["version"];
-		var releaseVersion = ContainerManifest.ParseVersionNumber(result["version"]);
-
-		for(int suffix = 1; ReleaseExists(result); suffix++)
-		{
-			if(!automatic)
-				throw new ContainerizationException(2, Properties.Resources.Manifest_4_Message);
-
-			result["version"] = new Versioning.Version.Number(releaseVersion.Major, releaseVersion.Minor, releaseVersion.Patch, checked((ushort)suffix)).ToString();
-		}
-
-		foreach(var component in result.Components)
-		{
-			if(!result.IsComplete)
-			{
-				foreach(var key in component.Values.Keys.ToArray())
-				{
-					if(key != "settings" && !key.StartsWith("environment!", StringComparison.OrdinalIgnoreCase))
-						component[key] = ContainerManifest.Evaluate(component[key], evaluator);
-				}
-			}
-		}
-
-		for(int index = 0; index < result.Migrations.Count; index++)
-			result.Migrations[index] = result.ResolvePath(result.IsComplete ? result.Migrations[index] : ContainerManifest.Evaluate(result.Migrations[index], evaluator));
-
-		if(manifests.Length == 0)
-		{
-			foreach(var argument in arguments)
-			{
-				var value = ContainerManifest.Evaluate(argument, evaluator);
-				var parts = value.Split('@', 2);
-				ContainerManifest.Component component;
-
-				if(!value.Contains('/') && !value.Contains('\\') && TemplateCatalog.Contains(parts[0]))
-				{
-					component = new() { Name = parts[0].ToLowerInvariant() };
-					if(parts.Length == 2)
-						component["tag"] = parts[1];
-				}
-				else
-				{
-					var input = result.ResolvePath(value);
-					var package = PackageReader.Select(input, result["name"], result["distribution"], result["architecture"]);
-					component = new(package);
-				}
-
-				result.Components.Add(component);
-			}
-		}
-
-		if(options.Contains("migration"))
-		{
-			result.Migrations.Clear();
-			var migration = ContainerManifest.Evaluate(options.GetValue<string>("migration"), evaluator);
-
-			if(!string.IsNullOrEmpty(migration))
-				result.Migrations.AddRange(MigrationInput.Select(result.ResolvePath(migration), result["name"], result["architecture"]));
-		}
+		ApplyOptions();
+		SelectVersion();
+		ResolveComponents();
+		ReadArguments();
+		SelectMigrations();
 
 		result.Evaluator = evaluator;
 		result.Evaluator.Providers.Insert(0, global::Zongsoft.Common.Variables.Wrap(result.Root));
@@ -166,6 +83,110 @@ internal static class ManifestFactory
 		result.ApplyDefaults(result.InputPath != null ? new ServiceDefaults() : ServiceDefaults.Read(Path.Combine(result["output"], ".settings")));
 
 		return result;
+
+		void ApplyOptions()
+		{
+			foreach(var key in ContainerManifest.RootKeys)
+			{
+				if(options.Contains(key))
+					result[key] = options.GetValue<string>(key);
+				if(result.Root.ContainsKey(key) && (!result.IsComplete || options.Contains(key)))
+					result[key] = ContainerManifest.Evaluate(result[key], evaluator);
+			}
+
+			result["source"] = start.Replace('\\', '/');
+			result["output"] = Path.GetFullPath(string.IsNullOrEmpty(result["output"]) ? "." : result["output"], start).Replace('\\', '/');
+			result["architecture"] = string.IsNullOrEmpty(result["architecture"]) ? "x64" : result["architecture"].ToLowerInvariant();
+			result["distribution"] = Distribution.Normalize(result["distribution"]);
+
+			string[] acquisitionOptions = ["bootstrap", "imaging", "engine"];
+			foreach(var key in acquisitionOptions)
+				result[key] = string.IsNullOrEmpty(result[key]) ? key == "engine" ? ContainerEngine.AUTO : "offline" : result[key].ToLowerInvariant();
+
+			ContainerManifest.ValidateIdentity(result["name"]);
+
+			if(!string.IsNullOrEmpty(result["tag"]))
+				ContainerManifest.ValidateIdentity(result["tag"]);
+
+			if(result["architecture"] is not ("x64" or "arm64") ||
+			   result["imaging"] is not ("online" or "offline") ||
+			   result["bootstrap"] is not ("online" or "offline") ||
+			   result["engine"] is not (ContainerEngine.AUTO or ContainerEngine.DOCKER or ContainerEngine.PODMAN))
+				throw new ContainerizationException(2, Properties.Resources.Manifest_3_Message);
+		}
+
+		void SelectVersion()
+		{
+			var automatic = string.IsNullOrEmpty(result["version"]);
+			result["version"] = automatic ? ContainerManifest.GetDateVersion(DateTime.Today) : result["version"];
+			var releaseVersion = ContainerManifest.ParseVersionNumber(result["version"]);
+
+			for(int suffix = 1; ReleaseExists(result); suffix++)
+			{
+				if(!automatic)
+					throw new ContainerizationException(2, Properties.Resources.Manifest_4_Message);
+
+				result["version"] = new Versioning.Version.Number(releaseVersion.Major, releaseVersion.Minor, releaseVersion.Patch, checked((ushort)suffix)).ToString();
+			}
+		}
+
+		void ResolveComponents()
+		{
+			foreach(var component in result.Components)
+			{
+				if(!result.IsComplete)
+				{
+					foreach(var key in component.Values.Keys.ToArray())
+					{
+						if(key != "settings" && !key.StartsWith("environment!", StringComparison.OrdinalIgnoreCase))
+							component[key] = ContainerManifest.Evaluate(component[key], evaluator);
+					}
+				}
+			}
+
+			for(int index = 0; index < result.Migrations.Count; index++)
+				result.Migrations[index] = result.ResolvePath(result.IsComplete ? result.Migrations[index] : ContainerManifest.Evaluate(result.Migrations[index], evaluator));
+		}
+
+		void ReadArguments()
+		{
+			if(manifests.Length == 0)
+			{
+				foreach(var argument in arguments)
+				{
+					var value = ContainerManifest.Evaluate(argument, evaluator);
+					var parts = value.Split('@', 2);
+					ContainerManifest.Component component;
+
+					if(!value.Contains('/') && !value.Contains('\\') && TemplateCatalog.Contains(parts[0]))
+					{
+						component = new() { Name = parts[0].ToLowerInvariant() };
+						if(parts.Length == 2)
+							component["tag"] = parts[1];
+					}
+					else
+					{
+						var input = result.ResolvePath(value);
+						var package = PackageReader.Select(input, result["name"], result["distribution"], result["architecture"]);
+						component = new(package);
+					}
+
+					result.Components.Add(component);
+				}
+			}
+		}
+
+		void SelectMigrations()
+		{
+			if(options.Contains("migration"))
+			{
+				result.Migrations.Clear();
+				var migration = ContainerManifest.Evaluate(options.GetValue<string>("migration"), evaluator);
+
+				if(!string.IsNullOrEmpty(migration))
+					result.Migrations.AddRange(MigrationInput.Select(result.ResolvePath(migration), result["name"], result["architecture"]));
+			}
+		}
 	}
 	#endregion
 

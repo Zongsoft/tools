@@ -55,7 +55,7 @@ public class DefinitionResolutionTest
 	[Theory]
 	[InlineData("http://0.0.0.0")]
 	[InlineData("http://[::]")]
-	[InlineData("http://app/api")]
+	[InlineData("http://app/api//child")]
 	[InlineData("http://app?x=1")]
 	[InlineData("http://app#fragment")]
 	[InlineData("http://user@host")]
@@ -142,7 +142,7 @@ public class DefinitionResolutionTest
 	public void CookieScopeAndPoolSeparationFollowEffectiveHealthPolicy()
 	{
 		using var files = new MigrationTestDirectory();
-		var result = NginxConfiguratorTest.Configure(files, "[api]\nbind!secure=https://*\nserver!a=http://app\nserver-affinity=COOKIE\nserver-health=/health\n[api on]\npath=/on\n[api off]\npath=/off\nserver-health=off");
+		var result = NginxConfiguratorTest.Configure(files, "[api]\nbind!secure=https://*\nserver!a=http://app\nserver!b=http://other\nserver-affinity=COOKIE\nserver-health=/health\n[api on]\npath=/on\n[api off]\npath=/off\nserver-health=off");
 		var text = result.Files[0].Content.Render("/opt/app");
 		Assert.Equal(2, text.Split("upstream hoster_").Length - 1);
 		Assert.Equal(2, text.Split("sticky cookie HOSTER_ROUTE_").Length - 1);

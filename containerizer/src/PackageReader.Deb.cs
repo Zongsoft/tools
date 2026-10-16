@@ -90,7 +90,7 @@ partial class PackageReader
 		result.Name = fields.GetValueOrDefault("Package");
 		result.Version = fields.GetValueOrDefault("Version");
 		result.Architecture = fields.GetValueOrDefault("Architecture");
-		result.ListenerAddresses = fields.GetValueOrDefault("Listen");
+		result.InstallPath = fields.GetValueOrDefault("InstallPath");
 	}
 	#endregion
 }

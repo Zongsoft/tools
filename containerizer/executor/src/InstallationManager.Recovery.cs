@@ -52,7 +52,7 @@ partial class InstallationManager
 		if(transaction == null || !transaction.Failed && installation.Status is "ReadyToStart" or "Prepared")
 			throw new ContainerizationException(7, Properties.Resources.Lifecycle_9_Message);
 
-		using var bundle = DeliveryBundle.Open(transaction.Assets);
+		using var bundle = ContainerBundle.Open(transaction.Assets);
 		if(bundle.Id != transaction.Id)
 			throw new ContainerizationException(4, Properties.Resources.Lifecycle_10_Message);
 
@@ -87,7 +87,7 @@ partial class InstallationManager
 			if(installation.Pending.Failed || !installation.Pending.Completed.Contains("ReadyToStart"))
 				throw new ContainerizationException(7, Properties.Resources.Lifecycle_13_Message);
 
-			using var bundle = DeliveryBundle.Open(installation.Pending.Assets);
+			using var bundle = ContainerBundle.Open(installation.Pending.Assets);
 			await this.ApplyMigrationsAsync(installation, bundle, null, cancellation);
 			await this.ActivateAsync(installation, bundle, cancellation);
 		}
@@ -119,7 +119,7 @@ partial class InstallationManager
 		}
 	}
 
-	private async Task ActivateAsync(Installation installation, DeliveryBundle bundle, CancellationToken cancellation)
+	private async Task ActivateAsync(Installation installation, ContainerBundle bundle, CancellationToken cancellation)
 	{
 		try
 		{
@@ -169,7 +169,7 @@ partial class InstallationManager
 		}
 	}
 
-	private async Task WaitForInfrastructureHealthAsync(DeliveryBundle bundle, CancellationToken cancellation)
+	private async Task WaitForInfrastructureHealthAsync(ContainerBundle bundle, CancellationToken cancellation)
 	{
 		foreach(var service in GetServicesInDependencyOrder(bundle.Plan).Where(service => service.Kind == "infrastructure"))
 			await host.WaitForHealthAsync(bundle, service, cancellation);

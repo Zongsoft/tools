@@ -90,7 +90,7 @@ public static class DeploymentResolverManager
 				throw new FormatException(string.Format(Properties.Resources.Review_InvalidOption, "delete", "output"));
 
 			var path = context.Deployer.Session.Validate(Path.Combine(deployment.Output.Path, deployment.Source.Name));
-			context.Deployer.Session.Add(new DeploymentOperation
+			context.Deployer.Session.Add(new DeploymentPlan.Operation
 			{
 				Kind = "Delete",
 				Output = path,

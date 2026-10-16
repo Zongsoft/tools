@@ -7,13 +7,15 @@
 
 [English](README.md) | [简体中文](README.zh-Hans.md)
 
-Terminal warnings use dark-yellow text with bold cyan parameters; errors use dark-red text with bold magenta parameters; success messages use green text. Exception types are highlighted in magenta and messages retain their original text. All four tools share the repository’s `.shared/Utility.Output.cs`: `FormatOutput` and `FormatError` construct Core `CommandOutletContent`; `WriteOutput` and `WriteError` route terminal and text-writer output; tools using the command executor call `HandleFailure` to display exceptions and mark them handled, while retaining their own exit codes. Terminals renders the colors. Redirected output and caller-provided error writers preserve plain text and their original streams. The same shared file provides `HighlightSyntax` for help text and `MeasureOutput` for stage timing. Timing messages use the caller's localized format and stage name and are emitted on first disposal, including when a stage fails.
+Terminal colors distinguish warnings, errors and success messages. Redirected output remains plain text on its original stream.
 
-`dotnet-containerize` packs applications and infrastructure services into a **container delivery for one Linux host**: a single `.tar.gz` that carries its Compose configuration, its images and its own native executor. Installing, upgrading, stopping, recovering and uninstalling the whole stack on the target is then one command per step — and the host needs neither the .NET SDK nor this tool.
+Run `dotnet-containerize --help` or `-h` for commands; individual commands also provide help. Creation prints elapsed time on success or failure; the exit code indicates the outcome.
 
-The maker runs on Windows or Linux and uses Docker or Podman. A delivery targets Ubuntu 22.04, Debian 12/13 or RHEL-family 9, on x64 or ARM64.
+`dotnet-containerize` packs applications and infrastructure services into a **container bundle for one Linux host**: a single `.tar.gz` that carries its Compose configuration, its images and its own native executor. Installing, upgrading, stopping, recovering and uninstalling the whole stack on the target is then one command per step — and the host needs neither the .NET SDK nor this tool.
 
-> 🚨 **Warning:** `dotnet-containerize` itself only writes local files. Running `install.sh` on a host installs the container engine, imports images, starts containers, executes migrations and can change databases. Rehearse with `run` and read the delivery README before touching a production host.
+The maker runs on Windows or Linux and uses Docker or Podman. A bundle targets Ubuntu 22.04, Debian 12/13 or RHEL-family 9, on x64 or ARM64.
+
+> 🚨 **Warning:** `dotnet-containerize` itself only writes local files. Running `install.sh` on a host installs the container engine, imports images, starts containers, executes migrations and can change databases. Rehearse with `run` and read the bundle README before touching a production host.
 
 ## Contents
 
@@ -34,14 +36,14 @@ The maker runs on Windows or Linux and uses Docker or Podman. A delivery targets
 ## Features
 
 - **One host, one archive:** applications, infrastructure services, ingress, migrations, bootstrap packages and images travel together as `name[-tag]@version-architecture.tar.gz`.
-- **Review before you build:** `plan` writes an editable `.container` manifest without connecting to an engine; `make` turns a reviewed manifest into a delivery.
+- **Review before you build:** `plan` writes an editable `.container` manifest without connecting to an engine; `make` turns a reviewed manifest into a bundle.
 - **Thirty built-in services:** Redis, MySQL, MariaDB, PostgreSQL, MongoDB, Kafka, Nacos, RustFS, nginx and more, each configured with a one-line `settings` value; custom templates extend the set.
-- **Applications from Packager packages:** `.deb`, `.rpm`, or `.tar.gz` plus its launcher; the entrypoint, runtime, environment and health check are derived from the package metadata.
+- **Applications from Packager packages:** `.deb`, `.rpm`, or `.tar.gz` plus its launcher; the entrypoint, runtime and environment come from package metadata; bindings control publication, and health defaults to process liveness.
 - **Automatic Web ingress:** an application that ships Packager's `.web/nginx` handoff assets gets a managed nginx ingress with rendered sites, ports and certificates; several applications can share it.
 - **Ordered migrations:** Migrator archives run in ascending version order during installation and preview, with per-version state and explicit retry instead of automatic re-execution.
 - **Offline or online acquisition:** images and system dependencies can be carried in the archive, or fetched on the target from digests recorded at build time.
-- **Rehearsal on the maker:** `run` installs the real delivery inside a disposable Linux container and prints the addresses that actually answered.
-- **Lifecycle without the SDK:** the delivery's Native AOT executor performs every target operation, including maintenance, recovery and cleanup.
+- **Rehearsal on the maker:** `run` installs the real bundle inside a disposable Linux container and prints the addresses that actually answered.
+- **Lifecycle without the SDK:** the bundle's Native AOT executor performs every target operation, including maintenance, recovery and cleanup.
 - **Registry mirrors:** an optional `.mirrors` file redirects image downloads without changing pinned digests or platforms.
 - **Bilingual by default:** console output, generated READMEs and this documentation ship in English and Simplified Chinese.
 
@@ -49,29 +51,29 @@ The maker runs on Windows or Linux and uses Docker or Podman. A delivery targets
 
 | Term | Meaning |
 | --- | --- |
-| **Delivery** | Everything needed to install one application stack on one Linux host: the `.tar.gz` archive, its `.container` manifest and the assets inside it. |
+| **Container bundle** | Everything needed to install one application stack on one Linux host: the `.tar.gz` archive, its `.container` manifest and the assets inside it. |
 | **Application package** | A Linux package from [Packager](../packager/README.md) holding a program, its configuration and its startup metadata. |
 | **Infrastructure service** | An image-based service such as Redis or MySQL, described by a built-in or custom template. |
 | **Ingress service** | A proxy that receives Web requests. Applications with nginx handoff assets add nginx automatically. |
-| **`name`** | The installation identity on the target host. Two deliveries with the same name are the same deployment. |
-| **`tag`** | An optional delivery label. It distinguishes builds but does not change installation identity. |
-| **`version`** | The release version of the delivery, independent of application and image versions. |
+| **`name`** | The installation identity on the target host. Two bundles with the same name are the same deployment. |
+| **`tag`** | An optional bundle label. It distinguishes builds but does not change installation identity. |
+| **`version`** | The release version of the bundle, independent of application and image versions. |
 | **`.settings`** | Shared per-service defaults in the output directory, used when planning or building from a component list. |
 | **`.container`** | The editable build manifest. `plan` writes a draft; a completed build records the effective configuration and image identities. |
-| **Executor** | The native `containerizer` program inside the delivery; it performs all target-side operations. |
+| **Executor** | The native `containerizer` program inside the bundle; it performs all target-side operations. |
 
-A delivery is produced in this order:
+A bundle is produced in this order:
 
 1. **Package** the applications with [Packager](../packager/README.md) and prepare migrations with [Migrator](../migrator/README.md).
 2. **Plan** a component list into an editable `.container` manifest.
 3. **Review** the shared `.settings` defaults and edit the manifest for this release.
-4. **Make** the delivery: images are resolved and built, assets are collected, checksums are written, and the archive is published.
+4. **Make** the bundle: images are resolved and built, assets are collected, checksums are written, and the archive is published.
 5. **Rehearse** the archive locally with `run`.
 6. **Ship** the archive to a matching host, extract it and run `./install.sh`.
 
 | Containerizer does | Containerizer does not |
 | --- | --- |
-| Package applications, pin image identities and record delivery checksums | Build application packages or migration archives — Packager and Migrator do that |
+| Package applications, pin image identities and record bundle checksums | Build application packages or migration archives — Packager and Migrator do that |
 | Generate Compose configuration, bootstrap dependencies and lifecycle commands | Build, deploy or configure application business code |
 | Render nginx sites from Packager's handoff assets and publish their ports | Issue certificates, change DNS, or rewrite application callbacks and redirects |
 | Run migrations in order and keep per-version state | Parse SQL or decide whether a failed migration may be retried |
@@ -81,10 +83,12 @@ A delivery is produced in this order:
 
 - **Maker:** the tool installed as a .NET global tool, plus a .NET runtime matching one of its target frameworks. Invoke it as `dotnet containerize` or `dotnet-containerize`.
 - `plan` needs only local inputs. `make`, direct builds and preview require a running Docker or Podman engine with a Compose provider; the first preparation of images, runtimes and system dependencies usually needs network access.
-- **Target host:** a Linux distribution and architecture matching the delivery, driven from a root session. Bootstrap prepares the container engine and its dependencies.
+- **Target host:** a Linux distribution and architecture matching the bundle, driven from a root session. Bootstrap prepares the container engine and its dependencies.
 - **Accepted targets:** Ubuntu 22.04, Debian 12/13 and RHEL/Rocky/AlmaLinux 9, on x64 or ARM64. RHEL requires an imported bootstrap dependency collection prepared for that system.
 
 These are the implemented target configurations; the observed runtime evidence is narrower. See [Platform and verification boundaries](docs/implementation.md#platform-and-verification-boundaries). A template declaration or a successful ARM64 compilation is not target acceptance.
+
+If image builds need a network proxy, set `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY` in the maker process (lowercase names are also accepted). The proxy must be reachable from the build container; with a remote engine, `localhost` refers to that remote environment. These values apply to build requests and are not written into the bundle manifest or application environment.
 
 ## Installation
 
@@ -145,11 +149,11 @@ Then create the migration archive from the hosting root with [migrate.cmd](https
 
 Containerizer never compiles hosts or generates migrations; it consumes these artifacts.
 
-For a container delivery, Containerizer runs migrations after infrastructure is ready. Do not embed the same migration through Packager's `--migration`: leave Migration empty in hosting's `pack.cmd` and select `.migration` in `containerize.cmd`. Use Packager-integrated migrations when installing the application package directly.
+For a container bundle, Containerizer runs migrations after infrastructure is ready. Do not embed the same migration through Packager's `--migration`: leave Migration empty in hosting's `pack.cmd` and select `.migration` in `containerize.cmd`. Use Packager-integrated migrations when installing the application package directly.
 
 ### Step 2: Declare shared service defaults
 
-Service defaults live in `output/.settings` and are shared by every delivery of the project. The hosting repository keeps its versioned defaults in [.containerized/.settings](https://github.com/Zongsoft/hosting/blob/main/.containerized/.settings); the entries used by this delivery are:
+Service defaults live in `output/.settings` and are shared by every bundle of the project. The hosting repository keeps its versioned defaults in [.containerized/.settings](https://github.com/Zongsoft/hosting/blob/main/.containerized/.settings); the entries used by this bundle are:
 
 ```ini
 [mysql]
@@ -188,17 +192,17 @@ dotnet-containerize plan ^
 
 | Argument or option | Effect |
 | --- | --- |
-| `daemon`, `web/default` | Host directories; each is searched for a package matching the delivery name, distribution and architecture. |
+| `daemon`, `web/default` | Host directories; each is searched for a package matching the bundle name, distribution and architecture. |
 | `redis mysql rustfs nginx` | Built-in infrastructure and ingress services. `nginx` is optional here: an application with complete `.web/nginx` handoff assets adds it automatically, and declaring it explicitly pins its tag and port mapping. |
 | `--name:zongsoft` | Installation identity; it also prefixes the package search and the migration archive name. |
-| `--version:1.0` | Release version of this delivery. Omitting it uses a date version, which is why the hosting project's own deliveries are named like `zongsoft@26.10.6-x64.tar.gz`. |
+| `--version:1.0` | Release version of this bundle. Omitting it uses a date version, which is why the hosting project's own bundles are named like `zongsoft@26.10.6-x64.tar.gz`. |
 | `--distribution:debian@13` | Target distribution; `debian` alone means `debian@13`. |
 | `--migration:.migration` | Directory searched for `zongsoft(migrate)@<version>_linux-<arch>` archives with their launchers. |
-| `--output:.containerized` | Destination for the manifest and, later, for the delivery archive. |
+| `--output:.containerized` | Destination for the manifest and, later, for the bundle archive. |
 
 ### Step 4: Review the manifest
 
-`plan` writes `.containerized/zongsoft@<version>-x64.container` and stops there — no engine contact, no image download. The draft for this delivery looks like:
+`plan` writes `.containerized/zongsoft@<version>-x64.container` and stops there — no engine contact, no image download. The draft for this bundle looks like:
 
 ```ini
 name=zongsoft
@@ -237,9 +241,9 @@ tag=1.30.5
 settings=port=80:18080,443:none
 ```
 
-`source` and `output` are stored relative to each other. Missing required service parameters appear as warnings while the draft is still saved; the delivery is edited here, not regenerated. See [Manifest fields](#manifest-fields) and [Web handoff and publication](#web-handoff-and-publication).
+`source` and `output` are stored relative to each other. Missing required service parameters appear as warnings while the draft is still saved; the bundle is edited here, not regenerated. See [Manifest fields](#manifest-fields) and [Web handoff and publication](#web-handoff-and-publication).
 
-### Step 5: Make the delivery
+### Step 5: Make the bundle
 
 ```cmd
 dotnet-containerize make .containerized/zongsoft@1.0-x64.container
@@ -252,7 +256,7 @@ dotnet-containerize make .containerized/zongsoft@1.0-x64.container
 .containerized/zongsoft@1.0-x64.tar.gz
 ```
 
-The archive contains the same completed manifest, so what ships is exactly what was reviewed. Existing deliveries are never overwritten; build the next release with `make FILE.container --version:1.1`. Use `--refresh` when the shared application runtime environments must be rebuilt from updated operating-system bases or runtime patches.
+The archive contains the same completed manifest, so what ships is exactly what was reviewed. Existing bundles are never overwritten; build the next release with `make FILE.container --version:1.1`. Use `--refresh` when the shared application runtime environments must be rebuilt from updated operating-system bases or runtime patches.
 
 ### Step 6: Rehearse locally
 
@@ -267,9 +271,9 @@ dotnet-containerize run .containerized/zongsoft@1.0-x64.tar.gz
 Copy the archive to a matching Linux host, extract it into its own directory and run the launcher from a root session:
 
 ```sh
-mkdir zongsoft-delivery
-tar -xzf zongsoft@1.0-x64.tar.gz -C zongsoft-delivery
-cd zongsoft-delivery
+mkdir zongsoft-bundle
+tar -xzf zongsoft@1.0-x64.tar.gz -C zongsoft-bundle
+cd zongsoft-bundle
 ./install.sh
 containerizer status --name zongsoft
 ```
@@ -298,7 +302,7 @@ Positional components are resolved in the order they are written:
 | --- | --- |
 | `service[@tag]` | A built-in service name (see [Built-in services](#built-in-services)), optionally with the image tag to pin. A value containing `/` or `\` is never a service name. |
 | Package file | An application package: `.deb`, `.rpm`, or `.tar.gz` together with its `.sh` launcher. |
-| Directory | Searched directly and in its `.packages/` subdirectory for a package matching the delivery's name prefix, distribution and architecture; several candidates prompt for selection, and file dates never pick a version. |
+| Directory | Searched directly and in its `.packages/` subdirectory for a package matching the bundle's name prefix, distribution and architecture; several candidates prompt for selection, and file dates never pick a version. |
 | `FILE.container` | Must be the only argument; plans or builds that manifest instead of a component list. |
 
 ### Options
@@ -310,13 +314,13 @@ All options below belong to the component-list forms; with a `.container` input 
 | `--name:<name>` | **Required** | Installation identity. It starts with an ASCII letter or digit, may continue with ASCII letters, digits, dots, underscores or hyphens, and cannot contain two consecutive dots. |
 | `--distribution:<dist[@version]>` | **Required** | Target distribution. `ubuntu` means `ubuntu@22.04` and `debian` means `debian@13`; `debian@12`, `rhel@9`, `rocky@9` and `almalinux@9` are also accepted, and `redhat` resolves to `rhel`. |
 | `--version:<version>` | Date version | Nonzero numeric release version with 2–4 parts. An omitted version uses the date and increments a fourth part when the output name is taken. |
-| `--tag:<tag>` | empty | Optional delivery label, following the name rules; it is independent of service image tags. |
+| `--tag:<tag>` | empty | Optional bundle label, following the name rules; it is independent of service image tags. |
 | `--architecture:<x64\|arm64>` | `x64` | Target architecture. |
 | `--source:<directory>` | invocation directory | Working source directory. |
 | `--output:<directory>` | final source | Directory receiving the manifest and the archive. |
 | `--engine:<auto\|docker\|podman>` | `auto` | Container engine used by the maker and by `run`. |
-| `--imaging:<offline\|online>` | `offline` | Infrastructure images: carried in the delivery, or fetched on the target from pinned digests. Application images are always carried. |
-| `--bootstrap:<offline\|online>` | `offline` | System dependencies: carried in the delivery, or downloaded on the target — both install the versions, sources and checksums recorded at build time. |
+| `--imaging:<offline\|online>` | `offline` | Infrastructure images: carried in the bundle, or fetched on the target from pinned digests. Application images are always carried. |
+| `--bootstrap:<offline\|online>` | `offline` | System dependencies: carried in the bundle, or downloaded on the target — both install the versions, sources and checksums recorded at build time. |
 | `--migration:<directory>` | none | Directory searched for Migrator archives and their launchers; omitting it adds no migrations. |
 | `--refresh[:boolean]` | `false` | Rebuild the shared application runtime environments needed by this build and resolve their operating-system bases again. |
 | `--title:<text>`, `--description:<text>` | empty | Descriptive manifest metadata. |
@@ -331,7 +335,7 @@ Deliveries are named `name[-tag]@version-architecture.container` and `name[-tag]
 
 ### Examples
 
-Plan and build an infrastructure-only delivery, then rehearse it:
+Plan and build an infrastructure-only bundle, then rehearse it:
 
 ```console
 dotnet-containerize plan redis --name:example --distribution:debian --version:1.0 --output:.containerized
@@ -339,7 +343,7 @@ dotnet-containerize make .containerized/example@1.0-x64.container
 dotnet-containerize run .containerized/example@1.0-x64.tar.gz
 ```
 
-Build a delivery in one step instead of planning first, pinning the image tag inline (the output defaults to the source directory):
+Build a bundle in one step instead of planning first, pinning the image tag inline (the output defaults to the source directory):
 
 ```console
 dotnet-containerize redis@8.10.2 --name:example --distribution:debian --version:1.0
@@ -384,7 +388,7 @@ A section never selects its service; only the component list or the manifest doe
 
 Variables come from the environment, the source directory's `.env` and its explicit imports, and command options. Only source's direct `.env` loads automatically; parent and child directories are not searched. Use `#@import ../.env` to include a parent file explicitly; import paths are relative to their declaring file and later declarations override earlier ones. References use `${name}`; `\${name}` keep a literal reference. Names that merely match a parameter are not bound automatically — the only built-in bindings are MySQL's `mysql:root_password` and RustFS's `rustfs:access_key` and `rustfs:secret_key`. Any other value must be set explicitly, as the hosting example does.
 
-Service parameters use single-line Core `Settings` syntax. Quoted values use backslash escapes, not doubled quotes; for example, `password='=abc=='` preserves a leading equals sign. Reading and writing use the same Core parser and serializer:
+Service parameters use single-line Core `Settings` syntax. Quoted values use backslash escapes, not doubled quotes; for example, `password='=abc=='` preserves a leading equals sign. For example:
 
 ```ini
 settings=port=16379;password='a;b="c"'
@@ -417,7 +421,9 @@ Root fields are `name`, `tag`, `version`, `engine`, `distribution`, `architectur
 | Component field | Use |
 | --- | --- |
 | `package` | Application package path; its presence marks the section as an application. |
-| `tag`, `repository`, `imaging` | Infrastructure image selection and an optional per-service delivery mode. |
+| `publish!<binding-id-or-alias>` | Application direct publication: auto, none, or semicolon-separated transport://IP:port values. Variables remain in drafts; missing values produce a planning warning and must be supplied before make. |
+| `health` | Application health command as a JSON array starting with CMD or CMD-SHELL; defaults to process liveness. |
+| `tag`, `repository`, `imaging` | Infrastructure image selection and an optional per-service bundle mode. |
 | `settings` | Infrastructure parameters, listed under [Built-in services](#built-in-services). |
 | `template` | Built-in template name or custom template path; defaults to the component name. See the [template reference](docs/templates.md). |
 | `environment!NAME` | Explicit container environment value. An application may override package service values; an infrastructure component must not contradict a parameter mapping. |
@@ -426,13 +432,12 @@ Root fields are `name`, `tag`, `version`, `engine`, `distribution`, `architectur
 | `file!/absolute/container/path` | Extra resource consumed by the nginx component; the value is a maker-side file path. |
 | `digest`, `identity`, `timestamp`, `size` | Image identity recorded by the tool, plus optional display metadata, as described in [Image identities and caches](docs/implementation.md#image-identities-and-caches). |
 
-Applications do not use `template`, `settings` or service image-selection fields: their entrypoint, working directory, runtime and basic health check come from — or are inferred from — the package metadata. To change an application's own configuration, edit the Packager scheme and rebuild the package.
 
 ### Web handoff and publication
 
-An application that ships Packager's complete `.web/nginx` handoff assets (`.bindings`, `<package-name>.conf` and `<package-name>.conf.template`) joins a managed nginx ingress automatically, and several applications can share that ingress. Without hosting assets, the application's valid `Listen` ports are published directly on host loopback.
+An application with sites in the installation-root JSON .bindings and complete .web/nginx/<package-name>.conf plus .conf.template assets joins a managed nginx ingress automatically. Several applications can share it. Root .bindings is required for all three package formats, including applications without Web assets.
 
-Nginx ports come from the packaged bindings and are published on the same host port by default. Remap or disable them with a `container-port:host-port` list:
+Nginx TCP/UDP ports come from the packaged bindings and are published on 127.0.0.1 at the same port by default; a numeric override applies to both transports when both are declared. UDP is not probed as TCP/HTTP. Remap or disable them with a `container-port:host-port` list:
 
 ```ini
 [zongsoft.web]
@@ -444,7 +449,7 @@ file!/etc/ssl/zongsoft/fullchain.pem=./certs/fullchain.pem
 file!/etc/ssl/zongsoft/key.pem=./certs/key.pem
 ```
 
-Here container port 80 prefers host port 18080 and container port 443 stays internal. A published wildcard-only site also needs a matching concrete `probe-host!SITE` name, and the site name and certificate paths must match the package content. External file declarations belong to the nginx component that uses them, and the ports are fixed when the manifest is written — editing `.settings` later does not change a saved delivery. Containerizer does not guess sites, issue certificates, or rewrite application callbacks and redirects.
+Here container port 80 prefers host port 18080 and container port 443 stays internal. A published wildcard-only site also needs a matching concrete `probe-host!SITE` name, and the site name and certificate paths must match the package content. External file declarations belong to the nginx component that uses them, and the ports are fixed when the manifest is written — editing `.settings` later does not change a saved bundle. Containerizer does not guess sites, issue certificates, or rewrite application callbacks and redirects.
 
 ### Migrations
 
@@ -489,7 +494,7 @@ Every service provides `port`; services with data mounts also provide `storage=p
 | valkey | 6379 | Same as Redis |
 | zookeeper | 2181 | — |
 
-Except for nginx mapping lists, a port parameter accepts `16379` (loopback), `192.0.2.10:16379`, `[::1]:16379` or `none`. It changes host publication only, never the container listener; `none` keeps the port reachable from inside the delivery only. Auxiliary ports stay unpublished by default, except the RustFS and TDengine consoles. nginx, haproxy, memcached and otel have no data mounts and reject `storage`.
+Except for nginx mapping lists, a port parameter accepts `16379` (loopback), `192.0.2.10:16379`, `[::1]:16379` or `none`. It changes host publication only, never the container listener; `none` keeps the port reachable from inside the bundle only. Auxiliary ports stay unpublished by default, except the RustFS and TDengine consoles. nginx, haproxy, memcached and otel have no data mounts and reject `storage`.
 
 `temporary` storage uses anonymous volumes: data survives stopping, starting or restarting the same container and is removed when the tool deletes that container. Starting infrastructure never implicitly recreates existing containers. Persistent directories survive an ordinary uninstall and require an explicit purge; changing settings does not migrate old data.
 
@@ -499,11 +504,11 @@ Parameters do not activate management features that an image lacks, and they nev
 
 ## Local preview
 
-`run` validates a delivery and executes its original `install.sh` inside an isolated Linux container, covering bootstrap, image import, migrations, application startup and health checks. The selected Docker or Podman runs the outer container, an independent Docker runs inside it, and the delivery must match the outer engine's native architecture. Outer Compose is not required.
+`run` validates a bundle and executes its original `install.sh` inside an isolated Linux container, covering bootstrap, image import, migrations, application startup and health checks. The selected Docker or Podman runs the outer container, an independent Docker runs inside it, and the bundle must match the outer engine's native architecture. Outer Compose is not required.
 
 - Every session starts from fresh installation state and test data; clean base environments and verified infrastructure and ingress images can be reused.
 - Requested ports are preferred, free ports are allocated on conflicts, and the addresses that actually answered are printed. Web entries publish on all IPv4 interfaces while ordinary TCP services publish on loopback, so LAN reachability still depends on firewalls and virtual-machine networking.
-- A required Web probe failure fails the preview. A failure limited to local forwarding for an infrastructure service is reported as a warning, while installation or service health failures still prevent readiness.
+- A required Web probe failure fails the preview. A local forwarding failure for a non-Web TCP port is reported as a warning, while installation or service health failures still prevent readiness. Ordinary application ports do not require Web entry metadata.
 - Domain probes connect to the local port while preserving Host and SNI, and HTTPS validates certificates. Hosts files, DNS and trust stores are left untouched, so opening a domain in a browser still needs suitable name resolution. Redirect targets are reported without being followed.
 - **Ctrl+C** after readiness returns `0` when cleanup succeeds; cancelling during startup returns `130`. An installation or probe failure keeps the established environment until you press Ctrl+C, and the failing status is retained.
 - A pre-existing preview environment for the same application blocks a second session. Force-terminating the process can leave resources behind; inspect the reported ownership before removing them.
@@ -512,19 +517,19 @@ Parameters do not activate management features that an image lacks, and they nev
 
 ## Target operations
 
-Copy the delivery to a matching Linux host and extract it into its own directory. Run the following from a root session:
+Copy the bundle to a matching Linux host and extract it into its own directory. Run the following from a root session:
 
 ```sh
-mkdir example-delivery
-tar -xzf example@1.0-x64.tar.gz -C example-delivery
-cd example-delivery
+mkdir example-bundle
+tar -xzf example@1.0-x64.tar.gz -C example-bundle
+cd example-bundle
 ./install.sh
 containerizer status --name example
 ```
 
 The installer saves every required asset into managed locations and installs or reuses `/usr/local/bin/containerizer`. Status, lifecycle, recovery and removal then work independently of the extraction directory.
 
-Target options are space-separated, and `BUNDLE` means a delivery archive or an extracted directory:
+Target options are space-separated, and `BUNDLE` means a bundle archive or an extracted directory:
 
 | Command | Effect |
 | --- | --- |
@@ -538,7 +543,7 @@ Target options are space-separated, and `BUNDLE` means a delivery archive or an 
 | `containerizer start --name NAME` | Starts prepared applications and ingress, and leaves maintenance once health checks pass. |
 | `containerizer restart [COMPONENT] --name NAME` | Restarts applications and ingress, or the named component; rejected during maintenance or a pending transaction. |
 | `containerizer recover --name NAME [--retry-migration VERSION]` | Continues the original failed or interrupted transaction and leaves the installation ready for an explicit start. |
-| `containerizer uninstall --name NAME [--purge]` | Uninstalls; `./uninstall.sh [--purge]` identifies the same installation from a delivery directory. |
+| `containerizer uninstall --name NAME [--purge]` | Uninstalls; `./uninstall.sh [--purge]` identifies the same installation from a bundle directory. |
 
 `--no-start` still starts infrastructure and runs migrations, leaving applications and ingress at `ReadyToStart`. Being in maintenance before the command also suppresses automatic application startup.
 
@@ -552,7 +557,7 @@ Target options are space-separated, and `BUNDLE` means a delivery archive or an 
 | `containerizer.json`, `checksums.sha256` | Execution plan and file checksums; the plan's hash identifies the release content. |
 | `compose.yaml`, `config/` | Generated runtime configuration and read-only runtime assets. |
 | `images/`, `packages/`, `migration/` | Offline images, bootstrap packages and migration archives, present when used. |
-| `README.md`, `README.zh-Hans.md` | Delivery-specific instructions, including the recommended migration order. |
+| `README.md`, `README.zh-Hans.md` | Bundle-specific instructions, including the recommended migration order. |
 
 ### Files on the host
 
@@ -563,7 +568,7 @@ Target options are space-separated, and `BUNDLE` means a delivery archive or an 
 | `/var/log/containerizer/NAME/` | Migration attempt result logs. |
 | `/var/cache/containerizer/NAME/` | Bootstrap downloads and staging. |
 
-An ordinary uninstall removes this application's containers, anonymous volumes and networks while retaining data, release assets, migration records and images for diagnosis, reinstallation or a later purge. A purge additionally removes verified, owned local assets and exclusive images, deleting the registration last; an interrupted cleanup can simply be repeated. The shared executor, Docker and Compose, the original delivery media and remote data stay outside the purge scope.
+An ordinary uninstall removes this application's containers, anonymous volumes and networks while retaining data, release assets, migration records and images for diagnosis, reinstallation or a later purge. A purge additionally removes verified, owned local assets and exclusive images, deleting the registration last; an interrupted cleanup can simply be repeated. The shared executor, Docker and Compose, the original bundle media and remote data stay outside the purge scope.
 
 ### Upgrades and migrations
 
@@ -575,6 +580,8 @@ Operators sequence multi-host maintenance: prepare and stop every host, upgrade 
 
 ## Registry mirrors and caches
 
+The `.mirrors` file redirects container image registries only. It does not replace Debian/RPM package repositories or download sites such as `download.docker.com`; preparing offline bootstrap packages and runtime images still needs access to those sites, directly or through the maker process's proxy.
+
 Put an optional `.mirrors` file in the final output directory. `run` reads the one beside the selected archive, while `plan` does not read it at all:
 
 ```ini
@@ -582,16 +589,16 @@ docker.io=mirror.example.com/docker.io
 mcr.microsoft.com=mirror.example.com/mcr
 ```
 
-Values are trusted `host[:port][/path-prefix]` endpoints, optionally separated by semicolons; they must not include a scheme, tag, digest, credentials or a trailing slash. The tool reuses a verified cache first, then tries the mirrors in order and finally the original registry, and no fallback can change a pinned digest or platform. These rules never enter the delivery: an ordinary target installation uses the engine's own configuration. See the [hosting registry mirrors](https://github.com/Zongsoft/hosting/blob/main/README.md#registry-mirrors) for a full list of public mirror entries. The complete resolution and cache rules are in [Registry mirrors](docs/implementation.md#registry-mirrors).
+Values are trusted `host[:port][/path-prefix]` endpoints, optionally separated by semicolons; they must not include a scheme, tag, digest, credentials or a trailing slash. The tool reuses a verified cache first, then tries the mirrors in order and finally the original registry, and no fallback can change a pinned digest or platform. These rules never enter the bundle: an ordinary target installation uses the engine's own configuration. See the [hosting registry mirrors](https://github.com/Zongsoft/hosting/blob/main/README.md#registry-mirrors) for a full list of public mirror entries. The complete resolution and cache rules are in [Registry mirrors](docs/implementation.md#registry-mirrors).
 
 Shared application runtime environments are cached under `%LOCALAPPDATA%/Zongsoft/containerizer` on Windows or `~/.cache/Zongsoft/containerizer` on Linux, where an absolute `XDG_CACHE_HOME` replaces the Linux cache base. They contain neither application packages nor application data. Use `make --refresh` to update operating-system bases or runtime patches; [Image identities and caches](docs/implementation.md#image-identities-and-caches) describes the cache layers and the boundaries for manual cleanup.
 
 ## Reference examples
 
 - The Zongsoft hosting project
-	- [Container delivery](https://github.com/Zongsoft/hosting/blob/main/README.md#container-delivery) — script workflow, image delivery options and Nginx ports
+	- [Container bundle](https://github.com/Zongsoft/hosting/blob/main/README.md#container-delivery) — script workflow, image delivery options and Nginx ports
 	- [`containerize.cmd`](https://github.com/Zongsoft/hosting/blob/main/containerize.cmd) — interactive plan/make/run wrapper
-	- [`.containerized/.settings`](https://github.com/Zongsoft/hosting/blob/main/.containerized/.settings) — shared service defaults for every delivery
+	- [`.containerized/.settings`](https://github.com/Zongsoft/hosting/blob/main/.containerized/.settings) — shared service defaults for every bundle
 	- [`.containerized/.mirrors`](https://github.com/Zongsoft/hosting/blob/main/.containerized/.mirrors) — registry mirrors used by builds and preview
 	- [`.env`](https://github.com/Zongsoft/hosting/blob/main/.env) — variables referenced by service defaults
 	- [`migrate.cmd`](https://github.com/Zongsoft/hosting/blob/main/migrate.cmd) — migration archive generation
@@ -605,6 +612,36 @@ Shared application runtime environments are cached under `%LOCALAPPDATA%/Zongsof
 
 ## Related documents
 
-- [Implementation](docs/implementation.md): maker data flow, Web handoff, delivery protocol, installation state, caches and verification boundaries.
+- [Implementation](docs/implementation.md): maker data flow, Web handoff, bundle protocol, installation state, caches and verification boundaries.
 - [Template reference](docs/templates.md): built-in repositories, ports, parameter mappings and the custom template format.
 - [Developer guide](SKILL.md): code maintenance, builds, tests and isolated validation.
+
+<a id="binding-publication"></a>
+
+### Publish application bindings
+
+Application packages require Packager's root `.bindings`; Web applications also need complete proxy assets. See [Packager declarations](../packager/README.md#application-bindings). Add overrides to an existing application component whose package supplies aliases `web`, `garnet` and `receiver`:
+
+```ini
+[application]
+publish!web = auto
+publish!garnet = tcp://127.0.0.1:16379
+publish!receiver = udp://0.0.0.0:19000
+health = ["CMD-SHELL","kill -0 1"]
+```
+
+This is a field fragment: retain the existing component name and package source rather than replacing the complete manifest.
+
+| Setting | Origin and result |
+| --- | --- |
+| `publish!web=auto` | `web` is a package alias. Proxied bindings remain internal; other bindings publish their original port on host loopback. |
+| `publish!garnet=tcp://127.0.0.1:16379` | Choose host port 16379; container port, e.g. 6379, comes from the declaration. TCP must already be declared. |
+| `publish!receiver=udp://0.0.0.0:19000` | Publish UDP 19000 on all host IPv4 interfaces to the declared UDP port, e.g. 9000, without a TCP mapping. |
+| `publish!garnet=none` | Disable direct publication for that binding while retaining existing proxy routes. |
+| `health` | Explicit process health; omission also defaults to PID 1 liveness. Supply a concrete command for business readiness. |
+
+Selectors can also use full binding IDs and must resolve uniquely. Overriding one binding through both ID and alias fails. Separate multiple host mappings with semicolons, e.g. `tcp://127.0.0.1:18443;udp://127.0.0.1:18443` when both transports are declared. TCP/UDP can share a port. Split a source binding containing different container ports into explicit declarations before overriding publication.
+
+The generated container network is IPv4, so cross-container connections and direct publication require a `0.0.0.0` listener. Loopback, fixed IP, DNS and IPv6-only declarations do not establish reachability. Host publication can separately use literal IPv4/IPv6 addresses. The tool does not rewrite application listeners, startup arguments or protocol advertisement addresses. Nginx ingress still uses the earlier `port=80:18080,443:none` settings; ingress and application-binding publication are separate choices.
+
+Metrics, gRPC reflection and `/opentelemetry` are not automatically business-health endpoints. UDP publication does not prove TCP/HTTP probe success. Validate ports, protocol exchange and business responses separately.

@@ -116,7 +116,7 @@ public abstract class DeploymentResolverBase : IDeploymentResolver
 				name = Path.Combine(name, sourceName);
 
 			var output = context.Deployer.Session.Validate(Path.Combine(directory, name));
-			var operation = new DeploymentOperation
+			var operation = new DeploymentPlan.Operation
 			{
 				Kind = "Copy",
 				Source = source.Path,
@@ -146,7 +146,7 @@ public abstract class DeploymentResolverBase : IDeploymentResolver
 	/// <param name="operation">已确定源和目标的文件操作。</param>
 	/// <param name="cancellation">用于取消准备工作的令牌。</param>
 	/// <returns>表示准备工作的任务；默认不修改操作。</returns>
-	protected virtual Task PrepareAsync(DeploymentContext context, DeploymentOperation operation, CancellationToken cancellation) => Task.CompletedTask;
+	protected virtual Task PrepareAsync(DeploymentContext context, DeploymentPlan.Operation operation, CancellationToken cancellation) => Task.CompletedTask;
 
 	/// <summary>枚举部署项已经解析的源路径所匹配的文件。</summary>
 	/// <param name="context">包含当前模板评估器与来源清单的部署上下文。</param>

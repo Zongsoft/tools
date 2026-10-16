@@ -283,7 +283,7 @@ public class DeploymentPlanTest
 		{
 			Root = fixture.OutputDirectory,
 			Succeeded = true,
-			Operations = [new DeploymentOperation { Kind = "Copy", Output = outside, Hash = Hash(outside), Status = "Copied" }],
+			Operations = [new DeploymentPlan.Operation { Kind = "Copy", Output = outside, Hash = Hash(outside), Status = "Copied" }],
 		}.Save(report);
 		fixture.Variables["previous"] = report.Replace('\\', '/');
 		fixture.Variables["prune"] = "true";

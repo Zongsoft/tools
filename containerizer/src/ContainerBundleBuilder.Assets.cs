@@ -44,7 +44,7 @@ using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer;
 
-partial class DeliveryBuilder
+partial class ContainerBundleBuilder
 {
 	#region 私有方法
 	private static string FindExecutor(string architecture, string supplied)
@@ -73,15 +73,15 @@ partial class DeliveryBuilder
 		throw new ContainerizationException(3, Properties.Resources.NodeBuilder_5_Message);
 	}
 
-	private static string CreateImageReference(DeliveryPlan node, string service) => $"containerizer/{node.Project}/{service}:{Files.HashText($"{node.Version}/{node.Tag}")[..16]}";
+	private static string CreateImageReference(ContainerBundlePlan node, string service) => $"containerizer/{node.Project}/{service}:{Files.HashText($"{node.Version}/{node.Tag}")[..16]}";
 
 	private static string CreateLauncher(string command) => $"#!/bin/sh\nset -eu\nbase=$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd -P)\nif [ \"$(id -u)\" -ne 0 ]; then printf 'Run as root.\\n' >&2; exit 3; fi\nexec \"$base/containerizer\" {command}{(command == "install" ? " \"$base\"" : " --from \"$base\"")} \"$@\"\n";
 
-	private static string CreateInstructions(DeliveryPlan node, string release) => FormatInstructions(node, release, CultureInfo.InvariantCulture);
+	private static string CreateInstructions(ContainerBundlePlan node, string release) => FormatInstructions(node, release, CultureInfo.InvariantCulture);
 
-	private static string CreateInstructionsZhHans(DeliveryPlan node, string release) => FormatInstructions(node, release, CultureInfo.GetCultureInfo("zh-Hans"));
+	private static string CreateInstructionsZhHans(ContainerBundlePlan node, string release) => FormatInstructions(node, release, CultureInfo.GetCultureInfo("zh-Hans"));
 
-	private static string FormatInstructions(DeliveryPlan node, string release, CultureInfo culture)
+	private static string FormatInstructions(ContainerBundlePlan node, string release, CultureInfo culture)
 	{
 		var previous = CultureInfo.CurrentUICulture;
 

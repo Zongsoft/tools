@@ -34,3 +34,5 @@ Native AOT 显式发布 Linux x64/arm64 与 Windows x64 到 `executor/src/bin/<�
 输出逻辑统一复用仓库 `.shared/Utility.Output.cs`：FormatOutput/FormatError 负责格式化，WriteOutput/WriteError 负责终端与文本写入器分流，HandleFailure 负责命令异常输出和已处理标记；各工具只决定退出码和业务诊断，不另建相同的包装层。用 Core CommandOutletContent 分段保存正文和参数：警告为暗黄色正文配粗体青色参数，错误为暗红色正文配粗体紫色参数。追加内容时从 Last 节点追加。Terminals 负责颜色；重定向和调用方提供的错误写入器保留原通道及纯文本；不要把 ANSI 序列写入报告或诊断回调。
 
 帮助语法统一使用共享 FormatHelp/HighlightSyntax，计时统一使用 MeasureOutput，不在各工具复制正则、计时器或颜色拼接。帮助入口在业务解析之前处理，返回 0 且不读取 .env、不写入产物；测试须验证重定向为纯文本、所有语法片段保留，以及耗时仅输出一次。计时文案由各工具资源提供，资源访问属性通过 ResXFileCodeGenerator 生成。
+
+数据库用户模型归 `MigrationPlan.Database.User`。类型归属调整须覆盖共享协议、权限校验、各执行器与序列化，保持数据库用户 JSON 结构及计划指纹；共享源码变更后发布三平台原生载荷再制包，防止全局工具携带过期执行器。

@@ -49,7 +49,7 @@ internal sealed partial class ContainerManifest(bool planning = false)
 {
 	#region 静态字段
 	internal static readonly string[] RootKeys = ["name", "tag", "version", "engine", "stage", "distribution", "architecture", "bootstrap", "imaging", "source", "output", "title", "description"];
-	private static readonly string[] _componentKeys = ["package", "tag", "timestamp", "repository", "size", "digest", "imaging", "settings", "dependences", "template", "identity"];
+	private static readonly string[] _componentKeys = ["package", "tag", "timestamp", "repository", "size", "digest", "imaging", "settings", "dependences", "template", "identity", "health"];
 	#endregion
 
 	#region 公共属性
@@ -225,7 +225,7 @@ internal sealed partial class ContainerManifest(bool planning = false)
 
 		foreach(var key in component.Values.Keys)
 		{
-			if(!IsComponentKey(key) || key.StartsWith("file!", StringComparison.OrdinalIgnoreCase) && (component["template"] ?? component.Name) != "nginx" || key.StartsWith("probe-host!", StringComparison.OrdinalIgnoreCase) && !component.IsApplication)
+			if(!IsComponentKey(key) || key.StartsWith("file!", StringComparison.OrdinalIgnoreCase) && (component["template"] ?? component.Name) != "nginx" || (key.StartsWith("probe-host!", StringComparison.OrdinalIgnoreCase) || key.StartsWith("publish!", StringComparison.OrdinalIgnoreCase) || key.Equals("health", StringComparison.OrdinalIgnoreCase)) && !component.IsApplication)
 				throw new ContainerizationException(2, string.Format(Properties.Resources.Manifest_8_Message, component.Name, key));
 		}
 
@@ -279,7 +279,7 @@ internal sealed partial class ContainerManifest(bool planning = false)
 
 				var version = dependencies[index] == "nginx" ? null : dependencies[index][6..];
 				if(component.Package.Web == null)
-					throw WebPackage.CreateException(component.Name, ".web/nginx/.bindings");
+					throw WebPackage.CreateException(component.Name, ".bindings/sites");
 
 				var existing = this.Components.Concat(additions).FirstOrDefault(item => item.Name.Equals("nginx", StringComparison.OrdinalIgnoreCase));
 
@@ -342,7 +342,7 @@ internal sealed partial class ContainerManifest(bool planning = false)
 
 	// 生成的路径还会经过模板求值，统一使用目录分隔符 /，避免把 Windows 分隔符当作转义字符。
 	private static string GetRelativePath(string relativeTo, string path) => Path.GetRelativePath(relativeTo, path).Replace(Path.DirectorySeparatorChar, '/');
-	private static bool IsComponentKey(string key) => _componentKeys.Contains(key, StringComparer.OrdinalIgnoreCase) || key.StartsWith("environment!", StringComparison.OrdinalIgnoreCase) || key.StartsWith("file!", StringComparison.OrdinalIgnoreCase) || key.StartsWith("probe-host!", StringComparison.OrdinalIgnoreCase);
+	private static bool IsComponentKey(string key) => _componentKeys.Contains(key, StringComparer.OrdinalIgnoreCase) || key.StartsWith("environment!", StringComparison.OrdinalIgnoreCase) || key.StartsWith("file!", StringComparison.OrdinalIgnoreCase) || key.StartsWith("probe-host!", StringComparison.OrdinalIgnoreCase) || key.StartsWith("publish!", StringComparison.OrdinalIgnoreCase);
 	private string GetImageIdentity(Component component) => Files.HashText(string.Join("\n", component["repository"] ?? "", component["tag"] ?? "", "linux", this["architecture"] ?? ""));
 	private static ContainerizationException CreateException(ProfileItem item, string message) => new(2, string.Format(Properties.Resources.Manifest_16_Message, item.Profile.FilePath, item.LineNumber + 1, message));
 

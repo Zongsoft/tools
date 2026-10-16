@@ -1,84 +1,81 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Text;
-using System.Formats.Tar;
-using System.IO.Compression;
 using System.Collections.Generic;
 
 using Xunit;
-
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
-public sealed class ListenerPackageTests
+public sealed class ListenerPackageTests : IDisposable
 {
-	#region 包元数据
+	private readonly string _root = Path.Combine(Path.GetTempPath(), "containerizer-listener-" + Guid.NewGuid().ToString("N"));
+	public ListenerPackageTests() => Directory.CreateDirectory(_root);
+	public void Dispose() => Directory.Delete(_root, true);
+
 	[Theory]
-	[InlineData(null)]
-	[InlineData("")]
-	[InlineData("http://127.0.0.1:8069")]
-	public void ReadsNativeListenerAndKeepsOldPackagesOnProcessHealth(string listen)
+	[InlineData("tar.gz", false)]
+	[InlineData("deb", false)]
+	[InlineData("rpm", false)]
+	[InlineData("tar.gz", true)]
+	[InlineData("deb", true)]
+	[InlineData("rpm", true)]
+	public void ReadsRootJsonAndKeepsTheConfiguredEntrypoint(string format, bool hasBinding)
 	{
-		var directory = Path.Combine(Path.GetTempPath(), "containerizer-listener-" + Guid.NewGuid().ToString("N"));
-		Directory.CreateDirectory(directory);
+		var document = new BindingDocument { Bindings = hasBinding ? [BindingDocument.CreateBinding("application", ["web"], [new("http", "0.0.0.0", 8069, "/", ["http1"])])] : [] };
+		var path = this.WritePackage(format, Encoding.UTF8.GetString(document.Serialize()));
+		var package = PackageReader.Read(path);
+		Assert.Equal(hasBinding ? 1 : 0, package.Bindings.Bindings.Length);
+		Assert.Equal(document.Serialize(), package.Bindings.Serialize());
+		Assert.Contains("/opt/example/.bindings", package.Entries.Keys);
+		Assert.DoesNotContain("/opt/example/.web/nginx/.bindings", package.Entries.Keys);
+		var source = ApplicationPlanner.Create(new(new PackageReader.Candidate(path, package)), new());
 
-		try
-		{
-			var path = WritePackage(directory, listen);
-			var package = PackageReader.Read(path);
-			Assert.Equal(listen, package.ListenerAddresses);
-			var source = ApplicationPlanner.Create(new(new PackageReader.Candidate(path, package)), new());
-
-			if(string.IsNullOrEmpty(listen))
-			{
-				Assert.Equal(["CMD-SHELL", "kill -0 1"], source.Plan.Health.Test);
-				Assert.Equal("http://127.0.0.1:8069", source.Plan.Entrypoint[^1]);
-			}
-			else
-			{
-				Assert.Contains("'http://127.0.0.1:8069/'", source.Plan.Health.Test[1]);
-				Assert.Equal("http://0.0.0.0:8069", source.Plan.Entrypoint[^1]);
-			}
-		}
-		finally { Directory.Delete(directory, true); }
+		Assert.Equal(["CMD-SHELL", "kill -0 1"], source.Plan.Health.Test);
+		Assert.Equal("http://127.0.0.1:8069", source.Plan.Entrypoint[^1]);
+		Assert.Equal(hasBinding ? 1 : 0, source.Plan.Ports.Count);
 	}
 
-	[Fact]
-	public void InvalidNativeMetadataFailsDuringPackageReading()
+	[Theory]
+	[InlineData("tar.gz")]
+	[InlineData("deb")]
+	[InlineData("rpm")]
+	public void WebReferencesAndStructuredTemplatesAreReadFromEveryPayload(string format)
 	{
-		var directory = Path.Combine(Path.GetTempPath(), "containerizer-listener-" + Guid.NewGuid().ToString("N"));
-		Directory.CreateDirectory(directory);
+		var document = WebFixtures.CreateDocument(new WebFixtures.Site("api", ["http://0.0.0.0:80"]));
+		var path = WebFixtures.WritePackage(Path.Combine(_root, "example." + format), "example", document, WebFixtures.Template(document));
+		var package = PackageReader.Read(path);
+		var site = Assert.Single(package.Web.Sites);
+		var reference = Assert.Single(site.Bindings);
+		var binding = package.Bindings.Bindings.Single(binding => binding.Id == reference.Binding);
 
-		try
-		{
-			Assert.Equal(2, Assert.Throws<ContainerizationException>(() => PackageReader.Read(WritePackage(directory, "not-a-url"))).Code);
-		}
-		finally { Directory.Delete(directory, true); }
+		Assert.Equal(document.Serialize(), package.Bindings.Serialize());
+		Assert.Equal("nginx", binding.Owner);
+		Assert.Equal(binding.Endpoints[0].Id, reference.Endpoint);
+		Assert.Equal("tcp", reference.Protocol);
+		Assert.Contains("{{zongsoft:binding:", package.Web.Template);
+		Assert.DoesNotContain("{{zongsoft:application}}", package.Web.Template);
 	}
 
-	#endregion
-
-	#region 辅助方法
-	private static string WritePackage(string directory, string listen)
+	[Theory]
+	[InlineData("tar.gz")]
+	[InlineData("deb")]
+	[InlineData("rpm")]
+	public void MissingInvalidOversizedAndLegacyBindingsFailDuringPackageReading(string format)
 	{
-		var path = Path.Combine(directory, "example.tar.gz");
-		var metadata = new Dictionary<string, string> { ["PackageName"] = "example", ["Architecture"] = "x64", ["Version"] = "1.0.0", ["InstallPath"] = "/opt/example" };
-
-		if(listen != null)
-			metadata["Listen"] = listen;
-
-		using(var output = File.Create(path))
-		using(var gzip = new GZipStream(output, CompressionLevel.Optimal))
-		using(var writer = new TarWriter(gzip))
-		{
-			writer.WriteEntry(new PaxGlobalExtendedAttributesTarEntry(metadata));
-			using var content = new MemoryStream(Encoding.UTF8.GetBytes("[Service]\nWorkingDirectory=/opt/example\nExecStart=dotnet /opt/example/example.dll --urls http://127.0.0.1:8069\n"));
-			writer.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, "example.service") { DataStream = content });
-		}
-
-		File.WriteAllText(path[..^7] + ".sh", "#!/bin/sh\nexit 0\n");
-		return path;
+		Assert.Equal(2, Assert.Throws<ContainerizationException>(() => PackageReader.Read(this.WritePackage(format, null))).Code);
+		Assert.Throws<InvalidDataException>(() => PackageReader.Read(this.WritePackage(format, "not-json")));
+		Assert.Throws<InvalidDataException>(() => PackageReader.Read(this.WritePackage(format, "[application]\nlisten=http://0.0.0.0:8069")));
+		Assert.Equal(2, Assert.Throws<ContainerizationException>(() => PackageReader.Read(this.WritePackage(format, new string(' ', BindingDocument.MaximumLength + 1)))).Code);
 	}
-	#endregion
+
+	private string WritePackage(string format, string bindings)
+	{
+		var files = new Dictionary<string, string> { ["example.service"] = "[Service]\nWorkingDirectory=/opt/example\nExecStart=dotnet /opt/example/example.dll --urls http://127.0.0.1:8069\n" };
+		if(bindings != null)
+			files[".bindings"] = bindings;
+		return PackageFixtures.Write(Path.Combine(_root, "example." + format), "example", files);
+	}
 }

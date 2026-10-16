@@ -74,37 +74,7 @@ internal static class TemplateCatalog
 			entry => entry.Name,
 			entry => entry.Name.ToLowerInvariant() is "entrypoint" or "command" or "health" ? entry.Value : Resolve(entry.Value), StringComparer.OrdinalIgnoreCase);
 
-		if(root.GetValueOrDefault("version") != "1")
-			throw new ContainerizationException(2, Properties.Resources.ServiceSource_13_Message);
-		if(root.GetValueOrDefault("kind") == "application")
-			throw new ContainerizationException(2, string.Format(Properties.Resources.Manifest_8_Message, component.Name, "kind=application"));
-
-		string[] permitted =
-		[
-			"image",
-			"kind",
-			"platforms",
-			"version",
-			"entrypoint",
-			"command",
-			"workdir",
-			"user",
-			"data-owner",
-			"restart",
-			"stop-signal",
-			"health",
-			"health-timeout",
-			"dependencies"
-		];
-
-		foreach(var key in root.Keys)
-		{
-			if(!permitted.Contains(key, StringComparer.OrdinalIgnoreCase))
-				throw new ContainerizationException(2, string.Format(Properties.Resources.ServiceSource_2_Message, path, key));
-		}
-
-		if(!(root.GetValueOrDefault("platforms") ?? "x64;arm64").Split(';').Contains(manifest["architecture"]))
-			throw new ContainerizationException(3, string.Format(Properties.Resources.ServiceSource_3_Message, component.Name));
+		ValidateRoot();
 
 		var source = new ServiceBuildContext(component)
 		{
@@ -140,115 +110,23 @@ internal static class TemplateCatalog
 		{
 			if(section.Name.Equals("environment", StringComparison.OrdinalIgnoreCase))
 			{
-				foreach(var entry in section.Entries)
-				{
-					if(!component.Values.ContainsKey($"environment!{entry.Name}"))
-						source.Environment.Add(entry.Name, Resolve(entry.Value) ?? "");
-				}
+				ReadEnvironment(section);
 			}
 			else if(section.Name.Equals("settings", StringComparison.OrdinalIgnoreCase))
 			{
-				foreach(var parameter in section.Sections)
-				{
-					declared.Add(parameter.Name);
-
-					var fields = parameter.Entries.ToDictionary(
-						entry => entry.Name,
-						entry => entry.Name.Equals("default", StringComparison.OrdinalIgnoreCase) ? entry.Value : Resolve(entry.Value), StringComparer.OrdinalIgnoreCase);
-
-					foreach(var key in fields.Keys)
-					{
-						if(key is not ("environment" or "argument" or "variable" or "default" or "required" or "choices"))
-							throw new ContainerizationException(2, string.Format(Properties.Resources.ServiceSource_4_Message, key));
-					}
-
-					if(fields.TryGetValue("environment", out var managed))
-						source.ManagedEnvironment.Add(managed);
-
-					string value;
-					if(settings.TryGetValue(parameter.Name, out var supplied))
-						value = manifest.ResolveValue(supplied);
-					else if(fields.TryGetValue("environment", out var binding) && component.Values.TryGetValue($"environment!{binding}", out var explicitValue))
-						value = manifest.ResolveValue(explicitValue);
-					else if(fields.TryGetValue("variable", out var variable))
-						value = manifest.IsPlanning ? $"${{{variable}}}" : manifest.Evaluator.TryGetVariable(variable, out var referenced) ? Resolve(referenced?.ToString()) : Resolve(fields.GetValueOrDefault("default"));
-					else
-						value = Resolve(fields.GetValueOrDefault("default"));
-
-					if(fields.GetValueOrDefault("required") == "true")
-					{
-						var missing = string.IsNullOrEmpty(value);
-						if(!missing && manifest.IsPlanning)
-						{
-							missing = !manifest.Evaluator.TryEvaluate(value, out var evaluated, out _) || string.IsNullOrEmpty(evaluated);
-						}
-
-						if(missing)
-							source.MissingSettings.Add(parameter.Name);
-					}
-
-					if(value == null)
-					{
-						if(manifest.IsPlanning && fields.GetValueOrDefault("required") == "true")
-							source.Settings[parameter.Name] = "";
-						continue;
-					}
-
-					source.Settings[parameter.Name] = value;
-					var deferred = manifest.IsPlanning && ContainerManifest.HasVariables(value);
-					if(!deferred && fields.TryGetValue("choices", out var choices) && !choices.Split(';').Contains(value, StringComparer.Ordinal))
-						throw new ContainerizationException(2, string.Format(Properties.Resources.ServiceSource_5_Message, component.Name, parameter.Name));
-
-					if(fields.TryGetValue("environment", out var environment))
-					{
-						source.Environment[environment] = value;
-					}
-
-					if(fields.TryGetValue("argument", out var argument))
-					{
-						source.Plan.Command = [.. source.Plan.Command ?? [], argument, value];
-					}
-				}
+				ReadSettings(section);
 			}
 			else if(section.Name.Equals("ports", StringComparison.OrdinalIgnoreCase))
 			{
-				foreach(var entry in section.Entries)
-				{
-					var port = ParsePort(Resolve(entry.Value));
-					port.Name = entry.Name == "default" ? "port" : $"{entry.Name}-port";
-					if(entry.Name != "default")
-						port.Host = 0;
-					source.Plan.Ports.Add(port);
-				}
+				ReadPorts(section);
 			}
 			else if(section.Name.Equals("data", StringComparison.OrdinalIgnoreCase))
 			{
-				var directory = $"{Installation.Paths.GetDataPath(manifest["name"])}/{source.Plan.Id}";
-
-				foreach(var entry in section.Entries)
-				{
-					ContainerManifest.ValidateIdentity(entry.Name);
-
-					source.Plan.Mounts.Add(new()
-					{
-						Source = section.Entries.Count == 1 ? directory : $"{directory}/{entry.Name}",
-						Target = Files.NormalizeLinuxPath(Resolve(entry.Value)),
-						Owned = true,
-						User = root.GetValueOrDefault("data-owner")
-					});
-				}
+				ReadData(section);
 			}
 			else if(section.Name.Equals("configuration", StringComparison.OrdinalIgnoreCase))
 			{
-				foreach(var entry in section.Entries)
-				{
-					var input = Path.GetFullPath(Resolve(entry.Value), Path.GetDirectoryName(path));
-
-					if(!File.Exists(input))
-						throw new ContainerizationException(2, string.Format(Properties.Resources.ServiceSource_6_Message, input));
-
-					source.Configuration.Add(Files.NormalizeLinuxPath(entry.Name), (input, null));
-				}
+				ReadConfiguration(section);
 			}
 			else
 				throw new ContainerizationException(2, string.Format(Properties.Resources.ServiceSource_7_Message, section.Name));
@@ -264,6 +142,173 @@ internal static class TemplateCatalog
 
 		ServiceOptions.ApplyEnvironment(component, source, manifest);
 		return source;
+
+		void ValidateRoot()
+		{
+			if(root.GetValueOrDefault("version") != "1")
+				throw new ContainerizationException(2, Properties.Resources.ServiceSource_13_Message);
+			if(root.GetValueOrDefault("kind") == "application")
+				throw new ContainerizationException(2, string.Format(Properties.Resources.Manifest_8_Message, component.Name, "kind=application"));
+
+			string[] permitted =
+			[
+				"image",
+				"kind",
+				"platforms",
+				"version",
+				"entrypoint",
+				"command",
+				"workdir",
+				"user",
+				"data-owner",
+				"restart",
+				"stop-signal",
+				"health",
+				"health-timeout",
+				"dependencies"
+			];
+
+			foreach(var key in root.Keys)
+			{
+				if(!permitted.Contains(key, StringComparer.OrdinalIgnoreCase))
+					throw new ContainerizationException(2, string.Format(Properties.Resources.ServiceSource_2_Message, path, key));
+			}
+
+			if(!(root.GetValueOrDefault("platforms") ?? "x64;arm64").Split(';').Contains(manifest["architecture"]))
+				throw new ContainerizationException(3, string.Format(Properties.Resources.ServiceSource_3_Message, component.Name));
+		}
+
+		void ReadEnvironment(ProfileSection section)
+		{
+			foreach(var entry in section.Entries)
+			{
+				if(!component.Values.ContainsKey($"environment!{entry.Name}"))
+					source.Environment.Add(entry.Name, Resolve(entry.Value) ?? "");
+			}
+		}
+
+		void ReadSettings(ProfileSection section)
+		{
+			foreach(var parameter in section.Sections)
+			{
+				ReadSetting(parameter);
+			}
+
+			void ReadSetting(ProfileSection parameter)
+			{
+				declared.Add(parameter.Name);
+
+				var fields = parameter.Entries.ToDictionary(
+					entry => entry.Name,
+					entry => entry.Name.Equals("default", StringComparison.OrdinalIgnoreCase) ? entry.Value : Resolve(entry.Value), StringComparer.OrdinalIgnoreCase);
+
+				foreach(var key in fields.Keys)
+				{
+					if(key is not ("environment" or "argument" or "variable" or "default" or "required" or "choices"))
+						throw new ContainerizationException(2, string.Format(Properties.Resources.ServiceSource_4_Message, key));
+				}
+
+				if(fields.TryGetValue("environment", out var managed))
+					source.ManagedEnvironment.Add(managed);
+
+				var value = ResolveValue();
+
+				if(fields.GetValueOrDefault("required") == "true")
+				{
+					var missing = string.IsNullOrEmpty(value);
+					if(!missing && manifest.IsPlanning)
+					{
+						missing = !manifest.Evaluator.TryEvaluate(value, out var evaluated, out _) || string.IsNullOrEmpty(evaluated);
+					}
+
+					if(missing)
+						source.MissingSettings.Add(parameter.Name);
+				}
+
+				if(value == null)
+				{
+					if(manifest.IsPlanning && fields.GetValueOrDefault("required") == "true")
+						source.Settings[parameter.Name] = "";
+					return;
+				}
+
+				source.Settings[parameter.Name] = value;
+				var deferred = manifest.IsPlanning && ContainerManifest.HasVariables(value);
+				if(!deferred && fields.TryGetValue("choices", out var choices) && !choices.Split(';').Contains(value, StringComparer.Ordinal))
+					throw new ContainerizationException(2, string.Format(Properties.Resources.ServiceSource_5_Message, component.Name, parameter.Name));
+
+				if(fields.TryGetValue("environment", out var environment))
+				{
+					source.Environment[environment] = value;
+				}
+
+				if(fields.TryGetValue("argument", out var argument))
+				{
+					source.Plan.Command = [.. source.Plan.Command ?? [], argument, value];
+				}
+
+				string ResolveValue()
+				{
+					if(settings.TryGetValue(parameter.Name, out var supplied))
+						return manifest.ResolveValue(supplied);
+					if(fields.TryGetValue("environment", out var binding) && component.Values.TryGetValue($"environment!{binding}", out var explicitValue))
+						return manifest.ResolveValue(explicitValue);
+
+					if(fields.TryGetValue("variable", out var variable))
+					{
+						if(manifest.IsPlanning)
+							return $"${{{variable}}}";
+						if(manifest.Evaluator.TryGetVariable(variable, out var referenced))
+							return Resolve(referenced?.ToString());
+					}
+
+					return Resolve(fields.GetValueOrDefault("default"));
+				}
+			}
+		}
+
+		void ReadPorts(ProfileSection section)
+		{
+			foreach(var entry in section.Entries)
+			{
+				var port = ParsePort(Resolve(entry.Value));
+				port.Name = entry.Name == "default" ? "port" : $"{entry.Name}-port";
+				if(entry.Name != "default")
+					port.Host = 0;
+				source.Plan.Ports.Add(port);
+			}
+		}
+
+		void ReadData(ProfileSection section)
+		{
+			var directory = $"{Installation.Paths.GetDataPath(manifest["name"])}/{source.Plan.Id}";
+
+			foreach(var entry in section.Entries)
+			{
+				ContainerManifest.ValidateIdentity(entry.Name);
+
+				source.Plan.Mounts.Add(new()
+				{
+					Source = section.Entries.Count == 1 ? directory : $"{directory}/{entry.Name}",
+					Target = Files.NormalizeLinuxPath(Resolve(entry.Value)),
+					Owned = true,
+					User = root.GetValueOrDefault("data-owner")
+				});
+			}
+		}
+
+		void ReadConfiguration(ProfileSection section)
+		{
+			foreach(var entry in section.Entries)
+			{
+				var input = Path.GetFullPath(Resolve(entry.Value), Path.GetDirectoryName(path));
+
+				if(!File.Exists(input))
+					throw new ContainerizationException(2, string.Format(Properties.Resources.ServiceSource_6_Message, input));
+
+				source.Configuration.Add(Files.NormalizeLinuxPath(entry.Name), (input, null));
+			}
+		}
 
 		string Resolve(string value) => value == null || manifest.IsPlanning ? value : ContainerManifest.Evaluate(value, manifest.Evaluator);
 		string[] ParseArguments(string value) => ParseArray(value)?.Select(Resolve).ToArray();
@@ -291,7 +336,7 @@ internal static class TemplateCatalog
 			throw new ContainerizationException(2, Properties.Resources.ServiceSource_10_Message);
 	}
 
-	private static PortPlan ParsePort(string value)
+	private static ServicePlan.PortMapping ParsePort(string value)
 	{
 		var protocol = value.Split('/', 2);
 		var parts = protocol[0].Split(':');

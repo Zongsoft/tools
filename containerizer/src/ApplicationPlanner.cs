@@ -56,6 +56,7 @@ internal static class ApplicationPlanner
 
 		ServiceOptions.ApplyEnvironment(component, source, manifest);
 		ResolveEntry(source.Package, source);
+		ApplicationBindings.Configure(source, manifest);
 
 		return source;
 	}
@@ -111,12 +112,9 @@ internal static class ApplicationPlanner
 		if(entries.Length != 1 || directories.Length != 1)
 			throw new ContainerizationException(2, Properties.Resources.ApplicationBuilder_4_Message);
 
-		var listeners = ApplicationHealth.ParseListeners(package.ListenerAddresses, package.Name);
-		var listening = string.Join(';', listeners.Select(listener => listener.GetLeftPart(UriPartial.Authority)));
-		var entry = listeners.Length == 0 ? entries[0][1] : entries[0][1].Replace(package.ListenerAddresses, listening, StringComparison.Ordinal);
-		var command = listening.Length == 0 ? entry : entry.Replace(listening, "", StringComparison.Ordinal);
+		var entry = entries[0][1];
 
-		if(command.IndexOfAny(['$', '%', '\\', '\'', '"', ';', '|', '&', '\n']) >= 0)
+		if(entry.IndexOfAny(['$', '%', '\\', '\'', '"', '|', '&', '\n']) >= 0)
 			throw new ContainerizationException(2, Properties.Resources.ApplicationBuilder_4_Message);
 
 		var arguments = entry.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -139,7 +137,7 @@ internal static class ApplicationPlanner
 		if(signal != null)
 			source.Plan.StopSignal = signal[1];
 
-		ApplicationHealth.Configure(package, source);
+		ApplicationHealth.Configure(source);
 	}
 
 	#endregion

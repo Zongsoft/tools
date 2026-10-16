@@ -81,6 +81,7 @@ public abstract partial class Package
 		this.Manufacturer = this.Options.Manufacturer;
 		this.Dependencies = this.Options.Dependencies;
 		this.Entries = new(this);
+		this.Bindings = new();
 	}
 	#endregion
 
@@ -113,10 +114,10 @@ public abstract partial class Package
 	#region 内部属性
 	internal PackageOptions Options { get; }
 	internal ApplicationHost Host { get; set; }
-	internal Web.Configurator.Result Web { get; set; }
 	internal abstract string FileName { get; }
+	internal BindingDocument Bindings { get; set; }
+	internal Web.Configurator.Result Web { get; set; }
 	internal virtual string EntryPrefix => this.InstallPath.TrimStart('/');
-	internal string Listen => this.Host?.Kind == ApplicationHost.HostKind.Generated ? this.Host.Listen : null;
 	#endregion
 
 	#region 公共方法
@@ -215,9 +216,22 @@ public abstract partial class Package
 		private readonly Package _package = package;
 		private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
 		private string _manifest;
+		private string _bindings;
 
 		public int Count => _entries.Count;
 		public bool Contains(string name) => name != null && _entries.ContainsKey(name);
+
+		internal void SetBindings(BindingDocument document)
+		{
+			var name = Utility.NormalizePath(Path.Combine(_package.EntryPrefix ?? "", BindingDocument.FileName));
+			var rooted = "/" + Utility.NormalizePath(Path.Combine(_package.InstallPath, BindingDocument.FileName)).TrimStart('/');
+			if(_entries.Any(item => item.Key == name && _bindings != name || item.Key == rooted ||
+			   item.Key.StartsWith(name + "/", StringComparison.Ordinal) || item.Key.StartsWith(rooted + "/", StringComparison.Ordinal)))
+				throw new InvalidOperationException(string.Format(Properties.Resources.GeneratedEntryConflicted_Message, name));
+
+			_entries[name] = new(document.Serialize(), name, 0, Utility.Unix.Mode644, false);
+			_bindings = name;
+		}
 
 		internal void RemoveGenerated(string name)
 		{

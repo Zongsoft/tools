@@ -37,15 +37,19 @@ using System.Text.Json.Serialization;
 
 namespace Zongsoft.Tools.Containerizer.Protocol;
 
-internal sealed class MountPlan
+partial class ServicePlan
 {
-	#region 公共属性
-	public string Source { get; set; }
-	public string Target { get; set; }
-	public bool ReadOnly { get; set; }
-	public bool Temporary { get; set; }
-	public bool Owned { get; set; }
-	public string User { get; set; }
-	public string Selinux { get; set; }
+	#region 嵌套类型
+	/// <summary>表示服务的健康检查命令及执行周期。</summary>
+	internal sealed class HealthCheck
+	{
+		#region 公共属性
+		public string[] Test { get; set; }
+		public int IntervalSeconds { get; set; } = 10;
+		public int TimeoutSeconds { get; set; } = 5;
+		public int Retries { get; set; } = 12;
+		public int StartSeconds { get; set; } = 30;
+		#endregion
+	}
 	#endregion
 }

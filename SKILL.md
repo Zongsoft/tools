@@ -32,3 +32,11 @@ description: 在 Zongsoft tools 仓库中修改、审查或排障时用于判断
 - 纯文档：只检查链接、CRLF 和 Git 差异。
 
 规范检查遵循 [AGENTS.md](AGENTS.md#代码规范检查)：严格构建及独立 IDE0049 检查都要通过；不要把普通构建成功等同于规范检查通过。
+
+## 网络绑定工作的入口
+
+1. 用户配置及 PI 语法从 [Packager README](packager/README.zh-Hans.md#application-bindings) 阅读；字段、身份、合并、路由和运行端协作读 [实现说明](packager/docs/implementation.zh-Hans.md#binding-document)。
+2. 修改 `.bindings`、提取或代理时，检查共享模型、Packager 生产端、Containerizer 消费端与两边示例；不得只改其中一个序列化入口。修改发布或健康选择时，阅读 [Containerizer 实现说明](containerizer/docs/implementation.zh-Hans.md)。
+3. 改动前辨别输入来源：应用运行配置给出监听，profile 给出入口与远程连接，container 清单给出宿主映射。HTTP Host、TLS 名称及连接主机不可相互替代。
+4. 按 [Packager 绑定回归矩阵](packager/SKILL.md#binding-validation) 选择检查。配置可读、文件协议正确、socket 可达、协议成功及业务 Handler 收到数据分层记录；不把交叉编译、配置语法检查或进程存活当作目标业务运行验证。
+5. Framework 的 NetworkAddress/NetworkProtocol、Web 端点范围、gRPC Handler/反射/客户端、Diagnostics 和各 daemon 插件归各自项目维护；工具不重复实现这些解析器或运行服务器。

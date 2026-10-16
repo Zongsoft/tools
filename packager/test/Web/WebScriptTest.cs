@@ -34,7 +34,7 @@ public class WebScriptTest
 		var result = await fixture.RunAsync(scripts.Delivered, "0");
 
 		Assert.Equal(0, result.Code);
-		Assert.Equal(keepWeb, File.Exists(bindings));
+		Assert.False(File.Exists(bindings));
 		Assert.Equal(keepWeb, File.Exists(template));
 		Assert.False(File.Exists(old));
 		Assert.Empty(fixture.Calls);

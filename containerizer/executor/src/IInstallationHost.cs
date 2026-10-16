@@ -41,18 +41,18 @@ namespace Zongsoft.Tools.Containerizer.Execution;
 internal interface IInstallationHost
 {
 	#region 公共方法
-	Task VerifyTargetAsync(DeliveryBundle bundle, Installation installation, CancellationToken cancellation);
-	Task InstallExecutorAsync(DeliveryBundle bundle, CancellationToken cancellation);
-	Task PrepareBootstrapAsync(DeliveryBundle bundle, Installation installation, CancellationToken cancellation);
-	Task PrepareImagesAsync(DeliveryBundle bundle, CancellationToken cancellation);
-	Task PrepareDirectoriesAsync(DeliveryBundle bundle, Installation installation, CancellationToken cancellation);
-	Task StartServiceAsync(DeliveryBundle bundle, ServicePlan service, CancellationToken cancellation);
-	Task WaitForHealthAsync(DeliveryBundle bundle, ServicePlan service, CancellationToken cancellation);
+	Task VerifyTargetAsync(ContainerBundle bundle, Installation installation, CancellationToken cancellation);
+	Task InstallExecutorAsync(ContainerBundle bundle, CancellationToken cancellation);
+	Task PrepareBootstrapAsync(ContainerBundle bundle, Installation installation, CancellationToken cancellation);
+	Task PrepareImagesAsync(ContainerBundle bundle, CancellationToken cancellation);
+	Task PrepareDirectoriesAsync(ContainerBundle bundle, Installation installation, CancellationToken cancellation);
+	Task StartServiceAsync(ContainerBundle bundle, ServicePlan service, CancellationToken cancellation);
+	Task WaitForHealthAsync(ContainerBundle bundle, ServicePlan service, CancellationToken cancellation);
 	// The caller persists maintenance before stopping; the host persists original restart policies before changing them.
 	Task StopApplicationsAsync(Installation installation, CancellationToken cancellation);
-	Task RestoreRestartPoliciesAsync(DeliveryBundle bundle, CancellationToken cancellation);
-	Task RestartServiceAsync(DeliveryBundle bundle, ServicePlan service, CancellationToken cancellation);
-	Task<int> RunMigrationAsync(DeliveryBundle bundle, MigrationPlan migration, string stateDirectory, string operation, string logPath, CancellationToken cancellation);
+	Task RestoreRestartPoliciesAsync(ContainerBundle bundle, CancellationToken cancellation);
+	Task RestartServiceAsync(ContainerBundle bundle, ServicePlan service, CancellationToken cancellation);
+	Task<int> RunMigrationAsync(ContainerBundle bundle, ContainerBundlePlan.Migration migration, string stateDirectory, string operation, string logPath, CancellationToken cancellation);
 	Task UninstallAsync(Installation installation, bool purge, CancellationToken cancellation);
 	Task FinalizePurgeAsync(Installation installation, CancellationToken cancellation);
 	Task StreamLogsAsync(Installation installation, ExecutorArguments arguments, CancellationToken cancellation);

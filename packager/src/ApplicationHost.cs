@@ -37,7 +37,7 @@ using System.Text.RegularExpressions;
 
 namespace Zongsoft.Tools.Packager;
 
-internal sealed record ApplicationHost(ApplicationHost.HostKind Kind, string Entry = null, string ServiceName = null, string ServiceSource = null, string Listen = null)
+internal sealed record ApplicationHost(ApplicationHost.HostKind Kind, string Entry = null, string ServiceName = null, string ServiceSource = null)
 {
 	#region 公共方法
 	internal static ApplicationHost Resolve(Package package)
@@ -74,11 +74,7 @@ internal sealed record ApplicationHost(ApplicationHost.HostKind Kind, string Ent
 			return new(HostKind.None);
 		}
 
-		var listen = options.Listen;
-		if(ushort.TryParse(listen, out var port))
-			listen = $"http://127.0.0.1:{port}";
-
-		return new(HostKind.Generated, entry, identifier, Listen: listen);
+		return new(HostKind.Generated, entry, identifier);
 	}
 	#endregion
 

@@ -15,11 +15,11 @@ using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
-public sealed class DeliveryBuilderTests : IDisposable
+public sealed class ContainerBundleBuilderTests : IDisposable
 {
 	private readonly string _root = Path.Combine(Path.GetTempPath(), "containerizer-build-tests-" + Guid.NewGuid().ToString("N"));
 	private static readonly string _digest = "sha256:" + new string('a', 64);
-	public DeliveryBuilderTests() => Directory.CreateDirectory(_root);
+	public ContainerBundleBuilderTests() => Directory.CreateDirectory(_root);
 	public void Dispose() => Directory.Delete(_root, true);
 
 	[Theory]
@@ -74,7 +74,7 @@ public sealed class DeliveryBuilderTests : IDisposable
 
 		var planFile = Path.Combine(unpacked, "containerizer.json");
 		Assert.Contains($"{Files.Hash(planFile)}  containerizer.json", File.ReadAllLines(Path.Combine(unpacked, "checksums.sha256")));
-		var node = Files.Load(planFile, ProtocolJson.Default.DeliveryPlan);
+		var node = Files.Load(planFile, ProtocolJson.Default.ContainerBundlePlan);
 		Assert.Equal(1, node.Schema);
 		Assert.Equal("linux/amd64", Assert.Single(node.Services).Image.Platform);
 		Assert.Equal(serviceImaging ?? mode, Assert.Single(node.Services).Image.Mode);
@@ -145,7 +145,7 @@ public sealed class DeliveryBuilderTests : IDisposable
 		var archive = await this.CreateBuilder(new BuildRunner()).BuildAsync(manifest, TestContext.Current.CancellationToken);
 		var directory = Path.Combine(_root, "mixed-order");
 		Files.Extract(archive, directory);
-		var plan = Files.Load(Path.Combine(directory, DeliveryPlan.FileName), ProtocolJson.Default.DeliveryPlan);
+		var plan = Files.Load(Path.Combine(directory, ContainerBundlePlan.FileName), ProtocolJson.Default.ContainerBundlePlan);
 		var completed = ContainerManifest.Read(manifest.ManifestPath);
 
 		Assert.Equal(["redis", "application"], plan.Services.Select(service => service.Id));
@@ -270,7 +270,7 @@ public sealed class DeliveryBuilderTests : IDisposable
 		Assert.DoesNotContain(runner.Calls, arguments => arguments.Contains("prune") || arguments.Contains("--force") || arguments.Contains("-f"));
 	}
 
-	private DeliveryBuilder CreateBuilder(BuildRunner runner, Action<CommandOutletContent> error = null) => new(runner, Path.Combine(_root, "cache"), Path.Combine(_root, "executor"), output: _ => { }, error: error);
+	private ContainerBundleBuilder CreateBuilder(BuildRunner runner, Action<CommandOutletContent> error = null) => new(runner, Path.Combine(_root, "cache"), Path.Combine(_root, "executor"), output: _ => { }, error: error);
 
 	[Theory]
 	[InlineData("podman")]
@@ -297,7 +297,7 @@ public sealed class DeliveryBuilderTests : IDisposable
 
 		var unpacked = Path.Combine(_root, "application-delivery");
 		Files.Extract(archive, unpacked);
-		var node = Files.Load(Path.Combine(unpacked, "containerizer.json"), ProtocolJson.Default.DeliveryPlan);
+		var node = Files.Load(Path.Combine(unpacked, "containerizer.json"), ProtocolJson.Default.ContainerBundlePlan);
 		Assert.Equal(1, node.Schema);
 		var application = Assert.Single(node.Services, service => service.Kind == "application");
 		Assert.Empty(application.Mounts);
@@ -320,18 +320,19 @@ public sealed class DeliveryBuilderTests : IDisposable
 		var manifest = this.CreateApplication(engine);
 		manifest.Components[0]["dependences"] = "nginx";
 		manifest.Components.Add(new() { Name = "nginx" });
-		var configuration = "server { listen 80; location / { proxy_pass http://application:8080; } }\n";
-		WebFixtures.WritePackage(manifest.Components[0]["package"], "application", "[api]\nbind=http://0.0.0.0:80\n", configuration);
+		var document = WebFixtures.CreateDocument(new WebFixtures.Site("api", ["http://0.0.0.0:80"]));
+		var configuration = WebFixtures.Template(document);
+		WebFixtures.WritePackage(manifest.Components[0]["package"], "application", document, configuration);
 		manifest.Normalize();
 		var runner = new BuildRunner();
 		var archive = await this.CreateBuilder(runner).BuildAsync(manifest, CancellationToken.None);
 		var unpacked = Path.Combine(_root, "ingress-delivery");
 		Files.Extract(archive, unpacked);
-		var node = Files.Load(Path.Combine(unpacked, "containerizer.json"), ProtocolJson.Default.DeliveryPlan);
+		var node = Files.Load(Path.Combine(unpacked, "containerizer.json"), ProtocolJson.Default.ContainerBundlePlan);
 		Assert.Empty(node.Services.Single(service => service.Kind == "application").Mounts);
 		var mount = Assert.Single(node.Services.Single(service => service.Id == "nginx").Mounts, item => item.Target == "/etc/nginx/containerizer/application.conf");
 		Assert.Equal("/etc/nginx/containerizer/application.conf", mount.Target);
-		Assert.Equal(configuration.ReplaceLineEndings("\r\n"), File.ReadAllText(Files.ResolveRelativePath(unpacked, mount.Source)));
+		Assert.Equal("server { listen 8080; location / { proxy_pass http://application:8069; } }", File.ReadAllText(Files.ResolveRelativePath(unpacked, mount.Source)));
 		Assert.DoesNotContain(runner.Calls, arguments => arguments[0] == "cp" && !arguments[1].EndsWith("/etc/passwd", StringComparison.Ordinal));
 		Assert.Empty(runner.Images);
 		Assert.Empty(runner.Containers);
@@ -454,6 +455,8 @@ public sealed class DeliveryBuilderTests : IDisposable
 			writer.WriteEntry(new PaxGlobalExtendedAttributesTarEntry(new Dictionary<string, string> { ["PackageName"] = "application", ["Architecture"] = "x64", ["Version"] = "1.0.0", ["InstallPath"] = "/opt/application" }));
 			using var service = new MemoryStream(Encoding.UTF8.GetBytes("[Service]\nWorkingDirectory=/opt/application\nExecStart=/opt/application/application\n"));
 			writer.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, "application.service") { DataStream = service });
+			using var bindings = new MemoryStream(new BindingDocument().Serialize());
+			writer.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, ".bindings") { DataStream = bindings });
 			using var contents = new MemoryStream(Encoding.UTF8.GetBytes(payload));
 			writer.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, "application") { DataStream = contents });
 		}

@@ -24,16 +24,16 @@ public class DefinitionLoadingTest
 
 	[Theory]
 	[InlineData("server!a=${missing}", "server=http://local", "http://local:80")]
-	[InlineData("server=${missing}", "server!b=http://local", "http://local:80")]
-	[InlineData("server!a=${missing}\nserver!b=invalid weight=0", "server!c=http://local", "http://local:80")]
+	[InlineData("server=${missing}", "server!b=http://local\nserver!d=http://second", "http://local:80")]
+	[InlineData("server!a=${missing}\nserver!b=invalid weight=0", "server!c=http://local\nserver!d=http://second", "http://local:80")]
 	public void ImportReplacesTheEntireServerGroup(string shared, string local, string expected)
 	{
 		using var files = new MigrationTestDirectory();
 		files.Write("shared.profile", "[api]\nbind!legacy=http://*\n" + shared);
 		var path = files.Write("web.profile", "#@import shared.profile\n[api]\n" + local);
 		var model = Resolve(path);
-		var route = Assert.Single(Assert.Single(model.Sites).Routes);
-		Assert.Equal(expected, Assert.Single(route.Server.Members).Endpoint.Address);
+		var route = Assert.Single(model.Sites).Default;
+		Assert.Equal(expected, route.Server.Members[0].Endpoint.Address);
 	}
 
 	[Fact]
@@ -74,6 +74,6 @@ public class DefinitionLoadingTest
 		Assert.Equal(content.Replace("\n", "\r\n"), System.IO.File.ReadAllText(path));
 	}
 
-	internal static Definition.Model Resolve(string path, global::Zongsoft.Common.Variables variables = null, string application = null) =>
+	internal static Definition.Model Resolve(string path, global::Zongsoft.Common.Variables variables = null, BindingDocument application = null) =>
 		Definition.Load(path).Resolve(new("example", "/opt/example", Utility.CreateEvaluator(variables), application), new("nginx"));
 }

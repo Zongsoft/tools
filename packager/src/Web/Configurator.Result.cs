@@ -43,6 +43,8 @@ partial class Configurator
 {
 	internal sealed record Result(string Hoster, IReadOnlyList<Result.File> Files, IReadOnlyList<Diagnostic> Diagnostics)
 	{
+		internal BindingDocument Bindings { get; init; } = new();
+
 		internal sealed record File(string Path, Content Content, UnixFileMode Mode);
 		internal sealed class Content(IReadOnlyList<ContentPart> parts)
 		{

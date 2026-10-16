@@ -42,6 +42,6 @@ public sealed class PlanCommand : ContainerizeCommand
 {
 	#region 重写方法
 	private protected override ContainerManifest CreateManifest(CommandContext context) => ManifestFactory.Create(context, planning: true);
-	private protected override ValueTask<string> BuildAsync(DeliveryBuilder builder, ContainerManifest manifest, CancellationToken cancellation) => ValueTask.FromResult(builder.Plan(manifest));
+	private protected override ValueTask<string> BuildAsync(ContainerBundleBuilder builder, ContainerManifest manifest, CancellationToken cancellation) => ValueTask.FromResult(builder.Plan(manifest));
 	#endregion
 }

@@ -49,7 +49,7 @@ internal sealed class WebPackage
 	public string Root { get; private init; }
 	public string Hoster { get; private init; }
 	public string Template { get; private init; }
-	public List<WebSitePlan> Sites { get; private init; }
+	public List<ServicePlan.WebSite> Sites { get; private init; }
 	#endregion
 
 	#region 读取说明
@@ -57,144 +57,59 @@ internal sealed class WebPackage
 	{
 		var assets = package.Entries.Keys.Where(path => path.Contains("/.web/", StringComparison.Ordinal)).ToArray();
 		if(assets.Length == 0)
+		{
+			if(package.Bindings.Sites.Length > 0)
+				throw CreateException(package.Name, ".web/nginx");
+
 			return null;
+		}
 
-		var roots = assets.Select(path => path[..path.IndexOf("/.web/", StringComparison.Ordinal)]).Distinct(StringComparer.Ordinal).ToArray();
-		if(roots.Length != 1)
-			throw CreateException(package.Name, ".web");
-
-		var root = roots[0];
+		var root = package.InstallPath.TrimEnd('/');
 		var prefix = root + "/.web/nginx/";
-		if(assets.Any(path => !path.StartsWith(prefix, StringComparison.Ordinal) && path != root + "/.web/nginx"))
-			throw CreateException(package.Name, ".web/<hoster>");
+		if(package.Bindings.Sites.Length == 0 || assets.Any(path => !path.StartsWith(prefix, StringComparison.Ordinal) && path != root + "/.web/nginx") ||
+			assets.Contains(prefix + ".bindings", StringComparer.Ordinal))
+			throw CreateException(package.Name, ".bindings/sites");
 
-		var bindings = prefix + ".bindings";
 		var configuration = prefix + package.Name + ".conf";
 		var template = configuration + ".template";
+		if(!package.WebTexts.ContainsKey(configuration) || !package.WebTexts.ContainsKey(template) ||
+			assets.Any(path => path.EndsWith(".conf", StringComparison.Ordinal) && path != configuration))
+			throw CreateException(package.Name, configuration);
 
-		foreach(var path in new[] { bindings, configuration, template })
+		var bindings = package.Bindings.Bindings.ToDictionary(binding => binding.Id, StringComparer.Ordinal);
+		var sites = new List<ServicePlan.WebSite>();
+
+		foreach(var declaration in package.Bindings.Sites)
 		{
-			if(!package.WebTexts.ContainsKey(path))
-				throw CreateException(package.Name, path);
-		}
-
-		if(assets.Any(path => path.EndsWith(".conf", StringComparison.Ordinal) && path != configuration))
-			throw CreateException(package.Name, prefix + "*.conf");
-
-		return new() { Root = root, Hoster = "nginx", Template = package.WebTexts[template], Sites = ParseSites(package.WebTexts[bindings], bindings) };
-	}
-
-	private static List<WebSitePlan> ParseSites(string text, string source)
-	{
-		var declarations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-		var section = "";
-
-		foreach(var line in text.Split('\n').Select(line => line.Trim()))
-		{
-			if(line.Length == 0 || line[0] is '#' or ';')
-				continue;
-
-			if(line.StartsWith('[') && line.EndsWith(']'))
+			var site = new ServicePlan.WebSite { Name = declaration.Name, Hosts = [.. declaration.Hosts] };
+			foreach(var listener in declaration.Listeners)
 			{
-				section = line[1..^1].Trim();
-				if(section.Length == 0 || section.Any(char.IsWhiteSpace) || !declarations.Add("[" + section + "]"))
-					throw CreateException(source, line);
-			}
-			else
-			{
-				var separator = line.IndexOf('=');
-				if(section.Length == 0 || separator <= 0 || !declarations.Add(section + "/" + line[..separator].Trim()))
-					throw CreateException(source, line);
-			}
-		}
+				var endpoint = bindings[listener.Binding].Endpoints.Single(endpoint => endpoint.Id == listener.Endpoint);
+				if(bindings[listener.Binding].Owner != "nginx" || endpoint.Transports.Length != 1)
+					throw CreateException(package.Name, listener.Binding);
 
-		using var reader = new StringReader(text);
-		var profile = Profile.Load(reader, new ProfileOptions { Directives = { ProfileDirectiveOptions.Import(ProfileDirectiveBehavior.Suppress) } });
-		var sites = new List<WebSitePlan>();
-
-		if(profile.Entries.Count > 0 || profile.Sections.Count == 0)
-			throw CreateException(source, ".bindings");
-
-		foreach(var item in profile.Sections)
-		{
-			if(item.Sections.Count > 0 || item.Entries.Any(entry => entry.Name is not ("host" or "bind" or "default")))
-				throw CreateException(source, item.Name);
-
-			var fields = item.Entries.ToDictionary(entry => entry.Name, entry => entry.Value, StringComparer.Ordinal);
-			var site = new WebSitePlan { Name = item.Name };
-
-			if(fields.TryGetValue("host", out var hosts))
-			{
-				site.Hosts.AddRange(ParseList(hosts, source).Distinct(StringComparer.OrdinalIgnoreCase));
-				if(site.Hosts.Any(host => !IsValidHost(host)))
-					throw CreateException(source, "host=" + hosts);
-			}
-
-			if(!fields.TryGetValue("bind", out var bindings))
-				throw CreateException(source, item.Name + "/bind");
-
-			var addresses = new Dictionary<string, WebBindingPlan>(StringComparer.Ordinal);
-			foreach(var value in ParseList(bindings, source))
-			{
-				var binding = ParseBinding(value, source);
-				if(!addresses.TryAdd(GetAddress(binding), binding))
-					throw CreateException(source, "bind=" + value);
-
-				site.Bindings.Add(binding);
-			}
-
-			if(fields.TryGetValue("default", out var defaults))
-			{
-				foreach(var value in ParseList(defaults, source))
+				site.Bindings.Add(new()
 				{
-					var key = GetAddress(ParseBinding(value, source));
-					if(!addresses.TryGetValue(key, out var binding) || binding.IsExplicitDefault)
-						throw CreateException(source, "default=" + value);
-
-					binding.IsExplicitDefault = true;
-				}
+					Binding = listener.Binding,
+					Endpoint = listener.Endpoint,
+					Scheme = endpoint.Scheme,
+					Address = endpoint.Host,
+					Port = endpoint.Port,
+					Protocol = endpoint.Transports[0],
+					IsExplicitDefault = listener.Default,
+				});
 			}
 
 			sites.Add(site);
 		}
 
-		return sites;
+		return new() { Root = root, Hoster = "nginx", Template = package.WebTexts[template], Sites = sites };
 	}
 	#endregion
 
 	#region 绑定与主机名
-	private static string[] ParseList(string text, string source)
-	{
-		var values = (text ?? "").Split([',', ';'], StringSplitOptions.TrimEntries);
-		if(values.Any(string.IsNullOrEmpty))
-			throw CreateException(source, text);
-
-		return values;
-	}
-
-	private static WebBindingPlan ParseBinding(string text, string source)
-	{
-		var separator = text.LastIndexOf(':');
-		if(separator < 0 || !int.TryParse(text[(separator + 1)..], NumberStyles.None, CultureInfo.InvariantCulture, out var port) || port is < 1 or > 65535 ||
-			text.Contains('\\') || text.Any(char.IsWhiteSpace) || !Uri.TryCreate(text, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") ||
-			uri.UserInfo.Length > 0 || uri.Query.Length > 0 || uri.Fragment.Length > 0 || uri.AbsolutePath != "/" || uri.Port != port ||
-			!IPAddress.TryParse(uri.Host.Trim('[', ']'), out var address) || address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 && address.ScopeId != 0)
-			throw CreateException(source, "bind=" + text);
-
-		return new() { Scheme = uri.Scheme, Address = address.ToString(), Port = port };
-	}
-
-	internal static string GetAddress(WebBindingPlan binding) => $"{binding.Scheme}://{(binding.Address.Contains(':') ? "[" + binding.Address + "]" : binding.Address)}:{binding.Port.ToString(CultureInfo.InvariantCulture)}";
+	internal static string GetAddress(ServicePlan.WebSite.BindingInfo binding) => $"{binding.Scheme}://{(binding.Address.Contains(':') ? "[" + binding.Address + "]" : binding.Address)}:{binding.Port.ToString(CultureInfo.InvariantCulture)}";
 	internal static bool IsConcreteHost(string host) => host != null && !host.Contains('*') && !host.StartsWith('.') && Uri.CheckHostName(host) is UriHostNameType.Dns or UriHostNameType.IPv4 or UriHostNameType.IPv6;
-	private static bool IsValidHost(string host)
-	{
-		if(IsConcreteHost(host))
-			return true;
-
-		var value = host.StartsWith("*.", StringComparison.Ordinal) ? host[2..] : host.StartsWith('.') ? host[1..] : host.EndsWith(".*", StringComparison.Ordinal) ? host[..^2] : null;
-		return value != null && !value.Contains('*') && Uri.CheckHostName(value) == UriHostNameType.Dns;
-	}
-
 	internal static int GetHostMatchScore(string pattern, string host)
 	{
 		if(pattern.Equals(host, StringComparison.OrdinalIgnoreCase))

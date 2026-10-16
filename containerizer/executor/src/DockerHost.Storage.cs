@@ -54,7 +54,7 @@ partial class DockerHost
 	#endregion
 
 	#region 公共方法
-	public async Task PrepareDirectoriesAsync(DeliveryBundle bundle, Installation installation, CancellationToken cancellation)
+	public async Task PrepareDirectoriesAsync(ContainerBundle bundle, Installation installation, CancellationToken cancellation)
 	{
 		using var ownershipLock = store.AcquireHostLock();
 
@@ -171,8 +171,8 @@ partial class DockerHost
 
 	private void ValidateDataPath(string path, string name)
 	{
-		DeliveryBundle.ValidateLinuxPath(path);
-		DeliveryBundle.ValidateIdentity(name);
+		ContainerBundle.ValidateLinuxPath(path);
+		ContainerBundle.ValidateIdentity(name);
 		path = $"/{string.Join('/', path.Split('/', StringSplitOptions.RemoveEmptyEntries))}";
 
 		var root = Installation.Paths.GetDataPath(name);

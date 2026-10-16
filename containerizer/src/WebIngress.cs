@@ -49,7 +49,7 @@ internal static partial class WebIngress
 			var component = source.Component;
 
 			if(source.Package.Web == null && ((component["dependences"] ?? "").Split(';', StringSplitOptions.TrimEntries).Contains("nginx") || component.Values.Keys.Any(key => key.StartsWith("probe-host!", StringComparison.OrdinalIgnoreCase))))
-				throw WebPackage.CreateException(component.Name, ".web/nginx/.bindings");
+				throw WebPackage.CreateException(component.Name, ".bindings/sites");
 		}
 
 		var applications = sources.Where(source => source.Package?.Web != null).OrderBy(source => source.Plan.Id, StringComparer.Ordinal).ToArray();
@@ -67,8 +67,11 @@ internal static partial class WebIngress
 					Name = site.Name,
 					Hosts = [.. site.Hosts],
 					Bindings = site.Bindings
-						.Select(binding => new WebBindingPlan
+						.Select(binding => new ServicePlan.WebSite.BindingInfo
 						{
+							Binding = binding.Binding,
+							Endpoint = binding.Endpoint,
+							Protocol = binding.Protocol,
 							Address = binding.Address,
 							Port = binding.Port,
 							Scheme = binding.Scheme,
@@ -82,7 +85,7 @@ internal static partial class WebIngress
 		foreach(var ingress in sources.Where(source => source.Plan.Template == "nginx"))
 		{
 			if(ingress.Plan.Web.Count == 0)
-				throw WebPackage.CreateException(ingress.Plan.Id, ".web/nginx/.bindings");
+				throw WebPackage.CreateException(ingress.Plan.Id, ".bindings/sites");
 
 			Configure(ingress, sources);
 			ValidateFiles(manifest, ingress, applications);
@@ -95,92 +98,128 @@ internal static partial class WebIngress
 		var records = sites.SelectMany(site => site.Bindings.Select(binding => (Site: site, Binding: binding))).ToArray();
 		var mapping = ParsePorts(source.Settings.GetValueOrDefault("port"), records.Select(record => record.Binding.Port).ToHashSet(), source.Plan.Id);
 
-		foreach(var endpoint in records.GroupBy(record => (record.Binding.Address, record.Binding.Port)))
+		SelectDefaults();
+		ConfigurePublications();
+		ConfigureProbes();
+		ValidateProbeOverrides();
+
+		void SelectDefaults()
 		{
-			if(endpoint.Select(record => record.Binding.Scheme).Distinct().Count() != 1 || endpoint.Count(record => record.Binding.IsExplicitDefault) > 1)
-				throw WebPackage.CreateException(source.Plan.Id, $"listen {endpoint.Key}");
-
-			var first = endpoint.FirstOrDefault(record => record.Binding.IsExplicitDefault);
-			if(first.Site == null)
-				first = endpoint.First();
-
-			first.Binding.IsDefault = true;
-			var hosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-			foreach(var record in endpoint)
+			foreach(var endpoint in records.GroupBy(record => (record.Binding.Protocol, record.Binding.Address, record.Binding.Port)))
 			{
-				foreach(var host in record.Site.Hosts)
-				{
-					// '.example' also owns both the exact name and the leading wildcard.
-					var names = host.StartsWith('.') ? new[] { host[1..], "*" + host } : [host];
+				if(endpoint.Select(record => record.Binding.Scheme).Distinct().Count() != 1 || endpoint.Count(record => record.Binding.IsExplicitDefault) > 1)
+					throw WebPackage.CreateException(source.Plan.Id, $"listen {endpoint.Key}");
 
-					if(names.Any(name => !hosts.Add(name)))
-						throw WebPackage.CreateException(source.Plan.Id, "host=" + host);
+				var first = endpoint.FirstOrDefault(record => record.Binding.IsExplicitDefault);
+				if(first.Site == null)
+					first = endpoint.First();
+
+				first.Binding.IsDefault = true;
+				var hosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+				foreach(var record in endpoint)
+				{
+					foreach(var host in record.Site.Hosts)
+					{
+						// '.example' also owns both the exact name and the leading wildcard.
+						var names = host.StartsWith('.') ? new[] { host[1..], "*" + host } : [host];
+
+						if(names.Any(name => !hosts.Add(name)))
+							throw WebPackage.CreateException(source.Plan.Id, "host=" + host);
+					}
 				}
 			}
 		}
 
-		foreach(var group in records.GroupBy(record => record.Binding.Port).OrderBy(group => group.Key))
+		void ConfigurePublications()
 		{
-			var preferred = mapping.GetValueOrDefault(group.Key, group.Key);
-			if(preferred == 0)
-				continue;
+			foreach(var group in records.GroupBy(record => (record.Binding.Protocol, record.Binding.Port)).OrderBy(group => group.Key.Protocol).ThenBy(group => group.Key.Port))
+			{
+				var preferred = mapping.GetValueOrDefault(group.Key.Port, group.Key.Port);
+				foreach(var record in group)
+				{
+					var application = sources.Single(application => application.Plan.Id == record.Site.Application);
+					application.Plan.Bindings.Single(binding => binding.Id == record.Binding.Binding).Publication = preferred == 0 ? "none" : "auto";
+				}
 
-			var ipv4 = group.Where(record => record.Binding.Address == "0.0.0.0").ToArray();
-			var ipv6 = group.Where(record => record.Binding.Address == "::").ToArray();
+				if(preferred == 0)
+					continue;
 
-			if(ipv4.Length == 0 || ipv4.Length + ipv6.Length != group.Count() ||
-			   group.Select(record => record.Binding.Scheme).Distinct().Count() != 1 ||
-			   ipv6.Length > 0 && !ipv4.Select(GetBindingSignature).Order(StringComparer.Ordinal).SequenceEqual(ipv6.Select(GetBindingSignature).Order(StringComparer.Ordinal)))
-				throw WebPackage.CreateException(source.Plan.Id, $"listen :{group.Key}");
+				var ipv4 = group.Where(record => record.Binding.Address == "0.0.0.0").ToArray();
+				var ipv6 = group.Where(record => record.Binding.Address == "::").ToArray();
 
-			var name = "web-" + group.Key.ToString(CultureInfo.InvariantCulture);
-			source.Plan.Ports.Add(new() { Name = name, Container = group.Key, Host = preferred, Address = "127.0.0.1" });
+				if(ipv4.Length == 0 || ipv4.Length + ipv6.Length != group.Count() ||
+				   group.Select(record => record.Binding.Scheme).Distinct().Count() != 1 ||
+				   ipv6.Length > 0 && !ipv4.Select(GetBindingSignature).Order(StringComparer.Ordinal).SequenceEqual(ipv6.Select(GetBindingSignature).Order(StringComparer.Ordinal)))
+					throw WebPackage.CreateException(source.Plan.Id, $"listen :{group.Key}");
 
-			foreach(var record in group)
-				record.Binding.Publication = name;
+				var name = "web-" + group.Key.Protocol + "-" + group.Key.Port.ToString(CultureInfo.InvariantCulture);
+				source.Plan.Ports.Add(new()
+				{
+					Name = name,
+					Container = group.Key.Port,
+					Host = preferred,
+					Address = "127.0.0.1",
+					Protocol = group.Key.Protocol,
+					Bindings = group.Select(record => new ServicePlan.PortMapping.BindingReference
+					{
+						Application = record.Site.Application,
+						Binding = record.Binding.Binding,
+						Endpoint = record.Binding.Endpoint,
+					}).DistinctBy(reference => (reference.Application, reference.Binding, reference.Endpoint)).ToList(),
+				});
+
+				foreach(var record in group)
+					record.Binding.Publication = name;
+			}
 		}
 
-		foreach(var site in sites)
+		void ConfigureProbes()
 		{
-			var component = sources.Single(source => source.Plan.Id == site.Application).Component;
-			var custom = component["probe-host!" + site.Name];
-			var published = site.Bindings.Where(binding => binding.Publication != null && binding.Address == "0.0.0.0").ToArray();
-
-			if(custom != null && (!WebPackage.IsConcreteHost(custom) || !site.Hosts.Any(host => WebPackage.GetHostMatchScore(host, custom) > 0)))
-				throw WebPackage.CreateException(site.Application, "probe-host!" + site.Name);
-
-			site.ProbeHosts.AddRange(site.Hosts.Where(WebPackage.IsConcreteHost));
-			if(custom != null)
-				site.ProbeHosts.Add(custom);
-			if(published.Length == 0)
-				continue;
-			if(site.Hosts.Count > 0 && site.ProbeHosts.Count == 0)
-				throw WebPackage.CreateException(site.Application, "probe-host!" + site.Name);
-			if(site.Hosts.Count == 0)
-				site.ProbeHosts.Add("127.0.0.1");
-
-			foreach(var binding in published)
+			foreach(var site in sites)
 			{
-				var peers = records.Where(record => record.Binding.Port == binding.Port && record.Binding.Address == binding.Address).ToArray();
+				var component = sources.Single(source => source.Plan.Id == site.Application).Component;
+				var custom = component["probe-host!" + site.Name];
+				var published = site.Bindings.Where(binding => binding.Publication != null && binding.Protocol == "tcp" && binding.Address == "0.0.0.0").ToArray();
 
-				foreach(var host in site.ProbeHosts)
+				if(custom != null && (!WebPackage.IsConcreteHost(custom) || !site.Hosts.Any(host => WebPackage.GetHostMatchScore(host, custom) > 0)))
+					throw WebPackage.CreateException(site.Application, "probe-host!" + site.Name);
+
+				site.ProbeHosts.AddRange(site.Hosts.Where(WebPackage.IsConcreteHost));
+				if(custom != null)
+					site.ProbeHosts.Add(custom);
+				if(published.Length == 0)
+					continue;
+				if(site.Hosts.Count > 0 && site.ProbeHosts.Count == 0)
+					throw WebPackage.CreateException(site.Application, "probe-host!" + site.Name);
+				if(site.Hosts.Count == 0)
+					site.ProbeHosts.Add("127.0.0.1");
+
+				foreach(var binding in published)
 				{
-					var candidates = peers.Select(record => (record.Site, Score: record.Site.Hosts.Select(pattern => WebPackage.GetHostMatchScore(pattern, host)).DefaultIfEmpty().Max())).OrderByDescending(item => item.Score).ToArray();
-					var winner = candidates[0].Score > 0 ? candidates[0].Site : peers.Single(record => record.Binding.IsDefault).Site;
+					var peers = records.Where(record => record.Binding.Protocol == binding.Protocol && record.Binding.Port == binding.Port && record.Binding.Address == binding.Address).ToArray();
 
-					if(winner != site || candidates.Length > 1 && candidates[0].Score > 0 && candidates[0].Score == candidates[1].Score)
-						throw WebPackage.CreateException(site.Application, $"{site.Name}: {host}:{binding.Port}");
+					foreach(var host in site.ProbeHosts)
+					{
+						var candidates = peers.Select(record => (record.Site, Score: record.Site.Hosts.Select(pattern => WebPackage.GetHostMatchScore(pattern, host)).DefaultIfEmpty().Max())).OrderByDescending(item => item.Score).ToArray();
+						var winner = candidates[0].Score > 0 ? candidates[0].Site : peers.Single(record => record.Binding.IsDefault).Site;
+
+						if(winner != site || candidates.Length > 1 && candidates[0].Score > 0 && candidates[0].Score == candidates[1].Score)
+							throw WebPackage.CreateException(site.Application, $"{site.Name}: {host}:{binding.Port}");
+					}
 				}
 			}
 		}
 
-		foreach(var component in sources.Select(source => source.Component).Where(component => component.IsApplication))
+		void ValidateProbeOverrides()
 		{
-			foreach(var key in component.Values.Keys.Where(key => key.StartsWith("probe-host!", StringComparison.OrdinalIgnoreCase)))
+			foreach(var component in sources.Select(source => source.Component).Where(component => component.IsApplication))
 			{
-				if(!sites.Any(site => site.Application.Equals(component.Name, StringComparison.OrdinalIgnoreCase) && site.Name.Equals(key[11..], StringComparison.OrdinalIgnoreCase)))
-					throw WebPackage.CreateException(component.Name, key);
+				foreach(var key in component.Values.Keys.Where(key => key.StartsWith("probe-host!", StringComparison.OrdinalIgnoreCase)))
+				{
+					if(!sites.Any(site => site.Application.Equals(component.Name, StringComparison.OrdinalIgnoreCase) && site.Name.Equals(key[11..], StringComparison.OrdinalIgnoreCase)))
+						throw WebPackage.CreateException(component.Name, key);
+				}
 			}
 		}
 	}
@@ -208,5 +247,5 @@ internal static partial class WebIngress
 		return result;
 	}
 
-	private static string GetBindingSignature((WebSitePlan Site, WebBindingPlan Binding) record) => $"{record.Site.Application}/{record.Site.Name}/{record.Binding.Scheme}/{record.Binding.IsDefault}/{record.Binding.IsExplicitDefault}";
+	private static string GetBindingSignature((ServicePlan.WebSite Site, ServicePlan.WebSite.BindingInfo Binding) record) => $"{record.Site.Application}/{record.Site.Name}/{record.Binding.Scheme}/{record.Binding.IsDefault}/{record.Binding.IsExplicitDefault}";
 }

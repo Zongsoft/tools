@@ -65,10 +65,10 @@ public sealed class RunCommand : CommandBase<CommandContext>
 		{
 			context.Output.WriteLine(Utility.FormatOutput(Properties.Resources.Run_Verify, Path.GetFullPath(arguments[0])));
 
-			DeliveryBundle bundle;
+			ContainerBundle bundle;
 
 			using(Utility.MeasureOutput(content => context.Output.WriteLine(content), Properties.Resources.Run_Elapsed, Properties.Resources.Run_StageVerify))
-				bundle = DeliveryBundle.Open(arguments[0]);
+				bundle = ContainerBundle.Open(arguments[0]);
 
 			using var verified = bundle;
 			var engine = await ContainerEngine.ConnectAsync(choice, new ProcessRunner(), stopping.Token, requireCompose: false, error: content => Utility.WriteOutput(context.Error, content));

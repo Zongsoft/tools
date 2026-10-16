@@ -3,9 +3,14 @@
 - 制作端 `src` 使用 Core Profile、Settings 与仓库 `.shared` 变量流程；只加载 source 直属 `.env`，其他配置通过 `#@import` 显式导入，不自动搜索父目录或子目录；现场 `executor/src` 只消费 JSON 协议及已生成资产，不引用 Core/YamlDotNet，也不解析 `.container`。
 - `.shared/Containerization.props` 直接链接模型、文件及进程辅助源码，不生成共享 DLL，不引用 packager/migrator 的可执行项目。交接仅通过它们的产物和配套脚本。
 - 新文本 CRLF、代码 Tab，Shell LF；资源通过 ResXFileCodeGenerator 更新，英文和中文同步。不得修改原有用户样例来迎合实现。
-- `upgrade`、`prepare` 使用唯一交付包位置参数，禁止重新引入 `--bundle`。应用身份不含 tag。基础设施或 bootstrap 变化不能由应用升级隐式接受。
+- `upgrade`、`prepare` 使用唯一容器包位置参数，禁止重新引入 `--bundle`。应用身份不含 tag。基础设施或 bootstrap 变化不能由应用升级隐式接受。
 - 维护、失败和升迁尝试先持久化；失败不自动启动旧版本、不自动重跑 SQL。恢复沿用原事务，显式重试仅允许当前事务的失败/中断版本。
 - 卸载默认保留持久资产；purge 校验实际归属、链接和挂载边界，最后删除状态。应用锁在可删除资产之外；主机锁与应用名使用独立文件名。
 - 构建/测试只用本工具解决方案和测试项目。镜像制作及原生构建使用专属隔离容器；不能为验证运行现场安装、修改全局工具、服务或真实数据库。
 - Cake default/test 不发布，build/compile 仅本地制包，pack 推送 NuGet。支持矩阵必须区分实现、单元测试、交叉编译与真实目标验收；未验证项不能列作受支持组合。
 - 成员可见性由生产调用决定，不为测试将 private 扩大为 internal/public，不增加仅供测试访问的入口。文档只保留当前行为与实现契约，不记录任务过程。
+
+- 应用监听只消费安装根 JSON `.bindings`；保留原始启动参数和环境，不从 `Listen` 或 `--urls` 推导发布或健康。三格式普通文件统一校验，旧 Web INI 拒绝。
+- 发布、连接选择和物理端口保留 binding/endpoint 引用；TCP/UDP 与地址族分开检查。代理绑定默认不直接发布，`none` 保留代理；默认进程健康，UDP 不执行 TCP/HTTP 探测。
+
+绑定发布必须校验 application/nginx 所属关系及 binding/endpoint 配对；保存声明端点、选定连接和宿主映射的各自来源。auto、none 与显式覆盖按 README 语义处理；默认健康检查不从绑定猜业务路径。服务附属模型放在 ServicePlan 分部文件，包文件与升迁条目放在 ContainerBundlePlan 分部文件；保持 JSON 字段与源生成序列化一致。

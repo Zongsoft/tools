@@ -13,7 +13,7 @@ public sealed class ApplicationPlannerTests
 	[Fact]
 	public void InferredApplicationEntryUsesProcessHealthInCompose()
 	{
-		var package = new PackageReader.Descriptor { Name = "example" };
+		var package = new PackageReader.Descriptor { Name = "example", Bindings = new() };
 		package.Texts["example.service"] = "[Service]\nType=simple\nWorkingDirectory=/opt/example\nExecStart=dotnet /opt/example/example.dll\n";
 		var source = ApplicationPlanner.Create(new(new PackageReader.Candidate("example.tar.gz", package)), new());
 		Assert.Equal(["dotnet", "/opt/example/example.dll"], source.Plan.Entrypoint);

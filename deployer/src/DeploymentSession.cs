@@ -60,11 +60,11 @@ internal sealed class DeploymentSession
 	public DeploymentPlan LockedPlan { get; set; }
 	public Dictionary<string, NugetUtility.PackageMetadata> Requested { get; } = new(StringComparer.OrdinalIgnoreCase);
 	/// <summary>获取或设置包占位展开时的临时输出集合；为空时直接向最终计划登记操作。</summary>
-	public List<DeploymentOperation> Output { get; set; }
+	public List<DeploymentPlan.Operation> Output { get; set; }
 	#endregion
 
 	#region 公共方法
-	public void Add(DeploymentOperation operation) => (this.Output ?? this.Plan.Operations).Add(operation);
+	public void Add(DeploymentPlan.Operation operation) => (this.Output ?? this.Plan.Operations).Add(operation);
 	public string Validate(string path) => DeploymentPath.Validate(this.Plan.Root, path);
 	public static string Hash(string path)
 	{

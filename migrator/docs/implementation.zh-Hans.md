@@ -28,7 +28,7 @@ MySQL provider 默认 `Secured=false`、`AllowPublicKeyRetrieval=true`，`Prepar
 
 进程入口使用 `tools/.shared/Utility.cs` 逐项保留参数边界，并转义反斜杠，保留空值与含空格的 Windows 路径。可能含变量的命令选项先作为字符串进入命令；版本来源解析后回填版本号和 Edition，并为本次命令建立独立 `MigrationOptions` 选项对象，按需递归展开其他值并在类型转换之前完成。布尔开关交由 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) `Switch` 判定。枚举使用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 转换，不额外检查成员定义。`--name` 独立于版本文件，输入和输出路径始终以当前目录为基准；全过程不保存版本文件。计划协议和原生执行器不参与源版本查找，只接收最终身份。命令测试覆盖版本号、文件、目录及默认来源、Edition 选择、变量展开，以及失败时源文件和已有输出保持不变。
 
-.shared 通过 Compile Link 分别编译到生成端与 executor，不生成共享 DLL。MigrationPlan 采用 partial 和嵌套 Step/Script/Bucket/Database/User、源码生成 JSON；Source/Content 仅在生成端扩展，参数及计划校验由共享代码负责。源码生成 JSON 的字段和指纹规则见[制作阶段的高级说明](../README.zh-Hans.md#advanced-package-details)。
+.shared 通过 Compile Link 分别编译到生成端与 executor，不生成共享 DLL。MigrationPlan 采用 partial 和嵌套 Step/Script/Bucket/Database 及 Database.User、源码生成 JSON；Source/Content 仅在生成端扩展，参数及计划校验由共享代码负责。源码生成 JSON 的字段和指纹规则见[制作阶段的高级说明](#plan-fields-and-fingerprint)。
 
 executor 使用显式工厂选择六种数据库或 Amazon S3，实现连接、建库、顺序提交、校验和、锁、状态及 pending。所有 SQL 每次 apply 均执行，不维护逐文件成功历史。数据库/Amazon S3 驱动只在执行器声明，TDengine 使用 WebSocket。
 
@@ -68,3 +68,50 @@ MigrationPrivileges 将 20 项统一能力规范化，并在指纹之前将 Perm
 终端警告使用暗黄色正文和粗体青色参数；错误使用暗红色正文和粗体紫色参数；成功提示使用绿色正文。异常类型以紫色标示，异常消息保留原文。四个工具共用仓库 `.shared/Utility.Output.cs`：`FormatOutput` 和 `FormatError` 构造 Core `CommandOutletContent`；`WriteOutput` 和 `WriteError` 统一终端与文本写入器的输出；使用命令执行器的工具通过 `HandleFailure` 输出异常并标记已处理，退出码由各工具决定。颜色由 Terminals 渲染。重定向的输出以及调用方提供的错误写入器保留纯文本和原通道。
 
 帮助入口在解析业务命令之前匹配独立的 `--help`/`-h`，通过共享 `FormatHelp` 和 `HighlightSyntax` 组织显示；不会加载变量文件或进入文件处理流程。总耗时通过共享 `MeasureOutput` 统计，由工具提供本地化 `Output.Elapsed` 资源及输出回调，首次释放时输出一次；退出码和成功/失败判断仍由业务流程决定。
+
+## 数据库计划的用户模型
+
+数据库用户由 `MigrationPlan.Database.User` 表达，并保存在 `Database.Users`。例如数据库项声明 `Name=orders`，其 Users 包含 `Name=reader`、`Permission=readonly`，则 reader 的权限随 orders 数据库执行；Host、Privileges、Roles 与 Password 也属于这个用户声明，不是整个升迁计划的全局账号。共享模型、权限校验和执行器使用同一嵌套类型，JSON 仍为 `databases[].users[]`，不改变指纹输入或执行顺序。
+
+<a id="plan-fields-and-fingerprint"></a>
+
+## 高级升迁包细节
+
+
+Steps 以数组位置标识，不保存独立 Id：数组位置决定执行顺序，日志和状态使用从 1 开始的步骤序号。Database 同样不保存 Id：Step.DatabaseIndex 为可空整数，引用 Databases 数组位置（从零开始）。SQL 步骤必须填写范围内且 provider 匹配的索引，Amazon S3 必须省略；索引 0 仍写入 JSON。不同服务器上的同名数据库分别占用独立数组项。SQL 文件名使用不补零的十进制序号（1.sql、2.sql、…、10.sql），每次 Load 按 provider 从 1 编号；执行依据 Steps 和 Scripts 数组，不按文件名排序。源码生成 JSON 统一忽略值为 null 的模型成员，格式化计划与紧凑指纹序列化共享规则；false、空字符串、空集合仍保留。Source/Content 和计算键继续使用无条件 JsonIgnore。状态记录 phase（validation/databases/users/steps/permissions/complete）、step（从 1 开始，非步骤阶段为 null）、databaseIndex（从零开始的目标数组索引，无目标时为 null）。
+
+`migration.json` 是升迁制作工具生成、migrator 读取的 UTF-8 JSON 对象。它保存已解析的执行输入，字段名按下表输出；运行器读取属性名时忽略大小写。
+
+| 字段 | 类型 | 含义 |
+| --- | --- | --- |
+| `Name` | 字符串 | 规范升迁名称，包含自动补全的升迁后缀及 Edition（如有），例如 `zongsoft-migrate` 或 `zongsoft-migrate-enterprise`。 |
+| `Version` | 字符串 | 制作升迁产物时指定的版本。 |
+| `Runtime` | string | 目标 RID：`linux-x64`、`linux-arm64` 或 `win-x64`，参与指纹并在执行前校验 |
+| `Title` / `Summary` / `Description` | string? | 可选展示文本；未设置时不输出，参与指纹 |
+| `Steps` | 数组 | 按有效声明和来源顺序执行的 SQL/Amazon S3 任务，在建库及创建用户之后执行。 |
+| `Steps[].Provider` | 字符串 | 规范升迁器名称：`mssql`、`mysql`、`sqlite`、`duckdb`、`postgres`、`tdengine`、`amazon.s3`。 |
+| `Steps[].Settings` | 字符串键值对象 | Amazon S3 连接参数；数据库任务为空对象，数据库参数保存于 Databases。 |
+| `Steps[].DatabaseIndex` | 整数? | Databases 数组索引（从零开始）；SQL 步骤必填并校验范围及 provider，Amazon S3 省略。 |
+| `Databases` | 数组 | 仅包含被引用并去重的数据库初始化描述。 |
+| `Databases[].Provider` / `Name` | 字符串 | 规范 provider 名与实际目标库名；初始化描述通过数组位置引用。 |
+| `Databases[].Settings` | 字符串键值对象 | 已展开并填充默认值的管理员连接设置。 |
+| `Databases[].Options` | 字符串键值对象 | 有效建库设置和命令超时。 |
+| `Databases[].Users` | 数组 | 此引用数据库下声明的全部用户。 |
+| `Databases[].Users[].Name` / `Password` / `Permission` | 字符串 | 账号名、初始密码、规范权限配置。 |
+| `Databases[].Users[].Privileges` / `Roles` | 字符串数组 | 规范化、去重并包含 Permission 预设的有效统一能力，以及已有角色名。 |
+| `Databases[].Users[].Host` | 字符串? | MySQL 账号主机，默认 `%`；其他 provider 省略。 |
+| `Steps[].Scripts` | 数组 | 数据库任务的有序批次列表；Amazon S3 任务为 `[]`。 |
+| `Steps[].Scripts[].Path` | 字符串 | 相对于升迁归档解压根目录的批次路径，例如 `.artifacts/mysql/1.sql`。同类任务共享目录和连续编号。 |
+| `Steps[].Scripts[].Checksum` | 字符串 | 包内批次实际 UTF-8 字节的 SHA-256，使用大写十六进制；执行前校验内容完整性。 |
+| `Steps[].Buckets` | 数组 | Amazon S3 任务的桶描述列表；数据库任务为 `[]`。 |
+| `Steps[].Buckets[].Name` | 字符串 | Bucket 名称，例如 hosting 的 `attachments`。 |
+| `Steps[].Buckets[].Public` | 布尔值 | `true` 表示配置公共读取策略；`false` 表示私有桶。 |
+| `Steps[].Buckets[].Encryption` | 对象，可省略 | 默认加密配置，包含 `Mode` 和可选 `Key`。 |
+| `Steps[].Buckets[].Encryption.Mode` | 字符串 | `sse-s3` 或 `sse-kms`。 |
+| `Steps[].Buckets[].Encryption.Key` | 字符串，可省略 | SSE-KMS 使用的已有密钥标识；仅适用于 `sse-kms`。 |
+| `Steps[].Buckets[].Versioning` | 字符串，可省略 | `enabled` 或 `suspended`。 |
+| `Steps[].Buckets[].Tags` | 字符串键值对象，可省略 | 桶标签，键名区分大小写；不是 INI 中带 `tag.` 前缀的原始选项名。 |
+
+省略的桶配置不发送对应配置请求。`Script.Source` 和 `Script.Content` 只供升迁生成端使用，不写入 JSON；原始 INI/ENV 路径和本机 SQL 源路径也不作为协议字段保存。连接参数可能包含密码或密钥，文件权限为 `0600`。
+
+计划指纹不保存在 JSON 内：升迁制作工具对模型的无缩进 JSON UTF-8 字节计算 SHA-256，将大写十六进制结果写入 `id`；运行器全部执行成功后写入状态目录的 `ready`。它不是对带缩进的 `migration.json` 文件直接计算摘要。有效数据库设置及用户、参数、脚本路径、校验和、桶配置以及数组顺序均参与指纹；缩进和文件换行不参与。指纹用于当前安装计划的完成判断，不是签名或逐脚本执行历史。

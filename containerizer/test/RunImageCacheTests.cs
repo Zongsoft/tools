@@ -130,7 +130,7 @@ public sealed class RunImageCacheTests : IDisposable
 		Assert.DoesNotContain(runner.Calls, call => call.Take(2).SequenceEqual(["volume", "rm"]));
 	}
 
-	private static async Task<int> ExecuteSessionAsync(string executable, Runner runner, DeliveryBundle bundle, Action onReady = null)
+	private static async Task<int> ExecuteSessionAsync(string executable, Runner runner, ContainerBundle bundle, Action onReady = null)
 	{
 		using var stopping = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 		var run = new RunContext(new(executable, runner), bundle, content =>
@@ -148,10 +148,10 @@ public sealed class RunImageCacheTests : IDisposable
 		return await run.ExecuteAsync(stopping.Token);
 	}
 
-	private DeliveryBundle CreateBundle()
+	private ContainerBundle CreateBundle()
 	{
 		var name = $"cache-test-{Guid.NewGuid():N}";
-		var plan = new DeliveryPlan
+		var plan = new ContainerBundlePlan
 		{
 			Name = name,
 			Architecture = "x64",
@@ -169,9 +169,9 @@ public sealed class RunImageCacheTests : IDisposable
 			plan.Files.Add(new() { Path = file, Length = new FileInfo(path).Length, Hash = Files.Hash(path) });
 		}
 
-		Files.Save(Path.Combine(_root, DeliveryPlan.FileName), plan, ProtocolJson.Default.DeliveryPlan);
-		Files.Write(Path.Combine(_root, "checksums.sha256"), $"{Files.Hash(Path.Combine(_root, DeliveryPlan.FileName))}  {DeliveryPlan.FileName}\n{string.Join('\n', plan.Files.Select(file => $"{file.Hash}  {file.Path}"))}\n");
-		return DeliveryBundle.Open(_root);
+		Files.Save(Path.Combine(_root, ContainerBundlePlan.FileName), plan, ProtocolJson.Default.ContainerBundlePlan);
+		Files.Write(Path.Combine(_root, "checksums.sha256"), $"{Files.Hash(Path.Combine(_root, ContainerBundlePlan.FileName))}  {ContainerBundlePlan.FileName}\n{string.Join('\n', plan.Files.Select(file => $"{file.Hash}  {file.Path}"))}\n");
+		return ContainerBundle.Open(_root);
 	}
 
 	private sealed class Runner : IProcessRunner

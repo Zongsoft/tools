@@ -147,14 +147,23 @@ partial class WebIngress
 
 	private static string RenderTemplate(ServiceBuildContext application, Func<string, string> file)
 	{
+		var referenced = new HashSet<(string Binding, string Endpoint)>();
 		var result = GetMarkerRegex().Replace(application.Package.Web.Template, match =>
 		{
-			if(match.Groups[1].Value == "application")
-				return application.Plan.Id;
+			if(match.Groups[1].Success)
+			{
+				var binding = application.Plan.Bindings.SingleOrDefault(binding => binding.Id == match.Groups[1].Value);
+				var connections = binding?.Connections.Where(connection => connection.Endpoint == match.Groups[2].Value).ToArray();
+				if(connections == null || connections.Length == 0 || connections.Select(connection => (connection.Host, connection.Port)).Distinct().Count() != 1)
+					throw WebPackage.CreateException(application.Plan.Id, "template/binding");
+
+				referenced.Add((binding.Id, match.Groups[2].Value));
+				return connections[0].Host + ":" + connections[0].Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+			}
 
 			string path;
 
-			try { path = new UTF8Encoding(false, true).GetString(Convert.FromBase64String(match.Groups[2].Value)); }
+			try { path = new UTF8Encoding(false, true).GetString(Convert.FromBase64String(match.Groups[3].Value)); }
 			catch(Exception exception) when(exception is FormatException or DecoderFallbackException)
 			{
 				throw WebPackage.CreateException(application.Plan.Id, "template/file");
@@ -162,10 +171,11 @@ partial class WebIngress
 
 			return file(path).Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
 		});
-		if(result.Contains("{{zongsoft:", StringComparison.Ordinal))
+		if(result.Contains("{{zongsoft:", StringComparison.Ordinal) ||
+			application.Plan.Bindings.Any(binding => binding.Connections.Any(connection => !referenced.Contains((binding.Id, connection.Endpoint)))))
 			throw WebPackage.CreateException(application.Plan.Id, "template");
 
-		return result;
+		return result.Replace("_ssl_trusted_certificate /etc/pki/tls/certs/ca-bundle.crt;", "_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;", StringComparison.Ordinal);
 	}
 
 	private static string NormalizeTarget(string path, string source)
@@ -184,6 +194,6 @@ partial class WebIngress
 		source.Configuration.Add(target, (file, relativePath));
 	}
 
-	[GeneratedRegex(@"\{\{zongsoft:(application|file:([^}]+))\}\}")]
+	[GeneratedRegex(@"\{\{zongsoft:(?:binding:([^:}]+):([^}]+)|file:([^}]+))\}\}")]
 	private static partial Regex GetMarkerRegex();
 }

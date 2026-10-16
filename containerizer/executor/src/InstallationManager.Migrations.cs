@@ -46,7 +46,7 @@ namespace Zongsoft.Tools.Containerizer.Execution;
 partial class InstallationManager
 {
 	#region 私有方法
-	private async Task ApplyMigrationsAsync(Installation installation, DeliveryBundle bundle, string retryVersion, CancellationToken cancellation)
+	private async Task ApplyMigrationsAsync(Installation installation, ContainerBundle bundle, string retryVersion, CancellationToken cancellation)
 	{
 		foreach(var migration in bundle.Plan.Migrations)
 		{

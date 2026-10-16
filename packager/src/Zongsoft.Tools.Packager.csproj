@@ -18,6 +18,8 @@
 		<Compile Include="..\..\.shared\Utility.cs" Link="Shared\Utility.cs" />
 		<Compile Include="..\..\.shared\Utility.Output.cs" Link="Shared\Utility.Output.cs" />
 		<Compile Include="..\..\.shared\ArtifactPublisher.cs" Link="Shared\ArtifactPublisher.cs" />
+		<Compile Include="..\..\.shared\BindingDocument.cs" Link="Shared\BindingDocument.cs" />
+		<Compile Include="..\..\.shared\FilterExpression.cs" Link="Shared\FilterExpression.cs" />
 		<InternalsVisibleTo Include="Zongsoft.Tools.Packager.Tests" />
 	</ItemGroup>
 
@@ -41,6 +43,12 @@
 			</ItemGroup>
 		</Otherwise>
 	</Choose>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Extensions.Configuration.FileExtensions" VersionOverride="8.0.1" Condition="'$(TargetFramework)' == 'net8.0'" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.FileExtensions" VersionOverride="9.0.2" Condition="'$(TargetFramework)' == 'net9.0'" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.FileExtensions" VersionOverride="10.0.0" Condition="'$(TargetFramework)' == 'net10.0'" />
+	</ItemGroup>
 
 	<ItemGroup>
 		<Compile Update="Properties\Resources.Designer.cs">

@@ -52,7 +52,7 @@ internal sealed class NugetGraph
 	#region 私有字段
 	private readonly TemplateEvaluator _evaluator;
 	private readonly (NugetUtility.PackageMetadata Metadata, NuGetFramework Framework)[] _roots;
-	private readonly IReadOnlyList<PackageSelection> _locked;
+	private readonly IReadOnlyList<DeploymentPlan.Package> _locked;
 	private readonly CancellationToken _cancellation;
 	private int _attempts;
 	private string _conflict = string.Empty;
@@ -61,7 +61,7 @@ internal sealed class NugetGraph
 	#region 构造函数
 	private NugetGraph(TemplateEvaluator evaluator,
 		IEnumerable<(NugetUtility.PackageMetadata Metadata, string Framework)> requests,
-		CancellationToken cancellation, IReadOnlyList<PackageSelection> locked)
+		CancellationToken cancellation, IReadOnlyList<DeploymentPlan.Package> locked)
 	{
 		_evaluator = evaluator;
 		_roots = requests.Select(request => (request.Metadata, NuGetFramework.Parse(request.Framework))).ToArray();
@@ -104,7 +104,7 @@ internal sealed class NugetGraph
 	/// <param name="locked">可选的锁定包记录，提供时限制候选版本。</param>
 	/// <returns>完成依赖求解并返回按包名索引的元数据字典的任务。</returns>
 	public static Task<Dictionary<string, NugetUtility.PackageMetadata>> ResolveAsync(TemplateEvaluator evaluator,
-		IEnumerable<(NugetUtility.PackageMetadata Metadata, string Framework)> requests, CancellationToken cancellation, IReadOnlyList<PackageSelection> locked = null) =>
+		IEnumerable<(NugetUtility.PackageMetadata Metadata, string Framework)> requests, CancellationToken cancellation, IReadOnlyList<DeploymentPlan.Package> locked = null) =>
 		new NugetGraph(evaluator, requests, cancellation, locked).ResolveAsync();
 
 	private async Task<Dictionary<string, NugetUtility.PackageMetadata>> ResolveAsync()

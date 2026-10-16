@@ -63,7 +63,7 @@ partial class PackageReader
 		result.Name = fields.GetValueOrDefault(1000);
 		result.Version = fields.GetValueOrDefault(1001);
 		result.Architecture = fields.GetValueOrDefault(1022);
-		result.ListenerAddresses = fields.GetValueOrDefault(1000001);
+		result.InstallPath = fields.GetValueOrDefault(1000003);
 
 		if(fields.GetValueOrDefault(1125) is not (null or "gzip"))
 			throw new ContainerizationException(2, Properties.Resources.PackageReader_13_Message);
@@ -93,7 +93,8 @@ partial class PackageReader
 				break;
 
 			var mode = Convert.ToInt32(Encoding.ASCII.GetString(header, 14, 8), 16);
-			var consumed = Capture(result, name, gzip, size, (mode & 0xf000) == 0x8000, (mode & 0xf000) == 0xa000);
+			var links = Convert.ToInt64(Encoding.ASCII.GetString(header, 38, 8), 16);
+			var consumed = Capture(result, name, gzip, size, (mode & 0xf000) == 0x8000, (mode & 0xf000) == 0xa000 || (mode & 0xf000) == 0x8000 && links != 1);
 			Skip(gzip, size - consumed);
 
 			Skip(gzip, (4 - size % 4) % 4);
@@ -127,8 +128,8 @@ partial class PackageReader
 			var type = BinaryPrimitives.ReadInt32BigEndian(item[4..]);
 			var offset = BinaryPrimitives.ReadInt32BigEndian(item[8..]);
 
-			if(tag == 1000001 && (type != 6 || BinaryPrimitives.ReadInt32BigEndian(item[12..]) != 1 || result.ContainsKey(tag)))
-				throw ApplicationHealth.CreateException("RPM", "Listen");
+			if(tag == 1000003 && (type != 6 || BinaryPrimitives.ReadInt32BigEndian(item[12..]) != 1 || result.ContainsKey(tag)))
+				throw WebPackage.CreateException("RPM", "InstallPath");
 
 			if(type != 6)
 				continue;

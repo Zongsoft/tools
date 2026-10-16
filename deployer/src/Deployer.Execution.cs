@@ -45,135 +45,160 @@ partial class Deployer
 	#region 计划验证
 	private void ValidatePlan()
 	{
-		var outputs = new Dictionary<string, DeploymentOperation>(DeploymentPath.Comparer);
+		var outputs = new Dictionary<string, DeploymentPlan.Operation>(DeploymentPath.Comparer);
 
-		foreach(var operation in this.Plan.Operations)
+		ValidateOperations();
+		CollectPackages();
+		ValidateReports();
+		ValidateLock();
+		CollectStaleOperations();
+
+		void ValidateOperations()
 		{
-			this.Session.Validate(operation.Output);
-
-			if(operation.Kind == "Delete")
+			foreach(var operation in this.Plan.Operations)
 			{
-				outputs.Remove(operation.Output);
-				continue;
+				this.Session.Validate(operation.Output);
+
+				if(operation.Kind == "Delete")
+				{
+					outputs.Remove(operation.Output);
+					continue;
+				}
+
+				var resolved = DeploymentPath.Identity(operation.Source);
+				operation.ResolvedSource = DeploymentPath.Comparer.Equals(resolved, Path.GetFullPath(operation.Source)) ? null : resolved;
+				var hash = DeploymentSession.Hash(operation.ResolvedSource ?? operation.Source);
+
+				if(operation.SourceHash != null && operation.SourceHash != hash)
+					throw new IOException(string.Format(Properties.Resources.Review_Conflict, operation.Source));
+
+				operation.SourceHash = hash;
+
+				if(outputs.TryGetValue(operation.Output, out var previous) && previous.Package != null && operation.Package != null)
+				{
+					if((previous.ContentHash ?? previous.SourceHash) != (operation.ContentHash ?? operation.SourceHash))
+						throw new IOException(string.Format(Properties.Resources.Review_Conflict, $"{operation.Output}: {previous.Package} / {operation.Package}"));
+
+					operation.Status = "Duplicate";
+					operation.Reason = "Identical package asset already planned for this output";
+					continue;
+				}
+
+				outputs[operation.Output] = operation;
 			}
-
-			var resolved = DeploymentPath.Identity(operation.Source);
-			operation.ResolvedSource = DeploymentPath.Comparer.Equals(resolved, Path.GetFullPath(operation.Source)) ? null : resolved;
-			var hash = DeploymentSession.Hash(operation.ResolvedSource ?? operation.Source);
-
-			if(operation.SourceHash != null && operation.SourceHash != hash)
-				throw new IOException(string.Format(Properties.Resources.Review_Conflict, operation.Source));
-
-			operation.SourceHash = hash;
-
-			if(outputs.TryGetValue(operation.Output, out var previous) && previous.Package != null && operation.Package != null)
-			{
-				if((previous.ContentHash ?? previous.SourceHash) != (operation.ContentHash ?? operation.SourceHash))
-					throw new IOException(string.Format(Properties.Resources.Review_Conflict, $"{operation.Output}: {previous.Package} / {operation.Package}"));
-
-				operation.Status = "Duplicate";
-				operation.Reason = "Identical package asset already planned for this output";
-				continue;
-			}
-
-			outputs[operation.Output] = operation;
 		}
 
-		var packages = this.Session.Packages.Values
-			.Concat(this.Session.Requested.Values)
-			.DistinctBy(package => package.Identity.ToString())
-			.OrderBy(package => package.Identity.Id, StringComparer.OrdinalIgnoreCase)
-			.ThenBy(package => package.Identity.Version);
-
-		foreach(var package in packages)
+		void CollectPackages()
 		{
-			var selection = new PackageSelection
-			{
-				Id = package.Identity.Id,
-				Version = package.Identity.Version.ToNormalizedString(),
-				Framework = Utility.GetTargetFramework(this.Evaluator),
-				Hash = NugetUtility.PackageHash(this.Evaluator, package),
-			};
+			var packages = this.Session.Packages.Values
+				.Concat(this.Session.Requested.Values)
+				.DistinctBy(package => package.Identity.ToString())
+				.OrderBy(package => package.Identity.Id, StringComparer.OrdinalIgnoreCase)
+				.ThenBy(package => package.Identity.Version);
 
-			if(this.Session.Requested.ContainsKey(package.Identity.ToString()))
-				selection.RequiredBy.Add("manifest");
-
-			foreach(var root in this.Session.Roots)
+			foreach(var package in packages)
 			{
-				if(root.Metadata.Identity.Equals(package.Identity))
-					selection.RequiredBy.Add("root");
-			}
-
-			foreach(var parent in this.Session.Packages.Values)
-			{
-				foreach(var framework in this.Session.Roots.Select(root => root.Framework).Distinct())
+				var selection = new DeploymentPlan.Package
 				{
-					foreach(var dependency in NugetGraph.GetDependencies(parent, framework))
+					Id = package.Identity.Id,
+					Version = package.Identity.Version.ToNormalizedString(),
+					Framework = Utility.GetTargetFramework(this.Evaluator),
+					Hash = NugetUtility.PackageHash(this.Evaluator, package),
+				};
+
+				if(this.Session.Requested.ContainsKey(package.Identity.ToString()))
+					selection.RequiredBy.Add("manifest");
+
+				foreach(var root in this.Session.Roots)
+				{
+					if(root.Metadata.Identity.Equals(package.Identity))
+						selection.RequiredBy.Add("root");
+				}
+
+				foreach(var parent in this.Session.Packages.Values)
+				{
+					foreach(var framework in this.Session.Roots.Select(root => root.Framework).Distinct())
 					{
-						if(StringComparer.OrdinalIgnoreCase.Equals(dependency.Id, selection.Id))
-							selection.RequiredBy.Add($"{parent.Identity} {dependency.VersionRange} ({framework})");
+						foreach(var dependency in NugetGraph.GetDependencies(parent, framework))
+						{
+							if(StringComparer.OrdinalIgnoreCase.Equals(dependency.Id, selection.Id))
+								selection.RequiredBy.Add($"{parent.Identity} {dependency.VersionRange} ({framework})");
+						}
 					}
 				}
-			}
 
-			this.Plan.Packages.Add(selection);
-		}
-
-		foreach(var key in new[] { "report", "lockFile" })
-		{
-			if(this.Evaluator.TryGetOption(key, out var output) && !string.IsNullOrEmpty(output))
-			{
-				var path = this.GetPath(output);
-				this.ValidateOutput(path, key == "report");
+				this.Plan.Packages.Add(selection);
 			}
 		}
 
-		if(Flag(this.Evaluator, "locked"))
+		void ValidateReports()
 		{
-			if(!this.Evaluator.TryGetOption("lockFile", out var lockPath) || !File.Exists(this.GetPath(lockPath)))
-				throw new InvalidOperationException(string.Format(Properties.Resources.Review_Locked, "lockFile"));
-
-			var previous = DeploymentPlan.Load(this.GetPath(lockPath));
-
-			if(!previous.Succeeded || !Shape(previous).SequenceEqual(Shape(this.Plan), StringComparer.Ordinal)
-				|| !previous.Manifests.OrderBy(item => item.Key).SequenceEqual(this.Plan.Manifests.OrderBy(item => item.Key))
-				|| !previous.Packages.Select(package => $"{package.Id}@{package.Version}:{package.Framework}:{package.Hash}").SequenceEqual(this.Plan.Packages.Select(package => $"{package.Id}@{package.Version}:{package.Framework}:{package.Hash}")))
-				throw new InvalidOperationException(string.Format(Properties.Resources.Review_Locked, lockPath));
-		}
-
-		if(this.Evaluator.TryGetOption("previous", out var previousPath))
-		{
-			var previous = DeploymentPlan.Load(this.GetPath(previousPath));
-
-			if(!previous.Succeeded || !DeploymentPath.Comparer.Equals(Path.GetFullPath(previous.Root), this.Plan.Root))
-				throw new InvalidOperationException(string.Format(Properties.Resources.Review_Locked, "previous root/result"));
-
-			foreach(var group in previous.Operations.Where(operation => operation.Status != "Duplicate").GroupBy(operation => operation.Output, DeploymentPath.Comparer))
+			foreach(var key in new[] { "report", "lockFile" })
 			{
-				var item = group.Last();
-				var path = this.Session.Validate(item.Output);
-
-				if(item.Kind is not ("Copy" or "Render") || item.Status is not ("Copied" or "Rendered" or "Unchanged"))
-					continue;
-
-				if(outputs.ContainsKey(path) || !File.Exists(path))
-					continue;
-
-				var unchanged = item.Hash != null && DeploymentSession.Hash(path) == item.Hash;
-				this.Plan.Operations.Add(new DeploymentOperation
-
+				if(this.Evaluator.TryGetOption(key, out var output) && !string.IsNullOrEmpty(output))
 				{
-					Kind = Flag(this.Evaluator, "prune") && unchanged ? "Prune" : "Stale",
-					Output = path,
-					Hash = item.Hash,
-					Manifest = previousPath,
-					Reason = unchanged ? "Previously deployed, no longer selected" : "Modified; preserved",
-				});
+					var path = this.GetPath(output);
+					this.ValidateOutput(path, key == "report");
+				}
 			}
 		}
-		else if(Flag(this.Evaluator, "prune"))
-			throw new ArgumentException(string.Format(Properties.Resources.Review_InvalidOption, "prune", "previous required"));
 
+		void ValidateLock()
+		{
+			if(Flag(this.Evaluator, "locked"))
+			{
+				if(!this.Evaluator.TryGetOption("lockFile", out var lockPath) || !File.Exists(this.GetPath(lockPath)))
+					throw new InvalidOperationException(string.Format(Properties.Resources.Review_Locked, "lockFile"));
+
+				var previous = DeploymentPlan.Load(this.GetPath(lockPath));
+
+				if(!Matches(previous, this.Plan))
+					throw new InvalidOperationException(string.Format(Properties.Resources.Review_Locked, lockPath));
+			}
+		}
+
+		void CollectStaleOperations()
+		{
+			if(this.Evaluator.TryGetOption("previous", out var previousPath))
+			{
+				var previous = DeploymentPlan.Load(this.GetPath(previousPath));
+
+				if(!previous.Succeeded || !DeploymentPath.Comparer.Equals(Path.GetFullPath(previous.Root), this.Plan.Root))
+					throw new InvalidOperationException(string.Format(Properties.Resources.Review_Locked, "previous root/result"));
+
+				foreach(var group in previous.Operations.Where(operation => operation.Status != "Duplicate").GroupBy(operation => operation.Output, DeploymentPath.Comparer))
+				{
+					var item = group.Last();
+					var path = this.Session.Validate(item.Output);
+
+					if(item.Kind is not ("Copy" or "Render") || item.Status is not ("Copied" or "Rendered" or "Unchanged"))
+						continue;
+
+					if(outputs.ContainsKey(path) || !File.Exists(path))
+						continue;
+
+					var unchanged = item.Hash != null && DeploymentSession.Hash(path) == item.Hash;
+					this.Plan.Operations.Add(new DeploymentPlan.Operation
+
+					{
+						Kind = Flag(this.Evaluator, "prune") && unchanged ? "Prune" : "Stale",
+						Output = path,
+						Hash = item.Hash,
+						Manifest = previousPath,
+						Reason = unchanged ? "Previously deployed, no longer selected" : "Modified; preserved",
+					});
+				}
+			}
+			else if(Flag(this.Evaluator, "prune"))
+				throw new ArgumentException(string.Format(Properties.Resources.Review_InvalidOption, "prune", "previous required"));
+		}
+
+		static bool Matches(DeploymentPlan previous, DeploymentPlan current) =>
+			previous.Succeeded &&
+			Shape(previous).SequenceEqual(Shape(current), StringComparer.Ordinal) &&
+			previous.Manifests.OrderBy(item => item.Key).SequenceEqual(current.Manifests.OrderBy(item => item.Key)) &&
+			Packages(previous).SequenceEqual(Packages(current));
+		static IEnumerable<string> Packages(DeploymentPlan plan) => plan.Packages.Select(package => $"{package.Id}@{package.Version}:{package.Framework}:{package.Hash}");
 		static IEnumerable<string> Shape(DeploymentPlan plan) => plan.Operations.Where(operation => operation.Kind is "Copy" or "Render" or "Delete").Select(operation => $"{operation.Kind}|{Path.GetRelativePath(plan.Root, operation.Output)}|{operation.Package}|{operation.SourceHash}|{operation.ContentHash}|{operation.ResolvedSource}");
 	}
 	#endregion
@@ -184,10 +209,17 @@ partial class Deployer
 		if(report && this.Evaluator.TryGetOption("lockFile", out var lockFile) && DeploymentPath.Comparer.Equals(path, this.GetPath(lockFile)))
 			throw new IOException(string.Format(Properties.Resources.Review_Conflict, path));
 
-		if(this.Plan.Manifests.ContainsKey(path) || this.Plan.Operations.Any(operation => DeploymentPath.Comparer.Equals(path, operation.Source) || DeploymentPath.Comparer.Equals(path, operation.ResolvedSource) || DeploymentPath.Comparer.Equals(path, operation.Output)))
+		if(this.Plan.Manifests.ContainsKey(path) || this.Plan.Operations.Any(Conflicts))
 			throw new IOException(string.Format(Properties.Resources.Review_Conflict, path));
 
 		DeploymentPath.Validate(Path.GetDirectoryName(path), path);
+
+		bool Conflicts(DeploymentPlan.Operation operation)
+		{
+			return DeploymentPath.Comparer.Equals(path, operation.Source) ||
+				DeploymentPath.Comparer.Equals(path, operation.ResolvedSource) ||
+				DeploymentPath.Comparer.Equals(path, operation.Output);
+		}
 	}
 	#endregion
 
@@ -216,64 +248,11 @@ partial class Deployer
 					operation.Status = operation.Kind == "Stale" ? "Preserved" : "Planned";
 				else if(operation.Kind is "Delete" or "Prune")
 				{
-					if(operation.Kind == "Prune" && (!File.Exists(operation.Output) || DeploymentSession.Hash(operation.Output) != operation.Hash))
-						throw new IOException(string.Format(Properties.Resources.Review_Conflict, operation.Output));
-
-					if(File.Exists(operation.Output))
-					{
-						File.Delete(operation.Output);
-						this.Session.Counter.Delete();
-						operation.Status = "Deleted";
-					}
-					else if(Directory.Exists(operation.Output))
-						throw new IOException(string.Format(Properties.Resources.Review_Conflict, operation.Output));
-					else
-					{
-						this.Session.Counter.Skip();
-						operation.Status = "Skipped";
-					}
+					Delete(operation);
 				}
 				else
 				{
-					var source = operation.ResolvedSource ?? operation.Source;
-					if(!DeploymentPath.Comparer.Equals(DeploymentPath.Identity(operation.Source), Path.GetFullPath(source)))
-						throw new IOException(string.Format(Properties.Resources.Review_Conflict, operation.Source));
-
-					if(DeploymentSession.Hash(source) != operation.SourceHash)
-						throw new IOException(string.Format(Properties.Resources.Review_Conflict, operation.Source));
-
-					if(operation.Kind == "Render")
-					{
-						var exists = File.Exists(operation.Output);
-						if(exists && this.Overwrite == Overwrite.Never)
-						{
-							this.Session.Counter.Skip();
-							operation.Status = "Skipped";
-						}
-						else if(exists && this.Overwrite != Overwrite.Alway && DeploymentSession.Hash(operation.Output) == operation.ContentHash)
-						{
-							this.Session.Counter.Skip();
-							operation.Status = "Unchanged";
-						}
-						else
-						{
-							ArtifactPublisher.Write(operation.Output, stream => stream.Write(operation.Content));
-							this.Session.Counter.Success();
-							operation.Status = "Rendered";
-						}
-					}
-					else if(DeploymentUtility.CopyFile(source, operation.Output, this.Overwrite))
-					{
-						this.Session.Counter.Success();
-						operation.Status = "Copied";
-					}
-					else
-					{
-						this.Session.Counter.Skip();
-						operation.Status = "Skipped";
-					}
-
-					operation.Hash = DeploymentSession.Hash(operation.Output);
+					Write(operation);
 				}
 
 				if(Flag(this.Evaluator, "explain") || this.IsVerbosity(Verbosity.Detail))
@@ -299,6 +278,74 @@ partial class Deployer
 			this.Plan.Save(this.GetPath(path));
 
 		return Task.CompletedTask;
+
+		void Delete(DeploymentPlan.Operation operation)
+		{
+			if(operation.Kind == "Prune" && (!File.Exists(operation.Output) || DeploymentSession.Hash(operation.Output) != operation.Hash))
+				throw new IOException(string.Format(Properties.Resources.Review_Conflict, operation.Output));
+
+			if(File.Exists(operation.Output))
+			{
+				File.Delete(operation.Output);
+				this.Session.Counter.Delete();
+				operation.Status = "Deleted";
+			}
+			else if(Directory.Exists(operation.Output))
+				throw new IOException(string.Format(Properties.Resources.Review_Conflict, operation.Output));
+			else
+			{
+				this.Session.Counter.Skip();
+				operation.Status = "Skipped";
+			}
+		}
+
+		void Write(DeploymentPlan.Operation operation)
+		{
+			var source = operation.ResolvedSource ?? operation.Source;
+			if(!DeploymentPath.Comparer.Equals(DeploymentPath.Identity(operation.Source), Path.GetFullPath(source)))
+				throw new IOException(string.Format(Properties.Resources.Review_Conflict, operation.Source));
+
+			if(DeploymentSession.Hash(source) != operation.SourceHash)
+				throw new IOException(string.Format(Properties.Resources.Review_Conflict, operation.Source));
+
+			if(operation.Kind == "Render")
+			{
+				Render(operation);
+			}
+			else if(DeploymentUtility.CopyFile(source, operation.Output, this.Overwrite))
+			{
+				this.Session.Counter.Success();
+				operation.Status = "Copied";
+			}
+			else
+			{
+				this.Session.Counter.Skip();
+				operation.Status = "Skipped";
+			}
+
+			operation.Hash = DeploymentSession.Hash(operation.Output);
+		}
+
+		void Render(DeploymentPlan.Operation operation)
+		{
+			var exists = File.Exists(operation.Output);
+			if(exists && this.Overwrite == Overwrite.Never)
+			{
+				this.Session.Counter.Skip();
+				operation.Status = "Skipped";
+			}
+			else if(exists && this.Overwrite != Overwrite.Alway && DeploymentSession.Hash(operation.Output) == operation.ContentHash)
+			{
+				this.Session.Counter.Skip();
+				operation.Status = "Unchanged";
+			}
+			else
+			{
+				ArtifactPublisher.Write(operation.Output, stream => stream.Write(operation.Content));
+				this.Session.Counter.Success();
+				operation.Status = "Rendered";
+			}
+		}
 	}
 	#endregion
 }

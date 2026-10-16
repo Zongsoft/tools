@@ -57,6 +57,31 @@ partial class Scriptor
 
 			if(host.Kind == ApplicationHost.HostKind.None)
 			{
+				ScriptWithoutService();
+				return;
+			}
+
+			var serviceName = host.ServiceName;
+			if(host.Kind == ApplicationHost.HostKind.Existing)
+				_package.Entries.AddEntry(source, host.ServiceSource, null, _package.EntryPrefix);
+			else
+				_package.Entries.AddGeneratedContent(serviceName, GenerateDaemon(host, _package), Utility.Unix.Mode644, true);
+
+			var servicePath = $"{_package.InstallPath}/{serviceName}";
+			var serviceLink = $"/etc/systemd/system/{serviceName}";
+
+			PrepareInstalling();
+			var migrationPreparation = PrepareMigration();
+			PrepareUninstalling();
+
+			_package.Scripts = new(
+				Combine(Migration.ContextScript(_package), this.ReadFiles(source, scripts.PreInstalling), installing, Migration.InvalidateScript(_package), this.ReadFiles(source, scripts.PostInstalling)),
+				Combine(Migration.ContextScript(_package), Migration.InvalidateScript(_package), this.ReadFiles(source, scripts.PreInstalled), migrationPreparation, Migration.ApplyScript(_package), installed, web.Activate, this.ReadFiles(source, scripts.PostInstalled)),
+				Combine(this.ReadFiles(source, scripts.PreUninstalling), web.Deactivate, uninstalling, this.ReadFiles(source, scripts.PostUninstalling)),
+				Combine(this.ReadFiles(source, scripts.PreUninstalled), _package.Migration == null ? null : $"rm -f '/etc/systemd/system/{serviceName}.d/20-packager-migration.conf'", uninstalled, web.Cleanup, this.ReadFiles(source, scripts.PostUninstalled)), web.Delivered);
+
+			void ScriptWithoutService()
+			{
 				if(string.IsNullOrWhiteSpace(installing))
 					installing = ":";
 
@@ -76,95 +101,89 @@ partial class Scriptor
 					Combine(Migration.ContextScript(_package), Migration.InvalidateScript(_package), this.ReadFiles(source, scripts.PreInstalled), Migration.ApplyScript(_package), installed, web.Activate, this.ReadFiles(source, scripts.PostInstalled)),
 					Combine(this.ReadFiles(source, scripts.PreUninstalling), web.Deactivate, uninstalling, this.ReadFiles(source, scripts.PostUninstalling)),
 					Combine(this.ReadFiles(source, scripts.PreUninstalled), uninstalled, web.Cleanup, this.ReadFiles(source, scripts.PostUninstalled)), web.Delivered);
-
-				return;
 			}
 
-			var serviceName = host.ServiceName;
-			if(host.Kind == ApplicationHost.HostKind.Existing)
-				_package.Entries.AddEntry(source, host.ServiceSource, null, _package.EntryPrefix);
-			else
-				_package.Entries.AddGeneratedContent(serviceName, GenerateDaemon(host, _package), Utility.Unix.Mode644, true);
-
-			var servicePath = $"{_package.InstallPath}/{serviceName}";
-			var serviceLink = $"/etc/systemd/system/{serviceName}";
-
-			if(string.IsNullOrWhiteSpace(installing))
-				installing = $$"""
-				if command -v systemctl >/dev/null 2>&1; then
-					systemctl stop '{{serviceName}}' >/dev/null 2>&1 || true
-				fi
-				""";
-
-			if(_package.Migration != null && string.IsNullOrWhiteSpace(scripts.Installing))
-				installing = $$"""
-				if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
-					if [ "$(systemctl show --property=LoadState --value '{{serviceName}}')" != not-found ]; then
-						systemctl stop '{{serviceName}}'
-					fi
-				fi
-				""";
-
-			if(string.IsNullOrWhiteSpace(installed))
-				installed = $$"""
-				install -d /etc/systemd/system
-				ln -sfn '{{servicePath}}' '{{serviceLink}}'
-				if command -v systemctl >/dev/null 2>&1; then
-					systemctl daemon-reload >/dev/null 2>&1 || true
-					systemctl enable '{{serviceName}}' >/dev/null 2>&1 || true
-					systemctl start '{{serviceName}}' >/dev/null 2>&1 || true
-				fi
-				""";
-
-			string migrationPreparation = null;
-			if(_package.Migration != null)
+			void PrepareInstalling()
 			{
-				migrationPreparation = $$"""
-				install -d '/etc/systemd/system/{{serviceName}}.d'
-				printf '[Service]\nExecStartPre=/bin/sh "%s/.migration/{{Path.GetFileName(_package.Migration.Script)}}" check "{{Migration.StateDirectory(_package)}}"\n' "$PACK_INSTALL_PATH" > '/etc/systemd/system/{{serviceName}}.d/20-packager-migration.conf'
-				chmod 0644 '/etc/systemd/system/{{serviceName}}.d/20-packager-migration.conf'
-				ln -sfn "$PACK_INSTALL_PATH/{{serviceName}}" '{{serviceLink}}'
-				if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
-					systemctl daemon-reload
-				fi
-				""";
+				if(string.IsNullOrWhiteSpace(installing))
+					installing = $$"""
+					if command -v systemctl >/dev/null 2>&1; then
+						systemctl stop '{{serviceName}}' >/dev/null 2>&1 || true
+					fi
+					""";
 
-				if(string.IsNullOrWhiteSpace(scripts.Installed))
-					installed = $$"""
+				if(_package.Migration != null && string.IsNullOrWhiteSpace(scripts.Installing))
+					installing = $$"""
 					if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
-						systemctl enable '{{serviceName}}'
-						systemctl start '{{serviceName}}'
+						if [ "$(systemctl show --property=LoadState --value '{{serviceName}}')" != not-found ]; then
+							systemctl stop '{{serviceName}}'
+						fi
+					fi
+					""";
+
+				if(string.IsNullOrWhiteSpace(installed))
+					installed = $$"""
+					install -d /etc/systemd/system
+					ln -sfn '{{servicePath}}' '{{serviceLink}}'
+					if command -v systemctl >/dev/null 2>&1; then
+						systemctl daemon-reload >/dev/null 2>&1 || true
+						systemctl enable '{{serviceName}}' >/dev/null 2>&1 || true
+						systemctl start '{{serviceName}}' >/dev/null 2>&1 || true
 					fi
 					""";
 			}
 
-			if(string.IsNullOrWhiteSpace(uninstalling))
-				uninstalling = $$"""
-				if command -v systemctl >/dev/null 2>&1; then
-					systemctl disable '{{serviceName}}' >/dev/null 2>&1 || true
-					systemctl stop '{{serviceName}}' >/dev/null 2>&1 || true
-				fi
-				""";
-
-			if(string.IsNullOrWhiteSpace(uninstalled))
-				uninstalled = _package is Package.Tar ? $$"""
-					rm -f '{{serviceLink}}'
-					if command -v systemctl >/dev/null 2>&1; then
-						systemctl daemon-reload >/dev/null 2>&1 || true
+			string PrepareMigration()
+			{
+				string migrationPreparation = null;
+				if(_package.Migration != null)
+				{
+					migrationPreparation = $$"""
+					install -d '/etc/systemd/system/{{serviceName}}.d'
+					printf '[Service]\nExecStartPre=/bin/sh "%s/.migration/{{Path.GetFileName(_package.Migration.Script)}}" check "{{Migration.StateDirectory(_package)}}"\n' "$PACK_INSTALL_PATH" > '/etc/systemd/system/{{serviceName}}.d/20-packager-migration.conf'
+					chmod 0644 '/etc/systemd/system/{{serviceName}}.d/20-packager-migration.conf'
+					ln -sfn "$PACK_INSTALL_PATH/{{serviceName}}" '{{serviceLink}}'
+					if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+						systemctl daemon-reload
 					fi
-					""" : $$"""
-					rm -f '{{serviceLink}}'
-					if command -v systemctl >/dev/null 2>&1; then
-						systemctl daemon-reload >/dev/null 2>&1 || true
-					fi
-					rm -rf '{{_package.InstallPath}}'
 					""";
 
-			_package.Scripts = new(
-				Combine(Migration.ContextScript(_package), this.ReadFiles(source, scripts.PreInstalling), installing, Migration.InvalidateScript(_package), this.ReadFiles(source, scripts.PostInstalling)),
-				Combine(Migration.ContextScript(_package), Migration.InvalidateScript(_package), this.ReadFiles(source, scripts.PreInstalled), migrationPreparation, Migration.ApplyScript(_package), installed, web.Activate, this.ReadFiles(source, scripts.PostInstalled)),
-				Combine(this.ReadFiles(source, scripts.PreUninstalling), web.Deactivate, uninstalling, this.ReadFiles(source, scripts.PostUninstalling)),
-				Combine(this.ReadFiles(source, scripts.PreUninstalled), _package.Migration == null ? null : $"rm -f '/etc/systemd/system/{serviceName}.d/20-packager-migration.conf'", uninstalled, web.Cleanup, this.ReadFiles(source, scripts.PostUninstalled)), web.Delivered);
+					if(string.IsNullOrWhiteSpace(scripts.Installed))
+						installed = $$"""
+						if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+							systemctl enable '{{serviceName}}'
+							systemctl start '{{serviceName}}'
+						fi
+						""";
+				}
+
+				return migrationPreparation;
+			}
+
+			void PrepareUninstalling()
+			{
+				if(string.IsNullOrWhiteSpace(uninstalling))
+					uninstalling = $$"""
+					if command -v systemctl >/dev/null 2>&1; then
+						systemctl disable '{{serviceName}}' >/dev/null 2>&1 || true
+						systemctl stop '{{serviceName}}' >/dev/null 2>&1 || true
+					fi
+					""";
+
+				if(string.IsNullOrWhiteSpace(uninstalled))
+					uninstalled = _package is Package.Tar ? $$"""
+						rm -f '{{serviceLink}}'
+						if command -v systemctl >/dev/null 2>&1; then
+							systemctl daemon-reload >/dev/null 2>&1 || true
+						fi
+						""" : $$"""
+						rm -f '{{serviceLink}}'
+						if command -v systemctl >/dev/null 2>&1; then
+							systemctl daemon-reload >/dev/null 2>&1 || true
+						fi
+						rm -rf '{{_package.InstallPath}}'
+						""";
+			}
 		}
 
 		string[] ReadFiles(string source, string paths)
@@ -202,7 +221,6 @@ partial class Scriptor
 
 		static string GenerateDaemon(ApplicationHost application, Package package)
 		{
-			var listen = application.Listen;
 			var host = application.Entry;
 			var environments = new string[package.Options.Daemon.Environments.Length];
 
@@ -217,56 +235,30 @@ partial class Scriptor
 
 			using var writer = new StringWriter();
 
-			if(string.IsNullOrEmpty(listen))
-				writer.Write($"""
-					[Unit]
-					Description={(string.IsNullOrEmpty(package.Title) ? package.Name : package.Title)}
+			writer.Write($"""
+			[Unit]
+			Description={(string.IsNullOrEmpty(package.Title) ? package.Name : package.Title)}
 
-					[Service]
-					Type=simple
-					WorkingDirectory={package.InstallPath}
-					ExecStartPre=mkdir -p {package.InstallPath}/logs
-					ExecStart=dotnet {package.InstallPath}/{host}
-					Restart=on-failure
-					RestartSec=10
-					KillSignal=SIGINT
-					SyslogIdentifier={package.PackageIdentity}
-					DynamicUser=no
-					PrivateTmp=no
-					ReadWritePaths={package.InstallPath} {package.InstallPath}/logs /tmp
+			[Service]
+			Type=simple
+			WorkingDirectory={package.InstallPath}
+			ExecStartPre=mkdir -p {package.InstallPath}/logs
+			ExecStart=dotnet {package.InstallPath}/{host}
+			Restart=on-failure
+			RestartSec=10
+			KillSignal=SIGINT
+			SyslogIdentifier={package.PackageIdentity}
+			DynamicUser=no
+			PrivateTmp=no
+			ReadWritePaths={package.InstallPath} {package.InstallPath}/logs /tmp
 
-					Environment=DOTNET_NOLOGO=true
-					{string.Join(Environment.NewLine, environments)}
+			Environment=DOTNET_NOLOGO=true
+			{string.Join(Environment.NewLine, environments)}
 
-					[Install]
-					WantedBy=multi-user.target
-					""");
-			else
-			{
-				writer.Write($"""
-					[Unit]
-					Description={(string.IsNullOrEmpty(package.Title) ? package.Name : package.Title)}
+			[Install]
+			WantedBy=multi-user.target
 
-					[Service]
-					Type=simple
-					WorkingDirectory={package.InstallPath}
-					ExecStartPre=mkdir -p {package.InstallPath}/logs
-					ExecStart=dotnet {package.InstallPath}/{host} --urls {listen}
-					Restart=on-failure
-					RestartSec=10
-					KillSignal=SIGINT
-					SyslogIdentifier={package.PackageIdentity}
-					DynamicUser=no
-					PrivateTmp=no
-					ReadWritePaths={package.InstallPath} {package.InstallPath}/logs /tmp
-
-					Environment=DOTNET_NOLOGO=true
-					{string.Join(Environment.NewLine, environments)}
-
-					[Install]
-					WantedBy=multi-user.target
-					""");
-			}
+			""");
 
 			return writer.ToString().ReplaceLineEndings("\n");
 		}

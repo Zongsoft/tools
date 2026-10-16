@@ -91,7 +91,7 @@ public class NugetResolver : DeploymentResolverBase
 
 		// 保留清单中的占位位置，待所有根请求完成统一求解后再展开。
 		context.Deployer.Session.Roots.Add((metadata, framework));
-		context.Deployer.Session.Add(new DeploymentOperation
+		context.Deployer.Session.Add(new DeploymentPlan.Operation
 		{
 			Kind = "Package",
 			Package = metadata.Identity.ToString(),

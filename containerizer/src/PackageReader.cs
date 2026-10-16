@@ -128,7 +128,15 @@ internal static partial class PackageReader
 			_ => throw new ContainerizationException(2, string.Format(Properties.Resources.PackageReader_7_Message, path))
 		};
 
-		ApplicationHealth.ParseListeners(result.ListenerAddresses, result.Name);
+		if(string.IsNullOrEmpty(result.InstallPath) || !result.InstallPath.StartsWith('/') || result.InstallPath.Contains('\\') ||
+		   result.InstallPath.Split('/').Any(part => part is "." or ".."))
+			throw WebPackage.CreateException(result.Name, "InstallPath");
+
+		var bindingsPath = result.InstallPath.TrimEnd('/') + "/" + BindingDocument.FileName;
+		if(!result.WebTexts.TryGetValue(bindingsPath, out var bindings))
+			throw new ContainerizationException(2, string.Format(Properties.Resources.BindingsInvalid_Message, bindingsPath, "missing"));
+
+		result.Bindings = BindingDocument.Deserialize(Encoding.UTF8.GetBytes(bindings));
 		result.Web = WebPackage.Read(result);
 
 		return result;
@@ -137,7 +145,7 @@ internal static partial class PackageReader
 
 	#region 私有方法
 	private static string NormalizeName(string name) => name.StartsWith("./", StringComparison.Ordinal) ? name[2..] : name;
-	private static bool IsMetadata(string name) => NormalizeName(name) == "control" || name.EndsWith(".service", StringComparison.Ordinal) || name.EndsWith(".runtimeconfig.json", StringComparison.Ordinal) || name.EndsWith("/.version", StringComparison.Ordinal) || name == ".version" || name.Contains("/.web/", StringComparison.Ordinal) && (name.EndsWith("/.bindings", StringComparison.Ordinal) || name.EndsWith(".conf", StringComparison.Ordinal) || name.EndsWith(".conf.template", StringComparison.Ordinal));
+	private static bool IsMetadata(string name) => NormalizeName(name) == "control" || name.EndsWith(".service", StringComparison.Ordinal) || name.EndsWith(".runtimeconfig.json", StringComparison.Ordinal) || name.EndsWith("/.version", StringComparison.Ordinal) || name == ".version" || name.EndsWith("/.bindings", StringComparison.Ordinal) || name.Contains("/.web/", StringComparison.Ordinal) && (name.EndsWith(".conf", StringComparison.Ordinal) || name.EndsWith(".conf.template", StringComparison.Ordinal));
 
 	private static long Capture(Descriptor result, string name, Stream stream, long length, bool regular, bool linked = false)
 	{
@@ -155,10 +163,10 @@ internal static partial class PackageReader
 			result.Links.Add(path);
 
 		var metadata = IsMetadata(path) || name == "control";
-		if(metadata && (!regular || length > 1024 * 1024) && !path.EndsWith("/.web/nginx", StringComparison.Ordinal))
+		if(metadata && (!regular || linked || length < 0 || length > BindingDocument.MaximumLength) && !path.EndsWith("/.web/nginx", StringComparison.Ordinal))
 			throw WebPackage.CreateException(result.Name, path);
 
-		if(regular && result.Extraction != null && result.Extraction.TryGetValue(path, out var destination))
+		if(regular && !metadata && result.Extraction != null && result.Extraction.TryGetValue(path, out var destination))
 		{
 			if(length > 16 * 1024 * 1024)
 				throw WebPackage.CreateException(result.Name, path);
@@ -183,6 +191,13 @@ internal static partial class PackageReader
 		result.Texts.Add(name, text);
 		result.WebTexts.Add(path, text);
 
+		if(result.Extraction != null && result.Extraction.TryGetValue(path, out var metadataDestination))
+		{
+			File.WriteAllBytes(metadataDestination, data);
+			if(!OperatingSystem.IsWindows())
+				File.SetUnixFileMode(metadataDestination, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+		}
+
 		return length;
 	}
 	#endregion
@@ -202,7 +217,7 @@ internal static partial class PackageReader
 		public string Architecture { get; set; }
 		public string Format { get; set; }
 		public string InstallPath { get; set; }
-		public string ListenerAddresses { get; set; }
+		public BindingDocument Bindings { get; set; }
 		public WebPackage Web { get; set; }
 		public IReadOnlyDictionary<string, string> Extraction { get; init; }
 		public Dictionary<string, bool> Entries { get; } = new(StringComparer.Ordinal);

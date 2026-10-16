@@ -37,15 +37,25 @@ using System.Text.Json.Serialization;
 
 namespace Zongsoft.Tools.Containerizer.Protocol;
 
-internal sealed class PackagePlan
+internal sealed partial class ContainerBundlePlan
 {
+	public const int ProtocolVersion = 1;
+	public const string FileName = "containerizer.json";
+
 	#region 公共属性
+	public int Schema { get; set; } = ProtocolVersion;
 	public string Name { get; set; }
+	public string Tag { get; set; }
 	public string Version { get; set; }
+	public string Distribution { get; set; }
 	public string Architecture { get; set; }
-	public string Format { get; set; }
-	public string Hash { get; set; }
-	public string Runtime { get; set; }
-	public string BaseImageReference { get; set; }
+	public string Project { get; set; }
+	public string DataRoot { get; set; }
+	public string SourceHash { get; set; }
+	public string ToolVersion { get; set; }
+	public List<ServicePlan> Services { get; set; } = [];
+	public List<Migration> Migrations { get; set; } = [];
+	public BootstrapPlan Bootstrap { get; set; } = new();
+	public List<FileEntry> Files { get; set; } = [];
 	#endregion
 }

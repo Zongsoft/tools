@@ -62,7 +62,7 @@ dry-run/offline/explain/report、lockFile/locked、previous/prune 的行为见�
 
 RID 资源使用 src/Resources/ 中固定的 dotnet/runtime v10.0.0 图谱，禁止从 MSBuildToolsPath 或运行机器 SDK 目录取图谱。图谱及许可证等第三方文件保留上游原始字节，不转换换行、编码或缩进；.gitattributes 的 -text 防止 Git 自动转换。更新快照时同步双语实现文档的版本/哈希及上游许可证，核对上游原件哈希并验证竞争候选顺序。通用包版本在仓库根 Directory.Packages.props 维护，NuGet.* 专用依赖在本项目通过 VersionOverride 维护。
 
-非测试手写 C# 文件包含既有 /* */ 版权头，使用 Tab/CRLF。沿用中文 #region 分区，按字段、构造、属性、方法或职责组织；展开一行多语句并在方法阶段之间留空行，不使用 using 类型别名；#endregion 前不留空行。DeploymentPlan、DeploymentOperation、PackageSelection、DeploymentSession 各自独立文件，NugetRuntime 专管 RID 适配。README 引用 docs 的中英文实现文档，文档及图谱许可证随工具包分发。
+非测试手写 C# 文件包含既有 /* */ 版权头，使用 Tab/CRLF。沿用中文 #region 分区，按字段、构造、属性、方法或职责组织；展开一行多语句并在方法阶段之间留空行，不使用 using 类型别名；#endregion 前不留空行。DeploymentPlan.Operation 和 DeploymentPlan.Package 嵌套于所属计划，分别保存在 DeploymentPlan.Operation.cs、DeploymentPlan.Package.cs；DeploymentSession 独立维护，NugetRuntime 专管 RID 适配。README 引用 docs 的中英文实现文档，文档及图谱许可证随工具包分发。
 资源维护：中性 Resources.resx 使用 ResXFileCodeGenerator 生成 Resources.Designer.cs；修改中性/中文资源后在 Visual Studio 运行自定义工具。调用处直接使用 Properties.Resources 的生成属性，使用 string.Format 格式化模板。卫星资源不生成第二套同名访问类。dotnet build 不自动触发该 IDE 自定义工具，提交生成输出时只允许空白规范化，不手写属性。
 
 ## 本地搜索
@@ -85,3 +85,5 @@ RID 资源使用 src/Resources/ 中固定的 dotnet/runtime v10.0.0 图谱，禁
 输出逻辑统一复用仓库 `.shared/Utility.Output.cs`：FormatOutput/FormatError 负责格式化，WriteOutput/WriteError 负责终端与文本写入器分流，HandleFailure 负责命令异常输出和已处理标记；各工具只决定退出码和业务诊断，不另建相同的包装层。用 Core CommandOutletContent 分段保存正文和参数：警告为暗黄色正文配粗体青色参数，错误为暗红色正文配粗体紫色参数。追加内容时从 Last 节点追加。Terminals 负责颜色；重定向和调用方提供的错误写入器保留原通道及纯文本；不要把 ANSI 序列写入报告或诊断回调。
 
 帮助语法统一使用共享 FormatHelp/HighlightSyntax，计时统一使用 MeasureOutput，不在各工具复制正则、计时器或颜色拼接。帮助入口在业务解析之前处理，返回 0 且不读取 .env、不写入产物；测试须验证重定向为纯文本、所有语法片段保留，以及耗时仅输出一次。计时文案由各工具资源提供，资源访问属性通过 ResXFileCodeGenerator 生成。
+
+部署模板中的 `\${option...}` 留给 Packager 的绑定提取阶段；deployer 仅展开本阶段变量并保留后续表达式。示例见 [应用网络绑定](../packager/README.zh-Hans.md#application-bindings)。DeploymentPlan.Operation 与 DeploymentPlan.Package 归所属计划；调整类型归属时同步解析器、会话、锁定读取和双语实现说明，保持报告及锁文件字段语义。

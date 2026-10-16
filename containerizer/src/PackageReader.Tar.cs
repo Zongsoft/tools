@@ -61,7 +61,6 @@ partial class PackageReader
 				result.Architecture = global.GlobalExtendedAttributes.GetValueOrDefault("Architecture");
 				result.Version = global.GlobalExtendedAttributes.GetValueOrDefault("Version");
 				result.InstallPath = global.GlobalExtendedAttributes.GetValueOrDefault("InstallPath");
-				result.ListenerAddresses = global.GlobalExtendedAttributes.GetValueOrDefault("Listen");
 			}
 			else
 				Capture(result, entry.Name, entry.DataStream, entry.Length, entry.EntryType is TarEntryType.RegularFile or TarEntryType.V7RegularFile, entry.EntryType is TarEntryType.SymbolicLink or TarEntryType.HardLink);

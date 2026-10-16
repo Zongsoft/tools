@@ -67,7 +67,7 @@
     <value>An option value is missing.</value>
   </data>
   <data name="Arguments.7.Message" xml:space="preserve">
-    <value>Exactly one node bundle path is required.</value>
+    <value>Exactly one container bundle path is required.</value>
   </data>
   <data name="Arguments.8.Message" xml:space="preserve">
     <value>At most one component is allowed.</value>
@@ -100,7 +100,7 @@
     <value>Bootstrap package architecture does not match its profile.</value>
   </data>
   <data name="Bundle.1.Message" xml:space="preserve">
-    <value>Expected a node bundle directory or .tar.gz archive.</value>
+    <value>Expected a container bundle directory or .tar.gz archive.</value>
   </data>
   <data name="Bundle.10.Message" xml:space="preserve">
     <value>Invalid service identity or kind.</value>
@@ -148,7 +148,7 @@
     <value>Checksum manifest differs from the node lock.</value>
   </data>
   <data name="Bundle.9.Message" xml:space="preserve">
-    <value>Untracked file in node bundle.</value>
+    <value>Untracked file in container bundle.</value>
   </data>
   <data name="DockerHost.1.Message" xml:space="preserve">
     <value>The installation executor requires Linux.</value>
@@ -310,7 +310,7 @@ Probe details:
     <value>Managed release identity mismatch.</value>
   </data>
   <data name="Installation.Phase.StageInstallation" xml:space="preserve">
-    <value>Stage delivery files</value>
+    <value>Stage container bundle files</value>
   </data>
   <data name="Installation.Phase.PrepareBootstrap" xml:space="preserve">
     <value>Prepare container engine and runtime dependencies</value>
@@ -649,7 +649,7 @@ Probe details:
     <value>Tool template is missing: {0}</value>
   </data>
   <data name="ApplicationHealth.Invalid.Message" xml:space="preserve">
-    <value>{0}: invalid application listener or HTTP health configuration ({1}).</value>
+    <value>{0}: invalid application binding, publication or health configuration ({1}).</value>
   </data>
   <data name="Manifest.19.Message" xml:space="preserve">
     <value>Invalid or unvalidated Linux distribution profile.</value>
@@ -693,7 +693,7 @@ Recovery never automatically reruns an interrupted migration. Ordinary uninstall
     <value>Usage: dotnet-containerize run &lt;archive.tar.gz&gt; [--engine:{0}]</value>
   </data>
   <data name="Run.Verify" xml:space="preserve">
-    <value>Verifying delivery: {0}</value>
+    <value>Verifying container bundle: {0}</value>
   </data>
   <data name="Run.Unsuccessful.Message" xml:space="preserve">
     <value>Verification ended without success; see the preceding diagnostics.</value>
@@ -752,7 +752,7 @@ The environment {1} is retained for inspection. Press Ctrl+C to remove it. Insta
     <value>  {0}: internal health check passed; verify its business behavior through its logs.</value>
   </data>
   <data name="Run.WebMetadata.Message" xml:space="preserve">
-    <value>Web entry metadata is missing for {0}; regenerate the delivery before reporting local Web readiness.</value>
+    <value>Web entry metadata is missing for {0}; regenerate the container bundle before reporting local Web readiness.</value>
   </data>
   <data name="Run.TooManyPorts.Message" xml:space="preserve">
     <value>Too many published ports for the verification environment.</value>
@@ -767,7 +767,7 @@ The environment {1} is retained for inspection. Press Ctrl+C to remove it. Insta
     <value>{0}: TCP access only; custom ingress configuration has no browser entry metadata. Verify the application's declared Web entry separately.</value>
   </data>
   <data name="Run.Help" xml:space="preserve">
-    <value>run installs an existing delivery in a fresh local verification container. Web entries publish on all IPv4 interfaces, while other published TCP entries bind to 127.0.0.1. Keep this window open; Ctrl+C removes the environment and test data. The first base-image preparation may need Internet access.</value>
+    <value>run installs an existing container bundle in a fresh local verification container. Web entries publish on all IPv4 interfaces, while other published TCP entries bind to 127.0.0.1. Keep this window open; Ctrl+C removes the environment and test data. The first base-image preparation may need Internet access.</value>
   </data>
   <data name="Engine.Podman.Guidance" xml:space="preserve">
     <value>{0}: check {0} info. On Windows, list machines with {0} machine list and start the selected machine with {0} machine start &lt;name&gt;.</value>
@@ -782,7 +782,7 @@ The environment {1} is retained for inspection. Press Ctrl+C to remove it. Insta
     <value>  → {0}: {1} s</value>
   </data>
   <data name="Run.StageVerify" xml:space="preserve">
-    <value>Extract and verify delivery</value>
+    <value>Extract and verify container bundle</value>
   </data>
   <data name="Run.StageBase" xml:space="preserve">
     <value>Prepare verification base</value>
@@ -791,7 +791,7 @@ The environment {1} is retained for inspection. Press Ctrl+C to remove it. Insta
     <value>Prepare image cache</value>
   </data>
   <data name="Run.StageCopy" xml:space="preserve">
-    <value>Copy delivery assets</value>
+    <value>Copy container bundle assets</value>
   </data>
   <data name="Run.StageInstall" xml:space="preserve">
     <value>Install and check services</value>
@@ -837,19 +837,19 @@ The environment {1} is retained for inspection. Press Ctrl+C to remove it. Insta
     <value>A public runtime image must not declare volumes; exporting its root filesystem would omit their contents.</value>
   </data>
   <data name="RuntimeCache.Help" xml:space="preserve">
-    <value>--refresh rebuilds the required public runtime environments for make/complete delivery. It is not saved in .container; plan/run do not refresh.</value>
+    <value>--refresh rebuilds the required public runtime environments for make/full bundle builds. It is not saved in .container; plan/run do not refresh.</value>
   </data>
   <data name="Build.Total" xml:space="preserve">
-    <value>Complete delivery</value>
+    <value>Complete bundle build</value>
   </data>
   <data name="Build.Checksums" xml:space="preserve">
     <value>Verify asset checksums</value>
   </data>
   <data name="Build.Compression" xml:space="preserve">
-    <value>Compress delivery</value>
+    <value>Compress container bundle</value>
   </data>
   <data name="Build.Publish" xml:space="preserve">
-    <value>Publish delivery</value>
+    <value>Publish container bundle</value>
   </data>
   <data name="Web.Invalid.Message" xml:space="preserve">
     <value>{0}: invalid or incomplete Web handoff ({1}).</value>
@@ -857,4 +857,5 @@ The environment {1} is retained for inspection. Press Ctrl+C to remove it. Insta
   <data name="Run.WebBrowser" xml:space="preserve"><value>  Browser domains require DNS pointing here, actual port {0}, and trusted HTTPS certificates. Requested engine publication: 0.0.0.0; LAN access also depends on VM forwarding and firewall rules.</value></data>
   <data name="Web.Plan" xml:space="preserve"><value>  {0} / {1}: {2}; hosts={3}; publication={4}</value></data>
   <data name="Run.WebInterfaces" xml:space="preserve"><value>  Local interfaces/port (LAN reachability not probed; named sites still require Host/SNI): {0}</value></data>
+  <data name="BindingsInvalid.Message" xml:space="preserve"><value>Invalid bindings document at "{0}" (rule: {1}).</value></data>
 </root>

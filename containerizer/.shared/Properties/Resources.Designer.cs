@@ -151,7 +151,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
         }
 
         /// <summary>
-        ///   查找类似 {0}: invalid application listener or HTTP health configuration ({1}). 的本地化字符串。
+        ///   查找类似 {0}: invalid application binding, publication or health configuration ({1}). 的本地化字符串。
         /// </summary>
         internal static string ApplicationHealth_Invalid_Message {
             get {
@@ -232,7 +232,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Exactly one node bundle path is required. 的本地化字符串。
+        ///   查找类似 Exactly one container bundle path is required. 的本地化字符串。
         /// </summary>
         internal static string Arguments_7_Message {
             get {
@@ -255,6 +255,15 @@ namespace Zongsoft.Tools.Containerizer.Properties {
         internal static string Arguments_9_Message {
             get {
                 return ResourceManager.GetString("Arguments.9.Message", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   查找类似 Invalid bindings document at &quot;{0}&quot; (rule: {1}). 的本地化字符串。
+        /// </summary>
+        internal static string BindingsInvalid_Message {
+            get {
+                return ResourceManager.GetString("BindingsInvalid.Message", resourceCulture);
             }
         }
 
@@ -340,7 +349,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Compress delivery 的本地化字符串。
+        ///   查找类似 Compress container bundle 的本地化字符串。
         /// </summary>
         internal static string Build_Compression {
             get {
@@ -349,7 +358,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Publish delivery 的本地化字符串。
+        ///   查找类似 Publish container bundle 的本地化字符串。
         /// </summary>
         internal static string Build_Publish {
             get {
@@ -358,7 +367,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Complete delivery 的本地化字符串。
+        ///   查找类似 Complete bundle build 的本地化字符串。
         /// </summary>
         internal static string Build_Total {
             get {
@@ -376,7 +385,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Expected a node bundle directory or .tar.gz archive. 的本地化字符串。
+        ///   查找类似 Expected a container bundle directory or .tar.gz archive. 的本地化字符串。
         /// </summary>
         internal static string Bundle_1_Message {
             get {
@@ -520,7 +529,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Untracked file in node bundle. 的本地化字符串。
+        ///   查找类似 Untracked file in container bundle. 的本地化字符串。
         /// </summary>
         internal static string Bundle_9_Message {
             get {
@@ -1054,7 +1063,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Stage delivery files 的本地化字符串。
+        ///   查找类似 Stage container bundle files 的本地化字符串。
         /// </summary>
         internal static string Installation_Phase_StageInstallation {
             get {
@@ -2100,7 +2109,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
         }
 
         /// <summary>
-        ///   查找类似 run installs an existing delivery in a fresh local verification container. Web entries publish on all IPv4 interfaces, while other published TCP entries bind to 127.0.0.1. Keep this window open; Ctrl+C removes the environment and test data. The first base-image preparation may need Internet access. 的本地化字符串。
+        ///   查找类似 run installs an existing container bundle in a fresh local verification container. Web entries publish on all IPv4 interfaces, while other published TCP entries bind to 127.0.0.1. Keep this window open; Ctrl+C removes the environment and test data. The first base-image preparation may need Internet access. 的本地化字符串。
         /// </summary>
         internal static string Run_Help {
             get {
@@ -2217,7 +2226,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Copy delivery assets 的本地化字符串。
+        ///   查找类似 Copy container bundle assets 的本地化字符串。
         /// </summary>
         internal static string Run_StageCopy {
             get {
@@ -2244,7 +2253,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Extract and verify delivery 的本地化字符串。
+        ///   查找类似 Extract and verify container bundle 的本地化字符串。
         /// </summary>
         internal static string Run_StageVerify {
             get {
@@ -2289,7 +2298,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Verifying delivery: {0} 的本地化字符串。
+        ///   查找类似 Verifying container bundle: {0} 的本地化字符串。
         /// </summary>
         internal static string Run_Verify {
             get {
@@ -2325,7 +2334,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
         }
 
         /// <summary>
-        ///   查找类似 Web entry metadata is missing for {0}; regenerate the delivery before reporting local Web readiness. 的本地化字符串。
+        ///   查找类似 Web entry metadata is missing for {0}; regenerate the container bundle before reporting local Web readiness. 的本地化字符串。
         /// </summary>
         internal static string Run_WebMetadata_Message {
             get {
@@ -2334,7 +2343,7 @@ namespace Zongsoft.Tools.Containerizer.Properties {
         }
 
         /// <summary>
-        ///   查找类似 --refresh rebuilds the required public runtime environments for make/complete delivery. It is not saved in .container; plan/run do not refresh. 的本地化字符串。
+        ///   查找类似 --refresh rebuilds the required public runtime environments for make/full bundle builds. It is not saved in .container; plan/run do not refresh. 的本地化字符串。
         /// </summary>
         internal static string RuntimeCache_Help {
             get {

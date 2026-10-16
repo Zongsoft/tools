@@ -46,7 +46,6 @@ public sealed class PackageOptions(TemplateEvaluator evaluator = null)
 	#region 常量定义
 	internal const string NAME = "name";
 	internal const string TITLE = "title";
-	internal const string LISTEN = "listen";
 	internal const string LICENSE = "license";
 	internal const string CATEGORY = "category";
 	internal const string HOMEPAGE = "homepage";
@@ -81,7 +80,6 @@ public sealed class PackageOptions(TemplateEvaluator evaluator = null)
 	public string Homepage => this[HOMEPAGE];
 	public string Name => this[NAME];
 	public string Title => this[TITLE];
-	public string Listen => this[LISTEN];
 	public string License => this[LICENSE];
 	public string Category => this[CATEGORY];
 	public string Maintainer => this[MAINTAINER];

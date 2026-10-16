@@ -46,7 +46,7 @@ namespace Zongsoft.Tools.Containerizer;
 internal static class ComposeWriter
 {
 	#region 公共方法
-	public static void Write(DeliveryPlan node, IReadOnlyList<ServiceBuildContext> sources, string directory)
+	public static void Write(ContainerBundlePlan node, IReadOnlyList<ServiceBuildContext> sources, string directory)
 	{
 		var services = new JsonObject();
 

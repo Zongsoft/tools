@@ -7,13 +7,15 @@
 
 [English](README.md) | [简体中文](README.zh-Hans.md)
 
-终端警告使用暗黄色正文和粗体青色参数；错误使用暗红色正文和粗体紫色参数；成功提示使用绿色正文。异常类型以紫色标示，异常消息保留原文。四个工具共用仓库 `.shared/Utility.Output.cs`：`FormatOutput` 和 `FormatError` 构造 Core `CommandOutletContent`；`WriteOutput` 和 `WriteError` 统一终端与文本写入器的输出；使用命令执行器的工具通过 `HandleFailure` 输出异常并标记已处理，退出码由各工具决定。颜色由 Terminals 渲染。重定向的输出以及调用方提供的错误写入器保留纯文本和原通道。 同一共享文件还提供帮助文本高亮 `HighlightSyntax` 和阶段计时 `MeasureOutput`。计时由调用方提供本地化格式与阶段名称，在首次释放时输出，阶段失败时也保留耗时信息。
+终端用颜色区分警告、错误和成功提示；重定向输出为纯文本，并保留原输出通道。
 
-`dotnet-containerize` 把应用和基础服务打包成**面向单台 Linux 主机**的容器交付物：一个 `.tar.gz` 归档，内含 Compose 配置、所需镜像以及自带的原生执行器。现场安装、升级、停止、恢复和卸载整栈各只需一条命令，目标主机既不需要 .NET SDK，也不需要本工具。
+运行 `dotnet-containerize --help` 或 `-h` 查看命令；各命令也支持单独帮助。制作流程结束时显示总耗时，失败时也保留已用时间，退出码表示执行结果。
 
-制作端可运行于 Windows 或 Linux，使用 Docker 或 Podman。交付物面向 Ubuntu 22.04、Debian 12/13 或 RHEL 系列 9，架构为 x64 或 ARM64。
+`dotnet-containerize` 把应用和基础服务打包成**面向单台 Linux 主机**的容器包：一个 `.tar.gz` 归档，内含 Compose 配置、所需镜像以及自带的原生执行器。现场安装、升级、停止、恢复和卸载整栈各只需一条命令，目标主机既不需要 .NET SDK，也不需要本工具。
 
-> 🚨 注意：`dotnet-containerize` 本身只写本地文件。在主机上执行 `install.sh` 会安装容器引擎、导入镜像、启动容器、执行升迁，并可能修改数据库。正式主机操作前请先用 `run` 预演，并阅读交付包内的说明文件。
+制作端可运行于 Windows 或 Linux，使用 Docker 或 Podman。容器包面向 Ubuntu 22.04、Debian 12/13 或 RHEL 系列 9，架构为 x64 或 ARM64。
+
+> 🚨 注意：`dotnet-containerize` 本身只写本地文件。在主机上执行 `install.sh` 会安装容器引擎、导入镜像、启动容器、执行升迁，并可能修改数据库。正式主机操作前请先用 `run` 预演，并阅读容器包内的说明文件。
 
 ## 目录
 
@@ -34,44 +36,44 @@
 ## 功能特性
 
 - **单机单包**：应用、基础服务、入口、升迁、bootstrap 包和镜像统一装进 `name[-tag]@version-architecture.tar.gz`。
-- **先审阅再制作**：`plan` 只生成可编辑的 `.container` 清单，不连接引擎；`make` 把审阅过的清单制作成交付包。
+- **先审阅再制作**：`plan` 只生成可编辑的 `.container` 清单，不连接引擎；`make` 把审阅过的清单制作成容器包。
 - **三十个内置服务**：Redis、MySQL、MariaDB、PostgreSQL、MongoDB、Kafka、Nacos、RustFS、nginx 等，均以单行 `settings` 配置，也可用自定义模板扩展。
-- **应用来自 Packager 安装包**：支持 `.deb`、`.rpm` 或 `.tar.gz` 加配套启动脚本；入口、运行时、环境与健康检查均从包元数据推导。
+- **应用来自 Packager 安装包**：支持 `.deb`、`.rpm` 或 `.tar.gz` 加配套启动脚本；入口、运行时与环境来自包元数据；绑定用于发布规划，健康检查默认为进程存活。
 - **自动 Web 入口**：带 Packager `.web/nginx` 交接资产的应用自动获得受管 nginx 入口，站点、端口与证书由工具渲染，多个应用可共用同一个入口。
 - **有序升迁**：Migrator 归档按版本升序在安装和预演时执行，按版本保存状态，失败只能显式重试，不会自动重跑。
 - **离线或在线获取**：镜像和系统依赖既可随包携带，也可在现场按制作时记录的摘要获取。
-- **制作端即可预演**：`run` 在一次性 Linux 容器内安装真实交付包，并打印实际响应成功的访问地址。
-- **现场无须 SDK**：交付包内的 Native AOT 执行器完成全部现场操作，包括维护、恢复和清理。
+- **制作端即可预演**：`run` 在一次性 Linux 容器内安装真实容器包，并打印实际响应成功的访问地址。
+- **现场无须 SDK**：容器包内的 Native AOT 执行器完成全部现场操作，包括维护、恢复和清理。
 - **镜像源**：可选的 `.mirrors` 文件重定向镜像下载，但不改变已固定的摘要与平台。
-- **中英双语**：控制台输出、交付包内说明和本文档均提供英文与简体中文。
+- **中英双语**：控制台输出、容器包内说明和本文档均提供英文与简体中文。
 
 ## 基础概念
 
 | 名称 | 含义 |
 | --- | --- |
-| **交付包** | 在单台 Linux 主机上安装一整套应用所需的全部内容：`.tar.gz` 归档、配套 `.container` 清单以及归档内的资产。 |
+| **容器包** | 在单台 Linux 主机上安装一整套应用所需的全部内容：`.tar.gz` 归档、配套 `.container` 清单以及归档内的资产。 |
 | **应用包** | [Packager](../packager/README.zh-Hans.md) 生成的 Linux 安装包，提供程序、配置及启动信息。 |
 | **基础服务** | Redis、MySQL 等镜像服务，由内置或自定义模板描述。 |
 | **入口服务** | 接收 Web 请求的代理；带 nginx 交接资产的应用会自动补齐 nginx。 |
-| **`name`** | 目标主机上的安装身份。同名交付包属于同一部署。 |
-| **`tag`** | 可选的交付标签，用于区分构建，但不改变安装身份。 |
-| **`version`** | 交付物的发行版本，独立于各应用和镜像版本。 |
+| **`name`** | 目标主机上的安装身份。同名容器包属于同一部署。 |
+| **`tag`** | 可选的容器包标签，用于区分构建，但不改变安装身份。 |
+| **`version`** | 容器包的发行版本，独立于各应用和镜像版本。 |
 | **`.settings`** | 输出目录中的服务默认配置，供按组件列表制作或规划时使用。 |
 | **`.container`** | 可编辑的制作清单。`plan` 生成草稿，完整制作后记录实际使用的配置和镜像身份。 |
-| **执行器** | 交付包内的原生 `containerizer` 程序，负责全部现场操作。 |
+| **执行器** | 容器包内的原生 `containerizer` 程序，负责全部现场操作。 |
 
 制作流程如下：
 
 1. 用 [Packager](../packager/README.zh-Hans.md) **打包应用**，用 [Migrator](../migrator/README.zh-Hans.md) **制作升迁包**。
 2. 用组件列表 **规划（plan）** 出可编辑的 `.container` 清单。
 3. **审阅**共享的 `.settings` 默认值，并按本版发行需要编辑清单。
-4. **制作（make）** 交付包：解析并构建镜像、收集资产、写出校验和并发布归档。
+4. **制作（make）** 容器包：解析并构建镜像、收集资产、写出校验和并发布归档。
 5. 用 `run` 在**本机预演**该归档。
 6. 把归档**送到**匹配的主机，解压后执行 `./install.sh`。
 
 | 工具负责 | 工具不负责 |
 | --- | --- |
-| 打包应用、固定镜像身份、记录交付包校验和 | 制作应用安装包或升迁归档（分别由 Packager、Migrator 负责） |
+| 打包应用、固定镜像身份、记录容器包校验和 | 制作应用安装包或升迁归档（分别由 Packager、Migrator 负责） |
 | 生成 Compose 配置、bootstrap 依赖及生命周期命令 | 编译、部署或配置应用的业务代码 |
 | 依据 Packager 交接资产渲染 nginx 站点并发布端口 | 申请证书、修改 DNS，或改写应用的登录回调与重定向地址 |
 | 按顺序执行升迁并保存各版本状态 | 解析 SQL，或判断失败的升迁是否可以重试 |
@@ -81,10 +83,12 @@
 
 - **制作端**：以 .NET 全局工具方式安装本工具，并具备与其目标框架之一匹配的 .NET 运行时。命令为 `dotnet containerize` 或 `dotnet-containerize`。
 - `plan` 只需要本地输入。`make`、直接制作和预演需要可用的 Docker 或 Podman 引擎及 Compose 提供程序；首次准备镜像、运行时和系统依赖通常需要联网。
-- **目标主机**：与交付包匹配的 Linux 发行版和架构，并在 root 会话中操作。容器引擎及其依赖由 bootstrap 准备。
+- **目标主机**：与容器包匹配的 Linux 发行版和架构，并在 root 会话中操作。容器引擎及其依赖由 bootstrap 准备。
 - **接受的发行版**：Ubuntu 22.04、Debian 12/13、RHEL/Rocky/AlmaLinux 9，架构为 x64 或 ARM64。RHEL 需要预先导入适用于该系统的 bootstrap 依赖集合。
 
 这些是实现接受的目标配置，实际运行验证范围更窄，见[平台与验证边界](docs/implementation.zh-Hans.md#平台与验证边界)。模板声明或 ARM64 编译成功都不等同于目标环境验收。
+
+镜像构建需要网络代理时，在制作进程中设置 `HTTP_PROXY`、`HTTPS_PROXY` 和 `NO_PROXY`（也接受小写名称）。代理必须能从构建容器访问；使用远程引擎时，`localhost` 指向远程环境。这些值用于构建请求，不写入容器包清单或应用环境。
 
 ## 安装
 
@@ -149,7 +153,7 @@ web/default/.packages/zongsoft.web@1.0.0-x64.deb
 
 ### 步骤 2：声明共享的服务默认值
 
-服务默认值位于 `output/.settings`，由该项目所有交付包共享。hosting 把它的版本化默认值放在 [.containerized/.settings](https://github.com/Zongsoft/hosting/blob/main/.containerized/.settings)，本交付包用到的段落如下：
+服务默认值位于 `output/.settings`，由该项目所有容器包共享。hosting 把它的版本化默认值放在 [.containerized/.settings](https://github.com/Zongsoft/hosting/blob/main/.containerized/.settings)，本容器包用到的段落如下：
 
 ```ini
 [mysql]
@@ -188,17 +192,17 @@ dotnet-containerize plan ^
 
 | 参数或选项 | 作用 |
 | --- | --- |
-| `daemon`、`web/default` | 宿主目录；每个目录都会按交付名称、发行版和架构查找匹配的安装包。 |
+| `daemon`、`web/default` | 宿主目录；每个目录都会按容器包名称、发行版和架构查找匹配的安装包。 |
 | `redis mysql rustfs nginx` | 内置基础服务与入口服务。此处 `nginx` 可省略：带完整 `.web/nginx` 交接资产的应用会自动补齐；显式声明则可以固定其镜像 tag 与端口映射。 |
 | `--name:zongsoft` | 安装身份，同时作为安装包搜索前缀和升迁归档名称。 |
-| `--version:1.0` | 本次交付的发行版本。省略时使用日期版本，hosting 自己的交付包因此形如 `zongsoft@26.10.6-x64.tar.gz`。 |
+| `--version:1.0` | 本次交付的发行版本。省略时使用日期版本，hosting 自己的容器包因此形如 `zongsoft@26.10.6-x64.tar.gz`。 |
 | `--distribution:debian@13` | 目标发行版；只写 `debian` 等价于 `debian@13`。 |
 | `--migration:.migration` | 在该目录中查找 `zongsoft(migrate)@<版本>_linux-<架构>` 归档及其启动脚本。 |
-| `--output:.containerized` | 清单以及随后交付归档的输出目录。 |
+| `--output:.containerized` | 清单以及随后容器包归档的输出目录。 |
 
 ### 步骤 4：审阅清单
 
-`plan` 生成 `.containerized/zongsoft@<版本>-x64.container` 后即结束：不连接引擎，也不下载镜像。本交付包的草稿如下：
+`plan` 生成 `.containerized/zongsoft@<版本>-x64.container` 后即结束：不连接引擎，也不下载镜像。本容器包的草稿如下：
 
 ```ini
 name=zongsoft
@@ -239,7 +243,7 @@ settings=port=80:18080,443:none
 
 清单中的 `source` 与 `output` 按相对彼此的形式保存。缺少必填服务参数时会在保存草稿的同时给出警告；交付内容在这里编辑，而不是重新生成。详见[清单字段](#清单字段)和 [Web 交接与端口发布](#web-交接与端口发布)。
 
-### 步骤 5：制作交付包
+### 步骤 5：制作容器包
 
 ```cmd
 dotnet-containerize make .containerized/zongsoft@1.0-x64.container
@@ -252,7 +256,7 @@ dotnet-containerize make .containerized/zongsoft@1.0-x64.container
 .containerized/zongsoft@1.0-x64.tar.gz
 ```
 
-归档内的完成清单与外部文件完全一致，因此交付的内容就是审阅过的内容。已有交付包不会被覆盖；用 `make FILE.container --version:1.1` 制作下一版。需要按更新后的系统底图或运行时补丁重建应用公共运行环境时，使用 `--refresh`。
+归档内的完成清单与外部文件完全一致，因此交付的内容就是审阅过的内容。已有容器包不会被覆盖；用 `make FILE.container --version:1.1` 制作下一版。需要按更新后的系统底图或运行时补丁重建应用公共运行环境时，使用 `--refresh`。
 
 ### 步骤 6：本机预演
 
@@ -267,9 +271,9 @@ dotnet-containerize run .containerized/zongsoft@1.0-x64.tar.gz
 把归档复制到匹配的 Linux 主机，解压到独立目录，并在 root 会话中执行启动脚本：
 
 ```sh
-mkdir zongsoft-delivery
-tar -xzf zongsoft@1.0-x64.tar.gz -C zongsoft-delivery
-cd zongsoft-delivery
+mkdir zongsoft-bundle
+tar -xzf zongsoft@1.0-x64.tar.gz -C zongsoft-bundle
+cd zongsoft-bundle
 ./install.sh
 containerizer status --name zongsoft
 ```
@@ -298,7 +302,7 @@ dotnet containerize run  <archive.tar.gz> [--engine:auto|docker|podman]
 | --- | --- |
 | `服务[@tag]` | 内置服务名（见[内置服务](#内置服务)），可选用 `@tag` 固定镜像 tag。含 `/` 或 `\` 的值一律不作为服务名。 |
 | 安装包文件 | 应用安装包：`.deb`、`.rpm`，或 `.tar.gz` 及其配套 `.sh`。 |
-| 目录 | 在该目录及其 `.packages/` 子目录中查找与交付名称前缀、发行版和架构匹配的安装包；候选多项时交互选择，且绝不按文件日期选择版本。 |
+| 目录 | 在该目录及其 `.packages/` 子目录中查找与容器包名称前缀、发行版和架构匹配的安装包；候选多项时交互选择，且绝不按文件日期选择版本。 |
 | `FILE.container` | 必须是唯一参数；表示规划或制作该清单，而不是按组件列表制作。 |
 
 ### 选项
@@ -310,10 +314,10 @@ dotnet containerize run  <archive.tar.gz> [--engine:auto|docker|podman]
 | `--name:<name>` | **必填** | 安装身份。以 ASCII 字母或数字开头，后续可含 ASCII 字母、数字、点、下划线、连字符，且不含连续两点。 |
 | `--distribution:<发行版[@版本]>` | **必填** | 目标发行版。`ubuntu` 等价于 `ubuntu@22.04`，`debian` 等价于 `debian@13`；另接受 `debian@12`、`rhel@9`、`rocky@9`、`almalinux@9`，`redhat` 解析为 `rhel`。 |
 | `--version:<version>` | 日期版本 | 非零的 2–4 段数字发行版本。省略时采用日期版本，并在输出名称冲突时递增第四段。 |
-| `--tag:<tag>` | 空 | 可选交付标签，命名规则同 `name`；与服务镜像 tag 相互独立。 |
+| `--tag:<tag>` | 空 | 可选容器包标签，命名规则同 `name`；与服务镜像 tag 相互独立。 |
 | `--architecture:<x64\|arm64>` | `x64` | 目标架构。 |
 | `--source:<目录>` | 调用目录 | 工作源目录。 |
-| `--output:<目录>` | 最终 source | 接收清单和交付归档的目录。 |
+| `--output:<目录>` | 最终 source | 接收清单和容器包归档的目录。 |
 | `--engine:<auto\|docker\|podman>` | `auto` | 制作端与 `run` 使用的容器引擎。 |
 | `--imaging:<offline\|online>` | `offline` | 基础服务镜像随包携带，或现场按固定摘要获取。应用镜像始终随包携带。 |
 | `--bootstrap:<offline\|online>` | `offline` | 系统依赖随包携带，或现场下载；两者都按制作时记录的版本、来源和校验值安装。 |
@@ -327,11 +331,11 @@ dotnet containerize run  <archive.tar.gz> [--engine:auto|docker|podman]
 
 `--source` 自身相对于调用目录解析；受其管理的本地输入和输出（包括 `./` 与 `../`）均相对于**最终 source**，绝对路径保持原义。清单内的 `source` 相对于声明它的文件，模板配套文件相对于模板目录。`run` 没有 source 选项，其归档相对于调用目录。
 
-交付物命名为 `name[-tag]@version-architecture.container` 与 `name[-tag]@version-architecture.tar.gz`。已有归档不会被覆盖；制作失败保留审阅过的草稿，制作成功则原位更新自己的草稿。完整路径契约见[路径、变量与输出](docs/implementation.zh-Hans.md#profile变量与路径)。
+容器包命名为 `name[-tag]@version-architecture.container` 与 `name[-tag]@version-architecture.tar.gz`。已有归档不会被覆盖；制作失败保留审阅过的草稿，制作成功则原位更新自己的草稿。完整路径契约见[路径、变量与输出](docs/implementation.zh-Hans.md#profile变量与路径)。
 
 ### 示例
 
-先规划再制作一个只含基础服务的交付包，然后预演：
+先规划再制作一个只含基础服务的容器包，然后预演：
 
 ```console
 dotnet-containerize plan redis --name:example --distribution:debian --version:1.0 --output:.containerized
@@ -384,7 +388,7 @@ settings=root-password=${mysql:root_password};database=example
 
 变量来自环境、source 直属 `.env` 及其显式导入，以及命令选项。只自动读取 source 直属 `.env`，不搜索父目录或子目录。如需父目录配置，显式使用 `#@import ../.env`；导入路径相对于声明文件，后续同名声明覆盖此前声明。引用形式为 `${name}`，`\${name}` 保留字面引用。与参数同名的变量不会被自动绑定：内置绑定只有 MySQL 的 `mysql:root_password` 及 RustFS 的 `rustfs:access_key`、`rustfs:secret_key`；其他取值必须显式提供，如 hosting 示例所示。
 
-服务参数使用单行 Core `Settings` 语法，引号内使用反斜杠转义，不以重复引号转义；例如 `password='=abc=='` 保留值开头的等号。读写统一使用 Core 解析器及序列化器：
+服务参数使用单行 Core `Settings` 语法，引号内使用反斜杠转义，不以重复引号转义；例如 `password='=abc=='` 保留值开头的等号。参数示例：
 
 ```ini
 settings=port=16379;password='a;b="c"'
@@ -417,6 +421,8 @@ settings=port=16379;storage=persistent;persistence=both
 | 组件字段 | 使用场景 |
 | --- | --- |
 | `package` | 应用安装包路径；有此字段的段落表示应用。 |
+| `publish!<binding-id-or-alias>` | 应用直接发布策略：auto、none，或分号分隔的 transport://IP:port。草稿保留变量，缺少值时规划给出警告，make 前必须补齐。 |
+| `health` | 以 CMD 或 CMD-SHELL 开头的 JSON 命令数组；默认检查进程存活。 |
 | `tag`、`repository`、`imaging` | 基础服务镜像选择，以及可选的局部交付方式覆盖。 |
 | `settings` | 基础服务参数，见[内置服务](#内置服务)。 |
 | `template` | 内置模板名称或自定义模板路径；省略时使用组件名。见[模板参考](docs/templates.zh-Hans.md)。 |
@@ -426,13 +432,12 @@ settings=port=16379;storage=persistent;persistence=both
 | `file!/容器绝对路径` | nginx 组件使用的额外资源文件；值为制作端文件路径。 |
 | `digest`、`identity`、`timestamp`、`size` | 工具记录的镜像身份及可选展示信息，含义见[镜像身份与缓存](docs/implementation.zh-Hans.md#镜像身份与缓存)。 |
 
-应用不使用 `template`、`settings` 或服务镜像选择字段：其程序入口、工作目录、运行时及基础健康检查由安装包元数据提供或推导。需要改变应用自身配置时，请修改 Packager 的 scheme 并重新打包。
 
 ### Web 交接与端口发布
 
-带 Packager 完整 `.web/nginx` 交接资产（`.bindings`、`<包名>.conf`、`<包名>.conf.template`）的应用会自动加入受管 nginx 入口，多个应用可共用同一个入口。没有托管资产时，应用有效的 `Listen` 端口直接发布到宿主回环地址。
+安装根 JSON .bindings 含 sites，且具有完整 .web/nginx/<包名>.conf 和 .conf.template 的应用自动加入受管 nginx 入口；多个应用可共享入口。三种格式都要求根 .bindings，没有 Web 资产的应用也一样。
 
-nginx 端口来自包内绑定，默认按同端口发布；用 `容器端口:宿主端口` 列表调整或关闭：
+nginx 的 TCP/UDP 端口来自包内绑定，默认按同端口发布到 127.0.0.1；同号覆盖同时作用于两种已声明传输，UDP 不按 TCP/HTTP 探测。用 `容器端口:宿主端口` 列表调整或关闭：
 
 ```ini
 [zongsoft.web]
@@ -444,7 +449,7 @@ file!/etc/ssl/zongsoft/fullchain.pem=./certs/fullchain.pem
 file!/etc/ssl/zongsoft/key.pem=./certs/key.pem
 ```
 
-上例中容器端口 80 优先使用宿主端口 18080，容器端口 443 仅保留内部访问。已发布的仅通配域名站点还需要匹配的具体 `probe-host!站点名`，站点名和证书路径必须与实际包内容相符。外部文件声明属于使用它的 nginx 组件；端口在写入清单时即已固定，之后修改 `.settings` 不会改变已保存的交付包。工具不猜测站点、不代签证书，也不修改应用的登录回调或重定向地址。
+上例中容器端口 80 优先使用宿主端口 18080，容器端口 443 仅保留内部访问。已发布的仅通配域名站点还需要匹配的具体 `probe-host!站点名`，站点名和证书路径必须与实际包内容相符。外部文件声明属于使用它的 nginx 组件；端口在写入清单时即已固定，之后修改 `.settings` 不会改变已保存的容器包。工具不猜测站点、不代签证书，也不修改应用的登录回调或重定向地址。
 
 ### 升迁
 
@@ -489,7 +494,7 @@ file!/etc/ssl/zongsoft/key.pem=./certs/key.pem
 | valkey | 6379 | 同 Redis |
 | zookeeper | 2181 | — |
 
-除 nginx 映射列表外，端口参数接受 `16379`（回环地址）、`192.0.2.10:16379`、`[::1]:16379` 或 `none`。它只改变宿主发布，不改变容器监听；`none` 表示仅在交付内部可访问。辅助端口默认不发布，RustFS、TDengine 控制台除外。nginx、haproxy、memcached、otel 没有数据挂载，不接受 `storage`。
+除 nginx 映射列表外，端口参数接受 `16379`（回环地址）、`192.0.2.10:16379`、`[::1]:16379` 或 `none`。它只改变宿主发布，不改变容器监听；`none` 表示仅在容器网络内部可访问。辅助端口默认不发布，RustFS、TDengine 控制台除外。nginx、haproxy、memcached、otel 没有数据挂载，不接受 `storage`。
 
 `temporary` 使用匿名卷：同一容器停止、启动、重启时保留数据，工具删除该容器时一并清理。启动基础设施不会隐式重建已有容器。持久目录在普通卸载后保留，显式 purge 才清理；切换设置不会迁移旧数据。
 
@@ -499,11 +504,11 @@ Redis、Valkey 的 `persistence` 可为 `both`、`rdb`、`aof` 或 `none`；AOF 
 
 ## 本机预演
 
-`run` 校验交付包后，在隔离的 Linux 容器内执行包中原有的 `install.sh`，覆盖 bootstrap、镜像导入、升迁、应用启动和健康检查。外层使用所选 Docker/Podman，内部使用独立 Docker；交付包必须与外层引擎的原生架构一致，外层无须 Compose。
+`run` 校验容器包后，在隔离的 Linux 容器内执行包中原有的 `install.sh`，覆盖 bootstrap、镜像导入、升迁、应用启动和健康检查。外层使用所选 Docker/Podman，内部使用独立 Docker；容器包必须与外层引擎的原生架构一致，外层无须 Compose。
 
 - 每次会话都从全新的安装状态和测试数据开始；干净的底图以及校验通过的基础设施、入口镜像可复用。
-- 优先使用交付端口，冲突时分配空闲端口，并打印实际响应成功的地址。Web 入口发布到所有 IPv4 接口，普通 TCP 服务发布到回环地址，因此局域网可达性仍取决于防火墙和虚拟机网络。
-- 必需的 Web 入口探测失败会使预演失败；仅基础设施本机转发失败会告警，而安装失败或服务自身健康失败仍会阻止就绪。
+- 优先使用容器包声明的宿主端口，冲突时分配空闲端口，并打印实际响应成功的地址。Web 入口发布到所有 IPv4 接口，普通 TCP 服务发布到回环地址，因此局域网可达性仍取决于防火墙和虚拟机网络。
+- 必需的 Web 入口探测失败会使预演失败；非 Web TCP 端口的本机转发失败会告警，而安装失败或服务自身健康失败仍会阻止就绪。普通应用端口不要求提供 Web 入口信息。
 - 域名探测连接本机端口并保留 Host 与 SNI，HTTPS 会验证证书；不修改 hosts、DNS 和信任库，因此用浏览器访问域名仍需自行准备解析。重定向只报告目标，不跟随。
 - 就绪后按 **Ctrl+C**，清理成功时返回 `0`；启动期间取消返回 `130`。安装或探测失败会保留已建立的现场直到按 Ctrl+C，并保留失败状态。
 - 同一应用已有预演环境时不允许启动第二个会话。强制结束进程可能留下资源，请按输出中的归属信息确认后再清理。
@@ -512,19 +517,19 @@ Redis、Valkey 的 `persistence` 可为 `both`、`rdb`、`aof` 或 `none`；AOF 
 
 ## 现场操作
 
-把交付包复制到匹配的 Linux 主机并解压到独立目录，以下命令在 root 会话中执行：
+把容器包复制到匹配的 Linux 主机并解压到独立目录，以下命令在 root 会话中执行：
 
 ```sh
-mkdir example-delivery
-tar -xzf example@1.0-x64.tar.gz -C example-delivery
-cd example-delivery
+mkdir example-bundle
+tar -xzf example@1.0-x64.tar.gz -C example-bundle
+cd example-bundle
 ./install.sh
 containerizer status --name example
 ```
 
 安装器把所需资产保存到受管位置，并安装或复用 `/usr/local/bin/containerizer`。此后状态、生命周期、恢复和卸载都不依赖解压目录。
 
-现场选项使用空格分隔，`BUNDLE` 表示交付归档或已解压目录：
+现场选项使用空格分隔，`BUNDLE` 表示容器包归档或已解压目录：
 
 | 命令 | 作用 |
 | --- | --- |
@@ -538,11 +543,11 @@ containerizer status --name example
 | `containerizer start --name NAME` | 启动已准备完成的应用和入口，健康检查通过后解除维护。 |
 | `containerizer restart [COMPONENT] --name NAME` | 重启应用和入口，或指定组件；维护中或存在未完成事务时拒绝。 |
 | `containerizer recover --name NAME [--retry-migration VERSION]` | 继续原失败或中断事务，恢复后保持待启动状态。 |
-| `containerizer uninstall --name NAME [--purge]` | 卸载；`./uninstall.sh [--purge]` 可从交付目录定位同一安装身份。 |
+| `containerizer uninstall --name NAME [--purge]` | 卸载；`./uninstall.sh [--purge]` 可从容器包目录定位同一安装身份。 |
 
 `--no-start` 仍会启动基础设施并执行升迁，只让应用和入口停在 `ReadyToStart`。命令执行前已处于维护状态时，同样不会自动启动应用。
 
-### 交付包内容
+### 容器包内容
 
 | 路径 | 内容 |
 | --- | --- |
@@ -552,7 +557,7 @@ containerizer status --name example
 | `containerizer.json`、`checksums.sha256` | 执行计划与文件校验和；计划的哈希标识发行内容。 |
 | `compose.yaml`、`config/` | 已生成的运行配置和只读运行资产。 |
 | `images/`、`packages/`、`migration/` | 离线镜像、bootstrap 包和升迁归档，按需存在。 |
-| `README.md`、`README.zh-Hans.md` | 该交付物的操作说明，含建议的升迁顺序。 |
+| `README.md`、`README.zh-Hans.md` | 该容器包的操作说明，含建议的升迁顺序。 |
 
 ### 现场目录
 
@@ -575,6 +580,8 @@ containerizer status --name example
 
 ## 镜像源与缓存
 
+`.mirrors` 只替换容器镜像仓库，不替换 Debian/RPM 软件包源或 `download.docker.com` 等下载站。准备离线 bootstrap 依赖和运行环境镜像时，仍需直接或通过制作进程的代理访问这些站点。
+
 可在最终输出目录放置可选的 `.mirrors` 文件；`run` 读取所选归档旁的该文件，`plan` 完全不读取：
 
 ```ini
@@ -582,7 +589,7 @@ docker.io=mirror.example.com/docker.io
 mcr.microsoft.com=mirror.example.com/mcr
 ```
 
-值为自选可信的 `主机[:端口][/路径前缀]`，多个地址用分号分隔，不带协议、tag、digest、凭据或末尾斜线。工具先复用校验通过的缓存，再依次尝试各镜像源，最后回到原仓库；任何回退都不会改变已固定的摘要和平台。这些规则不写入交付物：现场普通安装使用引擎自身的配置。公开镜像源清单见 [hosting 镜像源说明](https://github.com/Zongsoft/hosting/blob/main/README.zh-Hans.md#镜像配置)，完整的解析与缓存规则见[镜像源](docs/implementation.zh-Hans.md#镜像源)。
+值为自选可信的 `主机[:端口][/路径前缀]`，多个地址用分号分隔，不带协议、tag、digest、凭据或末尾斜线。工具先复用校验通过的缓存，再依次尝试各镜像源，最后回到原仓库；任何回退都不会改变已固定的摘要和平台。这些规则不写入容器包：现场普通安装使用引擎自身的配置。公开镜像源清单见 [hosting 镜像源说明](https://github.com/Zongsoft/hosting/blob/main/README.zh-Hans.md#镜像配置)，完整的解析与缓存规则见[镜像源](docs/implementation.zh-Hans.md#镜像源)。
 
 应用公共运行环境缓存在 Windows 的 `%LOCALAPPDATA%/Zongsoft/containerizer` 或 Linux 的 `~/.cache/Zongsoft/containerizer` 下（绝对路径 `XDG_CACHE_HOME` 可替代 Linux 缓存基目录），其中不含应用安装包和应用数据。需要更新系统底图或运行时补丁时使用 `make --refresh`；缓存分层与手动清理边界见[镜像身份与缓存](docs/implementation.zh-Hans.md#镜像身份与缓存)。
 
@@ -591,7 +598,7 @@ mcr.microsoft.com=mirror.example.com/mcr
 - Zongsoft hosting 项目
 	- [容器交付](https://github.com/Zongsoft/hosting/blob/main/README.zh-Hans.md#容器交付) —— 脚本流程、镜像交付选项与 Nginx 端口
 	- [`containerize.cmd`](https://github.com/Zongsoft/hosting/blob/main/containerize.cmd) —— plan/make/run 交互包装脚本
-	- [`.containerized/.settings`](https://github.com/Zongsoft/hosting/blob/main/.containerized/.settings) —— 所有交付包共享的服务默认值
+	- [`.containerized/.settings`](https://github.com/Zongsoft/hosting/blob/main/.containerized/.settings) —— 所有容器包共享的服务默认值
 	- [`.containerized/.mirrors`](https://github.com/Zongsoft/hosting/blob/main/.containerized/.mirrors) —— 制作与预演使用的镜像源
 	- [`.env`](https://github.com/Zongsoft/hosting/blob/main/.env) —— 服务默认值引用的变量
 	- [`migrate.cmd`](https://github.com/Zongsoft/hosting/blob/main/migrate.cmd) —— 升迁归档制作
@@ -608,3 +615,33 @@ mcr.microsoft.com=mirror.example.com/mcr
 - [实现说明](docs/implementation.zh-Hans.md)：制作数据流、Web 交接、交付协议、安装状态、缓存与验证边界。
 - [模板参考](docs/templates.zh-Hans.md)：内置仓库、端口、参数映射及自定义模板格式。
 - [开发指南](SKILL.md)：代码维护、构建、测试及隔离验证。
+
+<a id="binding-publication"></a>
+
+### 按应用绑定发布端口
+
+应用安装包必须包含 Packager 生成的根 `.bindings`；Web 应用还需完整代理资产。配置声明示例见 [Packager](../packager/README.zh-Hans.md#application-bindings)。在已有清单的应用组件段添加发布覆盖，例如该组件已包含别名 `web`、`garnet`、`receiver`：
+
+```ini
+[application]
+publish!web = auto
+publish!garnet = tcp://127.0.0.1:16379
+publish!receiver = udp://0.0.0.0:19000
+health = ["CMD-SHELL","kill -0 1"]
+```
+
+这是应用组件段的字段片段，保留清单中已有的组件名和包来源，不用这段替代完整清单。
+
+| 配置 | 来历与结果 |
+| --- | --- |
+| `publish!web=auto` | `web` 来自包内别名；已经代理的绑定只保留内部访问。没有代理的绑定按原端口发布到宿主回环地址。 |
+| `publish!garnet=tcp://127.0.0.1:16379` | `16379` 是选择的宿主端口；容器端口如 `6379` 来自 Garnet 声明。只允许包内已声明的 TCP。 |
+| `publish!receiver=udp://0.0.0.0:19000` | 宿主所有 IPv4 网卡的 UDP 19000 转到声明中的 UDP 端口，例如 9000；不会创建 TCP 映射。 |
+| `publish!garnet=none` | 取消这个绑定的直接宿主映射；已有代理路由保留。 |
+| `health` | 显式选择进程检查；省略时同样默认检查 PID 1 存活。业务就绪检查应提供明确命令。 |
+
+选择器也可写完整绑定 ID，必须唯一；同时通过 ID 和别名覆盖同一项会失败。多条宿主映射以分号分隔，例如同时发布声明支持的 `tcp://127.0.0.1:18443;udp://127.0.0.1:18443`。TCP/UDP 同号可以共存。一个绑定若含多个不同容器端口，应把源声明拆成明确项后再指定覆盖。
+
+生成的容器网络使用 IPv4，跨容器连接或直接发布需要 `0.0.0.0` 监听；回环、固定 IP、DNS 或仅 IPv6 声明不能据此认定可达。宿主发布地址可独立使用字面 IPv4/IPv6。工具不会修改应用配置中的监听地址、启动参数或协议通告地址。Nginx 入口仍使用前文 `port=80:18080,443:none` 设置；两种发布配置分别作用于入口与应用绑定。
+
+`/metrics`、gRPC 反射、`/opentelemetry` 都不能自动当作业务健康接口。UDP 发布也不表示 TCP/HTTP 探测成功；人工验收应分别确认端口、协议和业务响应。

@@ -26,9 +26,9 @@ public class WebPolicyTest
 	}
 
 	[Theory]
-	[InlineData("server!a=http://app weight=9223372036854775808")]
+	[InlineData("server!a=http://app weight=9223372036854775808\nserver!b=http://second")]
 	[InlineData("server-retry-count=9223372036854775807")]
-	[InlineData("server!a=http://app\nserver-failure-timeout=500ms")]
+	[InlineData("server!a=http://app\nserver!b=http://second\nserver-failure-timeout=500ms")]
 	[InlineData("server-health=/\nserver-health-interval=00:00:00.0000001")]
 	[InlineData("server-balance=least-requests")]
 	public void UnrepresentableValuesFailInsteadOfBeingTruncated(string values)
@@ -41,7 +41,7 @@ public class WebPolicyTest
 	public void TargetArchitectureDeterminesNumericBounds()
 	{
 		using var files = new MigrationTestDirectory();
-		var definition = Definition.Load(files.Write("web.profile", "[api]\nbind!legacy=http://*\nserver!a=http://app weight=2147483648"));
+		var definition = Definition.Load(files.Write("web.profile", "[api]\nbind!legacy=http://*\nserver!a=http://app weight=2147483648\nserver!b=http://second"));
 		var configurator = new Configurator.Nginx();
 		Assert.Equal("Capability", Assert.Throws<DefinitionException>(() => configurator.Configure(definition, new("example", "/opt/app", Utility.CreateEvaluator(), architecture: Architecture.X86))).Diagnostic.Code);
 		Assert.Contains("weight=2147483648", configurator.Configure(definition, new("example", "/opt/app", Utility.CreateEvaluator())).Files[0].Content.Render("/opt/app"));
@@ -76,14 +76,13 @@ public class WebPolicyTest
 
 	[Theory]
 	[InlineData("server=https://backend.example", "backend.example")]
-	[InlineData("server!a=https://backend.example", "backend.example")]
 	[InlineData("server!a=https://backend.example:443\nserver!b=https://backend.example:8443", "backend.example")]
 	[InlineData("server=https://192.0.2.1", null)]
 	[InlineData("server!a=https://one.example\nserver!b=https://two.example", null)]
 	public void TlsNamesComeOnlyFromEffectiveBackendAddresses(string servers, string name)
 	{
 		using var files = new MigrationTestDirectory();
-		var text = Generate(files, servers);
+		var text = Generate(files, servers + "\nserver-tls-verify=false");
 		Assert.Contains("proxy_ssl_verify off;", text);
 		Assert.Contains("proxy_ssl_server_name " + (name == null ? "off" : "on") + ";", text);
 
@@ -98,7 +97,7 @@ public class WebPolicyTest
 	{
 		using var files = new MigrationTestDirectory();
 		var text = Generate(files, "server=https://backend.example\nserver-tls-verify=true\nserver-tls-trust=file:/trust/ca.pem\nserver-health=/ready?mode=full\nserver-health-header!Host=probe.example\nserver-health-header!X-Empty=\nheader!X-Business=business\nwebsocket=true\nnginx:proxy_read_timeout=60s");
-		var probe = text[text.IndexOf("location @", StringComparison.Ordinal)..text.IndexOf("location /", StringComparison.Ordinal)];
+		var probe = text[text.IndexOf("location @", StringComparison.Ordinal)..text.IndexOf("location @binding_", StringComparison.Ordinal)];
 		Assert.Contains("proxy_read_timeout 5000ms;", probe);
 		Assert.Contains("proxy_method GET;", probe);
 		Assert.Contains("proxy_pass_request_headers off;", probe);
@@ -116,9 +115,9 @@ public class WebPolicyTest
 	public void RouteOverridesKeepOtherHeadersAndReplaceTheEntireBackendPool()
 	{
 		using var files = new MigrationTestDirectory();
-		var path = files.Write("web.profile", "server!one=http://one\nserver!two=http://two\nheader!X-Root=root\nserver-retry=timeout\n[api]\nbind!legacy=http://*\nheader!X-Value=site\n[api route]\nserver!three=http://three\nheader!x-value=\nwebsocket=true\nnginx:proxy_set_header!Connection=close");
+		var path = files.Write("web.profile", "server!one=http://one\nserver!two=http://two\nheader!X-Root=root\nserver-retry=timeout\n[api]\nbind!legacy=http://*\nheader!X-Value=site\n[api route]\nserver!three=http://three\nserver!four=http://four\nheader!x-value=\nwebsocket=true\nnginx:proxy_set_header!Connection=close");
 		var route = DefinitionLoadingTest.Resolve(path).Sites[0].Routes[0];
-		Assert.Equal("three", Assert.Single(route.Server.Members).Name);
+		Assert.Equal(["three", "four"], route.Server.Members.Select(member => member.Name));
 		Assert.Equal(["timeout"], route.Server.Policy.Retry.Conditions);
 		Assert.Contains(route.Headers, item => item.Name == "X-Root" && item.Value == "root");
 		Assert.Contains(route.Headers, item => item.Name == "x-value" && item.Value == "");
@@ -162,7 +161,7 @@ public class WebPolicyTest
 	public async Task ConcurrentCallsHaveNoSharedPoolOrVariableStateAsync()
 	{
 		using var files = new MigrationTestDirectory();
-		var definition = Definition.Load(files.Write("web.profile", "[api]\nbind!legacy=http://*\nserver!a=http://${backend}\nserver-health=/"));
+		var definition = Definition.Load(files.Write("web.profile", "[api]\nbind!legacy=http://*\nserver!a=http://${backend}\nserver!b=http://second\nserver-health=/"));
 		var configurator = new Configurator.Nginx();
 		var tasks = Enumerable.Range(0, 8).Select(index => Task.Run(() =>
 		{
@@ -186,7 +185,7 @@ public class WebPolicyTest
 	{
 		using var files = new MigrationTestDirectory();
 		var text = NginxConfiguratorTest.Configure(files,
-			"server=http://127.0.0.1:" + backend + "\n[api]\nhost=api.example.com\nbind!legacy=http://*,http://[::]\nnginx:ssl_session_cache=shared:SSL:1m\nnginx:ssl_session_timeout=10m\nnginx:ssl_ciphers=PROFILE=SYSTEM\nnginx:ssl_prefer_server_ciphers=on\n[port]\nhost=_\nbind!legacy=http://*:" + port + ",http://[::]:" + port)
+			"server=http://127.0.0.1:" + backend + "\n[api]\nhost=api.example.com\nbind!legacy=http://*,http://[::]\nnginx:ssl_session_cache=shared:SSL:1m\nnginx:ssl_session_timeout=10m\nnginx:ssl_ciphers=PROFILE=SYSTEM\nnginx:ssl_prefer_server_ciphers=on\n[port]\nbind!legacy=http://*:" + port + ",http://[::]:" + port)
 			.Files[0].Content.Render("/opt/app");
 		Assert.Equal(2, text.Split("server {").Length - 1);
 		Assert.Equal(2, text.Split("proxy_pass http://127.0.0.1:" + backend + ";").Length - 1);

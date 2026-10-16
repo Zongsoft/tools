@@ -1,4 +1,4 @@
-﻿/*
+/*
  *   _____                                ______
  *  /_   /  ____  ____  ____  _________  / __/ /_
  *    / /  / __ \/ __ \/ __ \/ ___/ __ \/ /_/ __/
@@ -47,6 +47,8 @@ partial class Generator
 	#region 公共方法
 	public static void Deb(this Package package, string output, bool overwrite)
 	{
+		package.Entries.SetBindings(package.Bindings);
+
 		using var publisher = new ArtifactPublisher(output, overwrite, package.FileName);
 		using(var stream = new FileStream(publisher.StagePath(package.FileName), FileMode.CreateNew, FileAccess.Write))
 		{
@@ -82,7 +84,6 @@ partial class Generator
 		AppendDebField(builder, "Homepage", package.Homepage);
 		AppendDebField(builder, "License", package.License);
 		AppendDebField(builder, "InstallPath", package.InstallPath);
-		AppendDebField(builder, "Listen", package.Listen);
 
 		if(package is Package.Deb deb)
 		{

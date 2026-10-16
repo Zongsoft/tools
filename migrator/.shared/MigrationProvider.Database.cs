@@ -90,52 +90,89 @@ partial class MigrationProvider
 			this.Validate(parameters, runtime);
 			parameters.TryAdd("CommandTimeout", "300s");
 
-			if(this.Name is not ("sqlite" or "duckdb"))
+			PrepareConnection();
+			PrepareOptions();
+			PrepareUsers();
+
+			void PrepareConnection()
 			{
-				parameters.TryAdd("UserName", this.Name switch { "mssql" => "sa", "postgres" => "postgres", _ => "root" });
-				parameters.TryAdd("Port", this.Name switch { "mssql" => "1433", "postgres" => "5432", "mysql" => "3306", _ => "6041" });
-				parameters["Port"] = ushort.Parse(parameters["Port"], CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture);
-				parameters.TryAdd("Timeout", "30s");
-				parameters.TryAdd("Bootstrap", this.Name switch { "mssql" => "master", "postgres" => "postgres", "mysql" => "mysql", _ => "" });
-
-				this.Require(parameters, "UserName");
-
-				if(this.Name == "mssql")
+				if(this.Name is not ("sqlite" or "duckdb"))
 				{
-					parameters.TryAdd("Secured", "true");
-					parameters.TryAdd("TrustServerCertificate", "false");
+					parameters.TryAdd("UserName", this.Name switch { "mssql" => "sa", "postgres" => "postgres", _ => "root" });
+					parameters.TryAdd("Port", this.Name switch { "mssql" => "1433", "postgres" => "5432", "mysql" => "3306", _ => "6041" });
+					parameters["Port"] = ushort.Parse(parameters["Port"], CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture);
+					parameters.TryAdd("Timeout", "30s");
+					parameters.TryAdd("Bootstrap", this.Name switch { "mssql" => "master", "postgres" => "postgres", "mysql" => "mysql", _ => "" });
+
+					this.Require(parameters, "UserName");
+
+					if(this.Name == "mssql")
+					{
+						parameters.TryAdd("Secured", "true");
+						parameters.TryAdd("TrustServerCertificate", "false");
+					}
+					else if(this.Name == "mysql")
+					{
+						parameters.TryAdd("Secured", "false");
+						parameters.TryAdd("AllowPublicKeyRetrieval", "true");
+					}
+					else if(this.Name == "tdengine")
+						parameters.TryAdd("Secured", "false");
 				}
-				else if(this.Name == "mysql")
-				{
-					parameters.TryAdd("Secured", "false");
-					parameters.TryAdd("AllowPublicKeyRetrieval", "true");
-				}
-				else if(this.Name == "tdengine")
-					parameters.TryAdd("Secured", "false");
 			}
 
-			string[] allowed = this.Name switch
+			void PrepareOptions()
 			{
-				"mysql" => ["CommandTimeout", "Charset", "Collation"],
-				"postgres" => ["CommandTimeout", "Charset", "Collation", "CType", "Template", "Timezone", "ConnectionLimit"],
-				"mssql" => ["CommandTimeout", "Collation"],
-				"tdengine" => ["CommandTimeout", "Precision", "Keep", "Duration", "Replica"],
-				"sqlite" => ["CommandTimeout", "Path", "Charset"],
-				_ => ["CommandTimeout", "Path"],
-			};
+				string[] allowed = this.Name switch
+				{
+					"mysql" => ["CommandTimeout", "Charset", "Collation"],
+					"postgres" => ["CommandTimeout", "Charset", "Collation", "CType", "Template", "Timezone", "ConnectionLimit"],
+					"mssql" => ["CommandTimeout", "Collation"],
+					"tdengine" => ["CommandTimeout", "Precision", "Keep", "Duration", "Replica"],
+					"sqlite" => ["CommandTimeout", "Path", "Charset"],
+					_ => ["CommandTimeout", "Path"],
+				};
 
-			foreach(var option in options)
-			{
-				if(!allowed.Contains(option.Key, StringComparer.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(option.Value) || option.Value.Contains('\0'))
-					throw Invalid(option.Key);
-			}
+				foreach(var option in options)
+				{
+					if(!allowed.Contains(option.Key, StringComparer.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(option.Value) || option.Value.Contains('\0'))
+						throw Invalid(option.Key);
+				}
 
-			options.TryAdd("CommandTimeout", parameters.Get("CommandTimeout"));
-			options.Seconds("CommandTimeout", 300);
+				options.TryAdd("CommandTimeout", parameters.Get("CommandTimeout"));
+				options.Seconds("CommandTimeout", 300);
 
-			switch(this.Name)
-			{
-				case "mysql":
+				switch(this.Name)
+				{
+					case "mysql":
+						PrepareMySql();
+						break;
+					case "postgres":
+						PreparePostgres();
+						break;
+					case "tdengine":
+						PrepareTimeSeries();
+						break;
+					case "sqlite":
+						options.TryAdd("Charset", "UTF-8");
+						options["Charset"] = options["Charset"].ToUpperInvariant() switch
+						{
+							"UTF-8" => "UTF-8",
+							"UTF-16LE" => "UTF-16le",
+							"UTF-16BE" => "UTF-16be",
+							_ => throw Invalid("Charset"),
+						};
+
+						goto case "duckdb";
+					case "duckdb":
+						if(!MigrationRuntime.IsDatabasePath(options.Get("Path"), runtime) || database.Users.Count > 0)
+							throw Invalid(database.Users.Count > 0 ? "Users" : "Path");
+
+						break;
+				}
+
+				void PrepareMySql()
+				{
 					if(!options.ContainsKey("Charset") && !options.ContainsKey("Collation"))
 					{
 						options.Add("Charset", "utf8mb4");
@@ -149,17 +186,20 @@ partial class MigrationProvider
 						if(options.TryGetValue(key, out var value) && !Regex.IsMatch(value, @"^[a-zA-Z0-9_]+$"))
 							throw Invalid(key);
 					}
-					break;
-				case "postgres":
+				}
+
+				void PreparePostgres()
+				{
 					options.TryAdd("Charset", "UTF8");
 					options.TryAdd("Template", "template0");
 					options.TryAdd("ConnectionLimit", "-1");
 
 					if(!int.TryParse(options["ConnectionLimit"], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var limit) || limit != -1 && limit <= 0)
 						throw Invalid("ConnectionLimit");
+				}
 
-					break;
-				case "tdengine":
+				void PrepareTimeSeries()
+				{
 					options.TryAdd("Precision", "ms");
 					options["Precision"] = options["Precision"].ToLowerInvariant();
 
@@ -177,55 +217,41 @@ partial class MigrationProvider
 
 					if(options["Replica"] is not ("1" or "3"))
 						throw Invalid("Replica");
-
-					break;
-				case "sqlite":
-					options.TryAdd("Charset", "UTF-8");
-					options["Charset"] = options["Charset"].ToUpperInvariant() switch
-					{
-						"UTF-8" => "UTF-8",
-						"UTF-16LE" => "UTF-16le",
-						"UTF-16BE" => "UTF-16be",
-						_ => throw Invalid("Charset"),
-					};
-
-					goto case "duckdb";
-				case "duckdb":
-					if(!MigrationRuntime.IsDatabasePath(options.Get("Path"), runtime) || database.Users.Count > 0)
-						throw Invalid(database.Users.Count > 0 ? "Users" : "Path");
-
-					break;
+				}
 			}
 
-			var users = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-			foreach(var user in database.Users)
+			void PrepareUsers()
 			{
-				if(user == null || !Identifier(user.Name) || string.IsNullOrWhiteSpace(user.Password) || user.Password.Contains('\0') ||
-					user.Privileges == null || user.Roles == null || !users.Add(user.Name))
-					throw Invalid("Users");
+				var users = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-				user.Permission = user.Permission?.ToLowerInvariant();
-				if(user.Permission is not ("none" or "readonly" or "readwrite" or "admin"))
-					throw Invalid("Permission");
-
-				if(this.Name == "mysql")
+				foreach(var user in database.Users)
 				{
-					user.Host ??= "%";
-					if(!Identifier(user.Host))
+					if(user == null || !Identifier(user.Name) || string.IsNullOrWhiteSpace(user.Password) || user.Password.Contains('\0') ||
+						user.Privileges == null || user.Roles == null || !users.Add(user.Name))
+						throw Invalid("Users");
+
+					user.Permission = user.Permission?.ToLowerInvariant();
+					if(user.Permission is not ("none" or "readonly" or "readwrite" or "admin"))
+						throw Invalid("Permission");
+
+					if(this.Name == "mysql")
+					{
+						user.Host ??= "%";
+						if(!Identifier(user.Host))
+							throw Invalid("Host");
+
+					}
+					else if(user.Host != null)
 						throw Invalid("Host");
 
-				}
-				else if(user.Host != null)
-					throw Invalid("Host");
+					foreach(var role in user.Roles)
+					{
+						if(!Identifier(role))
+							throw Invalid("Roles");
+					}
 
-				foreach(var role in user.Roles)
-				{
-					if(!Identifier(role))
-						throw Invalid("Roles");
+					MigrationPrivileges.Validate(database, user);
 				}
-
-				MigrationPrivileges.Validate(database, user);
 			}
 		}
 		#endregion

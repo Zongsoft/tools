@@ -65,34 +65,8 @@ partial class MigrationLoader
 
 			for(var i = 0; i < sql.Length;)
 			{
-				if(lineStart && quote == '\0' && block == 0 && !lineComment)
-				{
-					var end = sql.IndexOf('\n', i);
-					if(end < 0)
-						end = sql.Length;
-
-					var line = sql[i..end].Trim();
-					if(provider == "mssql" && Regex.IsMatch(line, @"^GO(?:\s*--.*)?$", RegexOptions.IgnoreCase))
-					{
-						Flush();
-						i = Math.Min(end + 1, sql.Length);
-						continue;
-					}
-
-					if(provider == "mysql" && Regex.IsMatch(line, @"^DELIMITER(?:\s|$)", RegexOptions.IgnoreCase))
-					{
-						delimiter = line[9..].Trim();
-						if(delimiter.Length == 0 || delimiter.Any(char.IsWhiteSpace))
-							throw new InvalidDataException(Properties.Resources.MySqlDelimiterInvalid_Message);
-
-						buffer.Append(sql.AsSpan(i, end - i).EndsWith("\r") ? "\r\n" : "\n");
-						i = Math.Min(end + 1, sql.Length);
-						continue;
-					}
-
-					if(provider == "mssql" && Regex.IsMatch(line, @"^GO\s+\d+\b", RegexOptions.IgnoreCase))
-						throw new InvalidDataException(Properties.Resources.SqlServerGoRepeatUnsupported_Message);
-				}
+				if(lineStart && quote == '\0' && block == 0 && !lineComment && ReadDirective(ref i))
+					continue;
 
 				var c = sql[i];
 				var next = i + 1 < sql.Length ? sql[i + 1] : '\0';
@@ -111,46 +85,13 @@ partial class MigrationLoader
 
 				if(block > 0)
 				{
-					buffer.Append(c);
-					i++;
-
-					if(c == '/' && next == '*' && provider != "mysql")
-					{
-						block++;
-						buffer.Append(next);
-						i++;
-					}
-					else if(c == '*' && next == '/')
-					{
-						block--;
-						buffer.Append(next);
-						i++;
-					}
-
+					ReadComment(c, next, ref i);
 					continue;
 				}
 
 				if(quote != '\0')
 				{
-					buffer.Append(c);
-					i++;
-
-					if(c == '\\' && escapeQuote && next != '\0')
-					{
-						buffer.Append(next);
-						i++;
-					}
-					else if(c == quote)
-					{
-						if(next == quote)
-						{
-							buffer.Append(next);
-							i++;
-						}
-						else
-							quote = '\0';
-					}
-
+					ReadQuoted(c, next, ref i);
 					continue;
 				}
 
@@ -199,6 +140,78 @@ partial class MigrationLoader
 
 			Flush();
 			return batches;
+
+			bool ReadDirective(ref int index)
+			{
+				var end = sql.IndexOf('\n', index);
+				if(end < 0)
+					end = sql.Length;
+
+				var line = sql[index..end].Trim();
+				if(provider == "mssql" && Regex.IsMatch(line, @"^GO(?:\s*--.*)?$", RegexOptions.IgnoreCase))
+				{
+					Flush();
+					index = Math.Min(end + 1, sql.Length);
+					return true;
+				}
+
+				if(provider == "mysql" && Regex.IsMatch(line, @"^DELIMITER(?:\s|$)", RegexOptions.IgnoreCase))
+				{
+					delimiter = line[9..].Trim();
+					if(delimiter.Length == 0 || delimiter.Any(char.IsWhiteSpace))
+						throw new InvalidDataException(Properties.Resources.MySqlDelimiterInvalid_Message);
+
+					buffer.Append(sql.AsSpan(index, end - index).EndsWith("\r") ? "\r\n" : "\n");
+					index = Math.Min(end + 1, sql.Length);
+					return true;
+				}
+
+				if(provider == "mssql" && Regex.IsMatch(line, @"^GO\s+\d+\b", RegexOptions.IgnoreCase))
+					throw new InvalidDataException(Properties.Resources.SqlServerGoRepeatUnsupported_Message);
+
+				return false;
+			}
+
+			void ReadComment(char c, char next, ref int index)
+			{
+				buffer.Append(c);
+				index++;
+
+				if(c == '/' && next == '*' && provider != "mysql")
+				{
+					block++;
+					buffer.Append(next);
+					index++;
+				}
+				else if(c == '*' && next == '/')
+				{
+					block--;
+					buffer.Append(next);
+					index++;
+				}
+			}
+
+			void ReadQuoted(char c, char next, ref int index)
+			{
+				buffer.Append(c);
+				index++;
+
+				if(c == '\\' && escapeQuote && next != '\0')
+				{
+					buffer.Append(next);
+					index++;
+				}
+				else if(c == quote)
+				{
+					if(next == quote)
+					{
+						buffer.Append(next);
+						index++;
+					}
+					else
+						quote = '\0';
+				}
+			}
 
 			void Flush()
 			{

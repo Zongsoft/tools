@@ -55,7 +55,7 @@ internal sealed partial class DockerHost(InstallationStore store, IProcessRunner
 	#endregion
 
 	#region 公共方法
-	public async Task VerifyTargetAsync(DeliveryBundle bundle, Installation installation, CancellationToken cancellation)
+	public async Task VerifyTargetAsync(ContainerBundle bundle, Installation installation, CancellationToken cancellation)
 	{
 		if(!OperatingSystem.IsLinux())
 			throw new ContainerizationException(3, Properties.Resources.DockerHost_1_Message);
@@ -90,7 +90,7 @@ internal sealed partial class DockerHost(InstallationStore store, IProcessRunner
 		}
 	}
 
-	public async Task<int> RunMigrationAsync(DeliveryBundle bundle, MigrationPlan migration, string stateDirectory, string operation, string logPath, CancellationToken cancellation)
+	public async Task<int> RunMigrationAsync(ContainerBundle bundle, ContainerBundlePlan.Migration migration, string stateDirectory, string operation, string logPath, CancellationToken cancellation)
 	{
 		Files.CreatePrivateDirectory(stateDirectory);
 		var result = await runner.RunAsync("sh", [Files.ResolveRelativePath(bundle.Directory, migration.Script), operation, stateDirectory], bundle.Directory, cancellation, 3600);
@@ -105,11 +105,11 @@ internal sealed partial class DockerHost(InstallationStore store, IProcessRunner
 	#endregion
 
 	#region 私有方法
-	private IEnumerable<DeliveryPlan> ReadReleasePlans(Installation installation)
+	private IEnumerable<ContainerBundlePlan> ReadReleasePlans(Installation installation)
 	{
 		foreach(var release in installation.Releases)
 		{
-			using var bundle = DeliveryBundle.Open(Path.Combine(store.GetApplicationPath(installation.Name), "releases", release, "assets"));
+			using var bundle = ContainerBundle.Open(Path.Combine(store.GetApplicationPath(installation.Name), "releases", release, "assets"));
 			yield return bundle.Plan;
 		}
 	}

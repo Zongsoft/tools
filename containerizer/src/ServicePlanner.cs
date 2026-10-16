@@ -108,7 +108,7 @@ internal static class ServicePlanner
 		var ports = sources.SelectMany(source => source.Plan.Ports).Where(port => port.Host > 0).ToArray();
 		for(int index = 0; index < ports.Length; index++)
 		{
-			if(ports.Skip(index + 1).Any(port => HasPortConflict(ports[index], port)))
+			if(ports.Skip(index + 1).Any(port => ServicePlan.PortMapping.Conflicts(ports[index], port)))
 				throw new ContainerizationException(2, Properties.Resources.NodeBuilder_7_Message);
 		}
 
@@ -133,11 +133,5 @@ internal static class ServicePlanner
 
 		static int GetRank(string kind) => kind == "infrastructure" ? 0 : kind == "application" ? 1 : 2;
 	}
-	#endregion
-
-	#region 私有方法
-	private static bool HasPortConflict(PortPlan left, PortPlan right) =>
-		left.Host == right.Host && left.Protocol == right.Protocol &&
-		(left.Address == right.Address || left.Address is "0.0.0.0" or "::" || right.Address is "0.0.0.0" or "::");
 	#endregion
 }

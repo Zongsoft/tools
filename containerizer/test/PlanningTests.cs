@@ -23,7 +23,7 @@ public sealed class PlanningTests : IDisposable
 	{
 		this.Write(".settings", "[redis]\ntag=8.4\nsettings=storage=temporary;password=${cache_password}\n");
 		var manifest = this.Create("redis", "rustfs");
-		var path = new DeliveryBuilder(new RejectRunner()).Plan(manifest);
+		var path = new ContainerBundleBuilder(new RejectRunner()).Plan(manifest);
 		var draft = ContainerManifest.Read(path);
 
 		Assert.Equal("plan", draft["stage"]);
@@ -47,7 +47,7 @@ public sealed class PlanningTests : IDisposable
 			arguments.Add("--imaging:" + option);
 
 		var manifest = ManifestFactory.Create(CreateContext([.. arguments]), planning: true);
-		var path = new DeliveryBuilder(new RejectRunner()).Plan(manifest);
+		var path = new ContainerBundleBuilder(new RejectRunner()).Plan(manifest);
 		var make = ManifestFactory.Create(CreateContext(path), make: true);
 
 		Assert.Equal(expected, make["imaging"]);
@@ -59,7 +59,7 @@ public sealed class PlanningTests : IDisposable
 	public void RefreshIsAnExecutionOptionAndIsNeverWrittenToTheManifest()
 	{
 		var manifest = this.Create("redis", "--refresh");
-		var path = new DeliveryBuilder(new RejectRunner(), refresh: true).Plan(manifest);
+		var path = new ContainerBundleBuilder(new RejectRunner(), refresh: true).Plan(manifest);
 		var context = CreateContext(path, "--refresh");
 
 		Assert.True(context.Options.Switch("refresh"));
@@ -76,7 +76,7 @@ public sealed class PlanningTests : IDisposable
 		manifest.Components[0]["settings"] = "mode=standalone";
 		manifest.Components[0]["imaging"] = "online";
 
-		var path = new DeliveryBuilder(new RejectRunner()).Plan(manifest);
+		var path = new ContainerBundleBuilder(new RejectRunner()).Plan(manifest);
 		var component = Assert.Single(ContainerManifest.Read(path).Components);
 
 		Assert.Equal("standalone", component.Settings["mode"]);
@@ -91,7 +91,7 @@ public sealed class PlanningTests : IDisposable
 	{
 		var manifest = this.Create("redis");
 		manifest["architecture"] = architecture;
-		var path = new DeliveryBuilder(new RejectRunner()).Plan(manifest);
+		var path = new ContainerBundleBuilder(new RejectRunner()).Plan(manifest);
 		var draft = ContainerManifest.Read(path);
 
 		Assert.Equal(architecture, draft["architecture"]);
@@ -138,7 +138,7 @@ public sealed class PlanningTests : IDisposable
 	public void MakeUsesEditedDraftAndResolvesValuesAfterSplittingSettings()
 	{
 		this.Write(".settings", "[redis]\ntag=8.4\nsettings=password=shared;storage=persistent\n");
-		var path = new DeliveryBuilder(new RejectRunner()).Plan(this.Create("redis"));
+		var path = new ContainerBundleBuilder(new RejectRunner()).Plan(this.Create("redis"));
 		var text = File.ReadAllText(path);
 		text = text.Replace("password=shared", "password=${test_password}", StringComparison.Ordinal);
 		File.WriteAllText(path, text);
@@ -261,7 +261,7 @@ public sealed class PlanningTests : IDisposable
 
 		source.Plan.Image.Reference = "example";
 		source.Plan.Image.Platform = "linux/amd64";
-		ComposeWriter.Write(new DeliveryPlan { Project = "example" }, [source], _root);
+		ComposeWriter.Write(new ContainerBundlePlan { Project = "example" }, [source], _root);
 		using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(_root, "compose.yaml")));
 		var service = json.RootElement.GetProperty("services").GetProperty("redis");
 
@@ -311,7 +311,7 @@ public sealed class PlanningTests : IDisposable
 
 		var original = File.ReadAllBytes(manifest.ManifestPath);
 		var clone = ManifestFactory.Create(CreateContext(manifest.ManifestPath, "--version:2.0"), planning: true);
-		var path = new DeliveryBuilder(new RejectRunner()).Plan(clone);
+		var path = new ContainerBundleBuilder(new RejectRunner()).Plan(clone);
 		var remake = ManifestFactory.Create(CreateContext(path));
 		var source = Assert.Single(ServicePlanner.Prepare(remake));
 
@@ -403,7 +403,7 @@ public sealed class PlanningTests : IDisposable
 		{
 			var manifest = this.Create("redis");
 			manifest.Components[0]["settings"] = settings;
-			Assert.Throws<ContainerizationException>(() => new DeliveryBuilder(new RejectRunner()).Plan(manifest));
+			Assert.Throws<ContainerizationException>(() => new ContainerBundleBuilder(new RejectRunner()).Plan(manifest));
 		}
 	}
 

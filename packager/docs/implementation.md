@@ -41,7 +41,7 @@ The main design choices are:
 | `Generator.Deb.cs` | Write the Debian `ar` container, `control.tar.gz`, and `data.tar.gz`. |
 | `Generator.Rpm.cs` | Write the RPM lead, signature/header, metadata header, and gzip cpio payload. |
 | `Migration.cs` | Locate external migration artifacts by final application identity, validate PAX metadata, attach unchanged files, and provide installation coordination scripts. |
-| `ApplicationHost.cs` | Resolve the application host, service and final listen once, shared by systemd generation and Web ~. |
+| `ApplicationHost.cs` | Resolve the application host and existing or generated service once. |
 | `Scriptor.Systemd.cs` | Generate/collect systemd units and compose application, migration and Web lifecycle scripts. |
 | `Web/Definition*.cs` | Collect [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Profile declarations and resolve replacement, inheritance, variables and validation. |
 | `Web/Configurator*.cs` | Configurator contract, Nginx directive model/validation, deterministic serialization and relocatable content. |
@@ -75,7 +75,7 @@ flowchart TD
     D --> E["Normalize source/output paths"]
     E --> F["Create Package.Tar/Deb/Rpm"]
     F --> M["Locate and validate optional migration artifacts"]
-    M --> G["Resolve application host and final listen"]
+    M --> G["Resolve application host"]
     G --> H["Load ordinary package entries"]
     H --> N["Attach unchanged migration archive and launcher"]
     N --> W["Load Web Profile, generate and attach hoster configuration"]
@@ -152,7 +152,6 @@ Systemd and lifecycle options:
 
 | Option | Description |
 | --- | --- |
-| `--listen` | Bind address passed to `--urls` in generated services; a numeric value becomes `http://127.0.0.1:<port>`. |
 | `--daemon` | Systemd unit filename/identity; `none`, `disable`, and `disabled` disable it. |
 | `--daemon-environments` | Comma- or semicolon-separated variable names written into the generated service. |
 | `--installing` / `--installed` | Before/after installation scripts. |
@@ -202,7 +201,6 @@ export APP_NAME=Zongsoft.Hosting.Web
 export APP_VERSION=1.0.0
 
 dotnet-pack deb \
-  --listen:8069 \
   --daemon:zongsoft.web \
   --name:"$APP_NAME" \
   --version:"$APP_VERSION" \
@@ -461,19 +459,7 @@ Environment=DOTNET_NOLOGO=true
 WantedBy=multi-user.target
 ```
 
-`PackageOptions.Listen` supplies the bind value. Multiple complete URLs separated by semicolons are retained as one `--urls` value. HTTP and HTTPS can be combined; the host configures the default HTTPS server certificate. Omitting the option adds no `--urls`; an existing service's ExecStart is not rewritten.
-
-A nonempty `--listen` produces:
-
-```ini
-ExecStart=dotnet <install-path>/<host> --urls <bind>
-```
-
-A numeric bind value becomes:
-
-```text
-http://127.0.0.1:<port>
-```
+Listeners come from application runtime configuration. Service generation does not append --urls, and existing ExecStart commands remain intact.
 
 ### Lifecycle scripts
 
@@ -510,9 +496,9 @@ Definition.cs provides the Load/Resolve entry points. Definition.Loader.cs colle
 
 Loading uses [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Profile.Load with Directives = { ProfileDirectiveOptions.Import(ProfileDirectiveBehavior.Strict) }. Loading collects the referer before merging; Loaded collects every completed source, including the root. Both retain Profile instance identity. Backend pools replace whole groups by input instance rather than enumerating all final merged entries. Structure is validated first, selected-hoster overrides next, and only consumed values are expanded. Directive arguments and consumed values use the shared Core template evaluator and its escaping rules.
 
-Resolver produces immutable site, route and policy records. Nginx builds a directive tree, validates native context/cardinality, static listener conflicts and regex proxy_pass, then emits UTF-8, Tab and CRLF. Installation-root references are typed ContentPart values, not text placeholders that can collide with input. Common literal values never silently become runtime expressions; unrepresentable values fail.
+Resolver produces immutable site, route and policy records. Routing combines application declarations by request kind and literal base path, selects an implementable upstream and keeps actual listeners separate from connection targets. Nginx builds a directive tree, validates native context/cardinality, static listener conflicts and structured binding relationships, then emits UTF-8, Tab and CRLF. Installation-root references are typed ContentPart values, not text placeholders that can collide with input. Common literal values never silently become runtime expressions; unrepresentable values fail.
 
-ApplicationHost resolves once before ordinary payload collection, sharing final listen with service generation and ~. Generated entries use Entry.OpenRead. Installation.Validate/ValidateEntry check normalized destination conflicts, aliases and ancestor/descendant paths in either insertion order. Failed publication does not save source versions; Profile input is never saved.
+ApplicationHost resolves the host and service once before ordinary payload collection. Generated entries use Entry.OpenRead. Installation.Validate/ValidateEntry check normalized destination conflicts, aliases and ancestor/descendant paths in either insertion order. Failed publication does not save source versions; Profile input is never saved.
 
 Package.InstallScripts.Delivered is separate from the four lifecycle phases. Tar runs it after payload copying and before the DESTDIR-gated Installed stage. Debian runs Delivered/Installed only in postinst configure; RPM runs them in %post. Generated .conf files are replaceable payloads without DEB conffile or RPM config flags.
 
@@ -525,7 +511,7 @@ Phase composition:
 
 HOSTER_WEB_ACTIVATION is read at installation time. Activation targets default nginx.conf/nginx.service; nginx -T confirms inclusion. Stopped services are validated without starting; running services reload. Installation failures propagate. During ordinary removal, Nginx errors warn and continue, while file-operation failures still fail. Disabled activation never suppresses payload delivery, obsolete-file pruning or final removal.
 
-Cleanup fragments are also generated when the new package has no Web result, so omitting --web can remove obsolete sites. Nginx is called only when current or old Web artifacts are involved. The .web layout itself is the container discovery contract, with no .hoster or extra templates.
+Cleanup fragments are also generated when the new package has no Web result, so omitting --web can remove obsolete sites. Nginx is called only when current or old Web artifacts are involved. The .web layout itself is the container discovery contract, with .conf.template companions and no .hoster.
 
 Tests cover declarations/models, native output, actual three-format archive decoding and isolated Shell doubles. Shell fixtures replace system paths with temporary directories and use fake nginx/systemctl commands, without installing packages or touching real services. On Windows, `PACKAGER_TEST_GIT`, PATH, Git installation records, and common installation locations select Bash and cygpath from the same installation. The fixture sets `MSYS=winsymlinks:nativestrict` and converts Windows paths through `cygpath -u`, so mount aliases such as `/tmp` agree with resolved link targets. A temporary-directory probe checks required utilities and symbolic-link support before running shell tests; unsupported environments are reported as skipped rather than blocking the build or release. After that probe succeeds, script failures and assertion failures still fail tests. Regression tests cover mount mappings with spaces, portable installations, incomplete tool pairs, and unavailable tools. These tests do not establish real installation validation; target Linux, Nginx modules, certificate loading, and reload behavior require an isolated environment with actual dependencies. See the [Web configuration guide](web.md) for configuration contracts, module requirements, and deployment behavior.
 
@@ -539,9 +525,21 @@ Tar writes manufacturer as the PAX global attribute `Manufacturer`, Debian write
 
 The complete field mapping is in [README application metadata](../README.md#application-metadata). `Generator.GetSummary` chooses the first nonblank Summary, Title, or application Name; `GetDescription` uses a nonblank Description or that effective summary. All three generators use these helpers. Debian combines a normalized one-line synopsis with independent long-description continuation lines, preserving internal indentation and encoding blank lines as ` .`; if both texts are identical, only the synopsis is written. Tar escapes its two text values, while RPM retains literal text. Blank License and Homepage values are omitted in every format. Debian's required Maintainer fallback (`Unknown`) and native category defaults (`utils` / `Applications/System`) remain format-specific.
 
-Debian adds `PackageSize` in invariant-culture bytes alongside its native KiB `Installed-Size`, and adds `InstallPath`. RPM adds the nonblank installation path as application string tag `1000002`, retaining deprecated tag `1056` for existing readers. The application tag is informational: adding `PREFIXES` would advertise relocation support that the lifecycle scripts do not provide. Modern RPM query formats do not expose unregistered application tags or the deprecated `DEFAULTPREFIX` name; readers must inspect the numeric header entries.
+Debian adds `PackageSize` in invariant-culture bytes alongside its native KiB `Installed-Size`, and adds `InstallPath`. RPM adds the nonblank installation path as application string tag `1000003`, retaining deprecated tag `1056` for existing readers. The application tag is informational: adding `PREFIXES` would advertise relocation support that the lifecycle scripts do not provide. Modern RPM query formats do not expose unregistered application tags or the deprecated `DEFAULTPREFIX` name; readers must inspect the numeric header entries.
 
-The effective application listener comes from the same `ApplicationHost` result used by service generation. `Package.Listen` exposes it only for a generated host. The generators omit absent/empty listeners, and hosts using an existing service or disabled daemon never advertise an ignored `--listen` value. Tar stores `Listen` in its PAX global attributes, Debian adds a control `Listen` field, and RPM stores a single string in application tag `1000001`. This tag is the Zongsoft package contract, not an upstream registered RPM tag; it stays outside the standard tag numbers ([upstream tag definitions](https://github.com/rpm-software-management/rpm/blob/master/include/rpm/rpmtag.h)). The RPM header digest covers it. No extra installed metadata file or payload entry is generated. `ListenerMetadataTest` checks all three formats, variable expansion, port normalization, service/metadata consistency and omission for unused settings.
+The shared BindingDocument model produces JSON .bindings in the installation root. Each generator calls EntryCollection.SetBindings before publication, adding a regular file with mode 0644 and epoch time to size totals and file lists. Containerizer locates and validates it under the installation root. Limits are 1 MiB of logical UTF-8 and depth 32; duplicate entries and links fail. See the [format specification](#binding-document) for the contract and implementation boundaries. PackCommand invokes BindingExtractor for application bindings; Web/Routing composes sites from application declarations, and the Nginx generator adds effective frontend bindings, request-kind routes, targets and policy to the same document.
+
+### Application binding extraction
+
+BindingExtractor runs after selection, exclusions, target mapping and generated entries, before artifact publication and source version saving. PackageFiles maps relative tar entries under InstallPath and deb/rpm or rooted entries to their final absolute installation paths, providing the same virtual root for all formats. Only final payload entries are exposed. PhysicalPath is null and BufferedStream wraps each entry stream so Core does not reinterpret FileStream as a physical source. PackageFiles is limited to virtual file access.
+
+The private ProcessInstruction callback in [BindingExtractor.Configuration.cs](../src/BindingExtractor.Configuration.cs) marks zongsoft.tools.binding instructions as handled and rewrites Import / paths to equivalent relative paths. It shares the private NormalizePath helper with PackageFiles; Core still owns scope, overrides, optional missing files, cycles and depth. Binding values are evaluated after loading, outside this callback, without registering a global Core instruction processor.
+
+Each final .option loads independently. After imports finish, extraction reads the provider's Instructions. An exact path selects one item; a terminal /* selects direct children. filter runs before template/protocols. ConfigurationView uses Core TemplateEvaluator's Resolving callback and MemberExpression for explicit option navigation. String paths are relative to the candidate unless prefixed with /, which starts at this configuration root. Only an explicit string index on a selected field parses Settings; TryGetValue distinguishes missing and empty values. The evaluator has no environment/command sources, recursion or fallback.
+
+Shared FilterExpression handles condition splitting, negation, candidate matching and left-to-right combination; deployer retains variable lookup and TFM comparison. separators splits the evaluated address text; commas split protocols. Core network values and BindingDocument normalize the results. Candidates are grouped by base path and protocol set, then groups sharing endpoints merge transitively. Disjoint endpoints or different paths/capabilities stay separate. required is checked per declaration before global deduplication. Invalid addresses and selected-field failures cannot become an empty result. Source information is diagnostic only and does not enter JSON or identity content.
+
+For example, ./shared.option imported by /opt/demo/web.option resolves to final /opt/demo/shared.option. An explicit /opt/demo/shared.option selects the same entry, while /shared.option selects a different location at the virtual root. A shared.option containing its own binding is also loaded independently; only equivalent results merge, without skipping declarations by PI text or filename. See [extraction examples](#binding-document) for inputs, provenance and failures.
 
 Each package records the generator identity, logically `Packager:Zongsoft.Tools.Packager@<assembly-version>`. The value is `assembly-name@version`, read from the packager assembly independently of the host application version. No additional option or migration configuration is required.
 
@@ -595,13 +593,13 @@ install.sh
 uninstall.sh
 ```
 
-A PAX global extended record starts the archive; it is not an installed file. `GetTarMetadata` writes `Packager`, `PackageName`, `Version`, `Manufacturer`, `Architecture`, `Summary`, `Description`, and `PackageSize`. Nonblank `License`, `Homepage`, `Maintainer`, `InstallPath`, `Listen`, `Dependencies`, and `Category` values are also written. No `BuildTime` attribute is written.
+A PAX global extended record starts the archive; it is not an installed file. `GetTarMetadata` writes `Packager`, `PackageName`, `Version`, `Manufacturer`, `Architecture`, `Summary`, `Description`, and `PackageSize`. Nonblank `License`, `Homepage`, `Maintainer`, `InstallPath`, `Dependencies`, and `Category` values are also written. No `BuildTime` attribute is written.
 
 `PackageName` uses `package.PackageName`, preserving the final system package name determined by the daemon identity and Edition; it does not use the application identity or archive filename. `Version` uses the full `package.Version.ToString()` and matches the generated `.version`. `Architecture` uses `package.Architecture.ToString().ToLowerInvariant()`, matching the filename's architecture value (for example `x64`, `arm64`, `x86`, or `arm`). All values remain readable after the archive is renamed, without additional options or payload entries.
 
 `Summary` selects the first nonblank value from Summary, Title, and application Name; a blank Description falls back to the effective summary. Since the .NET PAX writer rejects literal line breaks in values, both fields escape backslashes, CR, and LF as `\\`, `\r`, and `\n`. Readers decode these sequences to restore the original text; Unicode remains literal. Optional blank values are omitted; the existing Manufacturer whitespace behavior remains unchanged. `Category` uses only the package value, without a format-specific default. `InstallPath` describes the default path and does not change installation-time overrides.
 
-`Dependencies` uses `Dependency.Split` and `Dependency.Parse` to validate the shared input grammar, then joins required groups with `; ` while preserving ranges, native version endpoints, and alternatives. It is metadata only; the tar installer does not check or install dependencies. Invalid declarations fail before artifact publication. `PackageSize` uses `Package.GetPackageSize()` formatted with invariant culture: payload bytes, including generated entries and rooted files, excluding container headers and the tar install/uninstall scripts. Directories contribute zero; an empty payload records `0`. This is not filesystem disk usage.
+`Dependencies` uses `Dependency.Split` and `Dependency.Parse` to validate the shared input grammar, then joins required groups with `; ` while preserving ranges, native version endpoints, and alternatives. It is metadata only; the tar installer does not check or install dependencies. Invalid declarations fail before artifact publication. `PackageSize` uses `Package.GetPackageSize()` formatted with invariant culture: payload bytes, including generated entries and rooted files, excluding container headers and the tar install/uninstall scripts. Directories contribute zero; the generated empty .bindings document contributes 38 bytes. This is not filesystem disk usage.
 
 Rooted files enter `.root/` only when root-path aliases exist. Lifecycle content is written into `install.sh` and `uninstall.sh`.
 
@@ -744,7 +742,6 @@ Manufacturer: <manufacturer>
 Homepage: <homepage>
 License: <license>
 InstallPath: <default-installation-path>
-Listen: <generated-host-listener>
 Depends: <dependencies>
 Description: <summary-or-title-or-name>
  <long-description-line>
@@ -758,7 +755,7 @@ Details:
 - The first `Description` line is the short description.
 - Every long-description line starts with one space.
 - Blank lines become ` .`.
-- `License`, `Manufacturer`, `Packager`, `PackageSize`, `InstallPath`, and `Listen` are additional fields. Optional blank fields are omitted; `PackageSize` always records exact payload bytes, including `0`. `Installed-Size` retains the rounded KiB estimate with a minimum of 1. `Packager`, application `Version`, and `Maintainer` hold distinct information.
+- `License`, `Manufacturer`, `Packager`, `PackageSize`, `InstallPath` are additional fields. Optional blank fields are omitted; `PackageSize` always records exact payload bytes, including the generated .bindings file. `Installed-Size` retains the rounded KiB estimate with a minimum of 1. `Packager`, application `Version`, and `Maintainer` hold distinct information.
 
 ### Debian architecture mapping
 
@@ -950,7 +947,7 @@ Common tags:
 | `1056` | Deprecated default installation path, retained for existing readers. |
 | `1064` | Generator identity, `assembly-name@version`. |
 | `1046` / `271` | Uncompressed cpio archive bytes, unsigned 32-bit / 64-bit. |
-| `1000001` / `1000002` | Application string tags: effective generated-host listener / default installation path. |
+| 1000003 | Application string tag: default installation path. Binding JSON is a regular payload file. |
 | `1116..1118` | File directory indexes, basenames, and directory names. |
 | `1124` | Payload format, fixed to `cpio`. |
 | `1125` | Payload compressor, fixed to `gzip`. |
@@ -1152,8 +1149,437 @@ rpm2cpio ./packages/zongsoft.web@1.0.0-x64.rpm | cpio -t
 - Linux Standard Base: [RPM Package File Format](https://refspecs.linuxfoundation.org/LSB_3.1.1/LSB-Core-generic/LSB-Core-generic/pkgformat.html)
 - GNU tar manual: [GNU tar](https://www.gnu.org/software/tar/manual/)
 
-Web packaging also emits .conf.template and, when fully representable, .bindings from the final hoster model. Lists in host/bind accept commas and semicolons; containerizer make renders the template and records frontend publication separately from application Listen. See [Web hosting](web.md).
+Web packaging emits .conf.template and records the complete final hoster relationships in the installation-root .bindings; unrepresentable configurations fail before publication. Lists in host/bind accept commas and semicolons; containerizer make renders the template and records frontend publication separately from application bindings. See [Web hosting](web.md).
 
 Terminal warnings use dark-yellow text with bold cyan parameters; errors use dark-red text with bold magenta parameters; success messages use green text. Exception types are highlighted in magenta and messages retain their original text. All four tools share the repository’s `.shared/Utility.Output.cs`: `FormatOutput` and `FormatError` construct Core `CommandOutletContent`; `WriteOutput` and `WriteError` route terminal and text-writer output; tools using the command executor call `HandleFailure` to display exceptions and mark them handled, while retaining their own exit codes. Terminals renders the colors. Redirected output and caller-provided error writers preserve plain text and their original streams.
 
 The help entry point matches standalone `--help`/`-h` before parsing business commands and uses shared `FormatHelp` and `HighlightSyntax`; it neither loads variable files nor enters file processing. Shared `MeasureOutput` measures elapsed time, using the tool’s localized `Output.Elapsed` resource and output callback, and emits once on first disposal. Business logic still determines exit codes and success or failure. Help also accepts a single help flag after `tar`/`deb`/`rpm`; all three formats share timing in `PackCommand`.
+
+<a id="binding-document"></a>
+
+## Binding document contract
+
+`.bindings` is the package's snapshot of declared application listeners, generated proxy listeners and site relationships. Packager produces it from final payload files and the final proxy model; Containerizer consumes it for connections and publication. It does not contain credentials, unevaluated templates, runtime configuration trees, host-port overrides or inferred health checks. An empty declaration set does not prove that application code opens no other listeners.
+
+The examples describe a fictional `demo` application. Their addresses, ports and resources are explicit example inputs, not discovered deployment defaults:
+
+| Source | Input | Use |
+| --- | --- | --- |
+| `web.option` | `http://*:8069`, `Http1`, alias `web` | Ordinary application HTTP at `/`. |
+| `telemetry.option` | `http://*:4317/opentelemetry`, `grpc+http2`, alias `telemetry` | The application's gRPC receiver region. |
+| `garnet.option` | `tcp://0.0.0.0:6379`, `tcp`, alias `garnet` | Direct TCP service, without an HTTP route. |
+| `web.profile`, site `api` | `https://*:8443`, `https://[::]:8443`, host `api.example.test` | Two addresses for the same Nginx ingress. |
+| Profile route `orders` | `https://192.0.2.20:9443/orders` | Explicit remote upstream; its port is not a local listener. |
+| Upstream settings | Host/TLS name `orders.example.test`, trust `file:/etc/demo/upstream-ca.pem` | Separate HTTP authority, certificate identity and target-environment CA resource. |
+
+For example, `path="Kestrel/Endpoints/http"`, `template="${option.Url}"`, `protocols="${option.Protocols}"`, `name="web"` read the configured URL and capability, add the full configuration-path alias and short alias, and produce the Web binding below. `required="true"` controls packaging diagnostics and is not a runtime switch. Moving the source file or changing its alias does not change listener identity.
+
+### 1. Root and validation
+
+The UTF-8 document has no BOM. Property names are case sensitive. All three root properties are required:
+
+```json
+{"version":1,"bindings":[],"sites":[]}
+```
+
+`version` is the format version, not an application or .NET version. `bindings` and `sites` are arrays and can be empty. Reject unknown versions/properties, duplicate JSON properties, missing required fields, explicit nulls and null array elements. Optional fields are omitted, never written as null. A missing or zero-byte file is invalid, unlike the valid 38-byte empty document above.
+
+Examples: `{"bindings":[],"sites":[]}` lacks a required version; `{"version":2,"bindings":[],"sites":[]}` uses an unsupported version; `{"version":1,"bindings":null,"sites":[]}` has an invalid collection. Repeating `version`, even with the same value, is also invalid.
+
+### 2. Bindings and endpoints
+
+| Object | Required fields | Rules |
+| --- | --- | --- |
+| Binding | `id`, `owner`, `aliases`, `endpoints` | Owner is `application` or `nginx`. Aliases can be empty. At least one endpoint; endpoints are alternative addresses of the same logical service. |
+| Endpoint | `id`, `scheme`, `host`, `port`, `path`, `protocols` | Port 1–65535. Preserve complete application protocol/carrier combinations. IPv6 hosts omit URL brackets. |
+
+Aliases are case insensitive, normalized to lowercase, deduplicated and sorted. Distinct bindings may share an alias; selection must resolve uniquely. A collection declaration adds its base name and `name/child-key` alongside the full configuration-path alias. Aliases and source locations are excluded from identities.
+
+Within one candidate, addresses with the same path and protocol set form an alternative group. Groups with common endpoints merge transitively: `{A,B}+{B,C}` becomes `{A,B,C}` and combines aliases. Disjoint groups remain separate, even if they share a port or path. Different capabilities are not silently combined. Alternative addresses do not create load-balancing instances.
+
+`HostType` and `Transports` are computed model properties, absent from JSON and identity inputs. `HostType` corresponds to Core `NetworkAddress.HostType` (`UriHostNameType`), rather than socket `AddressFamily`. `0.0.0.0` is IPv4, `::1` is IPv6, and `localhost` is DNS; packaging does not resolve DNS. IPv6 zones retain case in `host`, for example `fe80::1%eth0`; compute HostType from the address without the zone and reconstruct a URL as `[fe80::1%25eth0]`.
+
+| Input | Normalized content | Derived transport / reason |
+| --- | --- | --- |
+| `http://*:8069`, `Http1` | `http`, `0.0.0.0`, `8069`, `/`, `["http1"]` | TCP; `*` means IPv4 only. |
+| `http://*:4317/opentelemetry`, `http2+grpc` | `http`, `0.0.0.0`, `4317`, `/opentelemetry`, `["grpc+http2"]` | TCP, without adding ordinary HTTP/2. |
+| `https://[::]:8443/`, `HTTP2,http1,grpc` | `https`, `::`, `8443`, `/`, `["grpc+http2","http1","http2"]` | TCP; sorted capabilities and explicit IPv6. |
+| `http://Example.TEST./Metrics/`, `http1` | `http`, `example.test`, `80`, `/metrics`, `["http1"]` | TCP; normalized DNS, default HTTP port and literal HTTP base path. |
+| `https://*:9443`, `grpc+http3` | `https`, `0.0.0.0`, `9443`, `/`, `["grpc+http3"]` | UDP only. |
+| `opc.tcp://127.0.0.1:4840/FactoryA`, omitted protocols | `opc.tcp`, `127.0.0.1`, `4840`, `/FactoryA`, `[]` | TCP; preserve OPC path case. |
+| `http://localhost:8080`, omitted protocols | `http`, `localhost`, `8080`, `/`, `[]` | No known transport; the HTTP version is unspecified. |
+
+DNS names use IDNA ASCII, lowercase and no trailing root dot; IPs use their normalized numeric representation. IPv4-mapped IPv6 remains IPv6. Supported binding schemes are `http`, `https`, `tcp`, `udp`, `opc.tcp`. Only HTTP/HTTPS have default ports (80/443). Reject userinfo, query, fragment, dynamic port zero, unknown schemes and Unix sockets. TCP/UDP allow only `/`; OPC retains its protocol path.
+
+HTTP paths are literal base paths: ASCII alphanumeric segments and `-._~`, one slash between segments, no `.`/`..` segment, percent encoding, backslash, control characters, wildcards or braces. Normalize case and remove non-root trailing slashes for identity and matching. This does not rewrite the actual request path or query.
+
+Protocols are case insensitive; comma separates capabilities, `+` combines one upper-layer name and one carrier in either order. Carriers are `tcp`, `udp`, `http`, `http1`, `http2`, `http3`; upper names follow `[A-Za-z][A-Za-z0-9._-]*`. Normalize `grpc` to `grpc+http2`, and `protobuf` to `protobuf+http`, outside Core's generic parser. Existing combinations receive no additional defaults. Remove generic `http` only when the same declaration and upper-layer meaning already supplies concrete versions: `http,http2` becomes `http2`, but `protobuf,http2` retains both. Deduplicate and sort canonical strings.
+
+HTTP/1 and HTTP/2 require TCP; HTTP/3 requires HTTPS and UDP. Raw TCP/UDP schemes determine their own transport. An unspecified HTTP version does not imply TCP, all versions or no networking. A consumer requiring complete publication must reject insufficient capability information. Thus `http://*:4317` with `grpc+http3`, or `tcp://*:6379` with `http1`, fails; `required=false` does not suppress that error.
+
+### 3. Content identities
+
+Endpoint identity hashes canonical content, independent of binding ownership. Binding identity hashes owner and the complete alternative endpoint set. Both are full SHA-256 digests encoded as 64 lowercase hexadecimal characters.
+
+1. Normalize fields and sets first. Sort protocols with Ordinal comparison. Deduplicate endpoints and sort them by the UTF-8 bytes of their identity input.
+2. Endpoint identity input is a compact object with properties in this exact order: `scheme,host,port,path,protocols`. Exclude `id` and derived properties.
+3. Binding input is `owner,endpoints`, with endpoints represented by those content objects, without endpoint IDs.
+4. Encode UTF-8 without BOM, whitespace or final newline. Integers use decimal digits without leading zeros, sign, fraction or exponent.
+5. Escape quotes/backslashes as `\"`/`\\`; use `\b`, `\t`, `\n`, `\f`, `\r` for their control characters, and lowercase `\u00xx` for other U+0000–U+001F values. Other valid Unicode scalar values are literal UTF-8, including `/`, `+`, `<`, `>`, `&`, U+2028 and U+2029. Reject invalid UTF-8 and unpaired UTF-16 surrogates; no additional Unicode normalization.
+6. Reading recomputes and checks identities and ownership-qualified references. Do not repair stale IDs or overwrite collisions.
+
+The Web endpoint's 79-byte input is:
+
+```json
+{"scheme":"http","host":"0.0.0.0","port":8069,"path":"/","protocols":["http1"]}
+```
+
+Its digest is `432783ea6b6e659516771ecfcb22caefaa4fc7a2d833b291299805eb5d28c8ab`. The 117-byte binding input is:
+
+```json
+{"owner":"application","endpoints":[{"scheme":"http","host":"0.0.0.0","port":8069,"path":"/","protocols":["http1"]}]}
+```
+
+Its digest is `025ae7cd729f6f9206ff7ba5504831755e33cd273e805563a1a71267f31d15bc`. For Unicode, the following 84-byte input hashes to `4b11342c4a6df3922352c315683f4fc545fd0b5257d4775cac9f82f7755a9d07`:
+
+```json
+{"scheme":"opc.tcp","host":"127.0.0.1","port":4840,"path":"/工厂A","protocols":[]}
+```
+
+`/工厂A` uses eight UTF-8 bytes: one slash, two three-byte characters and one ASCII letter. Equivalent escapes in the stored document decode to the same canonical identity bytes. Renaming an alias leaves IDs unchanged; changing 8069 to 8070 changes both IDs. Adding an IPv6 alternative changes the binding ID while preserving the existing IPv4 endpoint ID.
+
+### 4. Sites, references and complete example
+
+| Object | Fields and rules |
+| --- | --- |
+| Site | Required `id`, `name`, `hosts`, `listeners`, `routes`. ID is `site:` plus lowercase name, unique within the package. Name is nonempty without whitespace/slashes. Hosts and routes can be empty; listeners cannot. |
+| Listener | Required `binding`, `endpoint`, `default`. The pair identifies an HTTP endpoint in an `nginx` binding. `default` records an explicit default site; at most one per endpoint. |
+| Route | Required `requestKind` (`http`/`grpc`), normalized `path`, `target`, concrete selected `protocol`. Category + path is unique within the site. Optional `host`, `tls`, `policy`. |
+| Local target | `kind="binding"`, `binding`, `endpoint`. The pair must identify an `application` endpoint; selected protocol must be declared there. A route-level `connection` supplies scheme, host, port and path. |
+| Remote single target | `kind="remote"` plus a route-level `connection`; no local listener identity. |
+| Remote pool | `kind="remote"`, `balance`, `members`; no route-level connection. Members have unique case-insensitive names, positive integer weights and complete connections. At least two members. |
+
+Pool balance is `round-robin`, `least-connections` or `least-requests`; an adapter must reject unsupported algorithms. A listener referring to an existing endpoint in the wrong binding is invalid. Array positions never identify endpoints. Multi-package aggregation also carries package identity.
+
+This profile supplies ingress and a remote orders route; omitted local upstreams allow automatic application binding composition:
+
+```ini
+[api]
+host = api.example.test
+bind!public = https://*:8443,https://[::]:8443
+certificate = file:/etc/demo/api.pem
+certificate-key = file:/etc/demo/api.key
+nginx:http2 = on
+
+[api orders]
+path = /orders
+server = https://192.0.2.20:9443/orders
+header!Host = orders.example.test
+server-tls-verify = true
+server-tls-name = orders.example.test
+server-tls-trust = file:/etc/demo/upstream-ca.pem
+```
+
+`api` supplies the site name/ID, `host` the ingress hostname, and `bind!public` the `api/public` alias. Final generated listeners determine the Nginx binding. HTTP/2 configuration and the actual gRPC routes contribute its capabilities. No explicit `default_server` means `default=false`. Certificate/key contents are not copied to JSON. The complete document is:
+
+```json
+{
+	"version": 1,
+	"bindings": [
+		{
+			"id": "025ae7cd729f6f9206ff7ba5504831755e33cd273e805563a1a71267f31d15bc",
+			"owner": "application",
+			"aliases": [
+				"kestrel/endpoints/http",
+				"web"
+			],
+			"endpoints": [
+				{
+					"id": "432783ea6b6e659516771ecfcb22caefaa4fc7a2d833b291299805eb5d28c8ab",
+					"scheme": "http",
+					"host": "0.0.0.0",
+					"port": 8069,
+					"path": "/",
+					"protocols": [
+						"http1"
+					]
+				}
+			]
+		},
+		{
+			"id": "35a5a0a9b3b5d7866e1da297abf88087c56e08c87b8ea4fa9dad6dcb1ab4e61f",
+			"owner": "nginx",
+			"aliases": [
+				"api/public"
+			],
+			"endpoints": [
+				{
+					"id": "cdcccc23c6055cfcd5039aa9771da9de87894dc30420fc8d0ec583283c40eade",
+					"scheme": "https",
+					"host": "0.0.0.0",
+					"port": 8443,
+					"path": "/",
+					"protocols": [
+						"grpc+http2",
+						"http1",
+						"http2"
+					]
+				},
+				{
+					"id": "0a492aba7787bd961d4e94123c39f709e94ea9be1d38163d061c28da41c98370",
+					"scheme": "https",
+					"host": "::",
+					"port": 8443,
+					"path": "/",
+					"protocols": [
+						"grpc+http2",
+						"http1",
+						"http2"
+					]
+				}
+			]
+		},
+		{
+			"id": "a3bf9ca44465c933a625a621f10c1a9a4c632e9b0a7cb27e378c9134f6ca7920",
+			"owner": "application",
+			"aliases": [
+				"kestrel/endpoints/telemetry",
+				"telemetry"
+			],
+			"endpoints": [
+				{
+					"id": "918c6bae9bc0e06e61cafe03a2e37a2cb2a569f00834d177e3af7e74c45e83f4",
+					"scheme": "http",
+					"host": "0.0.0.0",
+					"port": 4317,
+					"path": "/opentelemetry",
+					"protocols": [
+						"grpc+http2"
+					]
+				}
+			]
+		},
+		{
+			"id": "c39af79ca4a8c092d137a696e477c3f4a0bcc5d45a10abede880c296b2ff742a",
+			"owner": "application",
+			"aliases": [
+				"externals/garnet/default",
+				"garnet"
+			],
+			"endpoints": [
+				{
+					"id": "dc2b1a1b180b183e8b4e9b7a8147a9909691fe8fcb96209b1133f851b81c7020",
+					"scheme": "tcp",
+					"host": "0.0.0.0",
+					"port": 6379,
+					"path": "/",
+					"protocols": [
+						"tcp"
+					]
+				}
+			]
+		}
+	],
+	"sites": [
+		{
+			"id": "site:api",
+			"name": "api",
+			"hosts": [
+				"api.example.test"
+			],
+			"listeners": [
+				{
+					"binding": "35a5a0a9b3b5d7866e1da297abf88087c56e08c87b8ea4fa9dad6dcb1ab4e61f",
+					"endpoint": "cdcccc23c6055cfcd5039aa9771da9de87894dc30420fc8d0ec583283c40eade",
+					"default": false
+				},
+				{
+					"binding": "35a5a0a9b3b5d7866e1da297abf88087c56e08c87b8ea4fa9dad6dcb1ab4e61f",
+					"endpoint": "0a492aba7787bd961d4e94123c39f709e94ea9be1d38163d061c28da41c98370",
+					"default": false
+				}
+			],
+			"routes": [
+				{
+					"requestKind": "grpc",
+					"path": "/opentelemetry",
+					"target": {
+						"kind": "binding",
+						"binding": "a3bf9ca44465c933a625a621f10c1a9a4c632e9b0a7cb27e378c9134f6ca7920",
+						"endpoint": "918c6bae9bc0e06e61cafe03a2e37a2cb2a569f00834d177e3af7e74c45e83f4"
+					},
+					"protocol": "grpc+http2",
+					"connection": {
+						"scheme": "http",
+						"host": "127.0.0.1",
+						"port": 4317,
+						"path": "/opentelemetry"
+					}
+				},
+				{
+					"requestKind": "http",
+					"path": "/",
+					"target": {
+						"kind": "binding",
+						"binding": "025ae7cd729f6f9206ff7ba5504831755e33cd273e805563a1a71267f31d15bc",
+						"endpoint": "432783ea6b6e659516771ecfcb22caefaa4fc7a2d833b291299805eb5d28c8ab"
+					},
+					"protocol": "http1",
+					"connection": {
+						"scheme": "http",
+						"host": "127.0.0.1",
+						"port": 8069,
+						"path": "/"
+					}
+				},
+				{
+					"requestKind": "http",
+					"path": "/orders",
+					"target": {
+						"kind": "remote"
+					},
+					"protocol": "http1",
+					"connection": {
+						"scheme": "https",
+						"host": "192.0.2.20",
+						"port": 9443,
+						"path": "/orders"
+					},
+					"host": "orders.example.test",
+					"tls": {
+						"verify": true,
+						"name": "orders.example.test",
+						"trust": "file:/etc/demo/upstream-ca.pem"
+					}
+				}
+			]
+		}
+	]
+}
+```
+
+Data flow through that document:
+
+- The three application bindings come from `web.option`, `telemetry.option` and `garnet.option`; their aliases combine configuration paths and explicit names. The fourth binding comes from the two final Nginx listeners.
+- Each endpoint's scheme, host, port, path and capability set determine its digest; owner and the sorted endpoint content set determine the containing binding's digest. Listener pairs select the IPv4 or IPv6 Nginx endpoint inside that binding.
+- `/` and `/opentelemetry` routes select the declared Web and OTLP endpoints. Same-machine connection hosts change IPv4 wildcard to `127.0.0.1`; scheme, port and path remain unchanged. Containerizer can select a reachable alternative and connect to application DNS without rewriting source listener facts.
+- `/orders` uses the profile's remote address, port and path. Its Host, TLS name and CA reference come from three separate profile settings; they do not change local listener identities.
+- A request `/products?id=7` follows HTTP `/`; a native gRPC call under `/opentelemetry/` follows the gRPC route; `/orders/42?expand=items` follows the longer HTTP range. Original paths/queries remain intact. An unknown gRPC range does not reach ordinary HTTP `/`. Garnet's direct TCP traffic does not use any site route.
+
+### 5. Connections, TLS and policy
+
+Connections require a concrete IP or DNS host, never `0.0.0.0`, `::` or a wildcard hostname. Local connections preserve the selected endpoint's scheme, port and path; only the host reflects topology. Site hosts separately support concrete names/IPs, `*.example.test`, `.example.test` and `example.*`. A route's optional `host` is HTTP authority, such as `orders.example.test:9443` or `[2001:db8::20]:9443`; omission preserves the request Host and does not determine TLS identity.
+
+Plain HTTP omits `tls`. HTTPS requires a TLS object with explicit `verify`; producers default to true. Optional `name` is a concrete certificate name/IP without a port or wildcard. With verification enabled, an IP connection requires explicit name; a concrete DNS connection can supply it by default. Optional `trust` is an absolute `file:/` resource reference; omission means target-system trust, which the adapter must map to a usable CA configuration or fail. For example, changing ingress hostname does not change `orders.example.test` certificate verification; removing route Host does not remove TLS name.
+
+A remote pool variant replaces `server` with:
+
+```ini
+server!east = https://192.0.2.20:9443/orders weight=2
+server!west = https://192.0.2.21:9443/orders weight=1
+server-balance = round-robin
+```
+
+These keys produce member names `east`/`west`, weights 2/1 and their respective connection objects under `target.members`, with `target.balance="round-robin"`. Shared Host/TLS settings still apply. The two explicit instances are distinct from alternative listener addresses of one local binding.
+
+Omitted `policy` means failure count 3, failure window 30 seconds, retry conditions `error`/`timeout`, retry count 1, no affinity and no active health check. Present policies require `failureCount`, `failureTimeout`, `retry`, `retryCount`, `affinity`; `cookie` and `health` are optional. Times are numeric milliseconds and may be fractional; counts/weights are integers. Example profile values `server-failure-timeout=30s`, `server-affinity=cookie`, `server-affinity-cookie=demo_session`, `server-health=/Ready?deep=true`, and health interval/timeouts 10s/5s produce:
+
+```json
+{
+	"failureCount": 3, "failureTimeout": 30000,
+	"retry": ["error", "timeout"], "retryCount": 1,
+	"affinity": "cookie", "cookie": "demo_session",
+	"health": {
+		"path": "/Ready?deep=true", "interval": 10000,
+		"connectTimeout": 5000, "sendTimeout": 5000, "readTimeout": 5000,
+		"failureCount": 3, "recoveryCount": 2,
+		"status": [200], "headers": {"X-Probe": "bindings"}
+	}
+}
+```
+
+The outer count/window describe passive failures; inner failure/recovery counts and `status`/`headers` come from explicit health settings. All health fields are required when health is present. Intervals/timeouts and health thresholds are positive; outer counts/window are nonnegative. Health paths retain case, percent encoding and query, start with a single slash, and reject fragment/whitespace/control characters. Statuses are a nonempty set from 100–599 (`2xx` expands during production). Header names are case-insensitively unique HTTP tokens; values reject controls. Affinity is `none` or `cookie`; `none` prohibits a cookie name, while omitted cookie names under cookie affinity are generated deterministically.
+
+Retry conditions are `error`, `timeout`, `invalid_header`, `http_500`, `http_502`, `http_503`, `http_504`, `http_403`, `http_404`, `http_429`, or exclusive `off`. Reject `off,timeout`, negative counts, zero health intervals and status 600. Adapter capability checks still apply to affinity and active health; do not blindly retry already-sent non-idempotent RPCs.
+
+### 6. Package location and limits
+
+| Format | Payload location for InstallPath `/opt/demo` | Installed path |
+| --- | --- | --- |
+| tar.gz | Archive-root `.bindings` | `/opt/demo/.bindings` |
+| deb | `data.tar.gz` entry `opt/demo/.bindings` | `/opt/demo/.bindings` |
+| rpm | CPIO entry `opt/demo/.bindings`, registered in the file table | `/opt/demo/.bindings` |
+
+It is an ordinary file with mode 0644, Unix-epoch timestamp, compact UTF-8 without BOM or trailing newline. All formats produce identical binding bytes for identical inputs. Include it in payload size, file lists, checksums and install/uninstall handling. For the empty document, the additional logical payload is 38 bytes; Debian Installed-Size still rounds total bytes up to KiB. InstallPath remains separate package metadata.
+
+Using a payload file gives all formats the same byte stream without control-field folding or private JSON header tags. A 1000-character alias is subject to total-document and semantic validation, not a metadata line-length rule. Files do not remove the need for bounded reading and structural checks.
+
+The limit is 1,048,576 logical UTF-8 bytes and JSON depth 32. Check archive-entry length before reading and validate bytes/structure again in the shared model; serialization checks before publishing. Exactly 1 MiB proceeds to semantic validation; 1 MiB + 1 fails. A compressed 80 KiB entry expanding to 2 MiB fails. Reject missing, zero-byte, duplicate, symlink and hard-link entries. A user payload at `.bindings` or `.bindings/child` conflicts with the reserved path and fails. No truncation or fallback storage is permitted.
+
+Byte limits use received bytes: JSON string `"服务"` uses eight UTF-8 bytes or fourteen with Unicode escapes. Equivalent string encoding can change stored size without changing the canonical content identity.
+
+### 7. Extraction example and diagnostics
+
+For InstallPath `/opt/demo`, package `shared.option` with `Server/Enabled=true`, `Url=http://*:8069,http://localhost:8069`, `Protocols=Http1`. Package `web.option` containing `<?import path="./shared.option"?>` and a binding with `path="Server"`, `filter="Enabled:true"`, `template="${option.Url}"`, `protocols="${option.Protocols}"`, `name="web"`, `required="true"`.
+
+Import resolves `/opt/demo/shared.option` in the final payload. Filter accepts the explicit value; the template supplies two addresses and the protocol template supplies `http1` to both. They share path `/` and capabilities, forming one alternative binding with aliases `server` and `web`. The shared file contributes no separate binding when it contains no instruction. Absolute `/opt/demo/shared.option` selects the same file; `/shared.option` does not. Exclusion causes the required import to fail even if a physical source file remains.
+
+Syntax diagnostics include JSON paths; semantic diagnostics include field/binding locations and stable rule identifiers. A listener pairing the Nginx binding with the OTLP endpoint fails `reference`. Extraction diagnostics use Core instruction file/line/column and candidate configuration path, such as `telemetry.option:2`, `Kestrel/Endpoints/telemetry`, `template`, `address` for port zero. They do not print complete settings or credential-bearing URLs. Configuration errors without a PI location use the input filename, `configuration/read`, and zero line/column rather than inventing a location. Source diagnostics are not serialized or hashed.
+
+### Web upstream member ownership
+
+`Definition.ServerGroup.Member` belongs to a specific upstream group and stores member name, endpoint and weight. For example, weights 2/1 for east/west come from that group's named server settings. Definition still owns reusable endpoint, header and policy values used across routes.
+
+<a id="routing-runtime"></a>
+
+## Shared proxy and runtime semantics
+
+Core supplies generic `NetworkAddress` and `NetworkProtocol` values and parsing, XML configuration/imports/instruction snapshots, Settings and TemplateEvaluator. Binding-specific scheme restrictions, shorthand protocols, identities, topology and proxy generation belong to consumers. Core does not interpret the binding instruction or package JSON. The shared `BindingDocument` source is linked into the maker projects with their namespace symbols; it is not an independent shared executable dependency.
+
+### Extraction and configuration scope
+
+`BindingExtractor` first loads each final `.option` and its explicit imports, then selects and evaluates instructions. The private callback in `BindingExtractor.Configuration.cs` marks binding instructions handled and adapts absolute virtual import paths to equivalent relative paths. Core retains import scope, override, optional-missing, cycle and depth semantics. The callback does not evaluate bindings while the file is only partially read. `PackageFiles` owns virtual payload access, with no physical path exposure or file watching; it shares private path normalization with the callback.
+
+Do not merge unrelated option files into a runtime-host configuration or deduplicate instructions before evaluation. A base file producing port 8069 and an importing override producing 8070 both contribute when independently shipped. Only normalized results merge. Final tar-relative entries map through InstallPath, matching deb/rpm paths. Reject build-machine drive/UNC/file URI paths, virtual-root escapes and unresolved links.
+
+The binding TemplateEvaluator uses invariant culture, `Recursive=false`, `Fallback=false`, and only the current `option` view. Resolving adapts configuration members, root-relative string paths and explicit Settings-key indexing; Core retains expression parsing, escaping and index syntax. A dynamic index like `[port]` is a variable reference, not literal `['port']`. No host variables or implicit parent fallback are registered. FilterExpression shares left-to-right matching with deployer, whose NuGet-specific framework comparison remains in its own adapter.
+
+### Request category and literal ranges
+
+Select ingress, request category, longest literal base path, unique logical backend, then a reachable alternative endpoint and carrier. Native gRPC content types are `application/grpc` or `application/grpc+format`, case insensitive with optional parameters. gRPC-Web is excluded. HTTP/1 gRPC requests retain their category and fail protocol validation instead of becoming Web requests. Ordinary HTTP and HTTP Protobuf share a category; encoding alone does not distinguish two independent same-path backends.
+
+Compare the original URI path case-insensitively with segment boundaries, without decoding escapes or collapsing dot segments to select another backend. `/opentelemetry` does not match `/%6fpentelemetry`, `/x/../opentelemetry` or `/opentelemetry-extra`. Matching uses `$request_uri` in Nginx and `IHttpRequestFeature.RawTarget` in the runtime. Handle origin/absolute forms; empty paths mean `/`, `OPTIONS *` is outside path mapping, and malformed targets receive 400. Preserve the original path/query when forwarding.
+
+Ordinary unmatched requests receive 404. Valid gRPC without a matching range receives HTTP 200, `application/grpc`, and trailers-only status 12. Invalid gRPC HTTP version/method receives 400/405 before range fallback; 405 includes `Allow: POST`. Unknown RPCs in an already-selected region remain that region's UNIMPLEMENTED response. Backend failure does not trigger a fresh business-route selection. Equal ranges for independent backends fail creation; more specific ranges override broader ones.
+
+### Runtime ownership and registration
+
+Web endpoints are a startup snapshot. `WebEndpointCollection` holds logical endpoints and rules, not configuration providers or Kestrel objects. `KestrelUtility.Convert` projects the same final input to native listener settings, removing the base path only from that projection while preserving source URLs, certificates, SNI and defaults. HTTP carriers can merge on an identical compatible socket; conflicting scheme/TLS/connection options and overlapping sockets fail. Plaintext Kestrel requires a single HTTP version. HTTPS/HTTP3 support is an adapter/platform responsibility.
+
+`WebEndpointProtocol` supplies narrow category identification, default carrier, validation and endpoint constraints. Web owns ordinary HTTP; Web.Grpc owns a private gRPC policy registered by `AddGrpcWebEndpoints` and the initializer. Missing/duplicate/ambiguous rules and late registration fail. Rules are registered before the snapshot; no temporary service provider is built during registration. Web does not depend on its gRPC extension.
+
+Plugins.Web automatically registers endpoint conversion, cross-plugin validation, request constraints and restart monitoring when a Web host has Kestrel endpoint declarations and no explicit endpoint collection. Explicit registration controls its chosen section and monitoring. Hosts without declarations keep their normal listener setup. The base host libraries are supplied by the host, not repeated by plugin `.deploy` files.
+
+Configure the Kestrel projection before loading endpoints, through the ordered post-configuration hook with reload disabled. `*` projects to IPv4 `0.0.0.0`; managed IPv6 TCP sockets set DualMode=false before bind. Other listener factories remain intact; TCP configuration does not prove QUIC behavior. `localhost` represents loopback, while DNS names are not treated as arbitrary network interfaces.
+
+Business gRPC services declare explicit Core `HandlerAttribute` base paths, including `[Handler("/")]` for root. Full base paths associate services with URL paths; alias names do not. A service can declare multiple paths, and multiple services can form one region, without duplicating DI lifetimes. Nonzero Order, invalid/missing regions, method conflicts and gRPC endpoints without registered business services fail startup. Core's ordinary IHandler discovery remains separate.
+
+The runtime uses actual local IP/port, connection protocol and original path, not Host or forwarded headers, to select a region. GrpcInitializer maps each region and adds metadata; endpoint constraints exclude other regions, compare base paths case-insensitively and preserve exact native service/method names. Controller/static-file/Hub behavior retains its original routes but remains subject to region constraints. Region-specific fallback replaces global unknown-service fallback and passes through authentication/authorization. Unknown methods cannot escape into a broader region.
+
+Reflection wraps the upstream implementation with the selected region's actual descriptor set. `list_services` lists that region's business/reflection services; proto files and dependencies may contain other symbols, so reflection is not an authorization boundary. Do not fill missing symbols from another region's registry or dispose shared DI business instances.
+
+Diagnostics OTLP exporters already append RPC paths to their configured Endpoint. Direct GrpcChannel callers use `GrpcClientHandler(path, innerHandler)` to validate and add a base path once, preserving query, metadata, streaming and cancellation without buffering. Handler/channel ownership follows DisposeHttpClient; owned chains set it true and shared chains remain caller-managed. Configuration changes to listeners, protocols, paths or service sets request restart; they do not independently reload Kestrel while retaining stale routes. Certificate rotation follows its separate facility.
+
+### Nginx generation and topology
+
+Generate an HTTP-level request-category map, then a category/original-URI map to stable package/site-prefixed named locations. Order same-category ranges by normalized path length. Use escaped case-insensitive expressions with segment boundaries, static proxy_pass/grpc_pass targets and no URI suffix/rewrite. An internal 418 dispatch preserves method/body/URI; do not intercept genuine upstream 418 responses. Include explicit gRPC protocol/method checks, headers, TLS, timeouts and safe retry policy.
+
+Final listener metadata comes from the final instruction tree. Reject dynamic listens, unresolvable includes and native location/rewrite/error_page/proxy_pass/grpc_pass overrides that would invalidate automatic routing. Keep representable native headers, certificates and policies.
+
+Backend capabilities come from declarations; creation does not probe servers or consult framework capability lists. Client-to-proxy and proxy-to-application connections are distinct. HTTP/3 ingress requires QUIC/UDP and TLS; standard proxy_pass/grpc_pass mapping cannot represent an HTTP/3 upstream. Unsupported mappings fail as adapter limitations without inventing backend capabilities or substituting undeclared HTTP/2. Prefer the highest usable declared carrier within the same service meaning. gRPC and ordinary HTTP do not borrow each other's versions.
+
+For same-machine connections, wildcard listeners map to same-family loopback and concrete addresses remain concrete. Cross-container selection requires an endpoint supported by the generated network and preserves scheme, port and path. Alternative addresses do not become a pool. Raw TCP/UDP remain direct publication rather than automatic Nginx stream configuration. Host authority, TLS name and connection host retain their distinct origins.
+
+Relevant upstream contracts: [gRPC HTTP/2](https://grpc.github.io/grpc/core/md_doc__p_r_o_t_o_c_o_l-_h_t_t_p2.html), [GrpcChannel subdirectories](https://learn.microsoft.com/en-us/aspnet/core/grpc/troubleshoot#calling-grpc-services-hosted-in-a-sub-directory), [Nginx map](https://nginx.org/en/docs/http/ngx_http_map_module.html), [proxy_http_version](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_http_version), [grpc_pass](https://nginx.org/en/docs/http/ngx_http_grpc_module.html#grpc_pass), and [QUIC](https://www.rfc-editor.org/rfc/rfc9000.html). Adapter regression checks belong in [SKILL](../SKILL.md#binding-validation).
+
+Component-specific configuration and lifecycles are maintained in [Garnet](../../../framework/externals/garnet/README.md), [ZeroMQ](../../../framework/messaging/zero/README.md), [MQTT](../../../framework/messaging/mqtt/README.md), [OPC](../../../framework/externals/opc/README.md), [Diagnostics](../../../framework/Zongsoft.Diagnostics/README.md), and [Web gRPC](../../../framework/Zongsoft.Web/grpc/README.md). They cover settings conversion, plugin assembly, listener lifecycles, discovery/registration addresses and clients; tools consume explicit binding declarations.

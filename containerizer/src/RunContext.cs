@@ -52,7 +52,7 @@ internal sealed partial class RunContext
 
 	#region 成员字段
 	private readonly ContainerEngine _engine;
-	private readonly DeliveryBundle _bundle;
+	private readonly ContainerBundle _bundle;
 	private readonly Action<CommandOutletContent> _output;
 	private readonly string _sessionId = Guid.NewGuid().ToString("N");
 	private readonly string _workspaceDirectory = Path.Combine(Path.GetTempPath(), $"containerizer-run-{Guid.NewGuid():N}");
@@ -62,7 +62,7 @@ internal sealed partial class RunContext
 	#endregion
 
 	#region 构造函数
-	internal RunContext(ContainerEngine engine, DeliveryBundle bundle, Action<CommandOutletContent> output)
+	internal RunContext(ContainerEngine engine, ContainerBundle bundle, Action<CommandOutletContent> output)
 	{
 		_engine = engine;
 		_bundle = bundle;

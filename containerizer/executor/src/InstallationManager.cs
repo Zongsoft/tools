@@ -65,7 +65,7 @@ internal sealed partial class InstallationManager(InstallationStore store, IInst
 
 		if(arguments.Command is "install" or "prepare" or "upgrade")
 		{
-			using var bundle = DeliveryBundle.Open(arguments.BundlePath);
+			using var bundle = ContainerBundle.Open(arguments.BundlePath);
 			if(arguments.Name != null && arguments.Name != bundle.Plan.Name)
 				throw new ContainerizationException(2, Properties.Resources.Lifecycle_1_Message);
 
@@ -77,7 +77,7 @@ internal sealed partial class InstallationManager(InstallationStore store, IInst
 		var name = arguments.Name;
 		if(arguments.SourceBundlePath != null)
 		{
-			using var source = DeliveryBundle.Open(arguments.SourceBundlePath);
+			using var source = ContainerBundle.Open(arguments.SourceBundlePath);
 			if(name != null && name != source.Plan.Name)
 				throw new ContainerizationException(2, Properties.Resources.Lifecycle_2_Message);
 
@@ -124,7 +124,7 @@ internal sealed partial class InstallationManager(InstallationStore store, IInst
 	#endregion
 
 	#region 私有方法
-	private static void ValidateUpgrade(DeliveryPlan previous, DeliveryPlan next)
+	private static void ValidateUpgrade(ContainerBundlePlan previous, ContainerBundlePlan next)
 	{
 		if(previous.Name != next.Name ||
 		   previous.Distribution != next.Distribution ||
@@ -158,11 +158,12 @@ internal sealed partial class InstallationManager(InstallationStore store, IInst
 			.OrderBy(package => package.Name)
 			.Select(package => $"{package.Name}/{package.Version}/{package.Hash}");
 
-		if(!left.SequenceEqual(right))
+		if(!left.SequenceEqual(right) ||
+			!previous.Bootstrap.Requirements.Order(StringComparer.Ordinal).SequenceEqual(next.Bootstrap.Requirements.Order(StringComparer.Ordinal)))
 			throw new ContainerizationException(3, Properties.Resources.Lifecycle_20_Message);
 	}
 
-	private static IEnumerable<ServicePlan> GetServicesInDependencyOrder(DeliveryPlan plan)
+	private static IEnumerable<ServicePlan> GetServicesInDependencyOrder(ContainerBundlePlan plan)
 	{
 		var result = new List<ServicePlan>();
 		var visiting = new HashSet<string>(StringComparer.Ordinal);
@@ -189,8 +190,8 @@ internal sealed partial class InstallationManager(InstallationStore store, IInst
 			result.Add(service);
 		}
 	}
-	private DeliveryBundle OpenCurrentBundle(Installation installation) => installation.Current == null ?
+	private ContainerBundle OpenCurrentBundle(Installation installation) => installation.Current == null ?
 		throw new ContainerizationException(7, Properties.Resources.Lifecycle_17_Message) :
-		DeliveryBundle.Open(Path.Combine(store.GetApplicationPath(installation.Name), "releases", installation.Current, "assets"));
+		ContainerBundle.Open(Path.Combine(store.GetApplicationPath(installation.Name), "releases", installation.Current, "assets"));
 	#endregion
 }

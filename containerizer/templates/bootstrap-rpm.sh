@@ -6,10 +6,13 @@ case "$ID:$VERSION_ID" in
 	rhel:9*) repository=rhel ;;
 	*) printf 'A matching entitled resolver is required for this distribution\n' >&2; exit 3 ;;
 esac
-dnf install -y dnf-plugins-core ca-certificates curl
+dnf install -y dnf-plugins-core ca-certificates createrepo_c
 dnf config-manager --add-repo "https://download.docker.com/linux/$repository/docker-ce.repo"
 mkdir -p /delivery
-dnf download --resolve --alldeps --destdir=/delivery docker-ce docker-ce-cli containerd.io docker-compose-plugin glibc libgcc libstdc++ libicu krb5-libs zlib openssl-libs tar gzip coreutils util-linux
+set -- docker-ce docker-ce-cli containerd.io docker-compose-plugin glibc libgcc libstdc++ libicu krb5-libs zlib openssl-libs tar gzip coreutils util-linux
+printf '%s\n' "$@" > /delivery/requirements.txt
+dnf download --resolve --alldeps --destdir=/delivery "$@"
+createrepo_c /delivery
 : > /delivery/metadata.tsv
 for package in /delivery/*.rpm; do
 	filename="${package##*/}"

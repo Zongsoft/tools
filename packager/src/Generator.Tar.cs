@@ -52,6 +52,8 @@ partial class Generator
 	#region 公共方法
 	public static void Tar(this Package package, string output, bool overwrite)
 	{
+		package.Entries.SetBindings(package.Bindings);
+
 		var installer = GetInstallerFileName(package);
 
 		using var publisher = new ArtifactPublisher(output, overwrite, package.FileName, installer);
@@ -106,7 +108,6 @@ partial class Generator
 		Add("Homepage", package.Homepage);
 		Add("Maintainer", package.Maintainer);
 		Add("InstallPath", package.InstallPath);
-		Add("Listen", package.Listen);
 		Add("Dependencies", string.Join("; ", dependencies));
 		Add("Category", package.Category);
 

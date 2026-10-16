@@ -62,7 +62,9 @@ internal sealed class BootstrapPackageBuilder(ContainerEngine engine, string cac
 		var distribution = manifest["distribution"];
 		var profile = $"{distribution}_{manifest["architecture"]}";
 		var imported = Path.Combine(manifest["source"], ".containerizer", "bootstrap", profile);
-		var cache = BuildStorage.GetBootstrapCache(manifest["source"], profile, cacheRoot);
+		var usesDebianPackages = Distribution.IsDebianFamily(distribution);
+		var script = TemplateCatalog.Find(usesDebianPackages ? "bootstrap-deb.sh" : "bootstrap-rpm.sh");
+		var cache = Path.Combine(BuildStorage.GetBootstrapCache(manifest["source"], profile, cacheRoot), Files.Hash(script));
 
 		Files.CreatePrivateDirectory(Path.GetDirectoryName(cache));
 		using var cacheLock = new FileStream($"{cache}.lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
@@ -78,8 +80,7 @@ internal sealed class BootstrapPackageBuilder(ContainerEngine engine, string cac
 		var directory = Path.Combine(workspace, "bootstrap");
 		Files.CreatePrivateDirectory(directory);
 
-		var scriptName = Distribution.IsDebianFamily(distribution) ? "bootstrap-deb.sh" : "bootstrap-rpm.sh";
-		File.Copy(TemplateCatalog.Find(scriptName), Path.Combine(directory, "collect.sh"));
+		File.Copy(script, Path.Combine(directory, "collect.sh"));
 		Files.Write(Path.Combine(directory, "Dockerfile"), $"FROM {engine.GetBuildReference(baseline)}\nCOPY collect.sh /collect.sh\nRUN sh /collect.sh\n", true);
 
 		await using var resources = new BuildResources(engine, error);
@@ -98,7 +99,9 @@ internal sealed class BootstrapPackageBuilder(ContainerEngine engine, string cac
 			Mode = manifest["bootstrap"],
 			Profile = $"{distribution}_{manifest["architecture"]}",
 			BaseImageReference = $"{baseline.Repository}@{baseline.Digest}",
-			Metadata = "packages/metadata.tsv"
+			Metadata = "packages/metadata.tsv",
+			Repository = usesDebianPackages ? null : "packages/repodata",
+			Requirements = usesDebianPackages ? [] : [.. File.ReadAllLines(Path.Combine(packages, "requirements.txt"))]
 		};
 
 		foreach(var line in File.ReadLines(Path.Combine(packages, "metadata.tsv")))
@@ -130,6 +133,9 @@ internal sealed class BootstrapPackageBuilder(ContainerEngine engine, string cac
 
 		if(plan.Packages.Count == 0 || plan.EngineVersion == null || plan.ComposeVersion == null)
 			throw new ContainerizationException(4, Properties.Resources.BootstrapBuilder_4_Message);
+
+		if(!usesDebianPackages)
+			ContainerBundle.ValidateBootstrapRepository(plan, delivery);
 
 		var staging = $"{cache}.{Guid.NewGuid().ToString("N")}";
 
@@ -164,6 +170,12 @@ internal sealed class BootstrapPackageBuilder(ContainerEngine engine, string cac
 
 		if(plan.Profile != profile || plan.Packages.Count == 0 || string.IsNullOrEmpty(plan.EngineVersion) || string.IsNullOrEmpty(plan.ComposeVersion))
 			throw new ContainerizationException(4, Properties.Resources.BootstrapBuilder_5_Message);
+
+		if(!Distribution.IsDebianFamily(profile[..profile.LastIndexOf('_')]))
+		{
+			var repository = ContainerBundle.ValidateBootstrapRepository(plan, directory);
+			Files.CopyTree(repository, Files.ResolveRelativePath(delivery, plan.Repository));
+		}
 
 		var paths = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
 		foreach(var package in plan.Packages)

@@ -45,8 +45,8 @@ internal static partial class Installation
 	internal static void Attach(Package package, Configurator.Result result)
 	{
 		package.Web = result;
-		if(!result.Files.Any(file => file.Path == ".web/nginx/.bindings"))
-			package.Entries.RemoveGenerated(".web/nginx/.bindings");
+		package.Bindings = result.Bindings;
+		package.Entries.RemoveGenerated(".web/nginx/.bindings");
 
 		Validate(package, false);
 

@@ -14,7 +14,7 @@
 - `deployer`：读取 `.deploy` 描述文件，将本地文件或 NuGet 包内容部署到目标目录；命令为 `dotnet-deploy`/`dotnet deploy`。
 - `packager`：生成 `.tar.gz`、`.deb`、`.rpm` 和安装生命周期脚本；命令为 `dotnet-pack`。
 - `migrator`：独立制作升迁归档和脚本，并提供 Native AOT 执行器；命令为 `dotnet-migrate`。
-- `containerizer`：制作单节点 Linux 容器交付物；制作命令为 `dotnet-containerize`，现场 Native AOT 命令为 `containerizer`。实现和平台验收范围见其双语说明，不把交叉编译视为目标运行验证。
+- `containerizer`：制作单节点 Linux 容器包；制作命令为 `dotnet-containerize`，现场 Native AOT 命令为 `containerizer`。实现和平台验收范围见其双语说明，不把交叉编译视为目标运行验证。
 - `regular`：面向 Windows 的正则表达式 WinForms 测试器，并通过独立启动器提供 `dotnet-regular` 工具命令。
 
 `deployer`、`packager` 与 `migrator` 支持 .NET 8、9、10；deployer 在构建时生成 NuGet 工具包，packager 独立构建，migrator 先准备三平台原生执行器再生成工具包。`regular` 的 GUI 目标为 `net10.0-windows`，单个工具包由 `net10.0` 启动器携带 Windows x64 GUI 发布产物生成；开发时仍直接运行 GUI `.exe`。
@@ -41,3 +41,11 @@
 对受影响项目执行 `dotnet build <项目> -p:ZongsoftCodeStyleStrict=true`，多目标项目不指定 `-f` 以覆盖全部框架；deployer 可额外指定 `-p:GeneratePackageOnBuild=false`。另执行 `dotnet format style <项目> --no-restore --verify-no-changes --diagnostics IDE0049`，这项规则不能只用构建检查。测试继续按各工具的既有测试项目运行。
 
 全部工具统一继承仓库根 `.editorconfig`，不在工具目录保留副本。根 `Directory.Build.props` 管理语言版本、作者/公司/版权、通用 NuGet 元数据、工具包图标和分析器引用，默认启用 `ZongsoftCodeStyleStrict=true` 并设置 `ZongsoftGuidelinesSynchronization`；实际构建时由分析器包同步根配置。工具名称、版本、目标框架、测试及发布属性保持项目自身定义。分析器版本由根 Directory.Packages.props 统一维护；配置模板在 guidelines 维护，消费仓库同步后提交。AOT Pod 和 CI 将该文件只读挂载到容器 `/.editorconfig`，供 `/workspace` 下的源码继承；容器同时只读挂载根 `Directory.Packages.props` 和 `Directory.Build.props` 到容器根目录；Linux 发布脚本通过 `-p:ZongsoftGuidelinesSynchronization=` 禁用同步，不向只读配置写入。生成资源通过 `ResXFileCodeGenerator` 更新，不手写访问属性；WinForms Designer 文件仅同步必要事件绑定，不重排布局。
+
+## 文档与模型归属
+
+- README 面向使用者，记录命令、输入、配置示例、结果与操作限制；原理、模型和算法写入各工具双语 `docs/implementation`，开发步骤写入 SKILL，硬性约束写入 AGENTS。只描述最终行为，不维护阶段评审或变更流水。
+- 长方法按处理阶段拆成仅服务于当前方法的局部方法；复杂条件提取为含义明确的局部判断，保持短路顺序、空值保护和异常行为。局部方法集中放在所属块末尾；不捕获上下文时使用 `static`，布局遵守 guidelines。
+- 专属于某计划/模型的条目优先嵌套于所有者，并按职责使用所有者的分部文件；有独立生产消费流程的模型保留独立类型。依据实际调用决定可见性，不为测试扩大作用域；CLR 类型整理不得无意改变序列化结构。
+- 绑定文件契约由 [Packager 实现说明](packager/docs/implementation.zh-Hans.md#binding-document) 集中定义；声明用法见其 README，发布规划见 Containerizer。`.shared/BindingDocument.cs`、`.shared/FilterExpression.cs` 按各消费项目约定链接源码与命名空间，不建立共享可执行项目引用。
+- 三种应用包统一交付安装根普通 `.bindings`，最大 1 MiB、深度 32；监听事实、代理连接与宿主发布分别表达。不得从端口、插件类型、运行探测或制作机环境猜测缺失声明。

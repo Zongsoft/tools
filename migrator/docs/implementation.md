@@ -29,7 +29,7 @@ Source selection and artifact Edition are separate. Explicit nonblank Edition se
 
 The process entry uses `tools/.shared/Utility.cs` to preserve each argument boundary and escape backslashes, including empty values and Windows paths with spaces. Options that may contain variables enter the command as strings. After resolving the version source, the command writes the final version and Edition into a per-invocation `MigrationOptions` object; other values expand recursively when used, before type conversion. [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core)'s `Switch` evaluates Boolean options. Enums use [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) conversion without an additional member-definition check. `--name` is independent of the version file; input/output paths use the working directory. No save operation is performed. The plan protocol and native executor do not participate in source version lookup; they receive the final identity. Command tests cover literal/file/directory/default sources, Edition selection, variable expansion and unchanged source/output files on failures.
 
-.shared compiles into the generator and executor through source links, without a shared DLL. MigrationPlan uses partial and nested Step/Script/Bucket/Database/User models and source-generated JSON. Source/Content only exist on the generation side. Shared code validates provider parameters and plan structure. See the [package details](../README.md#advanced-package-details) for plan fields and fingerprints.
+.shared compiles into the generator and executor through source links, without a shared DLL. MigrationPlan uses partial and nested Step/Script/Bucket/Database and Database.User models and source-generated JSON. Source/Content only exist on the generation side. Shared code validates provider parameters and plan structure. See the [package details](#plan-fields-and-fingerprint) for plan fields and fingerprints.
 
 The executor explicitly selects one of six databases or Amazon S3, and owns connections, initialization, ordered submission, checksums, locks, state and pending records. Every apply executes all SQL without per-file history. Only the executor declares database/AWS dependencies; TDengine uses WebSocket directly.
 
@@ -69,3 +69,50 @@ MigrationPrivileges canonicalizes the 20 capability names and expands Permission
 Terminal warnings use dark-yellow text with bold cyan parameters; errors use dark-red text with bold magenta parameters; success messages use green text. Exception types are highlighted in magenta and messages retain their original text. All four tools share the repository’s `.shared/Utility.Output.cs`: `FormatOutput` and `FormatError` construct Core `CommandOutletContent`; `WriteOutput` and `WriteError` route terminal and text-writer output; tools using the command executor call `HandleFailure` to display exceptions and mark them handled, while retaining their own exit codes. Terminals renders the colors. Redirected output and caller-provided error writers preserve plain text and their original streams.
 
 The help entry point matches standalone `--help`/`-h` before parsing business commands and uses shared `FormatHelp` and `HighlightSyntax`; it neither loads variable files nor enters file processing. Shared `MeasureOutput` measures elapsed time, using the tool’s localized `Output.Elapsed` resource and output callback, and emits once on first disposal. Business logic still determines exit codes and success or failure.
+
+## Database user model
+
+`MigrationPlan.Database.User` represents entries in `Database.Users`. For a database named `orders`, a user named `reader` with `Permission=readonly` is provisioned for that database. Host, Privileges, Roles and Password belong to the same user declaration rather than a plan-global account. Shared models, privilege validation and executors use this nested type. JSON remains `databases[].users[]`, with unchanged fingerprint inputs and execution order.
+
+<a id="plan-fields-and-fingerprint"></a>
+
+## Advanced package details
+
+
+Steps have no separate Id: array position defines execution order, and logs/status use one-based step numbers. Database also has no Id: Step.DatabaseIndex is a nullable integer referencing the zero-based position in Databases. SQL steps require an in-range index with a matching provider; Amazon S3 must omit it. Index 0 is serialized. Different servers may have databases with the same name; each distinct target receives its own array entry. SQL filenames use unpadded decimal numbers (1.sql, 2.sql, …, 10.sql), starting at 1 per provider on every Load. Execution follows Steps and Scripts arrays, never filename sorting. All null model properties are omitted using shared source-generated JSON options for both formatted output and compact fingerprint serialization; false, empty strings and empty collections remain. Source/Content and calculated keys still use unconditional JsonIgnore. Status records phase (validation/databases/users/steps/permissions/complete), step (one-based number or null outside a step), and databaseIndex (zero-based target array index or null).
+
+`migration.json` is a UTF-8 JSON object written by the migration generator and read by migrator. It contains resolved execution inputs. Output property names appear below; the reader matches property names case insensitively.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `Name` | String | Normalized migration name, including the migration suffix and optional Edition, such as `zongsoft-migrate` or `zongsoft-migrate-enterprise`. |
+| `Version` | String | Version specified when generating the migration artifacts. |
+| `Runtime` | string | Target RID: `linux-x64`, `linux-arm64` or `win-x64`; fingerprinted and verified before execution |
+| `Title` / `Summary` / `Description` | string? | Optional display text; omitted when unset and included in the fingerprint |
+| `Steps` | Array | SQL/Amazon S3 tasks in effective declaration/source order, executed after database and user initialization. |
+| `Steps[].Provider` | String | Canonical provider: `mssql`, `mysql`, `sqlite`, `duckdb`, `postgres`, `tdengine`, or `amazon.s3`. |
+| `Steps[].Settings` | String dictionary | Amazon S3 connection parameters; empty for database tasks. Database parameters are stored in Databases. |
+| `Steps[].DatabaseIndex` | Integer? | Zero-based index into Databases; required and range/provider-checked for SQL steps, omitted for Amazon S3. |
+| `Databases` | Array | Referenced, deduplicated database initialization descriptions. |
+| `Databases[].Provider` / `Name` | Strings | Canonical provider and actual target name; the array position identifies each initialization description. |
+| `Databases[].Settings` | String dictionary | Administrator connection settings, expanded and defaulted. |
+| `Databases[].Options` | String dictionary | Effective creation settings and command timeout. |
+| `Databases[].Users` | Array | All users declared under this referenced database. |
+| `Databases[].Users[].Name` / `Password` / `Permission` | Strings | Account name, initial password and normalized permission profile. |
+| `Databases[].Users[].Privileges` / `Roles` | String arrays | Normalized, deduplicated effective unified capabilities including the Permission preset, and existing role names. |
+| `Databases[].Users[].Host` | String? | MySQL account host, default `%`; omitted for other providers. |
+| `Steps[].Scripts` | Array | Ordered SQL batches for database tasks; `[]` for Amazon S3 tasks. |
+| `Steps[].Scripts[].Path` | String | Batch path relative to the migration archive extraction root, such as `.artifacts/mysql/1.sql`. Steps of the same provider share the directory and consecutive numbering. |
+| `Steps[].Scripts[].Checksum` | String | Uppercase hexadecimal SHA-256 of the actual UTF-8 batch bytes, checked before execution. |
+| `Steps[].Buckets` | Array | Bucket descriptions for Amazon S3 tasks; `[]` for database tasks. |
+| `Steps[].Buckets[].Name` | String | Bucket name, such as hosting's `attachments`. |
+| `Steps[].Buckets[].Public` | Boolean | `true` requests a public read policy; `false` means private. |
+| `Steps[].Buckets[].Encryption` | Optional object | Default encryption, containing `Mode` and optional `Key`. |
+| `Steps[].Buckets[].Encryption.Mode` | String | `sse-s3` or `sse-kms`. |
+| `Steps[].Buckets[].Encryption.Key` | Optional string | Existing KMS key identifier, only for `sse-kms`. |
+| `Steps[].Buckets[].Versioning` | Optional string | `enabled` or `suspended`. |
+| `Steps[].Buckets[].Tags` | Optional string dictionary | Case-sensitive bucket tag names, without the INI option's `tag.` prefix. |
+
+Omitted bucket settings do not produce configuration requests. `Script.Source` and `Script.Content` belong only to the migration generator and are excluded from JSON. Original INI/ENV paths and local SQL source paths are not protocol fields. Parameters may contain passwords or keys; the file mode is `0600`.
+
+The fingerprint is stored outside JSON: the migration generator hashes the model's compact JSON UTF-8 bytes with SHA-256 and writes the uppercase hexadecimal result to `id`. Migrator writes it to the state directory's `ready` only after all tasks succeed. This is not a direct hash of the indented `migration.json` file. Effective database settings/users, parameters, script paths, checksums, bucket options and array order contribute to it; indentation and file line endings do not. It identifies completion of the current plan, rather than providing a signature or per-script execution history.

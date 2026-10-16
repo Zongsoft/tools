@@ -50,6 +50,8 @@ internal sealed class BootstrapPlan
 	public string EngineVersion { get; set; }
 	public string ComposeVersion { get; set; }
 	public string Metadata { get; set; }
+	public string Repository { get; set; }
+	public List<string> Requirements { get; set; } = [];
 	public List<Package> Packages { get; set; } = [];
 	#endregion
 

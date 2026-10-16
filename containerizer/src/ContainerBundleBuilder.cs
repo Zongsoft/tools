@@ -47,7 +47,7 @@ using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer;
 
-internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cacheRoot = null, string executorPath = null, bool refresh = false, Action<CommandOutletContent> output = null, Action<CommandOutletContent> error = null)
+internal sealed partial class ContainerBundleBuilder(IProcessRunner runner, string cacheRoot = null, string executorPath = null, bool refresh = false, Action<CommandOutletContent> output = null, Action<CommandOutletContent> error = null)
 {
 	#region 成员字段
 	private readonly Action<CommandOutletContent> _output = output ?? Terminal.WriteLine;
@@ -104,7 +104,7 @@ internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cach
 		var buildResources = new BuildResources(engine, _error);
 		var environments = new RuntimeEnvironmentCache(engine, cacheRoot, refresh, _output, _error);
 
-		var node = new DeliveryPlan
+		var node = new ContainerBundlePlan
 		{
 			Name = manifest["name"],
 			Tag = manifest["tag"],
@@ -113,7 +113,7 @@ internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cach
 			Architecture = manifest["architecture"],
 			Project = $"containerizer-{manifest["name"].ToLowerInvariant().Replace('.', '-').Replace('_', '-')}-{Files.HashText(manifest["name"])[..8]}",
 			DataRoot = Installation.Paths.GetDataPath(manifest["name"]),
-			ToolVersion = typeof(DeliveryBuilder).Assembly.GetName().Version?.ToString(),
+			ToolVersion = typeof(ContainerBundleBuilder).Assembly.GetName().Version?.ToString(),
 			Services = sources.Select(source => source.Plan).ToList(),
 		};
 
@@ -123,6 +123,62 @@ internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cach
 			Files.CreatePrivateDirectory(delivery);
 			WebIngress.Render(sources, workspace);
 
+			await ResolveImagesAsync();
+			await PrepareImagesAsync();
+
+			ServicePlanner.Validate(sources);
+
+			PrepareConfiguration();
+
+			_output(Utility.FormatOutput(Properties.Resources.NodeBuilder_ResolveBootstrap));
+
+			using(Utility.MeasureOutput(_output, Properties.Resources.Run_Elapsed, Properties.Resources.NodeBuilder_ResolveBootstrap))
+				node.Bootstrap = await new BootstrapPackageBuilder(engine, cacheRoot, _error).BuildAsync(manifest, workspace, delivery, cancellation);
+
+			CollectMigrations();
+			CollectExecutor();
+
+			Files.Write(Path.Combine(delivery, "install.sh"), CreateLauncher("install"), true);
+			Files.Write(Path.Combine(delivery, "uninstall.sh"), CreateLauncher("uninstall"), true);
+			Files.Write(Path.Combine(delivery, "README.md"), CreateInstructions(node, manifest.ReleaseName));
+			Files.Write(Path.Combine(delivery, "README.zh-Hans.md"), CreateInstructionsZhHans(node, manifest.ReleaseName));
+			ComposeWriter.Write(node, sources, delivery);
+			var prepared = manifest.Prepare(workspace);
+			node.SourceHash = Files.Hash(prepared);
+			File.Copy(prepared, Path.Combine(delivery, Path.GetFileName(prepared)));
+
+			SavePlan();
+
+			var archivePath = Path.Combine(workspace, $"{manifest.ReleaseName}.tar.gz");
+
+			using(Utility.MeasureOutput(_output, Properties.Resources.Run_Elapsed, Properties.Resources.Build_Compression))
+				Files.Archive(delivery, archivePath);
+
+			cancellation.ThrowIfCancellationRequested();
+			using var publishLock = BuildStorage.AcquireLock(manifest["output"], cacheRoot);
+			var defaults = ServiceDefaults.Prepare(manifest, workspace);
+
+			using(Utility.MeasureOutput(_output, Properties.Resources.Run_Elapsed, Properties.Resources.Build_Publish))
+				BuildStorage.Publish(manifest, prepared, archivePath, defaults);
+			return Path.Combine(manifest["output"], Path.GetFileName(archivePath));
+		}
+		finally
+		{
+			await buildResources.DisposeAsync();
+
+			try
+			{
+				if(Directory.Exists(workspace))
+					Directory.Delete(workspace, true);
+			}
+			catch(Exception exception)
+			{
+				_error(Utility.FormatOutput(Properties.Resources.NodeBuilder_FailedBuild_Message, CommandOutletColor.DarkRed, workspace, exception.Message));
+			}
+		}
+
+		async Task ResolveImagesAsync()
+		{
 			foreach(var source in sources)
 			{
 				var component = source.Component;
@@ -157,7 +213,10 @@ internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cach
 						component.Values.Remove("size");
 				}
 			}
+		}
 
+		async Task PrepareImagesAsync()
+		{
 			foreach(var source in sources)
 			{
 				_output(Utility.FormatOutput(Properties.Resources.NodeBuilder_PrepareImage, source.Plan.Id));
@@ -173,9 +232,10 @@ internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cach
 
 				await new ServiceImagePreparer(engine, _error).PrepareAsync(source, workspace, cancellation);
 			}
+		}
 
-			ServicePlanner.Validate(sources);
-
+		void PrepareConfiguration()
+		{
 			foreach(var source in sources)
 			{
 				CollectConfiguration(source, delivery);
@@ -188,12 +248,10 @@ internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cach
 
 				UpdateConfigurationHash(source, delivery);
 			}
+		}
 
-			_output(Utility.FormatOutput(Properties.Resources.NodeBuilder_ResolveBootstrap));
-
-			using(Utility.MeasureOutput(_output, Properties.Resources.Run_Elapsed, Properties.Resources.NodeBuilder_ResolveBootstrap))
-				node.Bootstrap = await new BootstrapPackageBuilder(engine, cacheRoot, _error).BuildAsync(manifest, workspace, delivery, cancellation);
-
+		void CollectMigrations()
+		{
 			foreach(var path in manifest.Migrations)
 			{
 				var input = MigrationInput.Parse(path);
@@ -205,7 +263,10 @@ internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cach
 				File.Copy(input.Script, Path.Combine(delivery, script));
 				node.Migrations.Add(new() { Version = input.VersionText, Archive = archive, Script = script, Identity = Files.HashText($"{Files.Hash(path)}{Files.Hash(input.Script)}") });
 			}
+		}
 
+		void CollectExecutor()
+		{
 			File.Copy(executor, Path.Combine(delivery, "containerizer"));
 			var resources = Path.Combine(Path.GetDirectoryName(executor), "zh-Hans");
 			var nestedResources = Path.Combine(resources, "zh-Hans");
@@ -215,16 +276,10 @@ internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cach
 
 			if(Directory.Exists(resources))
 				Files.CopyTree(resources, Path.Combine(delivery, "zh-Hans"));
+		}
 
-			Files.Write(Path.Combine(delivery, "install.sh"), CreateLauncher("install"), true);
-			Files.Write(Path.Combine(delivery, "uninstall.sh"), CreateLauncher("uninstall"), true);
-			Files.Write(Path.Combine(delivery, "README.md"), CreateInstructions(node, manifest.ReleaseName));
-			Files.Write(Path.Combine(delivery, "README.zh-Hans.md"), CreateInstructionsZhHans(node, manifest.ReleaseName));
-			ComposeWriter.Write(node, sources, delivery);
-			var prepared = manifest.Prepare(workspace);
-			node.SourceHash = Files.Hash(prepared);
-			File.Copy(prepared, Path.Combine(delivery, Path.GetFileName(prepared)));
-
+		void SavePlan()
+		{
 			foreach(var service in node.Services)
 			{
 				// Runtime arguments belong to the protected Compose asset; the lock records hashes only.
@@ -234,37 +289,10 @@ internal sealed partial class DeliveryBuilder(IProcessRunner runner, string cach
 			}
 
 			using(Utility.MeasureOutput(_output, Properties.Resources.Run_Elapsed, Properties.Resources.Build_Checksums))
-				node.Files = Directory.EnumerateFiles(delivery, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal).Select(path => new FileRecord { Path = Path.GetRelativePath(delivery, path).Replace('\\', '/'), Hash = Files.Hash(path), Length = new FileInfo(path).Length }).ToList();
+				node.Files = Directory.EnumerateFiles(delivery, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal).Select(path => new ContainerBundlePlan.FileEntry { Path = Path.GetRelativePath(delivery, path).Replace('\\', '/'), Hash = Files.Hash(path), Length = new FileInfo(path).Length }).ToList();
 
-			Files.Save(Path.Combine(delivery, DeliveryPlan.FileName), node, ProtocolJson.Default.DeliveryPlan);
-			Files.Write(Path.Combine(delivery, "checksums.sha256"), $"{string.Join('\n', node.Files.Append(new() { Path = DeliveryPlan.FileName, Hash = Files.Hash(Path.Combine(delivery, DeliveryPlan.FileName)) }).Select(file => $"{file.Hash}  {file.Path}"))}\n", true);
-
-			var archivePath = Path.Combine(workspace, $"{manifest.ReleaseName}.tar.gz");
-
-			using(Utility.MeasureOutput(_output, Properties.Resources.Run_Elapsed, Properties.Resources.Build_Compression))
-				Files.Archive(delivery, archivePath);
-
-			cancellation.ThrowIfCancellationRequested();
-			using var publishLock = BuildStorage.AcquireLock(manifest["output"], cacheRoot);
-			var defaults = ServiceDefaults.Prepare(manifest, workspace);
-
-			using(Utility.MeasureOutput(_output, Properties.Resources.Run_Elapsed, Properties.Resources.Build_Publish))
-				BuildStorage.Publish(manifest, prepared, archivePath, defaults);
-			return Path.Combine(manifest["output"], Path.GetFileName(archivePath));
-		}
-		finally
-		{
-			await buildResources.DisposeAsync();
-
-			try
-			{
-				if(Directory.Exists(workspace))
-					Directory.Delete(workspace, true);
-			}
-			catch(Exception exception)
-			{
-				_error(Utility.FormatOutput(Properties.Resources.NodeBuilder_FailedBuild_Message, CommandOutletColor.DarkRed, workspace, exception.Message));
-			}
+			Files.Save(Path.Combine(delivery, ContainerBundlePlan.FileName), node, ProtocolJson.Default.ContainerBundlePlan);
+			Files.Write(Path.Combine(delivery, "checksums.sha256"), $"{string.Join('\n', node.Files.Append(new() { Path = ContainerBundlePlan.FileName, Hash = Files.Hash(Path.Combine(delivery, ContainerBundlePlan.FileName)) }).Select(file => $"{file.Hash}  {file.Path}"))}\n", true);
 		}
 	}
 	#endregion

@@ -79,7 +79,7 @@ public sealed class InstallationManagerTests : IDisposable
 	[InlineData("unhealthy")]
 	public async Task HealthFailuresIdentifyTheServiceAndRetainTheHealthExitCodeAsync(string failure)
 	{
-		using var bundle = DeliveryBundle.Open(this.CreateBundle("1.0", false));
+		using var bundle = ContainerBundle.Open(this.CreateBundle("1.0", false));
 		var service = bundle.Plan.Services[0];
 		service.Health.StartSeconds = service.Health.Retries = service.Health.TimeoutSeconds = 0;
 		var host = new DockerHost(_store, new HealthRunner(failure));
@@ -95,7 +95,7 @@ public sealed class InstallationManagerTests : IDisposable
 	[Fact]
 	public async Task BootstrapCacheOwnershipSurvivesLaterTransactionSavesAsync()
 	{
-		using var bundle = DeliveryBundle.Open(this.CreateBundle("1.0", false));
+		using var bundle = ContainerBundle.Open(this.CreateBundle("1.0", false));
 		var package = Path.Combine(bundle.Directory, "images", "redis.tar");
 		bundle.Plan.Bootstrap.Packages.Add(new() { Path = "images/redis.tar", Hash = Files.Hash(package), Length = new FileInfo(package).Length });
 		var installation = new Installation { Name = bundle.Plan.Name, DataRoot = bundle.Plan.DataRoot };
@@ -113,7 +113,7 @@ public sealed class InstallationManagerTests : IDisposable
 	[Fact]
 	public async Task BootstrapRecreatesDeletedCacheWithoutLosingOwnershipAsync()
 	{
-		using var bundle = DeliveryBundle.Open(this.CreateBundle("1.0", false));
+		using var bundle = ContainerBundle.Open(this.CreateBundle("1.0", false));
 		var package = Path.Combine(bundle.Directory, "images", "redis.tar");
 		bundle.Plan.Bootstrap.Packages.Add(new() { Path = "images/redis.tar", Hash = Files.Hash(package), Length = new FileInfo(package).Length });
 		var installation = new Installation { Name = bundle.Plan.Name, DataRoot = bundle.Plan.DataRoot };
@@ -132,7 +132,7 @@ public sealed class InstallationManagerTests : IDisposable
 	[Fact]
 	public async Task BootstrapAptCachePreservesBytesAndRejectsDuplicatePackageNamesAsync()
 	{
-		using var bundle = DeliveryBundle.Open(this.CreateBundle("1.0", false));
+		using var bundle = ContainerBundle.Open(this.CreateBundle("1.0", false));
 		var package = Path.Combine(bundle.Directory, "images", "redis.tar");
 		var original = File.ReadAllBytes(package);
 		bundle.Plan.Bootstrap.Packages.Add(new() { Path = "images/redis.tar", Hash = Files.Hash(package), Length = original.Length });
@@ -151,6 +151,197 @@ public sealed class InstallationManagerTests : IDisposable
 		Assert.Equal(4, (await Assert.ThrowsAsync<ContainerizationException>(() => host.PrepareBootstrapAsync(bundle, installation, CancellationToken.None))).Code);
 		Assert.Equal(original, File.ReadAllBytes(cache));
 		Assert.Equal(original, File.ReadAllBytes(package));
+	}
+
+	[Fact]
+	public async Task BootstrapRpmInstallsOnlyRootCapabilitiesFromVerifiedLocalRepositoryAsync()
+	{
+		using var bundle = ContainerBundle.Open(this.CreateBundle("1.0", false, bootstrapRequirements: ["docker-ce", "docker-compose-plugin", "coreutils"]));
+		var installation = new Installation { Name = bundle.Plan.Name, DataRoot = bundle.Plan.DataRoot };
+		var runner = new BootstrapRunner();
+		await new DockerHost(_store, runner).PrepareBootstrapAsync(bundle, installation, TestContext.Current.CancellationToken);
+
+		var repository = Path.Combine(_store.GetCachePath(installation.Name), bundle.Id, "bootstrap", "rpm");
+		var transaction = Assert.Single(runner.Calls, call => call.Executable == "dnf");
+		Assert.Equal(new[]
+		{
+			"-y", "--disablerepo=*",
+			$"--repofrompath=containerizer,{new Uri(repository + Path.DirectorySeparatorChar).AbsoluteUri}",
+			"--enablerepo=containerizer", "--setopt=containerizer.gpgcheck=0", "--setopt=containerizer.repo_gpgcheck=0",
+			"--setopt=install_weak_deps=False", "install", "docker-ce >= 0", "docker-compose-plugin >= 0", "coreutils >= 0",
+		}, transaction.Arguments);
+		Assert.Contains(bundle.Plan.Bootstrap.Packages, package => package.Name == "coreutils-single");
+		Assert.Contains(bundle.Plan.Bootstrap.Packages, package => package.Name == "curl");
+		Assert.Contains(bundle.Plan.Bootstrap.Packages, package => package.Name == "curl-minimal");
+		Assert.All(bundle.Plan.Bootstrap.Packages, package =>
+		{
+			var source = Path.Combine(bundle.Directory, package.Path);
+			var cached = Path.Combine(repository, Path.GetFileName(package.Path));
+			Assert.Equal(File.ReadAllBytes(source), File.ReadAllBytes(cached));
+			Assert.Equal(package.Hash, Files.Hash(source));
+			Assert.Equal(package.Hash, Files.Hash(cached));
+		});
+
+		foreach(var relative in new[] { "repomd.xml", "nested/primary.xml.gz" })
+			Assert.Equal(File.ReadAllBytes(Path.Combine(bundle.Directory, bundle.Plan.Bootstrap.Repository, relative)), File.ReadAllBytes(Path.Combine(repository, "repodata", relative)));
+
+		Assert.Equal(["sh", "dnf", "systemctl", "docker"], runner.Calls.Select(call => call.Executable));
+		Assert.Equal(["enable", "--now", "docker"], runner.Calls[2].Arguments);
+		Assert.Equal(["compose", "version"], runner.Calls[3].Arguments);
+		Assert.True(File.Exists(Path.Combine(_store.GetCachePath(installation.Name), ".containerizer-owner")));
+	}
+
+	[Theory]
+	[InlineData("null-requirements")]
+	[InlineData("empty-requirements")]
+	[InlineData("option-name")]
+	[InlineData("unknown-name")]
+	[InlineData("duplicate-name")]
+	[InlineData("null-repository")]
+	[InlineData("escaping-repository")]
+	[InlineData("missing-repository")]
+	[InlineData("missing-repomd")]
+	public async Task BootstrapRpmRejectsInvalidRepositoryBeforeDnfAsync(string failure)
+	{
+		using var bundle = ContainerBundle.Open(this.CreateBundle("1.0", false, bootstrapRequirements: ["docker-ce", "coreutils"]));
+		var plan = bundle.Plan.Bootstrap;
+
+		switch(failure)
+		{
+			case "null-requirements":
+				plan.Requirements = null;
+				break;
+			case "empty-requirements":
+				plan.Requirements.Clear();
+				break;
+			case "option-name":
+				plan.Requirements = ["--allowerasing"];
+				break;
+			case "unknown-name":
+				plan.Requirements = ["missing-package"];
+				break;
+			case "duplicate-name":
+				plan.Requirements.Add(plan.Requirements[0]);
+				break;
+			case "null-repository":
+				plan.Repository = null;
+				break;
+			case "escaping-repository":
+				plan.Repository = "../repodata";
+				break;
+			case "missing-repository":
+				plan.Repository = "packages/missing";
+				break;
+			case "missing-repomd":
+				File.Delete(Path.Combine(bundle.Directory, plan.Repository, "repomd.xml"));
+				break;
+		}
+
+		if(failure == "option-name")
+			plan.Packages[0].Name = plan.Requirements[0];
+
+		var runner = new BootstrapRunner();
+		var installation = new Installation { Name = bundle.Plan.Name, DataRoot = bundle.Plan.DataRoot };
+		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => new DockerHost(_store, runner).PrepareBootstrapAsync(bundle, installation, TestContext.Current.CancellationToken));
+
+		Assert.Equal(4, exception.Code);
+		Assert.Equal("sh", Assert.Single(runner.Calls).Executable);
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public async Task BootstrapRpmRejectsCorruptPackagesBeforeDnfAsync(bool length)
+	{
+		using var bundle = ContainerBundle.Open(this.CreateBundle("1.0", false, bootstrapRequirements: ["docker-ce", "coreutils"]));
+		var package = bundle.Plan.Bootstrap.Packages[0];
+
+		if(length)
+			package.Length++;
+		else
+			package.Hash = new string('0', 64);
+
+		var runner = new BootstrapRunner();
+		var installation = new Installation { Name = bundle.Plan.Name, DataRoot = bundle.Plan.DataRoot };
+		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => new DockerHost(_store, runner).PrepareBootstrapAsync(bundle, installation, TestContext.Current.CancellationToken));
+
+		Assert.Equal(4, exception.Code);
+		Assert.Equal("sh", Assert.Single(runner.Calls).Executable);
+		Assert.False(Directory.Exists(Path.Combine(_store.GetCachePath(installation.Name), bundle.Id, "bootstrap", "rpm")));
+	}
+
+	[Fact]
+	public async Task BootstrapRpmRejectsDuplicateBasenamesBeforeReplacingCacheAsync()
+	{
+		using var bundle = ContainerBundle.Open(this.CreateBundle("1.0", false, bootstrapRequirements: ["docker-ce", "coreutils"]));
+		var installation = new Installation { Name = bundle.Plan.Name, DataRoot = bundle.Plan.DataRoot };
+		var runner = new BootstrapRunner();
+		var host = new DockerHost(_store, runner);
+		await host.PrepareBootstrapAsync(bundle, installation, TestContext.Current.CancellationToken);
+		var original = bundle.Plan.Bootstrap.Packages[0];
+		var cached = Path.Combine(_store.GetCachePath(installation.Name), bundle.Id, "bootstrap", "rpm", Path.GetFileName(original.Path));
+		var bytes = File.ReadAllBytes(cached);
+		var relative = "other/" + Path.GetFileName(original.Path);
+		var collision = Path.Combine(bundle.Directory, relative);
+		Directory.CreateDirectory(Path.GetDirectoryName(collision));
+		File.WriteAllText(collision, "different valid package bytes");
+		bundle.Plan.Bootstrap.Packages.Add(new() { Name = "collision", Path = relative, Hash = Files.Hash(collision), Length = new FileInfo(collision).Length });
+		runner.Calls.Clear();
+
+		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => host.PrepareBootstrapAsync(bundle, installation, TestContext.Current.CancellationToken));
+
+		Assert.Equal(4, exception.Code);
+		Assert.Equal("sh", Assert.Single(runner.Calls).Executable);
+		Assert.Equal(bytes, File.ReadAllBytes(cached));
+		Assert.Equal(bytes, File.ReadAllBytes(Path.Combine(bundle.Directory, original.Path)));
+	}
+
+	[Fact]
+	public async Task BootstrapDebianRetainsOfflineFileTransactionAsync()
+	{
+		using var bundle = ContainerBundle.Open(this.CreateBundle("1.0", false));
+		var path = Path.Combine(bundle.Directory, "images", "redis.tar");
+		bundle.Plan.Bootstrap.Packages.Add(new() { Path = "images/redis.tar", Hash = Files.Hash(path), Length = new FileInfo(path).Length });
+		var runner = new BootstrapRunner();
+		var installation = new Installation { Name = bundle.Plan.Name, DataRoot = bundle.Plan.DataRoot };
+		await new DockerHost(_store, runner).PrepareBootstrapAsync(bundle, installation, TestContext.Current.CancellationToken);
+
+		var cache = Path.Combine(_store.GetCachePath(installation.Name), bundle.Id, "bootstrap", "apt");
+		var transaction = Assert.Single(runner.Calls, call => call.Executable == "apt-get");
+		Assert.Equal(new[]
+		{
+			"-y", "--no-download", "--no-remove", "--no-install-recommends",
+			"-o", "Dir::Etc::sourcelist=/dev/null", "-o", "Dir::Etc::sourceparts=-",
+			"-o", $"Dir::Cache::archives={cache}", "install", path,
+		}, transaction.Arguments);
+		Assert.Equal(File.ReadAllBytes(path), File.ReadAllBytes(Path.Combine(cache, "redis.tar")));
+		Assert.DoesNotContain(runner.Calls, call => call.Executable == "dnf");
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public async Task UpgradeRejectsChangedBootstrapRequirementsButAcceptsReorderingAsync(bool changed)
+	{
+		await this.RunAsync("install", this.CreateBundle("1.0", false, bootstrapRequirements: ["docker-ce", "docker-compose-plugin", "coreutils"]));
+		_host.Calls.Clear();
+		var next = this.CreateBundle("2.0", false, bootstrapRequirements: changed ? ["docker-ce", "docker-compose-plugin"] : ["coreutils", "docker-compose-plugin", "docker-ce"]);
+
+		if(changed)
+		{
+			var exception = await Assert.ThrowsAsync<ContainerizationException>(() => this.RunAsync("upgrade", next, "--name", "example"));
+
+			Assert.Equal(3, exception.Code);
+			Assert.DoesNotContain("stop", _host.Calls);
+			Assert.Equal("1.0", _store.Load("example").CurrentVersion);
+		}
+		else
+		{
+			await this.RunAsync("upgrade", next, "--name", "example");
+
+			Assert.Contains("stop", _host.Calls);
+			Assert.Equal("2.0", _store.Load("example").CurrentVersion);
+		}
 	}
 
 	[Theory]
@@ -172,7 +363,7 @@ public sealed class InstallationManagerTests : IDisposable
 	[InlineData("/etc/application")]
 	public async Task DirectoryPreparationRejectsSystemAndOtherApplicationPathsAsync(string path)
 	{
-		using var bundle = DeliveryBundle.Open(this.CreateBundle("1.0", false));
+		using var bundle = ContainerBundle.Open(this.CreateBundle("1.0", false));
 		bundle.Plan.DataRoot = path;
 		var installation = new Installation { Name = bundle.Plan.Name, DataRoot = path };
 		var host = new DockerHost(_store, new BootstrapRunner());
@@ -420,12 +611,12 @@ public sealed class InstallationManagerTests : IDisposable
 		if(!OperatingSystem.IsWindows())
 			Assert.Equal((UnixFileMode)292, File.GetUnixFileMode(Path.Combine(next, "config/nginx/site.conf")));
 
-		using var verified = DeliveryBundle.Open(next);
+		using var verified = ContainerBundle.Open(next);
 		if(!OperatingSystem.IsWindows())
 			File.SetUnixFileMode(Path.Combine(next, "config/nginx/site.conf"), (UnixFileMode)420);
 
 		File.AppendAllText(Path.Combine(next, "config/nginx/site.conf"), "tampered");
-		Assert.Equal(4, Assert.Throws<ContainerizationException>(() => DeliveryBundle.Open(next)).Code);
+		Assert.Equal(4, Assert.Throws<ContainerizationException>(() => ContainerBundle.Open(next)).Code);
 	}
 
 	[Fact]
@@ -442,7 +633,7 @@ public sealed class InstallationManagerTests : IDisposable
 	{
 		var path = this.CreateBundle("1.0", false);
 		File.AppendAllText(Path.Combine(path, "compose.yaml"), "changed");
-		Assert.Equal(4, Assert.Throws<ContainerizationException>(() => DeliveryBundle.Open(path)).Code);
+		Assert.Equal(4, Assert.Throws<ContainerizationException>(() => ContainerBundle.Open(path)).Code);
 		Assert.Empty(_store.List());
 	}
 
@@ -455,7 +646,7 @@ public sealed class InstallationManagerTests : IDisposable
 	[InlineData(true, true)]
 	public async Task OfflineImportValidatesImageIdentityBeforePublishingDeliveryTagsAsync(bool wrongArchitecture, bool cached)
 	{
-		using var bundle = DeliveryBundle.Open(this.CreateBundle("1.0", false));
+		using var bundle = ContainerBundle.Open(this.CreateBundle("1.0", false));
 		var runner = new ImportedImageRunner(wrongArchitecture, cached);
 		var host = new DockerHost(_store, runner);
 
@@ -536,7 +727,7 @@ public sealed class InstallationManagerTests : IDisposable
 	[Fact]
 	public async Task InfrastructureRestartPreservesContainerAndUninstallRemovesAnonymousVolumesAsync()
 	{
-		using var bundle = DeliveryBundle.Open(this.CreateBundle("1.0", false));
+		using var bundle = ContainerBundle.Open(this.CreateBundle("1.0", false));
 		var runner = new StorageRunner();
 		var host = new DockerHost(_store, runner);
 		await host.StartServiceAsync(bundle, bundle.Plan.Services.Single(service => service.Id == "redis"), CancellationToken.None);
@@ -556,7 +747,7 @@ public sealed class InstallationManagerTests : IDisposable
 	[InlineData(false)]
 	public async Task IngressCleansTemporaryVolumesOnlyWhenRecreatedAsync(bool recreated)
 	{
-		using var bundle = DeliveryBundle.Open(this.CreateBundle("1.0", false));
+		using var bundle = ContainerBundle.Open(this.CreateBundle("1.0", false));
 		var service = bundle.Plan.Services.Single(item => item.Id == "web");
 		service.Kind = "ingress";
 		service.Mounts.Add(new() { Temporary = true, Target = "/data" });
@@ -580,10 +771,10 @@ public sealed class InstallationManagerTests : IDisposable
 	{
 		var path = this.CreateBundle("1.0", false);
 		var file = Path.Combine(path, "containerizer.json");
-		var plan = Files.Load(file, ProtocolJson.Default.DeliveryPlan);
+		var plan = Files.Load(file, ProtocolJson.Default.ContainerBundlePlan);
 		plan.Schema = schema;
-		Files.Save(file, plan, ProtocolJson.Default.DeliveryPlan);
-		Assert.Equal(3, Assert.Throws<ContainerizationException>(() => DeliveryBundle.Open(path)).Code);
+		Files.Save(file, plan, ProtocolJson.Default.ContainerBundlePlan);
+		Assert.Equal(3, Assert.Throws<ContainerizationException>(() => ContainerBundle.Open(path)).Code);
 	}
 
 	private sealed class StorageRunner : IProcessRunner
@@ -662,11 +853,11 @@ public sealed class InstallationManagerTests : IDisposable
 		public Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation, int timeoutSeconds = 900) => throw new NotSupportedException();
 	}
 
-	private string CreateBundle(string version, bool migration, bool changedInfrastructure = false, string configuration = null)
+	private string CreateBundle(string version, bool migration, bool changedInfrastructure = false, string configuration = null, string[] bootstrapRequirements = null)
 	{
 		var directory = Path.Combine(_root, "bundle-" + Guid.NewGuid().ToString("N"));
 		Directory.CreateDirectory(directory);
-		var plan = new DeliveryPlan { Name = "example", Version = version, Distribution = "debian@13", Architecture = "x64", Project = "containerizer-example-" + Files.HashText("example")[..8], DataRoot = "/var/lib/containerizer/data/example" };
+		var plan = new ContainerBundlePlan { Name = "example", Version = version, Distribution = "debian@13", Architecture = "x64", Project = "containerizer-example-" + Files.HashText("example")[..8], DataRoot = "/var/lib/containerizer/data/example" };
 
 		if(configuration != null)
 		{
@@ -695,8 +886,25 @@ public sealed class InstallationManagerTests : IDisposable
 			plan.Migrations.Add(new() { Version = "1.0", Archive = "migration/migration.tar.gz", Script = "migration/migration.sh", Identity = Files.HashText(Files.Hash(Path.Combine(directory, "migration/migration.tar.gz")) + Files.Hash(Path.Combine(directory, "migration/migration.sh"))) });
 		}
 
-		plan.Files = Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories).Select(path => new FileRecord { Path = Path.GetRelativePath(directory, path).Replace('\\', '/'), Hash = Files.Hash(path), Length = new FileInfo(path).Length }).ToList();
-		Files.Save(Path.Combine(directory, "containerizer.json"), plan, ProtocolJson.Default.DeliveryPlan);
+		if(bootstrapRequirements != null)
+		{
+			plan.Distribution = "rocky@9";
+			plan.Bootstrap = new() { Profile = "rocky@9_x64", Requirements = [.. bootstrapRequirements], Repository = "packages/repodata" };
+			Directory.CreateDirectory(Path.Combine(directory, "packages", "repodata", "nested"));
+			File.WriteAllText(Path.Combine(directory, plan.Bootstrap.Repository, "repomd.xml"), "<repomd>fixture</repomd>");
+			File.WriteAllBytes(Path.Combine(directory, plan.Bootstrap.Repository, "nested", "primary.xml.gz"), [0, 1, 254, 255]);
+
+			foreach(var name in new[] { "docker-ce", "docker-compose-plugin", "coreutils", "coreutils-single", "curl", "curl-minimal" })
+			{
+				var relative = $"packages/{name}.rpm";
+				var path = Path.Combine(directory, relative);
+				File.WriteAllText(path, $"opaque {name} RPM fixture");
+				plan.Bootstrap.Packages.Add(new() { Name = name, Version = "1.0", Architecture = "x86_64", Path = relative, Hash = Files.Hash(path), Length = new FileInfo(path).Length });
+			}
+		}
+
+		plan.Files = Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories).Select(path => new ContainerBundlePlan.FileEntry { Path = Path.GetRelativePath(directory, path).Replace('\\', '/'), Hash = Files.Hash(path), Length = new FileInfo(path).Length }).ToList();
+		Files.Save(Path.Combine(directory, "containerizer.json"), plan, ProtocolJson.Default.ContainerBundlePlan);
 		Files.Write(Path.Combine(directory, "checksums.sha256"), string.Join('\n', plan.Files.Append(new() { Path = "containerizer.json", Hash = Files.Hash(Path.Combine(directory, "containerizer.json")) }).Select(file => file.Hash + "  " + file.Path)) + "\n", true);
 		return directory;
 	}
@@ -707,7 +915,7 @@ public sealed class InstallationManagerTests : IDisposable
 	[InlineData(false, true)]
 	public async Task OnlineMirrorsKeepPinnedIdentityAndReuseCachedImagesAsync(bool wrongMirror, bool cached)
 	{
-		using var bundle = DeliveryBundle.Open(this.CreateBundle("1.0", false));
+		using var bundle = ContainerBundle.Open(this.CreateBundle("1.0", false));
 		bundle.Plan.Services.RemoveAt(1);
 		var image = bundle.Plan.Services[0].Image;
 		image.Mode = "online";
@@ -779,10 +987,14 @@ public sealed class InstallationManagerTests : IDisposable
 
 	private sealed class BootstrapRunner : IProcessRunner
 	{
+		public List<(string Executable, string[] Arguments)> Calls { get; } = [];
 		public Task<int> StreamAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation) => throw new NotSupportedException();
 
-		public Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation, int timeoutSeconds = 900) =>
-			Task.FromResult(new ProcessResult(executable == "sh" ? 1 : 0, "", ""));
+		public Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation, int timeoutSeconds = 900)
+		{
+			this.Calls.Add((executable, arguments.ToArray()));
+			return Task.FromResult(new ProcessResult(executable == "sh" ? 1 : 0, "", ""));
+		}
 	}
 
 	private sealed class HealthRunner(string failure) : IProcessRunner
@@ -810,17 +1022,17 @@ public sealed class InstallationManagerTests : IDisposable
 		public Action<Installation> Stopping { get; set; }
 		public Action<Installation> PreparingDirectories { get; set; }
 		public int UninstallCount { get; private set; }
-		public Task VerifyTargetAsync(DeliveryBundle bundle, Installation installation, CancellationToken cancellation) => this.TargetVerificationFails ? throw new ContainerizationException(3, "Simulated target failure") : Task.CompletedTask;
-		public Task InstallExecutorAsync(DeliveryBundle bundle, CancellationToken cancellation) => Task.CompletedTask;
-		public Task PrepareBootstrapAsync(DeliveryBundle bundle, Installation installation, CancellationToken cancellation) => Task.CompletedTask;
-		public Task PrepareImagesAsync(DeliveryBundle bundle, CancellationToken cancellation) => this.ImagePreparationFails ? throw new ContainerizationException(5, "Simulated image failure") : Task.CompletedTask;
-		public Task PrepareDirectoriesAsync(DeliveryBundle bundle, Installation installation, CancellationToken cancellation)
+		public Task VerifyTargetAsync(ContainerBundle bundle, Installation installation, CancellationToken cancellation) => this.TargetVerificationFails ? throw new ContainerizationException(3, "Simulated target failure") : Task.CompletedTask;
+		public Task InstallExecutorAsync(ContainerBundle bundle, CancellationToken cancellation) => Task.CompletedTask;
+		public Task PrepareBootstrapAsync(ContainerBundle bundle, Installation installation, CancellationToken cancellation) => Task.CompletedTask;
+		public Task PrepareImagesAsync(ContainerBundle bundle, CancellationToken cancellation) => this.ImagePreparationFails ? throw new ContainerizationException(5, "Simulated image failure") : Task.CompletedTask;
+		public Task PrepareDirectoriesAsync(ContainerBundle bundle, Installation installation, CancellationToken cancellation)
 		{
 			this.PreparingDirectories?.Invoke(installation);
 			return Task.CompletedTask;
 		}
-		public Task StartServiceAsync(DeliveryBundle bundle, ServicePlan service, CancellationToken cancellation) { this.Calls.Add("start:" + service.Id); return Task.CompletedTask; }
-		public Task WaitForHealthAsync(DeliveryBundle bundle, ServicePlan service, CancellationToken cancellation) => Task.CompletedTask;
+		public Task StartServiceAsync(ContainerBundle bundle, ServicePlan service, CancellationToken cancellation) { this.Calls.Add("start:" + service.Id); return Task.CompletedTask; }
+		public Task WaitForHealthAsync(ContainerBundle bundle, ServicePlan service, CancellationToken cancellation) => Task.CompletedTask;
 		public Task StopApplicationsAsync(Installation installation, CancellationToken cancellation)
 		{
 			this.Stopping?.Invoke(installation);
@@ -829,9 +1041,9 @@ public sealed class InstallationManagerTests : IDisposable
 				throw new ContainerizationException(4, "Simulated stop failure");
 			return Task.CompletedTask;
 		}
-		public Task RestoreRestartPoliciesAsync(DeliveryBundle bundle, CancellationToken cancellation) => Task.CompletedTask;
-		public Task RestartServiceAsync(DeliveryBundle bundle, ServicePlan service, CancellationToken cancellation) { this.Calls.Add("restart:" + service.Id); return Task.CompletedTask; }
-		public Task<int> RunMigrationAsync(DeliveryBundle bundle, MigrationPlan migration, string stateDirectory, string operation, string logPath, CancellationToken cancellation)
+		public Task RestoreRestartPoliciesAsync(ContainerBundle bundle, CancellationToken cancellation) => Task.CompletedTask;
+		public Task RestartServiceAsync(ContainerBundle bundle, ServicePlan service, CancellationToken cancellation) { this.Calls.Add("restart:" + service.Id); return Task.CompletedTask; }
+		public Task<int> RunMigrationAsync(ContainerBundle bundle, ContainerBundlePlan.Migration migration, string stateDirectory, string operation, string logPath, CancellationToken cancellation)
 		{
 			this.MigrationPaths.Add(stateDirectory);
 			if(operation == "apply")

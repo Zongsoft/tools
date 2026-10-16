@@ -76,17 +76,26 @@ partial class MigrationPlan
 			first.Count == second.Count &&
 			first.All(item => item.Key.Equals(ignored, StringComparison.OrdinalIgnoreCase) || second.TryGetValue(item.Key, out var value) && value == item.Value);
 		#endregion
-	}
 
-	public sealed class User
-	{
-		#region 公共属性
-		public string Name { get; set; }
-		public string Password { get; set; }
-		public string Permission { get; set; } = "readwrite";
-		public string[] Privileges { get; set; } = [];
-		public string[] Roles { get; set; } = [];
-		public string Host { get; set; }
+		#region 嵌套类型
+		/// <summary>表示数据库用户及其权限和角色声明。</summary>
+		public sealed class User
+		{
+			#region 公共属性
+			/// <summary>获取或设置数据库用户名。</summary>
+			public string Name { get; set; }
+			/// <summary>获取或设置用户密码。</summary>
+			public string Password { get; set; }
+			/// <summary>获取或设置预定义权限类别。</summary>
+			public string Permission { get; set; } = "readwrite";
+			/// <summary>获取或设置显式权限列表。</summary>
+			public string[] Privileges { get; set; } = [];
+			/// <summary>获取或设置数据库角色列表。</summary>
+			public string[] Roles { get; set; } = [];
+			/// <summary>获取或设置允许连接的来源主机。</summary>
+			public string Host { get; set; }
+			#endregion
+		}
 		#endregion
 	}
 }

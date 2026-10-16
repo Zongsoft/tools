@@ -47,7 +47,7 @@ public sealed class PackageMetadataTest
 			package.Summary = "应用摘要";
 			package.Description = "第一段\\path\r\n\r\n  保留缩进\r\n最后一段";
 			package.Dependencies = ["runtime:[10.0,11.0) | alternative:[9.0)", "libssl:[3.0]"];
-			package.Host = new(ApplicationHost.HostKind.Generated, Listen: "http://127.0.0.1:8069");
+			package.Host = new(ApplicationHost.HostKind.Generated);
 			package.Entries.AddGeneratedContent("payload.txt", "生成载荷", Utility.Unix.Mode644);
 			package.Entries.AddEntry(directory.Path, "settings.conf", "/etc/example/settings.conf", package.EntryPrefix);
 			package.Entries.SetVersion(new(package.Name, package.Edition, package.Version));
@@ -68,11 +68,12 @@ public sealed class PackageMetadataTest
 			Assert.Equal("应用摘要", metadata["Summary"]);
 			Assert.Equal(package.Description.ReplaceLineEndings("\n"), metadata["Description"].ReplaceLineEndings("\n"));
 			Assert.Equal(package.InstallPath, metadata["InstallPath"]);
-			Assert.Equal(package.Listen, metadata["Listen"]);
+			Assert.False(metadata.ContainsKey("Listen"));
+			Assert.Equal(1, BindingDocument.Deserialize(Encoding.UTF8.GetBytes(metadata["Zongsoft-Bindings"])).Version);
 
 			var entries = PackageArtifactTest.ReadArchive(path, format).Where(entry => !entry.IsDirectory && entry.Name is not ("install.sh" or "uninstall.sh")).ToArray();
 			Assert.Equal(entries.Sum(entry => entry.Size).ToString(System.Globalization.CultureInfo.InvariantCulture), metadata["PackageSize"]);
-			Assert.Equal(3, entries.Length);
+			Assert.Equal(4, entries.Length);
 
 			using var version = new MemoryStream(Assert.Single(entries, entry => entry.Name.EndsWith(".version", StringComparison.Ordinal)).Content);
 			Assert.Equal(new ApplicationIdentifier(package.Name, package.Edition, package.Version), ApplicationIdentifier.Load(version));
@@ -134,11 +135,45 @@ public sealed class PackageMetadataTest
 			Assert.False(metadata.ContainsKey("License"));
 			Assert.False(metadata.ContainsKey("Homepage"));
 			Assert.False(metadata.ContainsKey("Listen"));
-			Assert.Equal("0", metadata["PackageSize"]);
+			Assert.Equal("38", metadata["PackageSize"]);
 			Assert.Equal(format switch { "deb" => "Unknown", _ => null }, metadata.GetValueOrDefault("Maintainer"));
 			Assert.Equal(format switch { "deb" => "utils", "rpm" => "Applications/System", _ => null }, metadata.GetValueOrDefault("Category"));
 			Assert.False(metadata.ContainsKey("Dependencies"));
 		}
+	}
+
+	[Theory]
+	[InlineData("tar")]
+	[InlineData("deb")]
+	[InlineData("rpm")]
+	public void BindingsDocument_IsStoredInTheApplicationPayload(string format)
+	{
+		using var directory = new MigrationTestDirectory();
+		var package = Create(format, directory.Path);
+		package.Bindings = new()
+		{
+			Bindings = [BindingDocument.CreateBinding("application", ["api"], [new("http", "0.0.0.0", 8069, "/", ["http1"])])],
+		};
+		package.Entries.AddGeneratedContent("payload.txt", "application payload", Utility.Unix.Mode644);
+		package.Pack(directory.Path, false);
+
+		var path = Path.Combine(directory.Path, package.FileName);
+		var metadata = ReadMetadata(path, format);
+		var bindings = BindingDocument.Deserialize(Encoding.UTF8.GetBytes(metadata["Zongsoft-Bindings"]));
+
+		Assert.Single(bindings.Bindings);
+		Assert.Equal("api", Assert.Single(bindings.Bindings[0].Aliases));
+
+		var archive = PackageArtifactTest.ReadArchive(path, format);
+		if(format == "tar")
+		{
+			Assert.Single(archive, entry => entry.Name == ".bindings");
+			Assert.DoesNotContain(archive, entry => entry.Name == "opt/example/.bindings");
+			var install = Encoding.UTF8.GetString(Assert.Single(archive, entry => entry.Name == "install.sh").Content);
+			Assert.DoesNotContain("-path './.bindings'", install);
+		}
+		else
+			Assert.Single(archive, entry => entry.Name == "opt/example/.bindings");
 	}
 	#endregion
 
@@ -199,6 +234,8 @@ public sealed class PackageMetadataTest
 
 	private static Dictionary<string, string> ReadMetadata(string path, string format)
 	{
+		var content = Encoding.UTF8.GetString(Assert.Single(PackageArtifactTest.ReadArchive(path, format), entry => entry.Name == ".bindings" || entry.Name.EndsWith("/.bindings", StringComparison.Ordinal)).Content);
+
 		if(format == "tar")
 		{
 			using var stream = File.OpenRead(path);
@@ -208,6 +245,7 @@ public sealed class PackageMetadataTest
 			var result = Assert.IsType<PaxGlobalExtendedAttributesTarEntry>(reader.GetNextEntry()).GlobalExtendedAttributes.ToDictionary();
 			result["Summary"] = System.Text.RegularExpressions.Regex.Unescape(result["Summary"]);
 			result["Description"] = System.Text.RegularExpressions.Regex.Unescape(result["Description"]);
+			result["Zongsoft-Bindings"] = content;
 
 			return result;
 		}
@@ -231,6 +269,7 @@ public sealed class PackageMetadataTest
 
 			result["PackageName"] = result["Package"];
 			result["Category"] = result["Section"];
+			result["Zongsoft-Bindings"] = content;
 
 			if(result.TryGetValue("Depends", out var depends))
 				result["Dependencies"] = depends;
@@ -258,17 +297,16 @@ public sealed class PackageMetadataTest
 			[1016] = "Category",
 			[1020] = "Homepage",
 			[1022] = "Architecture",
-			[1000002] = "InstallPath",
+			[1000003] = "InstallPath",
 			[1064] = "Packager",
-			[1000001] = "Listen",
 		};
 
-		var metadata = new Dictionary<string, string>();
+		var metadata = new Dictionary<string, string> { ["Zongsoft-Bindings"] = content };
 
 		foreach(var field in fields.Where(field => tags.ContainsKey(field.Tag)))
 			metadata[tags[field.Tag]] = Encoding.UTF8.GetString(bytes, field.Offset, Array.IndexOf(bytes, (byte)0, field.Offset) - field.Offset);
 
-		var installPath = Assert.Single(fields, field => field.Tag == 1000002);
+		var installPath = Assert.Single(fields, field => field.Tag == 1000003);
 		Assert.Equal(6, installPath.Type);
 		Assert.Equal(1, installPath.Count);
 

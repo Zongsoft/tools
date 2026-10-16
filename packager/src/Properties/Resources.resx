@@ -228,4 +228,6 @@
   <data name="Output.Elapsed" xml:space="preserve">
     <value>  → {0}: {1} s</value>
   </data>
+  <data name="BindingsInvalid.Message" xml:space="preserve"><value>Invalid bindings document at "{0}" (rule: {1}).</value></data>
+  <data name="BindingExtraction.Message" xml:space="preserve"><value>Cannot extract a binding from "{0}" at {1}:{2}, configuration "{3}", field "{4}" (rule: {5}).</value></data>
 </root>

@@ -57,10 +57,10 @@ partial class Configurator
 					if(argument.Value?.Contains("{{zongsoft:", StringComparison.Ordinal) == true)
 						throw DefinitionException.Create("Conflict", default, "{{zongsoft:");
 
-					if(template && argument.Kind == ArgumentKind.Application)
+					if(template && argument.Kind == ArgumentKind.Binding)
 					{
 						var scheme = argument.Value.IndexOf("://", StringComparison.Ordinal);
-						_text.Append(scheme < 0 ? "" : argument.Value[..(scheme + 3)]).Append("{{zongsoft:application}}").Append(argument.Value[argument.Value.LastIndexOf(':')..]);
+						_text.Append(scheme < 0 ? "" : argument.Value[..(scheme + 3)]).Append("{{zongsoft:binding:").Append(argument.Binding).Append(':').Append(argument.Endpoint).Append("}}");
 					}
 					else if(template && argument.Kind == ArgumentKind.Resource)
 					{

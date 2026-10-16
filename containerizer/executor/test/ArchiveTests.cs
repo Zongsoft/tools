@@ -52,7 +52,7 @@ public sealed class ArchiveTests : IDisposable
 	[Fact]
 	public void ProtocolRejectsUnknownFields()
 	{
-		Assert.Throws<JsonException>(() => JsonSerializer.Deserialize("{\"schema\":1,\"futureBehavior\":true}", ProtocolJson.Default.DeliveryPlan));
+		Assert.Throws<JsonException>(() => JsonSerializer.Deserialize("{\"schema\":1,\"futureBehavior\":true}", ProtocolJson.Default.ContainerBundlePlan));
 	}
 
 	[Fact]

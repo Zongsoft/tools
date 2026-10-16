@@ -18,6 +18,7 @@
 	<ItemGroup>
 		<Compile Include="..\..\.shared\Utility.cs" Link="Shared\Utility.cs" />
 		<Compile Include="..\..\.shared\Utility.Output.cs" Link="Shared\Utility.Output.cs" />
+		<Compile Include="..\..\.shared\FilterExpression.cs" Link="Shared\FilterExpression.cs" />
 		<Compile Include="..\..\.shared\ArtifactPublisher.cs" Link="Shared\ArtifactPublisher.cs" />
 		<None Remove="Resources/dotnet-runtime-LICENSE.txt" />
 		<None Include="Resources/dotnet-runtime-LICENSE.txt" Pack="true" PackagePath="licenses/" />

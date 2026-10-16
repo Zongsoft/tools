@@ -14,7 +14,7 @@
 | `tools/.shared` 链接源码 | `Utility.cs` 与本项目的 `partial Utility` 合并编译，组合 Core 变量来源并提供命令辅助方法；`ArtifactPublisher` 统一管理暂存与发布，部署复制和报告写入使用其单文件原子替换。选项中的布尔值沿用 Core `Switch` 语义，枚举使用 Core 转换。 |
 | `Deployer.cs` | 管理一次调用、遍历清单、收集请求及预检查错误。 |
 | `DeploymentSession.cs` | 持有本次计数、活动清单栈、包请求、选中版本和展开暂存列表。 |
-| `DeploymentPlan.cs`、`DeploymentOperation.cs`、`PackageSelection.cs` | 保存计划、操作来源、包版本与哈希；每种类型独立维护。 |
+| `DeploymentPlan.cs`、`DeploymentPlan.Operation.cs`、`DeploymentPlan.Package.cs` | 保存计划、操作来源、包版本与哈希；操作及包选择嵌套于 DeploymentPlan，使用对应的分部文件。 |
 | `Deployer.Execution.cs` | 验证目标冲突、锁与历史记录，然后执行操作。 |
 | `DeploymentResolverBase`、`DeploymentResolverManager`、`NugetResolver` | 将本地文件、delete/remove 和 NuGet 条目转换为计划。 |
 | `DeploymentPath` | 验证目标边界、拒绝写入链接路径，并提供部署清单路径标识。 |
@@ -71,6 +71,8 @@ Core 通过 Profile.Directives 全局登记指令实现，ProfileReader 解析�
 所有变量（包括 `framework`）统一遵循首个命中生效：null、空字符串、false 和 0 都不会触发下层回退。只有未提供该值时才继续查找；需要有效值的业务操作负责校验并在无法继续时报告错误。
 
 Core `TemplateEvaluator` 处理 `${name}`，保留 URL 中的斜线。部署路径展开发现未定义变量时报错；被过滤掉的分支无需提供变量。过滤组合保持从左到右求值，源过滤与目标过滤都必须满足。
+
+通用过滤解析、存在/否定、逗号候选值匹配及逻辑组合由 [.shared/FilterExpression.cs](../../.shared/FilterExpression.cs) 提供，并与 Packager binding 筛选共享。Utility.Requisition 继续提供 deployer 变量/选项查询和 framework 专用比较；不把 NuGet 框架比较带入通用过滤器。所有条件均求值，& 与 | 没有独立优先级；既有 .deploy 外层过滤语法不变。
 
 `NugetAssets.ResolveLibraryPath` 集中处理显式缓存路径的框架适配：只解析相对 NuGet_Packages 根的路径，识别 lib 目录；路径内的框架优先于 Framework 变量，通过官方 NuGetFrameworkUtility.GetNearest 选择最近框架并保留后续子路径。根外、未指定目标框架或无适用目录时返回原路径。
 
@@ -166,7 +168,7 @@ Core 的无显式目标 Save() 仅将自身及导入子树中修改的声明写�
 
 ## hosting 调用边界
 
-hosting 的 deploy.cmd 负责构建和插件部署，pack.cmd 独立制作安装包。根目录 `deploy.cmd` 和 `pack.cmd` 选择宿主源目录；填写框架覆盖值时，deploy.cmd 将其传给 Cake 和 deployer，pack.cmd 须另行输入同一值；留空时 Cake 使用 `build.cake` 默认值，工具从各自变量来源读取；deployer 按自身加载顺序从变量来源取得框架，`appsettings.json` 参与最终合并。构建值须与部署、打包值一致。框架用于 output 表达式时须在输出目录预解析阶段可用，不能靠随后加载的目标配置反推 output。部署器不负责同步 Cake 参数，也不调用 packager 或 migrator。操作示例见 [README](../README.zh-Hans.md#hosting-脚本中的框架与变量)。
+hosting 的 deploy.cmd 负责构建和插件部署，pack.cmd 独立制作安装包。根目录 `deploy.cmd` 和 `pack.cmd` 选择宿主源目录；填写框架覆盖值时，deploy.cmd 将其传给 Cake 和 deployer，pack.cmd 须另行输入同一值；留空时 Cake 使用 `build.cake` 默认值，工具从各自变量来源读取；deployer 按自身加载顺序从变量来源取得框架，`appsettings.json` 参与最终合并。构建值须与部署、打包值一致。框架用于 output 表达式时须在输出目录预解析阶段可用，不能靠随后加载的目标配置反推 output。部署器不负责同步 Cake 参数，也不调用 packager 或 migrator。操作示例见 [README](../README.zh-Hans.md#源目录导入与-hosting)。
 
 ## 本地搜索与源链接
 
