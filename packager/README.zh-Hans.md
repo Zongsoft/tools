@@ -1080,6 +1080,8 @@ RPM 的 `PACKAGER` 标签（1015）保存的是 `--maintainer` 维护者信息�
 
 在实际交付的 `.option` 中，用 `<?zongsoft.tools.binding ...?>` 声明应用已经配置的监听。打包时无需另外列出监听端口；Web 入口可自动接纳这些声明，Containerizer 可据此配置宿主端口。指令本身不会启动服务器或修改应用监听。
 
+生成的 `.bindings` 是 UTF-8 JSON 文件，组合协议直接显示为 `grpc+http2` 等文本，保留可读的 `+` 号。
+
 ### Web 与 gRPC
 
 以下文件声明普通 Web 根入口和 OTLP gRPC 接收区域：

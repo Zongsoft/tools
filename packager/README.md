@@ -1080,6 +1080,8 @@ This project is licensed under the [MIT](https://github.com/Zongsoft/tools/blob/
 
 Declare configured listeners with `<?zongsoft.tools.binding ...?>` in the `.option` files you ship. Web ingress can discover these declarations, and Containerizer can use them to publish host ports. The instruction does not start servers or change application listeners.
 
+The generated `.bindings` file is UTF-8 JSON. Combined protocols appear as readable text such as `grpc+http2`, with the `+` sign preserved literally.
+
 ### Web and gRPC
 
 This configuration declares an ordinary Web root and an OTLP gRPC region:

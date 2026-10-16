@@ -38,6 +38,7 @@ using System.Text;
 using System.Text.Json;
 using System.Net.Sockets;
 using System.Globalization;
+using System.Text.Encodings.Web;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text.Json.Serialization;
@@ -75,6 +76,7 @@ internal sealed class BindingDocument
 	#region 静态字段
 	private static readonly JsonSerializerOptions _options = new()
 	{
+		Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
 		PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
 		UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
 		MaxDepth = MAXIMUM_DEPTH,

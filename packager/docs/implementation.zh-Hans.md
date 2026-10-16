@@ -1238,7 +1238,7 @@ Web 输入的完整最小示意如下。另两个应用声明按同样的过程�
 
 ### 2. 顶层结构
 
-使用 UTF-8、无 BOM 的 JSON；字段名区分大小写。下面是有效的空文档：
+使用 UTF-8、无 BOM 的 JSON；字段名区分大小写。输出采用 `JavaScriptEncoder.UnsafeRelaxedJsonEscaping`，直接保留 `+`，例如 `"grpc+http2"`，并保留可直接输出的 Unicode 字符；双引号、反斜杠和控制字符仍按 JSON 规则转义。该文件独立作为 UTF-8 JSON 读取，不直接嵌入 HTML 或脚本。端点和绑定的身份仍按第 3.3 节的专用编码计算，不依赖文件的等价转义形式。下面是有效的空文档：
 
 ```json
 {

@@ -1176,7 +1176,7 @@ For example, `path="Kestrel/Endpoints/http"`, `template="${option.Url}"`, `proto
 
 ### 1. Root and validation
 
-The UTF-8 document has no BOM. Property names are case sensitive. All three root properties are required:
+The UTF-8 document has no BOM. Property names are case sensitive. Output uses `JavaScriptEncoder.UnsafeRelaxedJsonEscaping`, preserving literal `+` in values such as `"grpc+http2"` and Unicode characters that the encoder can emit directly. Quotes, backslashes and control characters remain JSON-escaped. Read this standalone file as UTF-8 JSON; do not embed it directly in HTML or scripts. Endpoint and binding identities still use the dedicated encoding in section 3, independently of equivalent escapes in the file. All three root properties are required:
 
 ```json
 {"version":1,"bindings":[],"sites":[]}
