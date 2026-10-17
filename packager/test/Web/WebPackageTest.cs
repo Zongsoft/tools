@@ -23,9 +23,9 @@ public class WebPackageTest
 		using var files = new MigrationTestDirectory();
 		files.Write(".version", "example@1.0.0");
 		files.Write("web.profile", "[api]\nhost=api.example.test\nbind!public=http://*");
-		files.Write("web.option", "<?zongsoft.tools.binding name=\"web\" path=\"Server\" template=\"${option.Url}\" protocols=\"${option.Protocols}\" required=\"true\"?>\n<configuration><option><server url=\"http://*:8069\" protocols=\"Http1\" /></option></configuration>");
-		files.Write("metrics.option", "<?zongsoft.tools.binding name=\"metrics\" path=\"Metrics\" template=\"${option.Url}\" protocols=\"${option.Protocols}\" required=\"true\"?>\n<configuration><option><metrics url=\"http://*:9464/metrics\" protocols=\"Http1\" /></option></configuration>");
-		files.Write("telemetry.option", "<?zongsoft.tools.binding name=\"telemetry\" path=\"Telemetry\" template=\"${option.Url}\" protocols=\"${option.Protocols}\" required=\"true\"?>\n<configuration><option><telemetry url=\"http://*:4317/opentelemetry\" protocols=\"grpc+http2\" /></option></configuration>");
+		files.Write("web.option", "<?zongsoft.tools.binding name=\"web\" path=\"Server\" template=\"${this.Url}\" protocols=\"${this.Protocols}\" required=\"true\"?>\n<configuration><option><server url=\"http://*:8069\" protocols=\"Http1\" /></option></configuration>");
+		files.Write("metrics.option", "<?zongsoft.tools.binding name=\"metrics\" path=\"Metrics\" template=\"${this.Url}\" protocols=\"${this.Protocols}\" required=\"true\"?>\n<configuration><option><metrics url=\"http://*:9464/metrics\" protocols=\"Http1\" /></option></configuration>");
+		files.Write("telemetry.option", "<?zongsoft.tools.binding name=\"telemetry\" path=\"Telemetry\" template=\"${this.Url}\" protocols=\"${this.Protocols}\" required=\"true\"?>\n<configuration><option><telemetry url=\"http://*:4317/opentelemetry\" protocols=\"grpc+http2\" /></option></configuration>");
 		var stale = files.Write(".web/nginx/.bindings", "[legacy]\nbind=http://*:9");
 		var originalLegacy = File.ReadAllBytes(stale);
 		byte[] baseline = null;

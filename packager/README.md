@@ -1089,7 +1089,7 @@ This configuration declares an ordinary Web root and an OTLP gRPC region:
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
 <?zongsoft.tools.binding name="kestrel" path="Kestrel/Endpoints/*"
-	template="${option.Url}" protocols="${option.Protocols}" required="true"?>
+	template="${this.Url}" protocols="${this.Protocols}" required="true"?>
 <options>
 	<option path="kestrel">
 		<endpoints>
@@ -1127,8 +1127,8 @@ Set `server = kestrel/http` to select a unique alias, or `server = https://upstr
 | Attribute | Usage |
 | --- | --- |
 | `path` | Required. An exact configuration path or trailing `/*` for immediate children. `/` selects the root. This is neither XPath nor recursive expansion. |
-| `template` | Required. A complete listener URL template, such as `${option.Url}`. |
-| `protocols` | Optional. A capability template such as `${option.Protocols}`, or a constant such as `tcp`. Omission does not add HTTP versions. |
+| `template` | Required. A complete listener URL template, such as `${this.Url}`. |
+| `protocols` | Optional. A capability template such as `${this.Protocols}`, or a constant such as `tcp`. Omission does not add HTTP versions. |
 | `name` | Optional additional alias. Collection selections also add `name/child-key`; configuration path aliases remain available. |
 | `filter` | Optional. Select candidates before reading addresses and protocols. |
 | `separators` | Address-result separator characters, default `,;\|`. An explicit nonempty value replaces the defaults. Protocol lists always use commas. |
@@ -1138,23 +1138,26 @@ The instruction name is case insensitive; examples use the complete lowercase na
 
 ### Templates, settings and filters
 
+`this` is the read-only view of the current item selected by `path` and accepted by `filter`, using this file's configuration after its explicit imports finish. The only template root variable is `this`, matched case-insensitively.
+
 | Expression | Source |
 | --- | --- |
-| `${option.Url}` | The current candidate's `Url`. |
-| `${option.Network.Address}` | Its `Network/Address` child. |
-| `${option['/Network/Address']}` | The root of this file and its explicit imports. |
-| `${option.Settings['urls']}` | The `urls` key parsed from its `Settings` text. |
-| `tcp://${option.Value['address']}` | The `address` setting in `Value`, prefixed with `tcp://`. |
+| `${this.Url}` | The current candidate's `Url`. |
+| `${this.Network.Address}` | Its `Network/Address` child. |
+| `${this['/Network/Address']}` | The root of this file and its explicit imports. |
+| `${this.Settings['urls']}` | The `urls` key parsed from its `Settings` text. |
+| `${this.Settings[this.Key]}` | Read the current item's `Key`, then use its value as a key in that item's `Settings` text. |
+| `tcp://${this.Value['address']}` | The `address` setting in `Value`, prefixed with `tcp://`. |
 
 Quote fixed settings keys, as in `['urls']`. Expressions read only the selected configuration view; they do not read the build machine's environment or missing fields from unrelated packaged files.
 
 Filters use the [deployer syntax](../deployer/README.md#filtering): `Enabled` tests presence, `Enabled:true` tests a value, `!Enabled | Enabled:true` enables missing values, and `Driver:prometheus,custom` accepts either value. `&` and `|` evaluate left to right, without grouping parentheses. Write `&amp;` inside XML attributes. Filter field references also support `/Server/Enabled` and `Settings[enabled]`.
 
-In `.option.template`, escape expressions intended for Packager as `\${option.Url}` or `\${option.Protocols}`. Deployer removes that escape and produces `${...}` in the final `.option`. Deployment variables in the runtime configuration are evaluated normally:
+In `.option.template`, escape expressions intended for Packager as `\${this.Url}` or `\${this.Protocols}`. Deployer removes that escape and produces `${...}` in the final `.option`. Deployment variables in the runtime configuration are evaluated normally:
 
 ```xml
 <?zongsoft.tools.binding path="Kestrel/Endpoints/http"
-	template="\${option.Url}" protocols="\${option.Protocols}" required="true"?>
+	template="\${this.Url}" protocols="\${this.Protocols}" required="true"?>
 <options>
 	<option path="kestrel">
 		<endpoints>
@@ -1164,7 +1167,7 @@ In `.option.template`, escape expressions intended for Packager as `\${option.Ur
 </options>
 ```
 
-`${web:url#xml}` comes from deployment variables and is escaped for an XML attribute. `\${option.Url}` survives in the generated configuration for packaging to read that final value. Do not ship an unevaluated `.option.template` as a finished configuration.
+`${web:url#xml}` comes from deployment variables and is escaped for an XML attribute. `\${this.Url}` survives in the generated configuration for packaging to read that final value. Do not ship an unevaluated `.option.template` as a finished configuration.
 
 ### Prometheus, multiple addresses and non-HTTP listeners
 
@@ -1173,7 +1176,7 @@ Prometheus reads complete scrape URLs from the same runtime settings:
 ```xml
 <?zongsoft.tools.binding name="prometheus"
 	path="Diagnostics/Diagnostor/Meters/Exporters/*" filter="Driver:prometheus"
-	template="${option.Settings['urls']}" protocols="http1"?>
+	template="${this.Settings['urls']}" protocols="http1"?>
 <options>
 	<option path="Diagnostics/Diagnostor/Meters/Exporters">
 		<exporter exporter.name="prometheus" driver="prometheus"
@@ -1188,18 +1191,18 @@ The following fields and instructions must match the shipped server configuratio
 
 | Service and input | Instruction attributes | Result and boundary |
 | --- | --- | --- |
-| Garnet: `Externals/Garnet/default/Value=address=0.0.0.0:6379` | `name="garnet" path="Externals/Garnet/default" template="tcp://${option.Value['address']}" protocols="tcp" required="true"` | `6379/tcp`; the plugin must select settings named `default`. Authentication, TLS and persistence remain Garnet configuration. |
-| MQTT: `Messaging/Mqtt/Server`, `enabled=true`, `url=tcp://0.0.0.0:1883` | `name="mqtt" path="Messaging/Mqtt/Server" filter="enabled:true" template="${option.Url}" protocols="tcp"` | `1883/tcp`; ship and enable the daemon plugin. This declares neither WebSocket nor TLS. |
-| OPC UA: `Externals/Opc/Server`, `enabled=true`, `urls=opc.tcp://0.0.0.0:4840/FactoryA` | `name="opc" path="Externals/Opc/Server" filter="enabled:true" template="${option.Urls}" separators="," protocols="opc.tcp"` | `4840/tcp`, retaining `/FactoryA`. `Discovery` is a registration target, not a listener. |
-| UDP: `Network/Receiver/Url=udp://0.0.0.0:9000` | `name="receiver" path="Network/Receiver" template="${option.Url}" protocols="udp"` | `9000/udp`; no extra TCP mapping or HTTP proxy. |
+| Garnet: `Externals/Garnet/default/Value=address=0.0.0.0:6379` | `name="garnet" path="Externals/Garnet/default" template="tcp://${this.Value['address']}" protocols="tcp" required="true"` | `6379/tcp`; the plugin must select settings named `default`. Authentication, TLS and persistence remain Garnet configuration. |
+| MQTT: `Messaging/Mqtt/Server`, `enabled=true`, `url=tcp://0.0.0.0:1883` | `name="mqtt" path="Messaging/Mqtt/Server" filter="enabled:true" template="${this.Url}" protocols="tcp"` | `1883/tcp`; ship and enable the daemon plugin. This declares neither WebSocket nor TLS. |
+| OPC UA: `Externals/Opc/Server`, `enabled=true`, `urls=opc.tcp://0.0.0.0:4840/FactoryA` | `name="opc" path="Externals/Opc/Server" filter="enabled:true" template="${this.Urls}" separators="," protocols="opc.tcp"` | `4840/tcp`, retaining `/FactoryA`. `Discovery` is a registration target, not a listener. |
+| UDP: `Network/Receiver/Url=udp://0.0.0.0:9000` | `name="receiver" path="Network/Receiver" template="${this.Url}" protocols="udp"` | `9000/udp`; no extra TCP mapping or HTTP proxy. |
 
 Declare ZeroMQ's four roles separately rather than combining their URLs:
 
 ```xml
-<?zongsoft.tools.binding name="zeromq/control" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${option.Control}" protocols="tcp"?>
-<?zongsoft.tools.binding name="zeromq/incoming" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${option.Incoming}" protocols="tcp"?>
-<?zongsoft.tools.binding name="zeromq/outgoing" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${option.Outgoing}" protocols="tcp"?>
-<?zongsoft.tools.binding name="zeromq/discovery" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${option.Discovery}" protocols="tcp"?>
+<?zongsoft.tools.binding name="zeromq/control" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${this.Control}" protocols="tcp"?>
+<?zongsoft.tools.binding name="zeromq/incoming" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${this.Incoming}" protocols="tcp"?>
+<?zongsoft.tools.binding name="zeromq/outgoing" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${this.Outgoing}" protocols="tcp"?>
+<?zongsoft.tools.binding name="zeromq/discovery" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${this.Discovery}" protocols="tcp"?>
 <options>
 	<option path="Messaging/ZeroMQ">
 		<server name="QueueServer" enabled="true" storage="QueueServer"

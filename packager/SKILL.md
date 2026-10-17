@@ -16,7 +16,7 @@ description: 修改打包命令、应用版本管理、载荷路径、三种包�
 - 包模型与编码：Package*、Generator*；长度、对齐、校验和、字节序为精确契约。
 - 依赖：Dependency 解析统一 name[:range]，保留原生端点、开闭边界及 OR 分组；[v) 等同 [v,)，区间内逗号不可分组。Debian 用分配律展开替代项（单组最多 1024 个关系组），RPM 用 with/or 与 RichDependencies 能力；~ /^ 端点声明 TildeInVersions / CaretInVersions。版本比较交给目标系统，虚拟提供者按各平台原生语义；其他关系字段不复用区间转换。
 - 安装及服务：ApplicationHost 固定共享的宿主结果，Scriptor.Systemd 组合生命周期；监听由运行配置提供，服务启动参数保留原义。包级绑定的字段、承载及当前实现边界见 [文件规范](docs/implementation.zh-Hans.md#binding-document)。推演安装、升级、覆盖和最终卸载，保留 Debian/RPM 阶段差异。
-- 应用绑定：BindingExtractor 使用最终安装路径的只读 IFileProvider，由 Core 处理逐文件配置及显式 Import；PhysicalPath 为空，包装条目流，避免 Core 把 FileStream 当作制作机来源。/ 指虚拟安装文件系统根，相对路径基于声明文件，排除与别名已生效。导入结束后再求值有效 zongsoft.tools.binding PI，使用独立且关闭递归/回退的 TemplateEvaluator、显式 option 视图及 Settings 取键；FilterExpression 共用过滤语法。逐声明检查 required，再按相交端点传递合并同类替代地址及别名，发布前校验文档与容量。提取完成后由 Web/Routing 按请求类别组合站点，Writer 以 binding/endpoint 身份生成容器模板；最后统一写入根 JSON。
+- 应用绑定：BindingExtractor 使用最终安装路径的只读 IFileProvider，由 Core 处理逐文件配置及显式 Import；PhysicalPath 为空，包装条目流，避免 Core 把 FileStream 当作制作机来源。/ 指虚拟安装文件系统根，相对路径基于声明文件，排除与别名已生效。导入结束后再求值有效 zongsoft.tools.binding PI，使用独立且关闭递归/回退的 TemplateEvaluator、显式 this 视图及 Settings 取键；FilterExpression 共用过滤语法。逐声明检查 required，再按相交端点传递合并同类替代地址及别名，发布前校验文档与容量。提取完成后由 Web/Routing 按请求类别组合站点，Writer 以 binding/endpoint 身份生成容器模板；最后统一写入根 JSON。
 - Web 托管：Web/Definition、Configurator、Installation；严格导入、后端整组替换和有效值求值顺序不可颠倒。生成 .web/nginx 配置，Delivered 独立于生命周期和激活开关；测试采用临时目录与 Nginx/systemctl 替身，不运行真实安装。字段、模块要求和容器化约定见 [Web 指南](docs/web.zh-Hans.md)。
 - 外部升迁：Migration.cs；按名称和最终应用身份定位 `<name>[-<edition>](migrate)@<version>_<RID>` 原样产物，name 原样使用，Edition 可省略，安装调用其脚本。变量展开后，裸名称从 source 逐级查到根，每层先查目录本身再查直属 `.migration/`；带 / 或 \ 的路径只查显式目录，./ 可限定源目录。两文件都缺失才查下一位置，半套或元数据无效即失败，不跨目录拼配；测试覆盖查找起点、最近目录、终止条件和三格式原样收录。生成/执行逻辑归独立 [migrator](../migrator/SKILL.md)。
 - 搜索与文本：Utility.Search 调用 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) Searcher；TextSource 解释 file:/text:，pre/post 为文件列表。
@@ -33,7 +33,7 @@ description: 修改打包命令、应用版本管理、载荷路径、三种包�
 
 ## 绑定开发与验证
 
-先阅读 [文件契约](docs/implementation.zh-Hans.md#binding-document) 和 [代理与运行端语义](docs/implementation.zh-Hans.md#routing-runtime)。绑定提取使用独立 TemplateEvaluator（InvariantCulture、Recursive=false、Fallback=false），只注册 option 视图；Resolving 适配配置导航和显式 Settings 索引。Core 继续负责表达式、XML、Import 和 Settings 语法。共享 FilterExpression 负责过滤，TFM 专用比较留在 deployer。
+先阅读 [文件契约](docs/implementation.zh-Hans.md#binding-document) 和 [代理与运行端语义](docs/implementation.zh-Hans.md#routing-runtime)。绑定提取使用独立 TemplateEvaluator（InvariantCulture、Recursive=false、Fallback=false），只注册 this 视图；Resolving 适配配置导航和显式 Settings 索引。Core 继续负责表达式、XML、Import 和 Settings 语法。共享 FilterExpression 负责过滤，TFM 专用比较留在 deployer。
 
 | 改动范围 | 应检查的输入与结果 |
 | --- | --- |

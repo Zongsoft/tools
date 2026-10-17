@@ -119,7 +119,7 @@ partial class BindingExtractor
 			evaluator.Resolving += (_, context) =>
 			{
 				this.Reference = context.Expression;
-				if(!string.IsNullOrEmpty(context.Namespace) || !context.Name.Equals("option", StringComparison.OrdinalIgnoreCase))
+				if(!string.IsNullOrEmpty(context.Namespace) || !context.Name.Equals("this", StringComparison.OrdinalIgnoreCase))
 					return;
 
 				context.Value = this.Resolve(MemberExpression.Parse(context.Expression));
@@ -148,7 +148,7 @@ partial class BindingExtractor
 		#region 私有方法
 		private object Resolve(IMemberExpression expression)
 		{
-			if(expression is not IdentifierExpression identifier || !identifier.Name.Equals("option", StringComparison.OrdinalIgnoreCase))
+			if(expression is not IdentifierExpression identifier || !identifier.Name.Equals("this", StringComparison.OrdinalIgnoreCase))
 				throw new InvalidOperationException();
 
 			object value = new Node(this.Path, true);

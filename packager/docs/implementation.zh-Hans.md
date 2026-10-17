@@ -537,7 +537,7 @@ BindingExtractor 在输入选择、排除、目标映射及生成条目完成后
 
 [BindingExtractor.Configuration.cs](../src/BindingExtractor.Configuration.cs) 中的私有 ProcessInstruction 回调将 zongsoft.tools.binding 指令标记为已接管，并将 Import 的 / 路径转换成等价相对路径。它与 PackageFiles 共用私有 NormalizePath 方法；Core 继续处理作用域、覆盖、可选缺失、循环及深度。绑定值在加载完成后求值，不在回调中提取，也不注册 Core 全局指令处理器。
 
-每个最终 .option 独立加载，导入完成后遍历提供程序的 Instructions。精确 path 选中单项，末尾 /* 只枚举直接子项；filter 先筛选，再求值 template/protocols。ConfigurationView 通过 Core TemplateEvaluator 的 Resolving 回调和 MemberExpression 提供显式 option 导航；字符串路径相对当前候选项，前导 / 从本次配置根读取。对已选字段的显式字符串索引才解析 Settings，TryGetValue 区分缺失与空值。求值器不注册环境/命令来源，关闭递归与回退。
+每个最终 .option 独立加载，导入完成后遍历提供程序的 Instructions。精确 path 选中单项，末尾 /* 只枚举直接子项；filter 先筛选，再求值 template/protocols。ConfigurationView 通过 Core TemplateEvaluator 的 Resolving 回调和 MemberExpression 提供显式 this 导航；this 是当前候选配置项的只读视图，也是唯一允许的根名称，忽略大小写。字符串路径相对当前候选项，前导 / 从本次配置根读取。对已选字段的显式字符串索引才解析 Settings，动态键同样以 this 为根，例如 `${this.Settings[this.Key]}`；TryGetValue 区分缺失与空值。求值器不注册环境/命令来源，关闭递归与回退。
 
 共享 FilterExpression 负责条件拆分、否定、候选值匹配及从左到右组合；deployer 保留变量查询和 TFM 专用比较。地址模板按 separators 切分，协议模板按逗号切分，由 Core 网络值类型及 BindingDocument 规范化。每个候选项按基路径及协议集合分组，端点相交的组传递合并；端点不相交、基路径或能力不同的结果独立保存。required 在全局去重前逐声明检查，非法地址及所选字段错误不降级为空集合。来源仅用于诊断，不进入 JSON 或身份。
 
@@ -1194,8 +1194,8 @@ Web 输入的完整最小示意如下。另两个应用声明按同样的过程�
 <?xml version="1.0" encoding="utf-8" ?>
 <?zongsoft.tools.binding name="web"
 	path="Kestrel/Endpoints/http"
-	template="${option.Url}"
-	protocols="${option.Protocols}"
+	template="${this.Url}"
+	protocols="${this.Protocols}"
 	required="true"?>
 <options>
 	<option path="kestrel">
@@ -1209,8 +1209,8 @@ Web 输入的完整最小示意如下。另两个应用声明按同样的过程�
 | 数据 | 提取过程 | 去向 |
 | --- | --- | --- |
 | `path="Kestrel/Endpoints/http"` | 在最终配置视图中选中 http 项 | 形成默认别名 `kestrel/endpoints/http`；不是 HTTP 请求路径 |
-| `${option.Url}` | 对选中项求值得到 `http://*:8069` | 拆成 scheme、host、port、path；源 URL 没有路径，所以规范路径为 `/` |
-| `${option.Protocols}` | 得到 `Http1`，规范成 `http1` | 写入 `protocols`，供代理选择普通 HTTP 承载 |
+| `${this.Url}` | 对选中项求值得到 `http://*:8069` | 拆成 scheme、host、port、path；源 URL 没有路径，所以规范路径为 `/` |
+| `${this.Protocols}` | 得到 `Http1`，规范成 `http1` | 写入 `protocols`，供代理选择普通 HTTP 承载 |
 | `name="web"` | 加入显式短别名 | 与默认配置路径别名一起进入 aliases |
 | `required="true"` | 此声明提取不到有效结果时失败 | 只控制制作期诊断，不写成运行时开关 |
 
@@ -1988,7 +1988,7 @@ Containerizer 先从相应包信息确定 InstallPath，再在映射后的安装
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
 <?import path="./shared.option"?>
-<?zongsoft.tools.binding name="web" path="Server" filter="Enabled:true" template="${option.Url}" protocols="${option.Protocols}" required="true"?>
+<?zongsoft.tools.binding name="web" path="Server" filter="Enabled:true" template="${this.Url}" protocols="${this.Protocols}" required="true"?>
 <configuration />
 ```
 
@@ -2021,7 +2021,7 @@ Containerizer 先从相应包信息确定 InstallPath，再在映射后的安装
 规则：address
 ~~~
 
-文件与行列来自 Core PI 快照，配置路径来自选中项；字段求值失败时还记录 option 属性引用，例如 template/option.Url。上例端口 0 由地址解析拒绝，终端不打印原始 URL 或 Settings 全文。基础配置读取错误未能定位到具体 PI 时，报告正在加载的 option 文件及 configuration/read，行列为 0；不捏造位置。来源信息仅用于制作期诊断，不写入交付文件或身份。读取包时只能报告包文件与 JSON 内容位置，不虚构已经不存在的 option 行号。
+文件与行列来自 Core PI 快照，配置路径来自选中项；字段求值失败时还记录 this 成员引用，例如 template/this.Url。上例端口 0 由地址解析拒绝，终端不打印原始 URL 或 Settings 全文。基础配置读取错误未能定位到具体 PI 时，报告正在加载的 option 文件及 configuration/read，行列为 0；不捏造位置。来源信息仅用于制作期诊断，不写入交付文件或身份。读取包时只能报告包文件与 JSON 内容位置，不虚构已经不存在的 option 行号。
 
 <a id="routing-runtime"></a>
 

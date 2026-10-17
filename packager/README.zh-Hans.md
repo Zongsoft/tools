@@ -1089,7 +1089,7 @@ RPM 的 `PACKAGER` 标签（1015）保存的是 `--maintainer` 维护者信息�
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
 <?zongsoft.tools.binding name="kestrel" path="Kestrel/Endpoints/*"
-	template="${option.Url}" protocols="${option.Protocols}" required="true"?>
+	template="${this.Url}" protocols="${this.Protocols}" required="true"?>
 <options>
 	<option path="kestrel">
 		<endpoints>
@@ -1127,8 +1127,8 @@ nginx:http2 = on
 | 参数 | 用法 |
 | --- | --- |
 | `path` | 必填。配置根的精确路径，或以 `/*` 选择直接子项；不是 XPath，不递归展开。`/` 选择根。 |
-| `template` | 必填。完整监听 URL 的模板，如 `${option.Url}`。 |
-| `protocols` | 可选。协议能力模板，如 `${option.Protocols}`，或常量 `tcp`。省略不补充 HTTP 版本。 |
+| `template` | 必填。完整监听 URL 的模板，如 `${this.Url}`。 |
+| `protocols` | 可选。协议能力模板，如 `${this.Protocols}`，或常量 `tcp`。省略不补充 HTTP 版本。 |
 | `name` | 可选。增加别名；集合选择同时增加 `name/子项键`，保留配置路径别名。 |
 | `filter` | 可选。先筛选候选项，再读取地址及协议。 |
 | `separators` | 地址结果的分隔字符集合，默认 `,;\|`；指定后替换默认集合，不允许空值。协议列表始终以逗号分隔。 |
@@ -1138,23 +1138,26 @@ nginx:http2 = on
 
 ### 模板、设置文本与筛选
 
+`this` 表示由 `path` 选中并通过 `filter` 筛选的当前配置项的只读视图，读取本文件及其显式导入完成后的配置。模板根变量仅支持 `this`，忽略大小写。
+
 | 表达式 | 读取位置 |
 | --- | --- |
-| `${option.Url}` | 当前候选项的 `Url`。 |
-| `${option.Network.Address}` | 当前候选项的 `Network/Address`。 |
-| `${option['/Network/Address']}` | 本文件及显式导入完成后的配置根。 |
-| `${option.Settings['urls']}` | 当前项 `Settings` 文本中的 `urls` 设置键。 |
-| `tcp://${option.Value['address']}` | 从 `Value` 的 `address` 键取得地址和端口，再添加 `tcp://`。 |
+| `${this.Url}` | 当前候选项的 `Url`。 |
+| `${this.Network.Address}` | 当前候选项的 `Network/Address`。 |
+| `${this['/Network/Address']}` | 本文件及显式导入完成后的配置根。 |
+| `${this.Settings['urls']}` | 当前项 `Settings` 文本中的 `urls` 设置键。 |
+| `${this.Settings[this.Key]}` | 先读取当前项的 `Key`，再以其值查询当前项的 `Settings` 设置键。 |
+| `tcp://${this.Value['address']}` | 从 `Value` 的 `address` 键取得地址和端口，再添加 `tcp://`。 |
 
 固定设置键使用引号，例如 `['urls']`。这些表达式只读取选中的配置视图，不读取制作机环境变量，也不从其他独立入包文件查找缺失字段。
 
 过滤条件使用 [deployer 的过滤语法](../deployer/README.zh-Hans.md#过滤)：`Enabled` 判断字段存在，`Enabled:true` 判断值，`!Enabled | Enabled:true` 表示缺失时启用，`Driver:prometheus,custom` 匹配任一候选值。`&` 和 `|` 从左到右计算，不支持括号分组；XML 属性中的 `&` 写为 `&amp;`。过滤字段可以写 `/Server/Enabled` 或 `Settings[enabled]`。
 
-在 `.option.template` 中，要将留给 Packager 求值的表达式写成 `\${option.Url}`、`\${option.Protocols}`。deployer 去掉这层转义，生成 `.option` 中的 `${...}`；运行配置自身的部署变量仍正常求值。例如：
+在 `.option.template` 中，要将留给 Packager 求值的表达式写成 `\${this.Url}`、`\${this.Protocols}`。deployer 去掉这层转义，生成 `.option` 中的 `${...}`；运行配置自身的部署变量仍正常求值。例如：
 
 ```xml
 <?zongsoft.tools.binding path="Kestrel/Endpoints/http"
-	template="\${option.Url}" protocols="\${option.Protocols}" required="true"?>
+	template="\${this.Url}" protocols="\${this.Protocols}" required="true"?>
 <options>
 	<option path="kestrel">
 		<endpoints>
@@ -1164,7 +1167,7 @@ nginx:http2 = on
 </options>
 ```
 
-`${web:url#xml}` 来自部署变量，并转义为 XML 属性值；`\${option.Url}` 保留到生成的配置文件中，打包时读取这个最终值。不要把 `.option.template` 当成已展开的配置交付。
+`${web:url#xml}` 来自部署变量，并转义为 XML 属性值；`\${this.Url}` 保留到生成的配置文件中，打包时读取这个最终值。不要把 `.option.template` 当成已展开的配置交付。
 
 ### Prometheus、多地址与非 HTTP 监听
 
@@ -1173,7 +1176,7 @@ Prometheus 示例从同一运行配置读取完整抓取 URL：
 ```xml
 <?zongsoft.tools.binding name="prometheus"
 	path="Diagnostics/Diagnostor/Meters/Exporters/*" filter="Driver:prometheus"
-	template="${option.Settings['urls']}" protocols="http1"?>
+	template="${this.Settings['urls']}" protocols="http1"?>
 <options>
 	<option path="Diagnostics/Diagnostor/Meters/Exporters">
 		<exporter exporter.name="prometheus" driver="prometheus"
@@ -1188,18 +1191,18 @@ Prometheus 示例从同一运行配置读取完整抓取 URL：
 
 | 服务与配置输入 | PI 参数 | 结果与边界 |
 | --- | --- | --- |
-| Garnet：`Externals/Garnet/default/Value=address=0.0.0.0:6379` | `name="garnet" path="Externals/Garnet/default" template="tcp://${option.Value['address']}" protocols="tcp" required="true"` | `6379/tcp`；插件选中的设置名称也须为 `default`。认证、TLS、持久化仍在 Garnet 配置中。 |
-| MQTT：`Messaging/Mqtt/Server` 的 `enabled=true`、`url=tcp://0.0.0.0:1883` | `name="mqtt" path="Messaging/Mqtt/Server" filter="enabled:true" template="${option.Url}" protocols="tcp"` | `1883/tcp`；需交付并启用 daemon 插件，不声明 WebSocket 或 TLS。 |
-| OPC UA：`Externals/Opc/Server` 的 `enabled=true`、`urls=opc.tcp://0.0.0.0:4840/FactoryA` | `name="opc" path="Externals/Opc/Server" filter="enabled:true" template="${option.Urls}" separators="," protocols="opc.tcp"` | `4840/tcp` 并保留 `/FactoryA`；`Discovery` 是注册目标，不提取为监听。 |
-| UDP：`Network/Receiver/Url=udp://0.0.0.0:9000` | `name="receiver" path="Network/Receiver" template="${option.Url}" protocols="udp"` | `9000/udp`；不增加 TCP 映射或 HTTP 代理。 |
+| Garnet：`Externals/Garnet/default/Value=address=0.0.0.0:6379` | `name="garnet" path="Externals/Garnet/default" template="tcp://${this.Value['address']}" protocols="tcp" required="true"` | `6379/tcp`；插件选中的设置名称也须为 `default`。认证、TLS、持久化仍在 Garnet 配置中。 |
+| MQTT：`Messaging/Mqtt/Server` 的 `enabled=true`、`url=tcp://0.0.0.0:1883` | `name="mqtt" path="Messaging/Mqtt/Server" filter="enabled:true" template="${this.Url}" protocols="tcp"` | `1883/tcp`；需交付并启用 daemon 插件，不声明 WebSocket 或 TLS。 |
+| OPC UA：`Externals/Opc/Server` 的 `enabled=true`、`urls=opc.tcp://0.0.0.0:4840/FactoryA` | `name="opc" path="Externals/Opc/Server" filter="enabled:true" template="${this.Urls}" separators="," protocols="opc.tcp"` | `4840/tcp` 并保留 `/FactoryA`；`Discovery` 是注册目标，不提取为监听。 |
+| UDP：`Network/Receiver/Url=udp://0.0.0.0:9000` | `name="receiver" path="Network/Receiver" template="${this.Url}" protocols="udp"` | `9000/udp`；不增加 TCP 映射或 HTTP 代理。 |
 
 ZeroMQ 的四个角色应分别声明，不能作为一个地址列表合并：
 
 ```xml
-<?zongsoft.tools.binding name="zeromq/control" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${option.Control}" protocols="tcp"?>
-<?zongsoft.tools.binding name="zeromq/incoming" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${option.Incoming}" protocols="tcp"?>
-<?zongsoft.tools.binding name="zeromq/outgoing" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${option.Outgoing}" protocols="tcp"?>
-<?zongsoft.tools.binding name="zeromq/discovery" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${option.Discovery}" protocols="tcp"?>
+<?zongsoft.tools.binding name="zeromq/control" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${this.Control}" protocols="tcp"?>
+<?zongsoft.tools.binding name="zeromq/incoming" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${this.Incoming}" protocols="tcp"?>
+<?zongsoft.tools.binding name="zeromq/outgoing" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${this.Outgoing}" protocols="tcp"?>
+<?zongsoft.tools.binding name="zeromq/discovery" path="Messaging/ZeroMQ/Server" filter="enabled:true" template="${this.Discovery}" protocols="tcp"?>
 <options>
 	<option path="Messaging/ZeroMQ">
 		<server name="QueueServer" enabled="true" storage="QueueServer"

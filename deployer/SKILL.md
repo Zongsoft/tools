@@ -86,4 +86,4 @@ RID 资源使用 src/Resources/ 中固定的 dotnet/runtime v10.0.0 图谱，禁
 
 帮助语法统一使用共享 FormatHelp/HighlightSyntax，计时统一使用 MeasureOutput，不在各工具复制正则、计时器或颜色拼接。帮助入口在业务解析之前处理，返回 0 且不读取 .env、不写入产物；测试须验证重定向为纯文本、所有语法片段保留，以及耗时仅输出一次。计时文案由各工具资源提供，资源访问属性通过 ResXFileCodeGenerator 生成。
 
-部署模板中的 `\${option...}` 留给 Packager 的绑定提取阶段；deployer 仅展开本阶段变量并保留后续表达式。示例见 [应用网络绑定](../packager/README.zh-Hans.md#application-bindings)。DeploymentPlan.Operation 与 DeploymentPlan.Package 归所属计划；调整类型归属时同步解析器、会话、锁定读取和双语实现说明，保持报告及锁文件字段语义。
+部署模板中的 `\${this...}` 留给 Packager 的绑定提取阶段；deployer 仅展开本阶段变量并保留后续表达式。示例见 [应用网络绑定](../packager/README.zh-Hans.md#application-bindings)。DeploymentPlan.Operation 与 DeploymentPlan.Package 归所属计划；调整类型归属时同步解析器、会话、锁定读取和双语实现说明，保持报告及锁文件字段语义。
