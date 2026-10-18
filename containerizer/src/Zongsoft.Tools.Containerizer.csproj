@@ -3,7 +3,7 @@
 		<OutputType>Exe</OutputType>
 		<TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
 		<DefineConstants>$(DefineConstants);CONTAINERIZER</DefineConstants>
-		<Version>0.1.0</Version>
+		<Version>1.0.0</Version>
 		<PackAsTool>true</PackAsTool>
 		<ToolCommandName>dotnet-containerize</ToolCommandName>
 		<PackageDescription>The Zongsoft Containerization .NET Tool.</PackageDescription>
