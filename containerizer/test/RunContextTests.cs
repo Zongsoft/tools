@@ -253,6 +253,98 @@ public sealed class RunContextTests : IDisposable
 	}
 
 	[Theory]
+	[InlineData("application", new[] { "messaging/mqtt/server", "mqtt" }, "mqtt")]
+	[InlineData("application", new[] { "mqtt", "messaging/mqtt/server" }, "mqtt")]
+	[InlineData("application", new[] { "shared", "messaging/zeromq/server", "zeromq/outgoing" }, "zeromq/outgoing")]
+	[InlineData("application", new[] { "messaging/mqtt/server" }, "messaging/mqtt/server")]
+	[InlineData("application", new[] { "zz", "aa" }, "aa")]
+	[InlineData("application", new[] { "aa", "zz" }, "aa")]
+	[InlineData("application", new[] { "shared" }, "shared")]
+	[InlineData("application", new string[0], null)]
+	[InlineData("infrastructure", new[] { "mqtt" }, null)]
+	public async Task PublishedAddressesIdentifyTheirApplicationBindingAsync(string kind, string[] aliases, string expected)
+	{
+		using var listener = new TcpListener(IPAddress.Loopback, 0);
+		listener.Start();
+
+		var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+		using var bundle = this.CreateBundle();
+		var service = bundle.Plan.Services[0];
+		service.Id = "example";
+		service.Kind = kind;
+		service.Bindings.Add(new() { Id = "selected", Owner = "application", Aliases = [.. aliases], Endpoints = [new() { Id = "selected-endpoint", Port = 9000 }] });
+		service.Bindings.Add(new() { Id = "other", Owner = "application", Aliases = ["shared", "messaging/zeromq/server"], Endpoints = [new() { Id = "other-endpoint", Port = 9000 }] });
+		service.Ports.Add(new()
+		{
+			Name = "published",
+			Host = port,
+			Container = 9000,
+			Bindings = [new() { Application = service.Id, Binding = "selected", Endpoint = "selected-endpoint" }],
+		});
+		var runner = new Runner { PublishedHostPort = port };
+		var messages = new List<string>();
+		using var stopping = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+		var run = new RunContext(new("podman", runner), bundle, content =>
+		{
+			messages.Add(GetText(content));
+			if(HasColor(content, CommandOutletColor.Green))
+				stopping.Cancel();
+		});
+
+		Assert.Equal(0, await run.ExecuteAsync(stopping.Token));
+		Assert.Equal($"  example: 127.0.0.1:{port}" + (expected == null ? "" : $"  ({expected})"), Assert.Single(messages, message => message.StartsWith("  example: ", StringComparison.Ordinal)));
+		Assert.Contains(Assert.Single(runner.Calls, call => call[0] == "create"), argument => argument.StartsWith("127.0.0.1::", StringComparison.Ordinal));
+		Assert.Contains(runner.Calls, call => call.Contains("TCP4:127.0.0.1:" + port));
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public async Task SharedPublicationListsDistinctBindingLabelsInStableOrderAsync(bool reverse)
+	{
+		using var listener = new TcpListener(IPAddress.Loopback, 0);
+		listener.Start();
+
+		var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+		using var bundle = this.CreateBundle();
+		var service = bundle.Plan.Services[0];
+		service.Id = "example";
+		service.Kind = "application";
+		service.Bindings.AddRange([
+			new() { Id = "first", Owner = "application", Aliases = ["shared"] },
+			new() { Id = "second", Owner = "application", Aliases = ["shared"] },
+			new() { Id = "third", Owner = "application", Aliases = ["metrics"] },
+			new() { Id = "unnamed", Owner = "application" },
+			new() { Id = "unpublished", Owner = "application", Aliases = ["unpublished"] },
+		]);
+		service.Ports.Add(new()
+		{
+			Name = "published",
+			Host = port,
+			Container = 9000,
+			Bindings = service.Bindings.Take(4).Select(binding => new ServicePlan.PortMapping.BindingReference { Application = service.Id, Binding = binding.Id, Endpoint = binding.Id }).ToList(),
+		});
+
+		if(reverse)
+		{
+			service.Bindings.Reverse();
+			service.Ports[0].Bindings.Reverse();
+		}
+
+		var messages = new List<string>();
+		using var stopping = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+		var run = new RunContext(new("podman", new Runner { PublishedHostPort = port }), bundle, content =>
+		{
+			messages.Add(GetText(content));
+			if(HasColor(content, CommandOutletColor.Green))
+				stopping.Cancel();
+		});
+
+		Assert.Equal(0, await run.ExecuteAsync(stopping.Token));
+		Assert.Equal($"  example: 127.0.0.1:{port}  (metrics, shared)", Assert.Single(messages, message => message.StartsWith("  example: ", StringComparison.Ordinal)));
+	}
+
+	[Theory]
 	[InlineData(false, 0)]
 	[InlineData(true, 4)]
 	public async Task MissingLocalMappingIsOptionalForInfrastructureButRequiredForWebAsync(bool web, int expected)
@@ -521,8 +613,23 @@ public sealed class RunContextTests : IDisposable
 			}
 
 			if(arguments[0] == "inspect")
-				output = this.PublishedHostPort == 0 ? """[{"NetworkSettings":{"Ports":{}}}]""" :
-					JsonSerializer.Serialize(new[] { new { NetworkSettings = new { Ports = new Dictionary<string, object> { ["45000/tcp"] = new[] { new { HostIp = "0.0.0.0", HostPort = this.PublishedHostPort.ToString(CultureInfo.InvariantCulture) } } } } } });
+			{
+				var ports = new Dictionary<string, object>();
+				if(this.PublishedHostPort != 0)
+				{
+					var creation = this.Calls.Last(call => call[0] == "create");
+					for(var index = 0; index < creation.Length - 1; index++)
+					{
+						if(creation[index] != "--publish")
+							continue;
+
+						var publication = creation[++index].Split(':');
+						ports.Add(publication[2], new[] { new { HostIp = publication[0], HostPort = this.PublishedHostPort.ToString(CultureInfo.InvariantCulture) } });
+					}
+				}
+
+				output = JsonSerializer.Serialize(new[] { new { NetworkSettings = new { Ports = ports } } });
+			}
 
 			return Task.FromResult(new ProcessResult(0, output, ""));
 		}

@@ -260,10 +260,36 @@ internal sealed partial class RunContext
 				_output(Utility.FormatOutput(Properties.Resources.Run_WebInterfaces, string.Join(", ", addresses)));
 		}
 		else
-			_output(Utility.FormatOutput("  {0}: {1}", endpoint.Service.Id, endpoint.Address));
+		{
+			var labels = GetBindingLabels(endpoint);
+			var content = Utility.FormatOutput("  {0}: {1}", endpoint.Service.Id, endpoint.Address);
+			if(labels.Length > 0)
+				content.Last.Append("  (").Append(Zongsoft.Components.CommandOutletColor.DarkYellow, labels).Append(")");
+
+			_output(content);
+		}
 
 		if(endpoint.Service.Kind == "ingress" && !endpoint.IsWeb)
 			_output(Utility.FormatOutput($"  {Properties.Resources.Run_UnknownEntry}", Zongsoft.Components.CommandOutletColor.DarkYellow, endpoint.Service.Id));
+
+		static string GetBindingLabels(Endpoint endpoint)
+		{
+			var service = endpoint.Service;
+			if(service.Kind != "application")
+				return string.Empty;
+
+			var bindings = service.Bindings.Where(binding => binding.Owner == "application").ToArray();
+			var labels = bindings
+				.Where(binding => endpoint.Port.Bindings.Any(reference => reference.Application == service.Id && reference.Binding == binding.Id))
+				.Select(binding => binding.Aliases
+					.OrderBy(alias => bindings.Any(other => other.Id != binding.Id && other.Aliases.Contains(alias, StringComparer.OrdinalIgnoreCase)))
+					.ThenBy(alias => alias.Length).ThenBy(alias => alias, StringComparer.Ordinal)
+					.FirstOrDefault())
+				.Where(alias => !string.IsNullOrEmpty(alias))
+				.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal);
+
+			return string.Join(", ", labels);
+		}
 	}
 	#endregion
 }
