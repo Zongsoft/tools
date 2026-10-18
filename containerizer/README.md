@@ -370,7 +370,7 @@ The tool explicitly enables Core variable fallback: named references search thei
 
 Core `Variables.Environments()` reads the default namespace live without rewriting environment names or values. Environment names ignore case on Windows and are case-sensitive on Unix/Linux; configuration and command-option names ignore case.
 
-`output/.settings` holds shared defaults, with one section per component accepting only `tag`, `repository` and `settings`:
+`output/.settings` holds shared defaults, with one section per component accepting `tag`, `repository`, `template` and `settings`:
 
 ```ini
 [redis]
@@ -380,11 +380,18 @@ settings=port=16379;storage=persistent;persistence=both;password=${redis:passwor
 [mysql]
 tag=latest
 settings=root-password=${mysql:root_password};database=example
+
+[prometheus]
+template=.containerized/templates/prometheus.template
 ```
 
 A section never selects its service; only the component list or the manifest does that. Values merge per parameter, and explicit component values win over `.settings`, which wins over template defaults. A default image tag is the literal `latest` — the tool does not search for the newest stable release.
 
-`plan`, failed builds and manifest replay never rewrite `.settings`. Only a **successful complete build from a component list** fills in missing service tags; existing tags, repositories and settings are left alone.
+`template` selects a built-in template name or a custom template path for a selected service. A custom path resolves against the final `source`, including `./` and `../`; absolute paths keep their meaning. Its `${...}` references are evaluated when selecting the template, including during `plan`. An omitted template uses the service name; an empty value or a missing/invalid selected template is an error. Companion configuration files still resolve relative to the template directory.
+
+These defaults apply only to component-list commands. The selected template is recorded in the generated `.container`; handwritten manifests and saved-manifest replay never merge `.settings`. Edit the manifest or generate a new plan to change an existing selection. Application packages do not consume service template defaults; a managed Web ingress must retain the built-in `nginx` template.
+
+`plan`, failed builds and manifest replay never rewrite `.settings`. Only a **successful complete build from a component list** fills in missing service tags; existing tags, repositories, templates and settings are left alone.
 
 Variables come from the environment, the source directory's `.env` and its explicit imports, and command options. Only source's direct `.env` loads automatically; parent and child directories are not searched. Use `#@import ../.env` to include a parent file explicitly; import paths are relative to their declaring file and later declarations override earlier ones. References use `${name}`; `\${name}` keep a literal reference. Names that merely match a parameter are not bound automatically — the only built-in bindings are MySQL's `mysql:root_password` and RustFS's `rustfs:access_key` and `rustfs:secret_key`. Any other value must be set explicitly, as the hosting example does.
 

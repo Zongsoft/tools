@@ -370,7 +370,7 @@ file!/etc/ssl/example/key.pem=./certs/key.pem
 
 系统环境由 Core `Variables.Environments()` 实时读取，只提供默认命名空间，不改写名称或原始值；Windows 忽略名称大小写，Unix/Linux 区分大小写。配置及命令选项名称忽略大小写。
 
-`output/.settings` 保存共享默认值，按组件名称分段，每段只接受 `tag`、`repository` 和 `settings`：
+`output/.settings` 保存共享默认值，按组件名称分段，每段接受 `tag`、`repository`、`template` 和 `settings`：
 
 ```ini
 [redis]
@@ -380,11 +380,18 @@ settings=port=16379;storage=persistent;persistence=both;password=${redis:passwor
 [mysql]
 tag=latest
 settings=root-password=${mysql:root_password};database=example
+
+[prometheus]
+template=.containerized/templates/prometheus.template
 ```
 
 某个段落不会自动选中该服务，选中只由组件列表或清单决定。取值按参数逐项合并：显式组件配置优先于 `.settings`，`.settings` 优先于模板默认值。镜像 tag 缺省为字面 `latest`，工具不会搜索“最新稳定版本”。
 
-`plan`、失败的制作和清单回放都不会改写 `.settings`。**只有按组件列表完整制作成功**，才补充缺失的服务 tag；已有的 tag、repository 和 settings 不会被改写。
+`template` 为已选服务指定内置模板名称或自定义模板路径。自定义路径相对于最终 `source` 解析，包括 `./` 和 `../`，绝对路径保持原义；其中的 `${...}` 引用在选择模板时求值，`plan` 也会求值。未配置时使用服务名对应的模板；空值、已选模板缺失或无效均报错。模板配套配置文件仍相对于模板目录解析。
+
+这些默认值只用于按组件列表规划或制作。选定的模板会写入生成的 `.container`；手写清单和已保存清单的回放不合并 `.settings`。要改变已有选择，请编辑清单或重新生成计划。应用安装包不使用基础服务的模板默认值；托管 Web 入口必须保留内置 `nginx` 模板。
+
+`plan`、失败的制作和清单回放都不会改写 `.settings`。**只有按组件列表完整制作成功**，才补充缺失的服务 tag；已有的 tag、repository、template 和 settings 不会被改写。
 
 变量来自环境、source 直属 `.env` 及其显式导入，以及命令选项。只自动读取 source 直属 `.env`，不搜索父目录或子目录。如需父目录配置，显式使用 `#@import ../.env`；导入路径相对于声明文件，后续同名声明覆盖此前声明。引用形式为 `${name}`，`\${name}` 保留字面引用。与参数同名的变量不会被自动绑定：内置绑定只有 MySQL 的 `mysql:root_password` 及 RustFS 的 `rustfs:access_key`、`rustfs:secret_key`；其他取值必须显式提供，如 hosting 示例所示。
 

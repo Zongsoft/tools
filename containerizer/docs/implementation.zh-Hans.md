@@ -72,6 +72,8 @@ plan 和 make 共用服务准备，但 plan 不连接引擎、不读取 `.mirror
 
 `.container` 接受固定根字段及组件字段，拒绝未知字段、重复组件/字段与嵌套组件。Profile 导入复用 Core 机制；导入文件参与声明检查，source 相对于实际声明文件解析。`.settings` 和模板读取禁止导入。
 
+`ServiceDefaults` 接受 tag、repository、template 和 settings。按组件列表输入时，ManifestFactory 在规范化及依赖校验前应用默认值。组件未指定模板时采用默认模板，并立即通过清单评估器求值路径；显式组件模板保持原值。自动添加的 nginx 组件使用相同的默认值合并及入口兼容性校验。仅已选服务通过 TemplateCatalog 加载模板，路径相对于最终 source，配套文件相对于模板目录。选定模板写入生成清单；清单输入使用空默认值对象，回放不读取或合并 .settings。
+
 服务参数的解析和序列化统一复用 Core `Settings`，引号和反斜杠转义遵循其语法。私有派生类通过 `OnEntryChanged` 校验参数名称，在 Core 覆盖旧值之前拒绝重复声明。空值或 null 参数保留为显式空字符串，缺失参数仍表示未提供；格式化使用 `ISettings.Add` 保留空值及首尾空白。原文或解码后的 CR/LF 在清单发布前拒绝。
 
 共享 Utility 组合命令选项、source 直属 `.env` 及其显式导入和系统环境，Core 在它们全部未命中后查询描述符默认值，章节层级以点号连接为命名空间。最终根字段通过 `Variables.Wrap(result.Root)` 直接作为实时变量视图放在最前面，后续字典修改立即可见；source/output 保存为 `/` 分隔的绝对路径。求值不整份导出环境，也不修改进程环境；仅名称相同不会自动建立绑定。输入选择和根路径需要立即求值；服务 settings/environment 在 plan 保留引用，make 按值求值。完成清单以字面值回放；由完成清单重新 plan 时转义字面引用，避免再次展开。

@@ -1,6 +1,8 @@
 using System;
 using System.IO;
+
 using Xunit;
+
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
@@ -15,12 +17,15 @@ public sealed class ServiceDefaultsTests : IDisposable
 	public void DefaultsUseComponentIdentityAndMergeIndividualExplicitKeys()
 	{
 		var path = Path.Combine(_root, ".settings");
-		File.WriteAllText(path, "[cache]\ntag=8.4\nrepository=quay.io/team/cache\nsettings=password=shared;storage=persistent\n");
+		File.WriteAllText(path, "[cache]\ntag=8.4\nrepository=quay.io/team/cache\ntemplate=valkey\nsettings=password=shared;storage=persistent\n");
+
 		var defaults = ServiceDefaults.Read(path);
 		var component = new ContainerManifest.Component { Name = "cache" };
 		component["template"] = "redis";
 		component["settings"] = "password=";
-		defaults.Apply(component);
+		defaults.Apply(component, Utility.CreateEvaluator());
+
+		Assert.Equal("redis", component["template"]);
 		Assert.Equal("8.4", component["tag"]);
 		Assert.Equal("quay.io/team/cache", component["repository"]);
 		Assert.Equal("", component.Settings["password"]);
@@ -35,7 +40,10 @@ public sealed class ServiceDefaultsTests : IDisposable
 	[InlineData("[redis]\nrepository=redis")]
 	[InlineData("[redis]\nrepository=docker.io/library/redis:latest")]
 	[InlineData("[repositories]\nredis=docker.io/library/redis")]
-	[InlineData("[redis]\ntemplate=redis")]
+	[InlineData("[redis]\ntemplate=")]
+	[InlineData("[redis]\ntemplate=  ")]
+	[InlineData("[redis]\ntemplate=redis\nTemplate=valkey")]
+	[InlineData("[redis]\nunknown=value")]
 	public void InvalidAndRemovedFormatsAreRejected(string text)
 	{
 		var path = Path.Combine(_root, ".settings");
@@ -46,18 +54,23 @@ public sealed class ServiceDefaultsTests : IDisposable
 	[Fact]
 	public void BackfillPreservesExistingSettingsTagsCommentsAndOrder()
 	{
-		var original = "# reviewed\r\n[redis]\r\ntag=8.4\r\nsettings=password=${secret}\r\n\r\n[rustfs]\r\n# keep\r\nrepository=docker.io/rustfs/rustfs\r\n";
+		var original = "# reviewed\r\n[redis]\r\ntag=8.4\r\nsettings=password=${secret}\r\ntemplate=templates/cache.template\r\n\r\n[rustfs]\r\n# keep\r\nrepository=docker.io/rustfs/rustfs\r\n";
 		var path = Path.Combine(_root, ".settings");
 		File.WriteAllText(path, original);
+
 		var manifest = new ContainerManifest();
 		manifest["output"] = _root;
+
 		var redis = new ContainerManifest.Component { Name = "redis" };
 		redis["tag"] = "9.0";
+
 		var rustfs = new ContainerManifest.Component { Name = "rustfs" };
 		rustfs["tag"] = "latest";
+
 		manifest.Components.AddRange([redis, rustfs]);
 		Assert.Equal(original.Replace("[rustfs]\r\n", "[rustfs]\r\ntag=latest\r\n", StringComparison.Ordinal), File.ReadAllText(ServiceDefaults.Prepare(manifest, _root)));
 		Assert.Equal(original, File.ReadAllText(path));
+
 		var draft = Path.Combine(_root, "draft.container");
 		File.WriteAllText(draft, "[redis]\ntag=9.0\n");
 		Assert.Null(ServiceDefaults.Prepare(ContainerManifest.Read(draft), _root));

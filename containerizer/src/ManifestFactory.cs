@@ -79,8 +79,8 @@ internal static class ManifestFactory
 		result.Evaluator = evaluator;
 		result.Evaluator.Providers.Insert(0, global::Zongsoft.Common.Variables.Wrap(result.Root));
 
-		result.Normalize();
 		result.ApplyDefaults(result.InputPath != null ? new ServiceDefaults() : ServiceDefaults.Read(Path.Combine(result["output"], ".settings")));
+		result.Normalize();
 
 		return result;
 

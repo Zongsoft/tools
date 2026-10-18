@@ -150,7 +150,7 @@ internal sealed partial class ContainerManifest(bool planning = false)
 	{
 		this.Defaults = defaults ?? throw new ArgumentNullException(nameof(defaults));
 		foreach(var component in this.Components)
-			this.Defaults.Apply(component);
+			this.Defaults.Apply(component, this.Evaluator);
 	}
 
 	public void Normalize()
@@ -292,9 +292,11 @@ internal sealed partial class ContainerManifest(bool planning = false)
 						existing["tag"] = version;
 					}
 
+					this.Defaults.Apply(existing, this.Evaluator);
 					additions.Add(existing);
 				}
-				else if(existing.IsApplication ||
+
+				if(existing.IsApplication ||
 					!string.Equals(existing["template"] ?? existing.Name, "nginx", StringComparison.OrdinalIgnoreCase) ||
 					version != null && existing["tag"] != version)
 					throw new ContainerizationException(2, Properties.Resources.Manifest_11_Message);

@@ -37,6 +37,7 @@ using System.Linq;
 using System.Text;
 using System.Collections.Generic;
 
+using Zongsoft.Text.Templating;
 using Zongsoft.Configuration.Profiles;
 using Zongsoft.Tools.Containerizer.Protocol;
 
@@ -79,6 +80,10 @@ internal sealed class ServiceDefaults
 						case "repository":
 							ImageReference.ValidateRepository(entry.Value);
 							break;
+						case "template":
+							if(string.IsNullOrWhiteSpace(entry.Value))
+								throw new ContainerizationException(2, string.Format(Properties.Resources.Manifest_8_Message, component.Name, "template"));
+							break;
 						case "settings":
 							ServiceSettings.Parse(entry.Value);
 							break;
@@ -103,7 +108,7 @@ internal sealed class ServiceDefaults
 	public string SelectTag(ContainerManifest.Component component) => component["tag"] ?? _components.GetValueOrDefault(component.Name)?["tag"] ?? "latest";
 	public string SelectRepository(ContainerManifest.Component component, string fallback) => component["repository"] ?? _components.GetValueOrDefault(component.Name)?["repository"] ?? fallback;
 
-	public void Apply(ContainerManifest.Component component)
+	public void Apply(ContainerManifest.Component component, TemplateEvaluator evaluator)
 	{
 		if(component.IsApplication)
 			return;
@@ -112,6 +117,15 @@ internal sealed class ServiceDefaults
 
 		if(_components.TryGetValue(component.Name, out var defaults))
 		{
+			if(component["template"] == null && defaults["template"] != null)
+			{
+				var template = ContainerManifest.Evaluate(defaults["template"], evaluator);
+				if(string.IsNullOrWhiteSpace(template))
+					throw new ContainerizationException(2, string.Format(Properties.Resources.Manifest_8_Message, component.Name, "template"));
+
+				component["template"] = template;
+			}
+
 			component["repository"] ??= defaults["repository"];
 			var settings = ServiceSettings.Parse(defaults["settings"]);
 

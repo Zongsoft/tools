@@ -5,7 +5,9 @@ using System.Text.Json;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+
 using Xunit;
+
 using Zongsoft.Components;
 using Zongsoft.Configuration;
 using Zongsoft.Tools.Containerizer.Protocol;
@@ -34,6 +36,120 @@ public sealed class PlanningTests : IDisposable
 		Assert.Null(draft.Components[0]["digest"]);
 		Assert.Empty(Directory.GetFiles(_root, "*.tar.gz"));
 		Assert.Equal("[redis]\ntag=8.4\nsettings=storage=temporary;password=${cache_password}\n", File.ReadAllText(Path.Combine(_root, ".settings")));
+	}
+
+	[Theory]
+	[InlineData("relative")]
+	[InlineData("dot")]
+	[InlineData("parent")]
+	[InlineData("absolute")]
+	[InlineData("variable")]
+	public void DefaultTemplatePathsUseSourceAndSurvivePlanReplay(string form)
+	{
+		var sourceDirectory = Directory.CreateDirectory(Path.Combine(_root, "source")).FullName;
+		var output = Directory.CreateDirectory(Path.Combine(sourceDirectory, "output")).FullName;
+		var templates = Directory.CreateDirectory(Path.Combine(form == "parent" ? _root : sourceDirectory, "custom templates")).FullName;
+		var template = Path.Combine(templates, "metrics.template");
+		var configuration = Path.Combine(templates, "metrics.yaml");
+
+		File.WriteAllText(template, "version=1\nimage=docker.io/prom/prometheus\n[configuration]\n/etc/prometheus/prometheus.yml=metrics.yaml\n");
+		File.WriteAllText(configuration, "# ${literal}\nscrape_configs: []\n");
+		File.WriteAllText(Path.Combine(sourceDirectory, ".env"), "templates=custom templates\n");
+
+		var input = form switch
+		{
+			"dot" => "./custom templates/metrics.template",
+			"parent" => "../custom templates/metrics.template",
+			"absolute" => template.Replace('\\', '/'),
+			"variable" => "${templates}/metrics.template",
+			_ => "custom templates/metrics.template",
+		};
+
+		var defaults = $"[prometheus]\ntag=default-tag\ntemplate={input}\n[otel]\ntemplate=missing.template\n";
+		var settings = Path.Combine(output, ".settings");
+		File.WriteAllText(settings, defaults);
+
+		var manifest = ManifestFactory.Create(CreateContext("prometheus@explicit-tag", "--source:" + sourceDirectory, "--output:output", "--name:example", "--version:1.0", "--distribution:debian"), planning: true);
+		var path = new ContainerBundleBuilder(new RejectRunner()).Plan(manifest);
+		var draft = Assert.Single(ContainerManifest.Read(path).Components);
+		Assert.Equal(Path.GetRelativePath(sourceDirectory, template).Replace('\\', '/'), draft["template"]);
+		Assert.Equal("explicit-tag", draft["tag"]);
+		Assert.Equal(defaults, File.ReadAllText(settings));
+
+		File.WriteAllText(settings, "invalid defaults must not be read on replay");
+		var make = ManifestFactory.Create(CreateContext(path), make: true);
+		var service = Assert.Single(ServicePlanner.Prepare(make));
+		Assert.Equal("prometheus", service.Plan.Id);
+		Assert.Equal("docker.io/prom/prometheus", service.ImageRepository);
+		Assert.Equal(Files.Hash(template), service.Plan.TemplateHash);
+		Assert.Equal(configuration, service.Configuration["/etc/prometheus/prometheus.yml"].Source);
+		Assert.Equal("# ${literal}\nscrape_configs: []\n", File.ReadAllText(configuration));
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void DefaultTemplateCanSelectAnotherBuiltInForPlanAndDirectBuild(bool planning)
+	{
+		this.Write(".settings", "[redis]\ntemplate=VALKEY\n");
+		var manifest = ManifestFactory.Create(CreateContext("redis", "--source:" + _root, "--name:example", "--version:1.0", "--distribution:debian"), planning);
+		var source = Assert.Single(ServicePlanner.Prepare(manifest));
+		Assert.Equal("valkey", source.Plan.Template);
+		Assert.Equal("docker.io/valkey/valkey", source.ImageRepository);
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void InvalidDefaultTemplatesNeverFallBackToBuiltIn(bool exists)
+	{
+		var template = Path.Combine(_root, "invalid.template");
+		this.Write(".settings", "[prometheus]\ntemplate=invalid.template\n");
+
+		if(exists)
+			File.WriteAllText(template, "version=1\nimage=docker.io/prom/prometheus\ninvalid=true\n");
+
+		var manifest = this.Create("prometheus");
+		var exception = Assert.Throws<ContainerizationException>(() => new ContainerBundleBuilder(new RejectRunner()).Plan(manifest));
+		Assert.Equal(2, exception.Code);
+		Assert.Contains(template, exception.Message, StringComparison.Ordinal);
+		Assert.False(File.Exists(manifest.ManifestPath));
+	}
+
+	[Fact]
+	public void EmptyEvaluatedDefaultTemplateIsRejected()
+	{
+		this.Write(".env", "template_path=\n");
+		this.Write(".settings", "[prometheus]\ntemplate=${template_path}\n");
+		Assert.Equal(2, Assert.Throws<ContainerizationException>(() => this.Create("prometheus")).Code);
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void DefaultTemplateCannotReplaceManagedNginx(bool explicitIngress)
+	{
+		this.Write(".settings", "[nginx]\ntemplate=redis\n");
+		var document = WebFixtures.CreateDocument(new WebFixtures.Site("api", ["http://0.0.0.0:80"]));
+		var package = WebFixtures.WritePackage(Path.Combine(_root, "web.tar.gz"), "example.web", document, WebFixtures.Template(document));
+		var components = explicitIngress ? new[] { package, "nginx" } : [package];
+		Assert.Equal(2, Assert.Throws<ContainerizationException>(() => this.Create(components)).Code);
+	}
+
+	[Fact]
+	public void DefaultTemplateAppliesToAutomaticIngressButNotApplicationPackages()
+	{
+		this.Write(".env", "ingress_template=nginx\n");
+		this.Write(".settings", "[nginx]\ntag=reviewed\ntemplate=${ingress_template}\n[example.web]\ntemplate=missing.template\n");
+
+		var document = WebFixtures.CreateDocument(new WebFixtures.Site("api", ["http://0.0.0.0:80"]));
+		var package = WebFixtures.WritePackage(Path.Combine(_root, "web.tar.gz"), "example.web", document, WebFixtures.Template(document));
+		var manifest = this.Create(package);
+
+		Assert.Null(manifest.Components[0]["template"]);
+		Assert.Equal("nginx", manifest.Components[1]["template"]);
+		Assert.Equal("reviewed", manifest.Components[1]["tag"]);
+		Assert.Equal(2, ServicePlanner.Prepare(manifest).Count);
 	}
 
 	[Theory]
@@ -118,6 +234,7 @@ public sealed class PlanningTests : IDisposable
 		component["digest"] = "sha256:" + new string('a', 64);
 		component["timestamp"] = "2026-09-15T05:30:05Z";
 		component["size"] = "123456";
+
 		var path = manifest.Prepare(_root, planning);
 		Assert.Equal(component["digest"], Assert.Single(ContainerManifest.Read(path).Components)["digest"]);
 
@@ -455,6 +572,7 @@ public sealed class PlanningTests : IDisposable
 		File.WriteAllText(path, content);
 		return path;
 	}
+
 	private sealed class RejectRunner : IProcessRunner
 	{
 		public Task<int> StreamAsync(string executable, IReadOnlyList<string> arguments, string directory, CancellationToken cancellation) => throw new InvalidOperationException("Plan must not start a streaming process.");
