@@ -113,6 +113,8 @@ source 的 CLI 值相对于调用目录；其他受管本地路径相对于最�
 
 先复用有身份与平台证据的本地镜像，证据不足时解析或拉取。固定 digest 的回放不得退回 tag、换平台或把索引摘要/image ID 当作目标 manifest。可用时记录创建时间和引擎报告大小，未知则省略；不为展示信息额外联网。
 
+Podman 的 manifest inspect 若把已知 OCI/Docker 单镜像投影为 manifests:null 且省略 config，制作端先拉取原请求，再核对 Linux 架构、仓库关联及实际 manifest digest，随后只使用固定摘要。原请求已有摘要时始终按该摘要拉取；已有 config 时仍核对配置身份，未知媒体类型、损坏列表和不匹配的平台或仓库均拒绝。
+
 清单 identity 关联 repository、tag、Linux 和 architecture；修改这些值会使旧 digest、timestamp、size 失效。只修改交付版本、标签或宿主发行版不改变基础服务镜像身份。
 
 制作端通过 image ID 导出基础服务，不在缓存镜像上附加发行专属标签。应用构建、账号探针及辅助构建器使用本次唯一资源名。清理删除本次容器及匿名卷、临时镜像和构建器；保留有用的来源镜像和工具镜像，不执行全局 prune。

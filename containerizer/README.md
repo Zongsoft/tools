@@ -464,6 +464,8 @@ Migrations come from [Migrator](../migrator/README.md) as `<name>(migrate)@<vers
 
 Building only collects the files; target installation and local preview execute them. Rebuild the migration package after changing its connection settings.
 
+Migration connections must use addresses and published ports reachable from the installation host. For databases or object storage included in the bundle, use the host loopback address. Application-container service names are not migration connection addresses. During local preview, the installation host is the isolated validation container, whose network differs from the maker machine.
+
 ## Built-in services
 
 Every service provides `port`; services with data mounts also provide `storage=persistent|temporary`, defaulting to persistent. Ports bind to `127.0.0.1` by default. An asterisk marks a required parameter; parameters without a stated default are optional.

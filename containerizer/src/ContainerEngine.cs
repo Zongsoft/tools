@@ -35,10 +35,10 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
-using System.Globalization;
 
 using Zongsoft.Common;
 using Zongsoft.Components;
@@ -321,7 +321,9 @@ internal sealed class ContainerEngine(string executable, IProcessRunner runner, 
 
 		using var json = JsonDocument.Parse(output);
 
-		if(json.RootElement.TryGetProperty("manifests", out var manifests))
+		var hasManifests = json.RootElement.TryGetProperty("manifests", out var manifests);
+
+		if(hasManifests && manifests.ValueKind == JsonValueKind.Array)
 		{
 			var selected = manifests.EnumerateArray()
 				.Where(item => item.TryGetProperty("platform", out var target) && GetString(target, "os") == "linux" && GetString(target, "architecture") == platform[6..])
@@ -334,6 +336,34 @@ internal sealed class ContainerEngine(string executable, IProcessRunner runner, 
 				throw new ContainerizationException(4, Properties.Resources.Engine_5_Message);
 
 			return (child, ParseDigest(GetString(json.RootElement, "digest")), default);
+		}
+
+		if(hasManifests)
+		{
+			if(manifests.ValueKind != JsonValueKind.Null || this.Executable != PODMAN ||
+				GetString(json.RootElement, "mediaType") is not ("application/vnd.oci.image.manifest.v1+json" or "application/vnd.docker.distribution.manifest.v2+json"))
+				throw new ContainerizationException(4, Properties.Resources.Engine_7_Message);
+
+			if(!json.RootElement.TryGetProperty("config", out _))
+			{
+				// Podman can project a single image as a null list without its config.
+				// Establish the first identity from the pull; an existing digest remains fixed.
+				var repository = ImageReference.GetRepository(reference);
+				var expected = ParseDigest(reference.Contains('@') ? reference.Split('@')[1] : GetString(json.RootElement, "digest"));
+				var pullReference = expected.IsEmpty ? reference : $"{repository}@{FormatDigest(expected)}";
+				await this.RunAsync(["pull", "--platform", platform, pullReference], null, cancellation);
+				var pulled = await this.InspectOrDefaultAsync(pullReference, platform, cancellation);
+
+				if(!pulled.HasValue || !MatchesPlatform(pulled.Value, platform))
+					throw new ContainerizationException(4, Properties.Resources.Engine_4_Message);
+
+				var selected = GetLocalDigest(pulled.Value, repository, platform[6..] == "arm64" ? "arm64" : "x64", expected);
+
+				if(selected.IsEmpty || !HasRepositoryDigest(pulled.Value, repository, selected))
+					throw new ContainerizationException(4, Properties.Resources.Engine_5_Message);
+
+				return (selected, default, GetImageId(pulled.Value));
+			}
 		}
 
 		var digest = reference.Contains('@') ? reference.Split('@')[1] : GetString(json.RootElement, "digest");

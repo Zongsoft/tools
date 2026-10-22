@@ -178,6 +178,152 @@ public sealed class ContainerEngineTests
 		Assert.DoesNotContain(runner.Calls, call => call.StartsWith("docker tag", StringComparison.Ordinal));
 	}
 
+	[Theory]
+	[InlineData("application/vnd.docker.distribution.manifest.v2+json")]
+	[InlineData("application/vnd.oci.image.manifest.v1+json")]
+	public async Task PodmanNullSingleManifestPinsPulledIdentityAsync(string mediaType)
+	{
+		var pulled = false;
+		var manifest = JsonSerializer.Serialize(new { schemaVersion = 2, mediaType, manifests = (object)null });
+		var runner = new ProbeRunner((_, arguments) =>
+		{
+			if(arguments[0] == "image")
+				return pulled ? new(0, CreateInspectionJson(_digest, [], true), "") : new(1, "", "not found");
+			if(arguments[0] == "manifest")
+				return new(0, manifest, "");
+			if(arguments[0] == "pull")
+				pulled = true;
+			return new(0, "", "");
+		});
+		var image = await new ContainerEngine("podman", runner).ResolveAsync(REPOSITORY, null, "latest", "x64", CancellationToken.None);
+		Assert.Equal(_digest, image.Digest);
+		Assert.Equal(_id, image.Id);
+		Assert.Equal("linux/amd64", image.Platform);
+		Assert.Null(image.IndexDigest);
+		Assert.Equal(REPOSITORY, image.SourceRepository);
+		Assert.Equal(REPOSITORY + ":latest", image.SourceReference);
+		var pulls = runner.Calls.Where(call => call.StartsWith("podman pull ", StringComparison.Ordinal)).ToArray();
+		Assert.Equal("podman pull --platform linux/amd64 " + REPOSITORY + ":latest", pulls[0]);
+		Assert.Contains("podman pull --platform linux/amd64 " + REPOSITORY + "@" + _digest, pulls);
+		Assert.All(pulls.Skip(1), call => Assert.Equal("podman pull --platform linux/amd64 " + REPOSITORY + "@" + _digest, call));
+		var cacheTag = "localhost/containerizer/cache/" + Files.HashText(REPOSITORY) + ":x64-" + _digest[7..];
+		Assert.Equal(cacheTag, image.Reference);
+		Assert.Contains("podman tag " + _id + " " + cacheTag, runner.Calls);
+	}
+
+	[Theory]
+	[InlineData("arm64", true)]
+	[InlineData("amd64", false)]
+	public async Task PodmanNullSingleManifestRejectsWrongPlatformOrRepositoryAsync(string architecture, bool association)
+	{
+		var pulled = false;
+		var runner = new ProbeRunner((_, arguments) =>
+		{
+			if(arguments[0] == "image")
+				return pulled ? new(0, CreateInspectionJson(_digest, [], association, architecture), "") : new(1, "", "not found");
+			if(arguments[0] == "manifest")
+				return new(0, "{\"schemaVersion\":2,\"mediaType\":\"application/vnd.docker.distribution.manifest.v2+json\",\"manifests\":null}", "");
+
+			if(arguments[0] == "pull")
+				pulled = true;
+			return new(0, "", "");
+		});
+		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => new ContainerEngine("podman", runner).ResolveAsync(REPOSITORY, null, "latest", "x64", CancellationToken.None));
+		Assert.Equal(4, exception.Code);
+		Assert.True(pulled);
+		Assert.DoesNotContain(runner.Calls, call => call.StartsWith("podman tag ", StringComparison.Ordinal));
+	}
+
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public async Task PodmanNullSingleManifestKeepsPinnedDigestAsync(bool matches)
+	{
+		var pulled = false;
+		var actual = matches ? _digest : "sha256:" + new string('c', 64);
+		var inspection = CreateInspectionJson(_digest, [], true).Replace(_digest, actual, StringComparison.Ordinal);
+		var runner = new ProbeRunner((_, arguments) =>
+		{
+			if(arguments[0] == "image")
+				return pulled ? new(0, inspection, "") : new(1, "", "not found");
+			if(arguments[0] == "manifest")
+				return new(0, "{\"schemaVersion\":2,\"mediaType\":\"application/vnd.docker.distribution.manifest.v2+json\",\"manifests\":null}", "");
+
+			if(arguments[0] == "pull")
+			{
+				Assert.Equal(REPOSITORY + "@" + _digest, arguments[^1]);
+				pulled = true;
+			}
+
+			return new(0, "", "");
+		});
+		var engine = new ContainerEngine("podman", runner);
+
+		if(matches)
+			Assert.Equal(_digest, (await engine.ResolveAsync(REPOSITORY, _digest, "latest", "x64", CancellationToken.None)).Digest);
+		else
+		{
+			var exception = await Assert.ThrowsAsync<ContainerizationException>(() => engine.ResolveAsync(REPOSITORY, _digest, "latest", "x64", CancellationToken.None));
+			Assert.Equal(4, exception.Code);
+			Assert.DoesNotContain(runner.Calls, call => call.StartsWith("podman tag ", StringComparison.Ordinal));
+		}
+
+		Assert.True(pulled);
+		Assert.All(runner.Calls, call => Assert.DoesNotContain(":latest", call, StringComparison.Ordinal));
+	}
+
+	[Fact]
+	public async Task PodmanNullSingleManifestUnavailablePinnedDigestNeverFallsBackAsync()
+	{
+		var runner = new ProbeRunner((_, arguments) => arguments[0] == "manifest" ?
+			new(0, "{\"schemaVersion\":2,\"mediaType\":\"application/vnd.docker.distribution.manifest.v2+json\",\"manifests\":null}", "") : new(1, "", "unavailable"));
+		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => new ContainerEngine("podman", runner).ResolveAsync(REPOSITORY, _digest, "latest", "x64", CancellationToken.None));
+		Assert.Equal(4, exception.Code);
+		Assert.Contains("podman pull --platform linux/amd64 " + REPOSITORY + "@" + _digest, runner.Calls);
+		Assert.All(runner.Calls, call => Assert.DoesNotContain(":latest", call, StringComparison.Ordinal));
+		Assert.DoesNotContain(runner.Calls, call => call.StartsWith("podman tag ", StringComparison.Ordinal));
+	}
+
+	[Theory]
+	[InlineData("podman", "application/unknown", "null")]
+	[InlineData("podman", "application/vnd.docker.distribution.manifest.v2+json", "{}")]
+	[InlineData("podman", "application/vnd.oci.image.index.v1+json", "null")]
+	[InlineData("docker", "application/vnd.docker.distribution.manifest.v2+json", "null")]
+	public async Task NullSingleManifestFallbackRejectsOtherEnginesAndMalformedManifestsAsync(string executable, string mediaType, string manifests)
+	{
+		var manifest = $"{{\"schemaVersion\":2,\"mediaType\":\"{mediaType}\",\"manifests\":{manifests}}}";
+		var runner = new ProbeRunner((_, arguments) => arguments[0] == "image" ? new(1, "", "not found") : new(0, manifest, ""));
+		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => new ContainerEngine(executable, runner).ResolveAsync(REPOSITORY, null, "latest", "x64", CancellationToken.None));
+		Assert.Equal(4, exception.Code);
+		Assert.DoesNotContain(runner.Calls, call => call.StartsWith(executable + " pull ", StringComparison.Ordinal) || call.StartsWith(executable + " tag ", StringComparison.Ordinal));
+	}
+
+	[Fact]
+	public async Task PodmanNullSingleManifestDoesNotBypassConfigurationBindingAsync()
+	{
+		var pulled = false;
+		var manifest = JsonSerializer.Serialize(new
+		{
+			schemaVersion = 2,
+			mediaType = "application/vnd.docker.distribution.manifest.v2+json",
+			manifests = (object)null,
+			config = new { digest = "sha256:" + new string('c', 64) },
+		});
+		var runner = new ProbeRunner((_, arguments) =>
+		{
+			if(arguments[0] == "image")
+				return pulled ? new(0, CreateInspectionJson(_digest, [], true), "") : new(1, "", "not found");
+			if(arguments[0] == "manifest")
+				return new(0, manifest, "");
+			if(arguments[0] == "pull")
+				pulled = true;
+			return new(0, "", "");
+		});
+		var exception = await Assert.ThrowsAsync<ContainerizationException>(() => new ContainerEngine("podman", runner).ResolveAsync(REPOSITORY, null, "latest", "x64", CancellationToken.None));
+		Assert.Equal(4, exception.Code);
+		Assert.DoesNotContain(runner.Calls, call => call.StartsWith("podman tag ", StringComparison.Ordinal));
+	}
+
 	[Fact]
 	public async Task MissingDisplayMetadataDoesNotTriggerRegistryAccessAsync()
 	{

@@ -113,6 +113,8 @@ Repository, source tag, target-platform manifest digest, multi-platform index di
 
 Local images are reused when identity and platform evidence is sufficient; otherwise they are resolved or pulled. Pinned replay cannot fall back to a tag, change platforms, or substitute an index digest/image ID for the target manifest. Creation time and engine-reported size are recorded when available and omitted otherwise, without extra network work for display metadata.
 
+When Podman manifest inspect projects a known OCI/Docker single image as manifests:null without config, the maker pulls the original reference, verifies the Linux architecture, repository association and actual manifest digest, then uses only the pinned digest. Existing digest requests remain pinned throughout. An exposed config still requires configuration-identity checks; unknown media types, malformed lists and platform/repository mismatches are rejected.
+
 The manifest identity associates repository, tag, Linux and architecture. Changes invalidate previous digest, timestamp and size values. Changing only the bundle version, bundle tag or host distribution does not alter infrastructure image identity.
 
 The maker exports infrastructure images by ID without attaching release-specific tags to cached images. Application builds, account probes and auxiliary builders use unique owned resources. Cleanup removes this invocation's containers and anonymous volumes, temporary images and builders, retaining useful source/tool images without global prune.
