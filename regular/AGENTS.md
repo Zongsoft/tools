@@ -20,7 +20,7 @@
 
 ## 验证
 
-- 构建：`dotnet build Zongsoft.Tools.Regular.slnx`；本地制包：`dotnet cake --edition Release --target build`；`pack` 将构建并推送到 NuGet.org。
+- 构建：`dotnet build Zongsoft.Tools.Regular.slnx`；本地制包：`dotnet cake --compilation Release --target build`；`pack` 将构建并推送到 NuGet.org。
 - 通过隔离的 `--tool-path` 安装本地包，确认命令、GUI 文件、运行配置、中文资源与直接运行的 Debug `.exe`；不要用全局安装替代本地验证。
 - 在 Windows 手工验证无匹配、多匹配、命名组、重复捕获、零长度捕获、无效表达式和各 RegexOptions 组合。
 - 布局变化检查常用缩放比例、窗口缩放、键盘导航以及打开/保存流程；本项目当前没有自动化测试。

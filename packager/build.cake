@@ -1,5 +1,5 @@
 var target = Argument("target", "default");
-var edition = Argument("edition", "Debug");
+var compilation = Argument("compilation", "Debug");
 
 var solutionFile = "Zongsoft.Tools.Packager.slnx";
 
@@ -7,8 +7,8 @@ Task("clean")
 	.Description("清理解决方案")
 	.Does(() =>
 {
-	CleanDirectories($"**/bin/{edition}");
-	CleanDirectories($"**/obj/{edition}");
+	CleanDirectories($"**/bin/{compilation}");
+	CleanDirectories($"**/obj/{compilation}");
 });
 
 Task("restore")
@@ -17,7 +17,7 @@ Task("restore")
 {
 	DotNetRestore(solutionFile, new DotNetRestoreSettings
 	{
-		MSBuildSettings = new DotNetMSBuildSettings().WithProperty("Configuration", edition),
+		MSBuildSettings = new DotNetMSBuildSettings().WithProperty("Configuration", compilation),
 	});
 });
 
@@ -29,13 +29,13 @@ Task("build")
 {
 	var settings = new DotNetBuildSettings
 	{
-		Configuration = edition,
+		Configuration = compilation,
 	};
 
 	DotNetBuild(solutionFile, settings);
 	DotNetPack("src/Zongsoft.Tools.Packager.csproj", new DotNetPackSettings
 	{
-		Configuration = edition,
+		Configuration = compilation,
 		NoBuild = true,
 		NoRestore = true,
 	});
@@ -49,7 +49,7 @@ Task("test")
 	var settings = new DotNetTestSettings
 	{
 		NoRestore = true,
-		Configuration = edition,
+		Configuration = compilation,
 	};
 
 	var projects = GetFiles("test/*.csproj");
@@ -66,7 +66,7 @@ Task("pack")
 	.Does(() =>
 {
 	var version = XmlPeek("src/Zongsoft.Tools.Packager.csproj", "/Project/PropertyGroup/Version");
-	var package = $"src/bin/{edition}/Zongsoft.Tools.Packager.{version}.nupkg";
+	var package = $"src/bin/{compilation}/Zongsoft.Tools.Packager.{version}.nupkg";
 	if(!FileExists(package))
 		throw new Exception($"NuGet package does not exist: {package}");
 

@@ -1057,10 +1057,10 @@ Run these commands from the `packager` directory of the tools repository.
 | --- | --- |
 | Restore and build | `dotnet restore Zongsoft.Tools.Packager.slnx`<br>`dotnet build Zongsoft.Tools.Packager.slnx -c Release` |
 | Run regression tests | `dotnet test test/Zongsoft.Tools.Packager.Tests.csproj -f net10.0` |
-| Cake build (includes local packing) | `dotnet cake --target=build --edition=Release` |
-| Cake test (default target) | `dotnet cake --target=test --edition=Release` |
+| Cake build (includes local packing) | `dotnet cake --target=build --compilation=Release` |
+| Cake test (default target) | `dotnet cake --target=test --compilation=Release` |
 
-- Cake passes the same `--edition` configuration to restore, build, and test.
+- Cake passes the same `--compilation` configuration to restore, build, and test.
 - Debug references the local [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) build output; Release uses the [NuGet package](https://www.nuget.org/packages/Zongsoft.Core) declared by the project, and the test project follows the main project.
 - See the [repository guide](../AGENTS.md#代码规范检查) for code style checks and resource generation.
 

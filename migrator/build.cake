@@ -1,5 +1,5 @@
 var target = Argument("target", "default");
-var edition = Argument("edition", "Debug");
+var compilation = Argument("compilation", "Debug");
 
 var solutionFile = "Zongsoft.Tools.Migrator.slnx";
 
@@ -7,8 +7,8 @@ Task("clean")
 	.Description("清理解决方案")
 	.Does(() =>
 {
-	CleanDirectories($"**/bin/{edition}");
-	CleanDirectories($"**/obj/{edition}");
+	CleanDirectories($"**/bin/{compilation}");
+	CleanDirectories($"**/obj/{compilation}");
 });
 
 Task("restore")
@@ -17,7 +17,7 @@ Task("restore")
 {
 	DotNetRestore(solutionFile, new DotNetRestoreSettings
 	{
-		MSBuildSettings = new DotNetMSBuildSettings().WithProperty("Configuration", edition),
+		MSBuildSettings = new DotNetMSBuildSettings().WithProperty("Configuration", compilation),
 	});
 });
 
@@ -43,14 +43,14 @@ Task("executor")
 	foreach(var runtime in new[] { "linux-x64", "linux-arm64" })
 	{
 		var arguments = new ProcessArgumentBuilder().Append($"exec {container} bash executor/build/publish.sh")
-			.Append(runtime).AppendQuoted(edition);
+			.Append(runtime).AppendQuoted(compilation);
 		if(StartProcess("podman", new ProcessSettings { Arguments = arguments }) != 0)
 			throw new Exception($"Native AOT publishing failed for {runtime}.");
 	}
 	if(IsRunningOnWindows())
 	{
 		var arguments = new ProcessArgumentBuilder().Append("-NoProfile -File")
-			.AppendQuoted("executor/build/publish.ps1").Append("-Configuration").AppendQuoted(edition);
+			.AppendQuoted("executor/build/publish.ps1").Append("-Configuration").AppendQuoted(compilation);
 		if(StartProcess("pwsh", new ProcessSettings { Arguments = arguments }) != 0)
 			throw new Exception("Native AOT publishing failed for win-x64.");
 	}
@@ -58,7 +58,7 @@ Task("executor")
 	foreach(var runtime in new[] { "linux-x64", "linux-arm64", "win-x64" })
 	{
 		var executable = runtime == "win-x64" ? "Zongsoft.Tools.Migrator.Executor.exe" : "Zongsoft.Tools.Migrator.Executor";
-		if(!FileExists($"executor/src/bin/{edition}/net10.0/{runtime}/publish/{executable}"))
+		if(!FileExists($"executor/src/bin/{compilation}/net10.0/{runtime}/publish/{executable}"))
 			throw new Exception($"Prepare the complete Native AOT publication for {runtime} before packaging the tool.");
 	}
 });
@@ -71,19 +71,19 @@ Task("compile")
 	foreach(var runtime in new[] { "linux-x64", "linux-arm64", "win-x64" })
 	{
 		var executable = runtime == "win-x64" ? "Zongsoft.Tools.Migrator.Executor.exe" : "Zongsoft.Tools.Migrator.Executor";
-		if(!FileExists($"executor/src/bin/{edition}/net10.0/{runtime}/publish/{executable}"))
+		if(!FileExists($"executor/src/bin/{compilation}/net10.0/{runtime}/publish/{executable}"))
 			throw new Exception($"Prepare the complete Native AOT publication for {runtime} before packaging the tool.");
 	}
 
 	var settings = new DotNetBuildSettings
 	{
-		Configuration = edition,
+		Configuration = compilation,
 	};
 
 	DotNetBuild(solutionFile, settings);
 	DotNetPack("src/Zongsoft.Tools.Migrator.csproj", new DotNetPackSettings
 	{
-		Configuration = edition,
+		Configuration = compilation,
 		NoBuild = true,
 		NoRestore = true,
 	});
@@ -102,7 +102,7 @@ Task("test")
 	var settings = new DotNetTestSettings
 	{
 		NoRestore = true,
-		Configuration = edition,
+		Configuration = compilation,
 	};
 
 	var projects = GetFiles("test/*.csproj").Concat(GetFiles("executor/test/*.csproj"));
@@ -119,7 +119,7 @@ Task("pack")
 	.Does(() =>
 {
 	var version = XmlPeek("src/Zongsoft.Tools.Migrator.csproj", "/Project/PropertyGroup/Version");
-	var package = $"src/bin/{edition}/Zongsoft.Tools.Migrator.{version}.nupkg";
+	var package = $"src/bin/{compilation}/Zongsoft.Tools.Migrator.{version}.nupkg";
 	if(!FileExists(package))
 		throw new Exception($"NuGet package does not exist: {package}");
 

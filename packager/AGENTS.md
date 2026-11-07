@@ -26,7 +26,7 @@
 
 `dotnet test test/Zongsoft.Tools.Packager.Tests.csproj -f net10.0`；`dotnet build Zongsoft.Tools.Packager.slnx -p:ZongsoftCodeStyleStrict=true` 覆盖所有 TFM，另执行 IDE0049 verify。
 
-Cake restore/build/test 使用同一 edition，默认 test；build 只构建本工具并制 NuGet 包，不启动容器。pack 会推送 NuGet，未获明确授权不能运行。Debug 引用本地 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core)，Release 使用 NuGet，测试不能混用。
+Cake restore/build/test 使用同一 compilation，默认 test；build 只构建本工具并制 NuGet 包，不启动容器。pack 会推送 NuGet，未获明确授权不能运行。Debug 引用本地 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core)，Release 使用 NuGet，测试不能混用。
 
 文件系统测试使用临时目录，包内容检查不等于安装；不得擅自执行安装、systemd、sudo 或真实数据库/存储操作。交接集成通过产物或独立进程，不跨工具引用协议类型。公开行为修改同步双语 README、实现说明、资源和测试。
 

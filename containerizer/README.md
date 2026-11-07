@@ -114,7 +114,7 @@ dotnet tool uninstall -g Zongsoft.Tools.Containerizer
 A `.nupkg` built from source can be installed for testing without publishing to [nuget.org](https://nuget.org). The tool package embeds two Native AOT executor payloads, so a full local build first prepares them; the commands and the dedicated AOT environment are documented in the [developer guide](SKILL.md#构建与验证). To package from a checkout and install into an isolated tool directory:
 
 ```powershell
-dotnet cake --target build --edition Release
+dotnet cake --target build --compilation Release
 
 $toolVersion = dotnet msbuild src/Zongsoft.Tools.Containerizer.csproj -getProperty:Version -p:Configuration=Release -nologo
 dotnet tool install Zongsoft.Tools.Containerizer --tool-path ./.cache/tool --version $toolVersion --source ./src/bin/Release --no-http-cache

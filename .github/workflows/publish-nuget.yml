@@ -157,15 +157,15 @@ jobs:
         if: inputs.project == 'migrator'
         run: |
           chmod 755 executor/src/bin/Release/net10.0/linux-*/publish/Zongsoft.Tools.Migrator.Executor
-          dotnet cake --edition Release --target compile
+          dotnet cake --compilation Release --target compile
       - name: Build containerizer package
         if: inputs.project == 'containerizer'
         run: |
           chmod 755 executor/src/bin/Release/net10.0/linux-*/publish/containerizer
-          dotnet cake --edition Release --target compile
+          dotnet cake --compilation Release --target compile
       - name: Build tool package
         if: inputs.project != 'migrator' && inputs.project != 'containerizer'
-        run: dotnet cake --edition Release --target build
+        run: dotnet cake --compilation Release --target build
       - name: NuGet login
         id: login
         uses: NuGet/login@v1
@@ -174,4 +174,4 @@ jobs:
       - name: Publish packages
         env:
           NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
-        run: dotnet cake --edition Release --target pack --exclusive
+        run: dotnet cake --compilation Release --target pack --exclusive

@@ -1057,10 +1057,10 @@ RPM 的 `PACKAGER` 标签（1015）保存的是 `--maintainer` 维护者信息�
 | --- | --- |
 | 还原并构建 | `dotnet restore Zongsoft.Tools.Packager.slnx`<br>`dotnet build Zongsoft.Tools.Packager.slnx -c Release` |
 | 运行回归测试 | `dotnet test test/Zongsoft.Tools.Packager.Tests.csproj -f net10.0` |
-| Cake 构建（含本地制包） | `dotnet cake --target=build --edition=Release` |
-| Cake 测试（默认目标） | `dotnet cake --target=test --edition=Release` |
+| Cake 构建（含本地制包） | `dotnet cake --target=build --compilation=Release` |
+| Cake 测试（默认目标） | `dotnet cake --target=test --compilation=Release` |
 
-- Cake 会将同一 `--edition` 配置传给依赖还原、编译和测试。
+- Cake 会将同一 `--compilation` 配置传给依赖还原、编译和测试。
 - Debug 引用本地 [Zongsoft.Core](https://github.com/Zongsoft/framework/tree/main/Zongsoft.Core) 编译产物；Release 使用项目声明的 [NuGet 包](https://www.nuget.org/packages/Zongsoft.Core)，测试项目跟随主项目使用该依赖。
 - 代码规范检查及资源生成要求见[仓库说明](../AGENTS.md#代码规范检查)。
 

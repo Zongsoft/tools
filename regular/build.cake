@@ -1,5 +1,5 @@
 var target = Argument("target", "default");
-var edition = Argument("edition", "Debug");
+var compilation = Argument("compilation", "Debug");
 
 var solutionFile = "Zongsoft.Tools.Regular.slnx";
 var guiProject = "src/Zongsoft.Tools.Regular.csproj";
@@ -9,8 +9,8 @@ Task("clean")
 	.Description("清理解决方案")
 	.Does(() =>
 {
-	CleanDirectories($"**/bin/{edition}");
-	CleanDirectories($"**/obj/{edition}");
+	CleanDirectories($"**/bin/{compilation}");
+	CleanDirectories($"**/obj/{compilation}");
 });
 
 Task("restore")
@@ -19,7 +19,7 @@ Task("restore")
 {
 	DotNetRestore(solutionFile, new DotNetRestoreSettings
 	{
-		MSBuildSettings = new DotNetMSBuildSettings().WithProperty("Configuration", edition),
+		MSBuildSettings = new DotNetMSBuildSettings().WithProperty("Configuration", compilation),
 	});
 });
 
@@ -31,16 +31,16 @@ Task("build")
 {
 	DotNetBuild(solutionFile, new DotNetBuildSettings
 	{
-		Configuration = edition,
+		Configuration = compilation,
 		NoRestore = true,
 	});
 
 	var version = XmlPeek(toolProject, "/Project/PropertyGroup/Version");
-	var guiPublishDir = MakeAbsolute(Directory($"src/bin/{edition}/gui/win-x64")).FullPath;
+	var guiPublishDir = MakeAbsolute(Directory($"src/bin/{compilation}/gui/win-x64")).FullPath;
 
 	DotNetPublish(guiProject, new DotNetPublishSettings
 	{
-		Configuration = edition,
+		Configuration = compilation,
 		Runtime = "win-x64",
 		SelfContained = false,
 		OutputDirectory = guiPublishDir,
@@ -49,7 +49,7 @@ Task("build")
 
 	DotNetPack(toolProject, new DotNetPackSettings
 	{
-		Configuration = edition,
+		Configuration = compilation,
 		MSBuildSettings = new DotNetMSBuildSettings().WithProperty("RegularPublishDir", guiPublishDir),
 	});
 });
@@ -60,7 +60,7 @@ Task("pack")
 	.Does(() =>
 {
 	var version = XmlPeek(toolProject, "/Project/PropertyGroup/Version");
-	var packageDirectory = $"tool/bin/{edition}";
+	var packageDirectory = $"tool/bin/{compilation}";
 	var package = $"{packageDirectory}/Zongsoft.Tools.Regular.{version}.nupkg";
 
 	if(!FileExists(package))

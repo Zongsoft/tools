@@ -1,16 +1,16 @@
 var target = Argument("target", "default");
-var edition = Argument("edition", "Debug");
+var compilation = Argument("compilation", "Debug");
 const string solution = "Containerizer.slnx";
 
 Task("restore").Does(() => DotNetRestore(solution, new DotNetRestoreSettings
 {
-	MSBuildSettings = new DotNetMSBuildSettings().WithProperty("Configuration", edition),
+	MSBuildSettings = new DotNetMSBuildSettings().WithProperty("Configuration", compilation),
 }));
 
 Task("test").IsDependentOn("restore").Does(() =>
 {
 	foreach(var project in GetFiles("test/*.csproj").Concat(GetFiles("executor/test/*.csproj")))
-		DotNetTest(project.FullPath, new DotNetTestSettings { Configuration = edition, NoRestore = true });
+		DotNetTest(project.FullPath, new DotNetTestSettings { Configuration = compilation, NoRestore = true });
 });
 
 Task("executor").Does(() =>
@@ -29,7 +29,7 @@ Task("executor").Does(() =>
 
 	foreach(var runtime in new[] { "linux-x64", "linux-arm64" })
 	{
-		if(StartProcess("podman", $"exec {container} bash executor/build/publish.sh {runtime} {edition}") != 0)
+		if(StartProcess("podman", $"exec {container} bash executor/build/publish.sh {runtime} {compilation}") != 0)
 			throw new Exception($"Native AOT publication failed: {runtime}.");
 	}
 });
@@ -38,19 +38,19 @@ Task("compile").IsDependentOn("restore").Does(() =>
 {
 	foreach(var runtime in new[] { "linux-x64", "linux-arm64" })
 	{
-		if(!FileExists($"executor/src/bin/{edition}/net10.0/{runtime}/publish/containerizer"))
+		if(!FileExists($"executor/src/bin/{compilation}/net10.0/{runtime}/publish/containerizer"))
 			throw new Exception($"Publish {runtime} before creating the tool package.");
 	}
 
-	DotNetBuild(solution, new DotNetBuildSettings { Configuration = edition });
-	DotNetPack("src/Zongsoft.Tools.Containerizer.csproj", new DotNetPackSettings { Configuration = edition, NoBuild = true, NoRestore = true });
+	DotNetBuild(solution, new DotNetBuildSettings { Configuration = compilation });
+	DotNetPack("src/Zongsoft.Tools.Containerizer.csproj", new DotNetPackSettings { Configuration = compilation, NoBuild = true, NoRestore = true });
 });
 
 Task("build").IsDependentOn("executor").IsDependentOn("compile");
 Task("pack").IsDependentOn("build").Does(() =>
 {
 	var version = XmlPeek("src/Zongsoft.Tools.Containerizer.csproj", "/Project/PropertyGroup/Version");
-	DotNetNuGetPush($"src/bin/{edition}/Zongsoft.Tools.Containerizer.{version}.nupkg", new DotNetNuGetPushSettings
+	DotNetNuGetPush($"src/bin/{compilation}/Zongsoft.Tools.Containerizer.{version}.nupkg", new DotNetNuGetPushSettings
 	{
 		Source = "nuget.org", ApiKey = EnvironmentVariable("NUGET_API_KEY"), SkipDuplicate = true,
 	});

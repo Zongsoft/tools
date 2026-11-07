@@ -124,7 +124,7 @@ Cake 任务边界：
 | build | executor + compile |
 | pack | build 后推送 NuGet；发布才使用 |
 
-需要制包时执行 `dotnet cake --target build --edition Release`；已有最新载荷时可使用 compile。普通源码验证不必制包。需要验证工具安装时使用独立 tool-path，版本从项目读取：
+需要制包时执行 `dotnet cake --target build --compilation Release`；已有最新载荷时可使用 compile。普通源码验证不必制包。需要验证工具安装时使用独立 tool-path，版本从项目读取：
 
 ```powershell
 $toolVersion = dotnet msbuild src/Zongsoft.Tools.Containerizer.csproj -getProperty:Version -p:Configuration=Release -nologo
