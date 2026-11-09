@@ -24,4 +24,8 @@
 	<ItemGroup Condition="'$(PackAsTool)' == 'true'">
 		<None Include="$(MSBuildThisFileDirectory)zongsoft-logo.png" Pack="true" PackagePath="\" Visible="true" />
 	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="$(MSBuildThisFileDirectory)LICENSE" Pack="true" PackagePath="\" Visible="false" />
+	</ItemGroup>
 </Project>

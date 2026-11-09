@@ -36,3 +36,7 @@ Packager builds independently. Migrator builds Linux and Windows native artifact
 All tools share the root `.editorconfig`. `Directory.Build.props` enables `ZongsoftCodeStyleStrict=true` for every C# build and sets `ZongsoftGuidelinesSynchronization` to the repository root. Git checks out C# sources with CRLF to match the editor configuration. During build preparation, `Zongsoft.CodeAnalysis` copies the template from the referenced NuGet package to that file; no separate synchronization command or GitHub access is required.
 
 Synchronization overwrites the root file without merging local edits. The template is maintained in guidelines; Directory.Packages.props defines the shared analyzer version. Restore, clean, design-time builds and builds skipped by Visual Studio's up-to-date check do not synchronize; use Rebuild when necessary. AOT containers mount the root configuration read-only; the Linux publish script passes `-p:ZongsoftGuidelinesSynchronization=` to disable synchronization.
+
+## License
+
+This project is licensed under the [MIT](LICENSE) license. Third-party content retains its own copyright and license notices.
