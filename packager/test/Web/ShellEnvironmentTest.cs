@@ -1,7 +1,5 @@
 using System.IO;
 
-using Xunit;
-
 namespace Zongsoft.Tools.Packager.Tests.Web;
 
 public class ShellEnvironmentTest

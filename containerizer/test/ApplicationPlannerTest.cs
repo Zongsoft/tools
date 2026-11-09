@@ -2,13 +2,11 @@ using System;
 using System.IO;
 using System.Text.Json;
 
-using Xunit;
-
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
-public sealed class ApplicationPlannerTests
+public sealed class ApplicationPlannerTest
 {
 	[Fact]
 	public void InferredApplicationEntryUsesProcessHealthInCompose()

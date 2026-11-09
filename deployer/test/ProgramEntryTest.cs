@@ -1,7 +1,5 @@
 using System.Reflection;
 
-using Xunit;
-
 namespace Zongsoft.Tools.Deployer.Tests;
 
 public sealed class ProgramEntryTest

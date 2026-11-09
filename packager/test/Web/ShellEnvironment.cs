@@ -6,7 +6,6 @@ using System.ComponentModel;
 using System.Collections.Generic;
 
 using Microsoft.Win32;
-using Xunit;
 
 namespace Zongsoft.Tools.Packager.Tests.Web;
 

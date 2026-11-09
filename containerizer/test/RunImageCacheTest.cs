@@ -6,14 +6,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-using Xunit;
 using Zongsoft.Components;
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
 [Collection("Run sessions")]
-public sealed class RunImageCacheTests : IDisposable
+public sealed class RunImageCacheTest : IDisposable
 {
 	private const string INFRASTRUCTURE = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 	private const string APPLICATION = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";

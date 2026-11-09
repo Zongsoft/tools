@@ -3,8 +3,6 @@ using System.IO;
 using System.Linq;
 using System.Text;
 
-using Xunit;
-
 namespace Zongsoft.Tools.Packager.Tests;
 
 public class BindingsDocumentTest

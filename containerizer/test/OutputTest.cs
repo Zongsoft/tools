@@ -4,12 +4,11 @@ using System.Globalization;
 using System.Collections.Generic;
 using System.Linq;
 
-using Xunit;
 using Zongsoft.Components;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
-public sealed class OutputTests
+public sealed class OutputTest
 {
 	[Fact]
 	public void LocalizedMessagesStyleParametersSeparatelyWithoutExpandingTheirContents()

@@ -6,8 +6,6 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-using Xunit;
-
 namespace Zongsoft.Tools.Migrator.Migration.Tests;
 
 public sealed partial class MigrationDatabaseUsersTest

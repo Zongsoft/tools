@@ -4,8 +4,6 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 
-using Xunit;
-
 using Zongsoft.Configuration.Profiles;
 
 namespace Zongsoft.Tools.Migrator.Tests;

@@ -10,18 +10,17 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-using Xunit;
 using Zongsoft.Components;
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
 [Collection("Run sessions")]
-public sealed class RunContextTests : IDisposable
+public sealed class RunContextTest : IDisposable
 {
 	private readonly string _root = Path.Combine(Path.GetTempPath(), $"containerizer-run-test-{Guid.NewGuid():N}");
 
-	public RunContextTests() => Directory.CreateDirectory(_root);
+	public RunContextTest() => Directory.CreateDirectory(_root);
 	public void Dispose() => Directory.Delete(_root, true);
 
 	[Theory]

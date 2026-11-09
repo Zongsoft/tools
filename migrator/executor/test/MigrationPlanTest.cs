@@ -4,8 +4,6 @@ using System.Text;
 using System.Text.Json;
 using System.Security.Cryptography;
 
-using Xunit;
-
 namespace Zongsoft.Tools.Migrator.Migration.Tests;
 
 public sealed class MigrationPlanTest

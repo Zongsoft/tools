@@ -6,6 +6,10 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<Using Include="Xunit" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<ProjectReference Include="..\src\Zongsoft.Tools.Migrator.csproj" />
 		<ProjectReference Include="..\executor\src\Zongsoft.Tools.Migrator.Executor.csproj" ReferenceOutputAssembly="false" />
 

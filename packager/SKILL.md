@@ -45,4 +45,4 @@ description: 修改打包命令、应用版本管理、载荷路径、三种包�
 | 容器消费 | auto/none/显式映射、别名与 ID 重复覆盖、TCP/UDP 同号、地址族、回环与 IPv4 网络可达性、源端点与连接引用、显式健康命令及默认进程检查。 |
 | 运行协作 | Kestrel 同输入投影、同 socket 及跨插件冲突、区域与原生 RPC 精确匹配、区域反射、普通路由约束、OTLP 三信号实际到达、直接 GrpcChannel 前缀仅一次与处理链释放。 |
 
-现有回归入口包括 BindingsDocumentTest、WebRoutingTest、WebBindingsTest、WebPolicyTest，以及 Containerizer 的 ApplicationBindingsTests、BindingProtocolTests、ListenerPackageTests。按目标项目执行严格构建、IDE0049 和既有测试；新增行为需要测试时遵循项目测试流程。对生成的 Nginx 配置先做隔离 `nginx -t`，再做实际请求；HTTP/3 的 QUIC/TLS 入口、HTTP 上游、gRPC 流分别验收。包检查使用读取工具，不安装真实系统包或启停现场服务。运行日志放在隔离证据目录，不写回维护文档作为阶段记录。
+现有回归入口包括 BindingsDocumentTest、WebRoutingTest、WebBindingsTest、WebPolicyTest，以及 Containerizer 的 ApplicationBindingsTest、BindingProtocolTest、ListenerPackageTest。按目标项目执行严格构建、IDE0049 和既有测试；新增行为需要测试时遵循项目测试流程。对生成的 Nginx 配置先做隔离 `nginx -t`，再做实际请求；HTTP/3 的 QUIC/TLS 入口、HTTP 上游、gRPC 流分别验收。包检查使用读取工具，不安装真实系统包或启停现场服务。运行日志放在隔离证据目录，不写回维护文档作为阶段记录。

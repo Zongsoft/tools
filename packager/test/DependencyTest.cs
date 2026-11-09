@@ -3,8 +3,6 @@ using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 
-using Xunit;
-
 using Zongsoft.Components;
 
 namespace Zongsoft.Tools.Packager.Tests;

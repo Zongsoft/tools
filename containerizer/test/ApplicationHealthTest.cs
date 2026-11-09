@@ -1,12 +1,11 @@
 using System;
 using System.Linq;
 
-using Xunit;
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
-public sealed class ApplicationHealthTests
+public sealed class ApplicationHealthTest
 {
 	[Theory]
 	[InlineData(null)]

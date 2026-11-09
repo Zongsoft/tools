@@ -6,17 +6,15 @@ using System.Formats.Tar;
 using System.IO.Compression;
 using System.Collections.Generic;
 
-using Xunit;
-
 using Zongsoft.Components;
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
-public sealed class ContainerManifestTests : IDisposable
+public sealed class ContainerManifestTest : IDisposable
 {
 	private readonly string _root = Path.Combine(Path.GetTempPath(), "containerizer-tests-" + Guid.NewGuid().ToString("N"));
-	public ContainerManifestTests() => Directory.CreateDirectory(_root);
+	public ContainerManifestTest() => Directory.CreateDirectory(_root);
 	public void Dispose() => Directory.Delete(_root, true);
 
 	[Theory]
@@ -129,7 +127,7 @@ public sealed class ContainerManifestTests : IDisposable
 	}
 
 	[Theory]
-	[MemberData(nameof(ContainerEngineTests.InvalidDigests), MemberType = typeof(ContainerEngineTests))]
+	[MemberData(nameof(ContainerEngineTest.InvalidDigests), MemberType = typeof(ContainerEngineTest))]
 	public void ManifestRejectsInvalidImageDigests(string digest)
 	{
 		var manifest = ManifestFactory.Create(CreateContext("redis", "--name:example", "--distribution:debian", "--source:" + _root, "--version:1.0"));

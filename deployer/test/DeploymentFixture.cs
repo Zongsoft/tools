@@ -1,7 +1,5 @@
 using System.Xml.Linq;
 
-using Xunit;
-
 [assembly: CollectionBehavior(DisableTestParallelization = true)]
 
 namespace Zongsoft.Tools.Deployer.Tests;

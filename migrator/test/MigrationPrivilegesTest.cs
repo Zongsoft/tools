@@ -2,8 +2,6 @@ using System;
 using System.IO;
 using System.Linq;
 
-using Xunit;
-
 using Zongsoft.Tools.Migrator.Migration;
 
 namespace Zongsoft.Tools.Migrator.Tests;

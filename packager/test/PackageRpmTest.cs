@@ -10,8 +10,6 @@ using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Runtime.InteropServices;
 
-using Xunit;
-
 namespace Zongsoft.Tools.Packager.Tests;
 
 public sealed class PackageRpmTest
@@ -302,7 +300,6 @@ public sealed class PackageRpmTest
 		Assert.Contains(4, observedAlignment);
 		Assert.True(observedHeaderSizes.Count > 1, "Metadata variants must exercise multiple declared header lengths.");
 	}
-
 	#endregion
 
 	#region 辅助方法

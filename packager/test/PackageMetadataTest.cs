@@ -9,8 +9,6 @@ using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
-using Xunit;
-
 using Zongsoft.Services;
 
 namespace Zongsoft.Tools.Packager.Tests;

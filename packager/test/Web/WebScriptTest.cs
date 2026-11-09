@@ -10,8 +10,6 @@ using System.Runtime.InteropServices;
 
 using Zongsoft.Tools.Packager.Web;
 
-using Xunit;
-
 namespace Zongsoft.Tools.Packager.Tests.Web;
 
 public class WebScriptTest

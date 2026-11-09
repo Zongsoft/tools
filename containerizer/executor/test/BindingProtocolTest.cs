@@ -1,12 +1,11 @@
 using System;
 using System.Text.Json;
 
-using Xunit;
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Executor.Tests;
 
-public sealed class BindingProtocolTests
+public sealed class BindingProtocolTest
 {
 	[Fact]
 	public void JsonRoundtripPreservesDeclarationsSelectionsAndPublicationReferences()

@@ -6,12 +6,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-using Xunit;
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
-public sealed class ContainerEngineBuildTests
+public sealed class ContainerEngineBuildTest
 {
 	[Fact]
 	public async Task PodmanDoesNotPersistIntermediateLayersAsync()

@@ -2,8 +2,6 @@ using System.Xml.Linq;
 
 using NuGet.Versioning;
 
-using Xunit;
-
 namespace Zongsoft.Tools.Deployer.Tests;
 
 public class NugetTest

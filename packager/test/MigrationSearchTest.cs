@@ -5,8 +5,6 @@ using System.Formats.Tar;
 using System.IO.Compression;
 using System.Collections.Generic;
 
-using Xunit;
-
 namespace Zongsoft.Tools.Packager.Tests;
 
 public sealed partial class MigrationPackageTest

@@ -6,8 +6,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-using Xunit;
-
 namespace Zongsoft.Tools.Migrator.Migration.Tests;
 
 public sealed class MigrationDatabaseTest

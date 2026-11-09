@@ -2,8 +2,6 @@ using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
 
-using Xunit;
-
 namespace Zongsoft.Tools.Deployer.Tests;
 
 public class TemplateResolverTest

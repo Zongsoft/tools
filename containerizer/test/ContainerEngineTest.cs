@@ -5,13 +5,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-using Xunit;
-
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
-public sealed class ContainerEngineTests
+public sealed class ContainerEngineTest
 {
 	private static readonly string _digest = "sha256:" + new string('a', 64);
 	private static readonly string _id = "sha256:" + new string('b', 64);

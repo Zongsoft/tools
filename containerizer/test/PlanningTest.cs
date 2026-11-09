@@ -6,18 +6,16 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
-using Xunit;
-
 using Zongsoft.Components;
 using Zongsoft.Configuration;
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
-public sealed class PlanningTests : IDisposable
+public sealed class PlanningTest : IDisposable
 {
 	private readonly string _root = Path.Combine(Path.GetTempPath(), "containerizer-planning-" + Guid.NewGuid().ToString("N"));
-	public PlanningTests() => Directory.CreateDirectory(_root);
+	public PlanningTest() => Directory.CreateDirectory(_root);
 	public void Dispose() => Directory.Delete(_root, true);
 
 	[Fact]

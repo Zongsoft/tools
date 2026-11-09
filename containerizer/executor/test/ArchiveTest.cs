@@ -5,16 +5,14 @@ using System.Text.Json;
 using System.Formats.Tar;
 using System.IO.Compression;
 
-using Xunit;
-
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Executor.Tests;
 
-public sealed class ArchiveTests : IDisposable
+public sealed class ArchiveTest : IDisposable
 {
 	private readonly string _root = Path.Combine(Path.GetTempPath(), "containerizer-archive-" + Guid.NewGuid().ToString("N"));
-	public ArchiveTests() => Directory.CreateDirectory(_root);
+	public ArchiveTest() => Directory.CreateDirectory(_root);
 	public void Dispose() => Directory.Delete(_root, true);
 
 	[Theory]

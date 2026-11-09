@@ -2,8 +2,6 @@ using System;
 using System.Linq;
 using System.Runtime.InteropServices;
 
-using Xunit;
-
 namespace Zongsoft.Tools.Packager.Tests;
 
 public class BindingExtractorTest

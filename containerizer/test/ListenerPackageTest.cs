@@ -4,15 +4,14 @@ using System.Linq;
 using System.Text;
 using System.Collections.Generic;
 
-using Xunit;
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
-public sealed class ListenerPackageTests : IDisposable
+public sealed class ListenerPackageTest : IDisposable
 {
 	private readonly string _root = Path.Combine(Path.GetTempPath(), "containerizer-listener-" + Guid.NewGuid().ToString("N"));
-	public ListenerPackageTests() => Directory.CreateDirectory(_root);
+	public ListenerPackageTest() => Directory.CreateDirectory(_root);
 	public void Dispose() => Directory.Delete(_root, true);
 
 	[Theory]

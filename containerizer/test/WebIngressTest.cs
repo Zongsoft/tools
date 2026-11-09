@@ -4,16 +4,15 @@ using System.Linq;
 using System.Text;
 using System.Collections.Generic;
 
-using Xunit;
 using Zongsoft.Components;
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
-public sealed class WebIngressTests : IDisposable
+public sealed class WebIngressTest : IDisposable
 {
 	private readonly string _root = Path.Combine(Path.GetTempPath(), "containerizer-web-" + Guid.NewGuid().ToString("N"));
-	public WebIngressTests() => Directory.CreateDirectory(_root);
+	public WebIngressTest() => Directory.CreateDirectory(_root);
 	public void Dispose() => Directory.Delete(_root, true);
 
 	[Fact]

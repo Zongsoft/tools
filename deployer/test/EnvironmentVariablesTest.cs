@@ -1,5 +1,3 @@
-using Xunit;
-
 using Zongsoft.Common;
 using Zongsoft.Configuration.Profiles;
 using Zongsoft.Text.Templating;

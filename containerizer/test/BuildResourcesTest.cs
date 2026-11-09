@@ -5,13 +5,12 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-using Xunit;
 using Zongsoft.Components;
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
-public sealed class BuildResourcesTests
+public sealed class BuildResourcesTest
 {
 	[Theory]
 	[InlineData("podman")]

@@ -4,8 +4,6 @@ using System.Linq;
 using System.Text;
 using System.Collections.Generic;
 
-using Xunit;
-
 using Zongsoft.Tools.Migrator.Migration;
 
 namespace Zongsoft.Tools.Migrator.Tests;

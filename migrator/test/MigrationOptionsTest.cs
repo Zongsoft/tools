@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
-using Xunit;
-
 using Zongsoft.Text.Templating;
 
 namespace Zongsoft.Tools.Migrator.Tests;

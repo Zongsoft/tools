@@ -6,13 +6,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-using Xunit;
-
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
-public sealed class ServiceImagePreparerTests : IDisposable
+public sealed class ServiceImagePreparerTest : IDisposable
 {
 	private readonly string _root = Path.Combine(Path.GetTempPath(), $"containerizer-ownership-{Guid.NewGuid():N}");
 

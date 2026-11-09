@@ -5,16 +5,15 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-using Xunit;
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
-public sealed class RegistryMirrorTests : IDisposable
+public sealed class RegistryMirrorTest : IDisposable
 {
 	private readonly string _root = Path.Combine(Path.GetTempPath(), $"containerizer-mirrors-test-{Guid.NewGuid():N}");
 
-	public RegistryMirrorTests() => Directory.CreateDirectory(_root);
+	public RegistryMirrorTest() => Directory.CreateDirectory(_root);
 	public void Dispose() => Directory.Delete(_root, true);
 
 	[Fact]

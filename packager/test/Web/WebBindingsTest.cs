@@ -6,8 +6,6 @@ using System.Collections.Generic;
 
 using Zongsoft.Tools.Packager.Web;
 
-using Xunit;
-
 namespace Zongsoft.Tools.Packager.Tests.Web;
 
 public class WebBindingsTest

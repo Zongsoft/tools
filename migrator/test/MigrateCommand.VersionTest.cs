@@ -5,8 +5,6 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-using Xunit;
-
 using Zongsoft.Components;
 
 namespace Zongsoft.Tools.Migrator.Tests;

@@ -10,8 +10,6 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Runtime.InteropServices;
 
-using Xunit;
-
 using Zongsoft.Terminals;
 
 namespace Zongsoft.Tools.Packager.Tests;
@@ -295,7 +293,6 @@ public sealed class PackageArtifactTest
 		}
 		finally { Terminal.Default = previousTerminal; }
 	}
-
 	#endregion
 
 	#region 流式载荷

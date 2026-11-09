@@ -6,21 +6,19 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-using Xunit;
-
 using Zongsoft.Tools.Containerizer.Protocol;
 using Zongsoft.Tools.Containerizer.Execution;
 
 namespace Zongsoft.Tools.Containerizer.Executor.Tests;
 
-public sealed class StoragePathsTests : IDisposable
+public sealed class StoragePathsTest : IDisposable
 {
 	private readonly string _root = Path.Combine(Path.GetTempPath(), "containerizer-storage-" + Guid.NewGuid().ToString("N"));
 	private readonly InstallationStore _store;
 	private readonly StorageProcessRunner _runner = new();
 	private readonly DockerHost _host;
 
-	public StoragePathsTests()
+	public StoragePathsTest()
 	{
 		_store = new(Path.Combine(_root, "lib"), Path.Combine(_root, "log"), Path.Combine(_root, "cache"), Path.Combine(_root, "run"));
 		_host = new(_store, _runner);

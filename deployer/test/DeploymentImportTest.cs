@@ -1,7 +1,5 @@
 using System.Security.Cryptography;
 
-using Xunit;
-
 namespace Zongsoft.Tools.Deployer.Tests;
 
 public class DeploymentImportTest

@@ -11,8 +11,6 @@ using Amazon.S3;
 using Amazon.Runtime;
 using Amazon.S3.Model;
 
-using Xunit;
-
 namespace Zongsoft.Tools.Migrator.Migration.Tests;
 
 public sealed class MigrationS3Test
@@ -163,7 +161,7 @@ public sealed class MigrationS3Test
 	#endregion
 }
 
-public sealed class MigrationExecutorTests
+public sealed class MigrationExecutorTest
 {
 	#region 测试方法
 	[Fact]

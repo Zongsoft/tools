@@ -7,12 +7,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-using Xunit;
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
-public sealed class RuntimeEnvironmentCacheTests : IDisposable
+public sealed class RuntimeEnvironmentCacheTest : IDisposable
 {
 	#region 成员字段
 	private readonly string _root = Path.Combine(Path.GetTempPath(), $"containerizer-runtime-tests-{Guid.NewGuid():N}");
@@ -20,7 +19,7 @@ public sealed class RuntimeEnvironmentCacheTests : IDisposable
 	#endregion
 
 	#region 公共方法
-	public RuntimeEnvironmentCacheTests() => Directory.CreateDirectory(_root);
+	public RuntimeEnvironmentCacheTest() => Directory.CreateDirectory(_root);
 	public void Dispose() => Directory.Delete(_root, true);
 
 	[Fact]

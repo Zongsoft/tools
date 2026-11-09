@@ -10,8 +10,6 @@ using System.IO.Compression;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-using Xunit;
-
 using Zongsoft.Terminals;
 using Zongsoft.Components;
 

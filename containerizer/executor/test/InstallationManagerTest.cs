@@ -6,20 +6,18 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-using Xunit;
-
 using Zongsoft.Tools.Containerizer.Protocol;
 using Zongsoft.Tools.Containerizer.Execution;
 
 namespace Zongsoft.Tools.Containerizer.Executor.Tests;
 
-public sealed class InstallationManagerTests : IDisposable
+public sealed class InstallationManagerTest : IDisposable
 {
 	private readonly string _root = Path.Combine(Path.GetTempPath(), "containerizer-lifecycle-" + Guid.NewGuid().ToString("N"));
 	private readonly InstallationStore _store;
 	private readonly FakeInstallationHost _host = new();
 	private readonly InstallationManager _manager;
-	public InstallationManagerTests()
+	public InstallationManagerTest()
 	{
 		Directory.CreateDirectory(_root);
 		_store = new InstallationStore(Path.Combine(_root, "registry"), Path.Combine(_root, "logs"), Path.Combine(_root, "cache"), Path.Combine(_root, "run"));

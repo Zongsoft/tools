@@ -1,16 +1,14 @@
 using System;
 using System.IO;
 
-using Xunit;
-
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
-public sealed class ServiceDefaultsTests : IDisposable
+public sealed class ServiceDefaultsTest : IDisposable
 {
 	private readonly string _root = Path.Combine(Path.GetTempPath(), "containerizer-defaults-" + Guid.NewGuid().ToString("N"));
-	public ServiceDefaultsTests() => Directory.CreateDirectory(_root);
+	public ServiceDefaultsTest() => Directory.CreateDirectory(_root);
 	public void Dispose() => Directory.Delete(_root, true);
 
 	[Fact]

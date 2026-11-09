@@ -6,16 +6,14 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-using Xunit;
-
 using Zongsoft.Tools.Containerizer.Protocol;
 
 namespace Zongsoft.Tools.Containerizer.Tests;
 
-public sealed class BootstrapPackageBuilderTests : IDisposable
+public sealed class BootstrapPackageBuilderTest : IDisposable
 {
 	private readonly string _root = Path.Combine(Path.GetTempPath(), "containerizer-bootstrap-tests-" + Guid.NewGuid().ToString("N"));
-	public BootstrapPackageBuilderTests() => Directory.CreateDirectory(_root);
+	public BootstrapPackageBuilderTest() => Directory.CreateDirectory(_root);
 	public void Dispose() => Directory.Delete(_root, true);
 
 	[Theory]

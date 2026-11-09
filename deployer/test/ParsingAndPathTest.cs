@@ -1,5 +1,3 @@
-using Xunit;
-
 using Zongsoft.Text.Templating;
 
 namespace Zongsoft.Tools.Deployer.Tests;
