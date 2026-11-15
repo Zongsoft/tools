@@ -81,7 +81,7 @@
 
 ## 使用条件
 
-- **制作端**：以 .NET 全局工具方式安装本工具，并具备与其目标框架之一匹配的 .NET 运行时。命令为 `dotnet containerize` 或 `dotnet-containerize`。
+- **制作端**：以 .NET 全局工具方式安装本工具，并具备.NET 10 或 .NET 11 运行时。命令为 `dotnet containerize` 或 `dotnet-containerize`。
 - `plan` 只需要本地输入。`make`、直接制作和预演需要可用的 Docker 或 Podman 引擎及 Compose 提供程序；首次准备镜像、运行时和系统依赖通常需要联网。
 - **目标主机**：与容器包匹配的 Linux 发行版和架构，并在 root 会话中操作。容器引擎及其依赖由 bootstrap 准备。
 - **接受的发行版**：Ubuntu 22.04、Debian 12/13、RHEL/Rocky/AlmaLinux 9，架构为 x64 或 ARM64。RHEL 需要预先导入适用于该系统的 bootstrap 依赖集合。

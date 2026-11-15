@@ -111,7 +111,7 @@ dotnet tool uninstall -g Zongsoft.Tools.Packager
 
 ### Installing from local source
 
-You can install from a `.nupkg` built from source for testing, without publishing to [nuget.org](https://nuget.org). The commands below use the .NET 10 SDK and run from this repository's `packager` directory; packager needs no native migration executor or AOT build environment.
+You can install from a `.nupkg` built from source for testing, without publishing to [nuget.org](https://nuget.org). The commands below use the .NET 11 SDK and run from this repository's `packager` directory; packager needs no native migration executor or AOT build environment.
 
 1. Build the local tool package:
 
@@ -1056,7 +1056,7 @@ Run these commands from the `packager` directory of the tools repository.
 | Task | Command |
 | --- | --- |
 | Restore and build | `dotnet restore Zongsoft.Tools.Packager.slnx`<br>`dotnet build Zongsoft.Tools.Packager.slnx -c Release` |
-| Run regression tests | `dotnet test test/Zongsoft.Tools.Packager.Tests.csproj -f net10.0` |
+| Run regression tests | `dotnet test test/Zongsoft.Tools.Packager.Tests.csproj` |
 | Cake build (includes local packing) | `dotnet cake --target=build --compilation=Release` |
 | Cake test (default target) | `dotnet cake --target=test --compilation=Release` |
 

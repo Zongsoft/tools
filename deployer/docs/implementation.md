@@ -133,9 +133,8 @@ Handwritten non-test C# files use the tool's existing `/* */` MIT header, Tab in
 ```powershell
 dotnet restore Zongsoft.Tools.Deployer.slnx --source https://api.nuget.org/v3/index.json -p:GeneratePackageOnBuild=false
 dotnet build Zongsoft.Tools.Deployer.slnx -f net10.0 --no-restore -p:GeneratePackageOnBuild=false
-dotnet test test/Zongsoft.Tools.Deployer.Tests.csproj -f net8.0 --no-restore -p:GeneratePackageOnBuild=false
-dotnet test test/Zongsoft.Tools.Deployer.Tests.csproj -f net9.0 --no-restore -p:GeneratePackageOnBuild=false
 dotnet test test/Zongsoft.Tools.Deployer.Tests.csproj -f net10.0 --no-restore -p:GeneratePackageOnBuild=false
+dotnet test test/Zongsoft.Tools.Deployer.Tests.csproj -f net11.0 --no-restore -p:GeneratePackageOnBuild=false
 ```
 
 Tests use temporary destinations and synthetic local packages. RID order tests assert final file contents; localization tests assert en/zh-Hans templates and parameters. Host integration checks validate assembly loading and native first use on the target platform. Both implementation documents ship under docs with README links.

@@ -27,7 +27,7 @@ description: 修改独立升迁输入、SQL 批次、原生执行、产物命名
 
 先运行针对性测试，再运行 test、executor/test 全回归、全 TFM 严格构建及 IDE0049 verify。真实执行使用隔离 SQLite/DuckDB 或测试服务，不能使用真实连接参数。资源经 ResXFileCodeGenerator 生成，不为本地化写测试。
 
-Native AOT 显式发布 Linux x64/arm64 与 Windows x64 到 `executor/src/bin/<配置>/net10.0/<RID>/publish/`；生成端从发布目录链接文件，构建和独立发布布局为 .migrator/<RID>/；NuGet 包在 tools/.migrator/<RID>/ 共用一份，生成端在本地 .migrator/ 不存在时定位该共享目录。检查 ELF/PE、原生库、资源、权限和第三方警告，日志与符号保留在 RID 下的独立目录。Pod 使用相对 YAML 路径，继承根中央包和公共构建属性；Linux 发布禁用只读规范配置的同步。DNS 或挂载修改需重建专用 Pod；保留缓存，不修改其他容器。普通 dotnet build/test 不启动环境。文档集中维护命令用法、输入协议和实现机制；临时验证文件在结束后清理。
+Native AOT 显式发布 Linux x64/arm64 与 Windows x64 到 `executor/src/bin/<配置>/net11.0/<RID>/publish/`；生成端从发布目录链接文件，构建和独立发布布局为 .migrator/<RID>/；NuGet 包在 tools/.migrator/<RID>/ 共用一份，生成端在本地 .migrator/ 不存在时定位该共享目录。检查 ELF/PE、原生库、资源、权限和第三方警告，日志与符号保留在 RID 下的独立目录。Pod 使用相对 YAML 路径，继承根中央包和公共构建属性；Linux 发布禁用只读规范配置的同步。DNS 或挂载修改需重建专用 Pod；保留缓存，不修改其他容器。普通 dotnet build/test 不启动环境。文档集中维护命令用法、输入协议和实现机制；临时验证文件在结束后清理。
 
 权限变更同时更新 MigrationPrivileges 与驱动展开：统一名称只映射库内能力，ReadWrite 含 Execute，基础读写含 Sequence 取值，CreateTable/CreateIndex 含适用的序列创建。允许粗粒度合并，禁止公开 NativePrivileges 或隐式实例权限。角色范围和 PostgreSQL 所有权不足明确报不支持；测试覆盖合并去重、范围拒绝、权限阶段失败及指纹。
 

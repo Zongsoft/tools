@@ -38,7 +38,7 @@ Task("compile").IsDependentOn("restore").Does(() =>
 {
 	foreach(var runtime in new[] { "linux-x64", "linux-arm64" })
 	{
-		if(!FileExists($"executor/src/bin/{compilation}/net10.0/{runtime}/publish/containerizer"))
+		if(!FileExists($"executor/src/bin/{compilation}/net11.0/{runtime}/publish/containerizer"))
 			throw new Exception($"Publish {runtime} before creating the tool package.");
 	}
 

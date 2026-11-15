@@ -771,7 +771,7 @@ internal sealed class MigrationTestDirectory : IDisposable
 			root = root.Parent;
 		Assert.NotNull(root);
 		var configuration = new DirectoryInfo(AppContext.BaseDirectory.TrimEnd(System.IO.Path.DirectorySeparatorChar)).Parent.Name;
-		var runtime = System.IO.Path.Combine(root.FullName, "executor", "src", "bin", configuration, "net10.0");
+		var runtime = System.IO.Path.Combine(root.FullName, "executor", "src", "bin", configuration, "net11.0");
 		Assert.True(File.Exists(System.IO.Path.Combine(runtime, "Zongsoft.Tools.Migrator.Executor.deps.json")), runtime);
 		return runtime;
 	}

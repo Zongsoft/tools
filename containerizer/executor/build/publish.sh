@@ -9,8 +9,8 @@ export DOTNET_ROOT=/aot/dotnet
 export PATH="$DOTNET_ROOT:$PATH"
 export DOTNET_PROCESSOR_COUNT="${DOTNET_PROCESSOR_COUNT:-2}"
 repository="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-output="$repository/executor/src/bin/$configuration/net10.0/$rid/publish"
-logs="$repository/executor/src/bin/$configuration/net10.0/$rid/logs"
+output="$repository/executor/src/bin/$configuration/net11.0/$rid/publish"
+logs="$repository/executor/src/bin/$configuration/net11.0/$rid/logs"
 mkdir -p "$output" "$logs"
 properties=(-p:ZongsoftGuidelinesSynchronization= -p:ZongsoftCodeStyleStrict=true -p:LinkerFlavor=lld -p:StripSymbols=true -p:TrimmerSingleWarn=false -p:IlcSingleWarn=false)
 if [[ "$rid" = linux-arm64 ]]; then

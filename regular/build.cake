@@ -38,14 +38,18 @@ Task("build")
 	var version = XmlPeek(toolProject, "/Project/PropertyGroup/Version");
 	var guiPublishDir = MakeAbsolute(Directory($"src/bin/{compilation}/gui/win-x64")).FullPath;
 
-	DotNetPublish(guiProject, new DotNetPublishSettings
+	foreach(var framework in new[] { "net10.0", "net11.0" })
 	{
-		Configuration = compilation,
-		Runtime = "win-x64",
-		SelfContained = false,
-		OutputDirectory = guiPublishDir,
-		MSBuildSettings = new DotNetMSBuildSettings().WithProperty("Version", version),
-	});
+		DotNetPublish(guiProject, new DotNetPublishSettings
+		{
+			Configuration = compilation,
+			Framework = $"{framework}-windows",
+			Runtime = "win-x64",
+			SelfContained = false,
+			OutputDirectory = $"{guiPublishDir}/{framework}",
+			MSBuildSettings = new DotNetMSBuildSettings().WithProperty("Version", version),
+		});
+	}
 
 	DotNetPack(toolProject, new DotNetPackSettings
 	{

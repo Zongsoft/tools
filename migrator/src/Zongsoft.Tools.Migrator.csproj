@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
-		<TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+		<TargetFrameworks>net10.0;net11.0</TargetFrameworks>
 		<DefineConstants>$(DefineConstants);MIGRATOR</DefineConstants>
-		<Version>1.0.0</Version>
+		<Version>2.0.0</Version>
 		<PackAsTool>true</PackAsTool>
 		<ToolCommandName>dotnet-migrate</ToolCommandName>
 		<PackageDescription>The Zongsoft Migration .NET Tool.</PackageDescription>
@@ -26,19 +26,19 @@
 		<None Include="..\README.md" Pack="true" PackagePath="\" />
 		<None Include="..\README.zh-Hans.md" Pack="true" PackagePath="\" />
 
-		<Content Include="../executor/src/bin/$(Configuration)/net10.0/linux-x64/publish/**/*"
+		<Content Include="../executor/src/bin/$(Configuration)/net11.0/linux-x64/publish/**/*"
 			Link=".migrator/linux-x64/%(RecursiveDir)%(Filename)%(Extension)"
 			CopyToOutputDirectory="PreserveNewest"
 			CopyToPublishDirectory="PreserveNewest"
 			Pack="true"
 			PackagePath="tools/%(Link)" />
-		<Content Include="../executor/src/bin/$(Configuration)/net10.0/linux-arm64/publish/**/*"
+		<Content Include="../executor/src/bin/$(Configuration)/net11.0/linux-arm64/publish/**/*"
 			Link=".migrator/linux-arm64/%(RecursiveDir)%(Filename)%(Extension)"
 			CopyToOutputDirectory="PreserveNewest"
 			CopyToPublishDirectory="PreserveNewest"
 			Pack="true"
 			PackagePath="tools/%(Link)" />
-		<Content Include="../executor/src/bin/$(Configuration)/net10.0/win-x64/publish/**/*"
+		<Content Include="../executor/src/bin/$(Configuration)/net11.0/win-x64/publish/**/*"
 			Link=".migrator/win-x64/%(RecursiveDir)%(Filename)%(Extension)"
 			CopyToOutputDirectory="PreserveNewest"
 			CopyToPublishDirectory="PreserveNewest"

@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<TargetFramework>net10.0</TargetFramework>
+		<TargetFrameworks>net10.0;net11.0</TargetFrameworks>
 		<IsPackable>false</IsPackable>
 		<IsTestProject>true</IsTestProject>
 	</PropertyGroup>
@@ -11,7 +11,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\src\Zongsoft.Tools.Migrator.csproj" />
-		<ProjectReference Include="..\executor\src\Zongsoft.Tools.Migrator.Executor.csproj" ReferenceOutputAssembly="false" />
+		<ProjectReference Include="..\executor\src\Zongsoft.Tools.Migrator.Executor.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" SetTargetFramework="TargetFramework=net11.0" />
 
 		<Reference Include="Zongsoft.Core" Condition="$(Configuration)=='Debug'">
 			<HintPath>..\..\..\framework\Zongsoft.Core\src\bin\$(Configuration)\$(TargetFramework)\Zongsoft.Core.dll</HintPath>

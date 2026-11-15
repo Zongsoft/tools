@@ -1,6 +1,6 @@
 ## 概述
 
-本目录遵循 [../AGENTS.md](../AGENTS.md)。`src/` 是 `net10.0-windows` WinForms 正则表达式测试器，使用 `System.Text.RegularExpressions` 展示 Match、Group 和 Capture 结果；`tool/` 是 `net10.0` 的 .NET 工具启动器，工具包中携带 Windows x64 的 GUI 文件。
+本目录遵循 [../AGENTS.md](../AGENTS.md)。`src/` 是 `net10.0-windows` 和 `net11.0-windows` 的 WinForms 正则表达式测试器，使用 `System.Text.RegularExpressions` 展示 Match、Group 和 Capture 结果；`tool/` 是 `net10.0` 和 `net11.0` 的 .NET 工具启动器，工具包中携带 Windows x64 的 GUI 文件。
 
 ## 工作边界
 

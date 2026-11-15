@@ -44,7 +44,7 @@ description: 修改或审查 Zongsoft tools/deployer 的 .deploy 描述语法、
 - 本地可控 NuGet 包、依赖忽略和多目标框架选择；
 - 缺失文件、无效语法、下载失败和路径冲突。
 
-先构建 `Zongsoft.Tools.Deployer.slnx`，测试项目为 `test/Zongsoft.Tools.Deployer.Tests.csproj`，覆盖 net8.0/net9.0/net10.0。使用可重复的隔离测试；不要以真实应用部署代替测试。不要使用真实私有源凭据或运行发布推包。
+先构建 `Zongsoft.Tools.Deployer.slnx`，测试项目为 `test/Zongsoft.Tools.Deployer.Tests.csproj`，覆盖 net10.0/net11.0。使用可重复的隔离测试；不要以真实应用部署代替测试。不要使用真实私有源凭据或运行发布推包。
 
 命令支持管道与重定向，输出使用 TextWriter。失败返回非零退出码；预检查失败时不写目标，执行阶段失败停止后续操作。默认覆盖为 newest，正常跳过/删除单独统计。
 

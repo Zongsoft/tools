@@ -4,10 +4,11 @@ public class NugetPathTest
 {
 	#region 路径适配
 	[Theory]
-	[InlineData("lib/net9.0/Path.Source.dll", "net10.0")]
-	[InlineData("lib/net9.0/*.dll", "net10.0")]
-	[InlineData("lib/*.dll", "net9.0")]
-	public async Task Deploy_LocalCacheLibraryPathUsesExplicitFrameworkBeforeVariableAsync(string requested, string framework)
+	[InlineData("lib/net9.0/Path.Source.dll", "net10.0", "net8.0")]
+	[InlineData("lib/net9.0/*.dll", "net10.0", "net8.0")]
+	[InlineData("lib/*.dll", "net9.0", "net8.0")]
+	[InlineData("lib/*.dll", "net11.0", "net10.0")]
+	public async Task Deploy_LocalCacheLibraryPathUsesExplicitFrameworkBeforeVariableAsync(string requested, string framework, string expectedFramework)
 	{
 		using var fixture = new DeploymentFixture();
 		var package = fixture.Package("Path.Source", framework: "net8.0");
@@ -20,8 +21,8 @@ public class NugetPathTest
 
 		Assert.Equal(0, result.Failures);
 		Assert.Equal(1, result.Successes);
-		Assert.Equal("Path.Source@1.0.0", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Path.Source.dll")));
-		Assert.Equal(Path.Combine(package, "lib", "net8.0", "Path.Source.dll"), Assert.Single(deployer.Plan.Operations).Source);
+		Assert.Equal(expectedFramework == "net10.0" ? "framework ten asset" : "Path.Source@1.0.0", File.ReadAllText(Path.Combine(fixture.OutputDirectory, "Path.Source.dll")));
+		Assert.Equal(Path.Combine(package, "lib", expectedFramework, "Path.Source.dll"), Assert.Single(deployer.Plan.Operations).Source);
 	}
 
 	[Theory]

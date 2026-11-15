@@ -81,7 +81,7 @@ A bundle is produced in this order:
 
 ## Requirements
 
-- **Maker:** the tool installed as a .NET global tool, plus a .NET runtime matching one of its target frameworks. Invoke it as `dotnet containerize` or `dotnet-containerize`.
+- **Maker:** the tool installed as a .NET global tool, plus the .NET 10 or .NET 11 runtime. Invoke it as `dotnet containerize` or `dotnet-containerize`.
 - `plan` needs only local inputs. `make`, direct builds and preview require a running Docker or Podman engine with a Compose provider; the first preparation of images, runtimes and system dependencies usually needs network access.
 - **Target host:** a Linux distribution and architecture matching the bundle, driven from a root session. Bootstrap prepares the container engine and its dependencies.
 - **Accepted targets:** Ubuntu 22.04, Debian 12/13 and RHEL/Rocky/AlmaLinux 9, on x64 or ARM64. RHEL requires an imported bootstrap dependency collection prepared for that system.

@@ -17,7 +17,7 @@
 - `containerizer`：制作单节点 Linux 容器包；制作命令为 `dotnet-containerize`，现场 Native AOT 命令为 `containerizer`。实现和平台验收范围见其双语说明，不把交叉编译视为目标运行验证。
 - `regular`：面向 Windows 的正则表达式 WinForms 测试器，并通过独立启动器提供 `dotnet-regular` 工具命令。
 
-`deployer`、`packager` 与 `migrator` 支持 .NET 8、9、10；deployer 在构建时生成 NuGet 工具包，packager 独立构建，migrator 先准备三平台原生执行器再生成工具包。`regular` 的 GUI 目标为 `net10.0-windows`，单个工具包由 `net10.0` 启动器携带 Windows x64 GUI 发布产物生成；开发时仍直接运行 GUI `.exe`。
+deployer、packager、migrator 和 containerizer 的托管工具面向 .NET 10、11。deployer 在构建时生成 NuGet 工具包，migrator 和 containerizer 的执行器使用 .NET 11 Native AOT。regular 为 .NET 10 和 .NET 11 分别提供 WinForms GUI 和启动器，由一个 NuGet 工具包交付。
 
 ## 操作边界
 
@@ -36,7 +36,7 @@
 
 ## 代码规范检查
 
-所有 C# 项目通过根 `Directory.Build.props` 统一引用 `Zongsoft.CodeAnalysis`，版本由 `Directory.Packages.props` 管理，设置 `PrivateAssets="all"`，分析器不作为工具的运行时依赖分发。编辑器配置来自 Zongsoft guidelines；C# 规则由 NuGet 包提供，不在仓库中降低诊断级别。使用 .NET SDK 10.0.401 或具有 Roslyn 5.9 及以上版本编译器的工具链。
+所有 C# 项目通过根 `Directory.Build.props` 统一引用 `Zongsoft.CodeAnalysis`，版本由 `Directory.Packages.props` 管理，设置 `PrivateAssets="all"`，分析器不作为工具的运行时依赖分发。编辑器配置来自 Zongsoft guidelines；C# 规则由 NuGet 包提供，不在仓库中降低诊断级别。使用 .NET SDK 11.0.100 或具有 Roslyn 5.9 及以上版本编译器的工具链。
 
 对受影响项目执行 `dotnet build <项目> -p:ZongsoftCodeStyleStrict=true`，多目标项目不指定 `-f` 以覆盖全部框架；deployer 可额外指定 `-p:GeneratePackageOnBuild=false`。另执行 `dotnet format style <项目> --no-restore --verify-no-changes --diagnostics IDE0049`，这项规则不能只用构建检查。测试继续按各工具的既有测试项目运行。
 

@@ -4,6 +4,8 @@
 
 ## 概述
 
+托管工具可在 .NET 10 或 .NET 11 上运行，从源码构建需要 .NET 11 SDK。
+
 提供了辅助开发的工具集，包括：
 
 - [deployer](deployer/README.zh-Hans.md)

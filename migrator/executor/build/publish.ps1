@@ -2,9 +2,9 @@ param([ValidateSet('Debug', 'Release')][string]$Configuration = 'Release')
 
 $ErrorActionPreference = 'Stop'
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-$output = Join-Path $repository "executor/src/bin/$Configuration/net10.0/win-x64/publish"
+$output = Join-Path $repository "executor/src/bin/$Configuration/net11.0/win-x64/publish"
 $logs = Join-Path (Split-Path $output) 'logs'
-if([IO.Path]::GetFullPath($output) -ne [IO.Path]::Combine($repository, 'executor', 'src', 'bin', $Configuration, 'net10.0', 'win-x64', 'publish')) { throw 'Invalid runtime publication directory.' }
+if([IO.Path]::GetFullPath($output) -ne [IO.Path]::Combine($repository, 'executor', 'src', 'bin', $Configuration, 'net11.0', 'win-x64', 'publish')) { throw 'Invalid runtime publication directory.' }
 if(Test-Path -LiteralPath $output) { Remove-Item -LiteralPath $output -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
 

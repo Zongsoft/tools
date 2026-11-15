@@ -16,11 +16,11 @@ esac
 test -f /aot/ready
 export DOTNET_ROOT=/aot/dotnet
 export PATH="$DOTNET_ROOT:$PATH"
-test -d "$DOTNET_ROOT/sdk/10.0.401"
+test -d "$DOTNET_ROOT/sdk/11.0.100"
 repository="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 artifacts="/aot/artifacts/executor/$configuration/$rid"
-output="$repository/executor/src/bin/$configuration/net10.0/$rid/publish"
-evidence="$repository/executor/src/bin/$configuration/net10.0/$rid/logs"
+output="$repository/executor/src/bin/$configuration/net11.0/$rid/publish"
+evidence="$repository/executor/src/bin/$configuration/net11.0/$rid/logs"
 mkdir -p "$evidence"
 log="$evidence/publish-$(date -u +%Y%m%dT%H%M%SZ).log"
 

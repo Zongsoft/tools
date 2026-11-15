@@ -47,8 +47,8 @@ jobs:
         with:
           name: executor-linux
           path: |
-            migrator/executor/src/bin/Release/net10.0/linux-x64/publish/
-            migrator/executor/src/bin/Release/net10.0/linux-arm64/publish/
+            migrator/executor/src/bin/Release/net11.0/linux-x64/publish/
+            migrator/executor/src/bin/Release/net11.0/linux-arm64/publish/
           include-hidden-files: true
           if-no-files-found: error
       - name: Remove build container
@@ -82,8 +82,8 @@ jobs:
         with:
           name: containerizer-executor-linux
           path: |
-            containerizer/executor/src/bin/Release/net10.0/linux-x64/publish/
-            containerizer/executor/src/bin/Release/net10.0/linux-arm64/publish/
+            containerizer/executor/src/bin/Release/net11.0/linux-x64/publish/
+            containerizer/executor/src/bin/Release/net11.0/linux-arm64/publish/
           include-hidden-files: true
           if-no-files-found: error
       - name: Remove build container
@@ -100,7 +100,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: 11.0.x
       - name: Prepare Windows executor
         working-directory: migrator
         shell: pwsh
@@ -108,7 +108,7 @@ jobs:
       - uses: actions/upload-artifact@v6
         with:
           name: executor-windows
-          path: migrator/executor/src/bin/Release/net10.0/win-x64/publish/
+          path: migrator/executor/src/bin/Release/net11.0/win-x64/publish/
           include-hidden-files: true
           if-no-files-found: error
 
@@ -133,35 +133,34 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
-            8.0.x
-            9.0.x
             10.0.x
+            11.0.x
       - name: Restore .NET tools
         run: dotnet tool restore
       - uses: actions/download-artifact@v7
         if: inputs.project == 'containerizer'
         with:
           name: containerizer-executor-linux
-          path: containerizer/executor/src/bin/Release/net10.0/
+          path: containerizer/executor/src/bin/Release/net11.0/
       - uses: actions/download-artifact@v7
         if: inputs.project == 'migrator'
         with:
           name: executor-linux
-          path: migrator/executor/src/bin/Release/net10.0/
+          path: migrator/executor/src/bin/Release/net11.0/
       - uses: actions/download-artifact@v7
         if: inputs.project == 'migrator'
         with:
           name: executor-windows
-          path: migrator/executor/src/bin/Release/net10.0/win-x64/publish/
+          path: migrator/executor/src/bin/Release/net11.0/win-x64/publish/
       - name: Build migrator package
         if: inputs.project == 'migrator'
         run: |
-          chmod 755 executor/src/bin/Release/net10.0/linux-*/publish/Zongsoft.Tools.Migrator.Executor
+          chmod 755 executor/src/bin/Release/net11.0/linux-*/publish/Zongsoft.Tools.Migrator.Executor
           dotnet cake --compilation Release --target compile
       - name: Build containerizer package
         if: inputs.project == 'containerizer'
         run: |
-          chmod 755 executor/src/bin/Release/net10.0/linux-*/publish/containerizer
+          chmod 755 executor/src/bin/Release/net11.0/linux-*/publish/containerizer
           dotnet cake --compilation Release --target compile
       - name: Build tool package
         if: inputs.project != 'migrator' && inputs.project != 'containerizer'

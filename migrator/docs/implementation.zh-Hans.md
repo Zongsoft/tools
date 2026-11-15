@@ -36,7 +36,7 @@ executor 使用显式工厂选择六种数据库或 Amazon S3，实现连接、�
 
 两个产物通过 `tools/.shared/ArtifactPublisher.cs` 先写入输出目录下的私有暂存目录，再备份/替换目标；异常恢复原输出。该类也供其他工具的单文件写入和复制使用，单文件直接原子替换。生成端还链接共享的变量和 `Utility.cs`，后者与本项目的 `partial Utility` 合并编译；不生成共享 DLL，也不改变执行器协议。归档根目录直接放置 `migration.json`、`id`、内部入口、原生执行器及依赖；SQL 路径为 `.artifacts/<provider>/<序号>.sql`，相对于解压根目录。执行器以计划所在目录为根，只允许读取其 `.artifacts/` 子树中的脚本。路径参与计划指纹，生成端、启动脚本与执行器必须采用同一布局。归档中的 migration.json 权限为 0600，其他数据 0644，入口 0755。Unix 下外部归档 0600，脚本 0755。归档含展开后的凭据，不应上传到公共源。
 
-Linux 运行需要 glibc >=2.34、libgcc、libstdc++、zlib、ICU、OpenSSL、CA 证书，部分认证需要 Kerberos/GSSAPI；Shell 需要 sh、tar/gzip、核心工具和 cmp。Windows 需要系统 PowerShell、tar.exe 和发行目录内的原生 DLL。目标机无需 .NET。AOT 不启用 invariant globalization，保留中英文资源；原生产物位于 `executor/src/bin/<配置>/net10.0/<RID>/publish/`，同级 logs/ 和 symbols/ 分别保存日志/架构检查及符号。普通构建和独立发布通过文件链接收录到程序目录的 .migrator/<RID>/；NuGet 制包仅在 tools/.migrator/<RID>/ 保存一份，并移除包内各框架的重复副本。MigrationBundle 先检查程序目录的 .migrator/，该目录不存在时定位 tools/<TFM>/any/ 上两级的共享目录。不向源码目录写入原生产物。第三方 AOT 警告保留并审查，不屏蔽。
+Linux 运行需要 glibc >=2.34、libgcc、libstdc++、zlib、ICU、OpenSSL、CA 证书，部分认证需要 Kerberos/GSSAPI；Shell 需要 sh、tar/gzip、核心工具和 cmp。Windows 需要系统 PowerShell、tar.exe 和发行目录内的原生 DLL。目标机无需 .NET。AOT 不启用 invariant globalization，保留中英文资源；原生产物位于 `executor/src/bin/<配置>/net11.0/<RID>/publish/`，同级 logs/ 和 symbols/ 分别保存日志/架构检查及符号。普通构建和独立发布通过文件链接收录到程序目录的 .migrator/<RID>/；NuGet 制包仅在 tools/.migrator/<RID>/ 保存一份，并移除包内各框架的重复副本。MigrationBundle 先检查程序目录的 .migrator/，该目录不存在时定位 tools/<TFM>/any/ 上两级的共享目录。不向源码目录写入原生产物。第三方 AOT 警告保留并审查，不屏蔽。
 
 通用包版本由仓库根 Directory.Packages.props 管理；数据库驱动与 AWS SDK 在执行器项目通过 VersionOverride 维护。所有项目使用根 Directory.Packages.props 指定的 CodeAnalysis 版本，严格构建之外运行 IDE0049 verify。资源使用 ResXFileCodeGenerator；不编写本地化测试。普通构建不依赖 packager，也不启动容器。
 
@@ -57,7 +57,7 @@ MigrationPlan 使用 Name 保存规范升迁名称，状态文件对应 name；�
 
 原生发布后检查 ELF/PE 架构、依赖文件、全球化资源及 Linux 执行权限。使用无 .NET 的隔离目标验证 SQLite/DuckDB 的 apply/status/check、重复执行、失败重试、锁、临时目录清理及跨版本状态。ARM64 可只检查编译产物与架构。
 
-固定版本依赖包含裁剪和动态代码警告，涉及 SqlClient 的诊断载荷、反射配置、SQL CLR 类型及参数转换，ConfigurationManager 的反射，以及 DuckDB 的复杂集合/结构转换、MySqlConnector 的诊断路径。完整日志位于 `executor/src/bin/<Configuration>/net10.0/<RID>/logs/publish.log`。保留并逐项审查警告；普通构建成功或原生文件生成成功均不能证明驱动高级功能可用。网络认证、复杂数据类型及真实 Amazon S3 服务需按实际使用场景验证。
+固定版本依赖包含裁剪和动态代码警告，涉及 SqlClient 的诊断载荷、反射配置、SQL CLR 类型及参数转换，ConfigurationManager 的反射，以及 DuckDB 的复杂集合/结构转换、MySqlConnector 的诊断路径。完整日志位于 `executor/src/bin/<Configuration>/net11.0/<RID>/logs/publish.log`。保留并逐项审查警告；普通构建成功或原生文件生成成功均不能证明驱动高级功能可用。网络认证、复杂数据类型及真实 Amazon S3 服务需按实际使用场景验证。
 
 生成端回归覆盖输入、SQL 批次、命名、覆盖恢复和进程交接；执行器回归覆盖计划校验、数据库执行、状态、Amazon S3 pending 及 TDengine 会话。命令见 [README](../README.zh-Hans.md#build-and-test)。
 

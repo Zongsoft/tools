@@ -4,6 +4,8 @@
 
 ## Overview
 
+The managed tools run on .NET 10 or .NET 11. Building from source requires the .NET 11 SDK.
+
 Provides a suite of tools to assist in development, including:
 
 - [deployer](deployer/README.md)

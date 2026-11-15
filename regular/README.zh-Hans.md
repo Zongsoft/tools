@@ -6,7 +6,7 @@
 
 ## 运行要求
 
-Windows x64 和 .NET 10 Windows Desktop Runtime。
+Windows x64 和 .NET 10 或 .NET 11 Windows Desktop Runtime。
 
 ## 安装与运行
 

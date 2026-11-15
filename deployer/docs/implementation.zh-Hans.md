@@ -135,9 +135,8 @@ Cake 的 `--compilation` 同时控制还原、编译和测试，`restore` 显式
 ```powershell
 dotnet restore Zongsoft.Tools.Deployer.slnx --source https://api.nuget.org/v3/index.json -p:GeneratePackageOnBuild=false
 dotnet build Zongsoft.Tools.Deployer.slnx -f net10.0 --no-restore -p:GeneratePackageOnBuild=false
-dotnet test test/Zongsoft.Tools.Deployer.Tests.csproj -f net8.0 --no-restore -p:GeneratePackageOnBuild=false
-dotnet test test/Zongsoft.Tools.Deployer.Tests.csproj -f net9.0 --no-restore -p:GeneratePackageOnBuild=false
 dotnet test test/Zongsoft.Tools.Deployer.Tests.csproj -f net10.0 --no-restore -p:GeneratePackageOnBuild=false
+dotnet test test/Zongsoft.Tools.Deployer.Tests.csproj -f net11.0 --no-restore -p:GeneratePackageOnBuild=false
 ```
 
 测试使用临时目标和合成本地包；RID 回退顺序验证最终文件内容，本地化验证 en/zh-Hans 模板与参数。宿主集成验证检查目标平台上的程序集加载与原生首次调用。本页及英文版随工具包放入 docs，README 提供入口。

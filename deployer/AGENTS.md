@@ -23,10 +23,10 @@
 
 - 最小构建：`dotnet build Zongsoft.Tools.Deployer.slnx -f net10.0`。
 - 解析行为使用临时 `.deploy`、临时源/目标和本地 NuGet 缓存覆盖路径、变量、过滤、覆盖、删除和失败分支。
-- 目标框架或依赖解析变化再覆盖 net8.0、net9.0、net10.0 代表性包。
+- 目标框架或依赖解析变化再覆盖 net10.0、net11.0 代表性包。
 - 未经明确要求，不对真实应用目录执行 `dotnet deploy`，不访问私有源，不运行 Cake `pack`。
 
-- 测试项目在 `test/`，支持 net8.0/net9.0/net10.0；验证范围包括计划、锁定、清理、Profile 导入、本地搜索及 NuGet 资产选择。命令和实现说明见双语 README 与 docs；避免通过 Cake 发布任务验证。
+- 测试项目在 `test/`，支持 net10.0/net11.0；验证范围包括计划、锁定、清理、Profile 导入、本地搜索及 NuGet 资产选择。命令和实现说明见双语 README 与 docs；避免通过 Cake 发布任务验证。
 
 ## 代码与实现文档
 

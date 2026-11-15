@@ -111,7 +111,7 @@ dotnet tool uninstall -g Zongsoft.Tools.Packager
 
 ### 从本地源码安装
 
-无需发布到 [nuget.org](https://nuget.org)，即可从源码生成的 `.nupkg` 安装以便测试。以下命令使用 .NET 10 SDK，在本仓库的 `packager` 目录执行；packager 不需要原生升迁执行器或 AOT 构建环境。
+无需发布到 [nuget.org](https://nuget.org)，即可从源码生成的 `.nupkg` 安装以便测试。以下命令使用 .NET 11 SDK，在本仓库的 `packager` 目录执行；packager 不需要原生升迁执行器或 AOT 构建环境。
 
 1. 生成本地工具包：
 
@@ -1056,7 +1056,7 @@ RPM 的 `PACKAGER` 标签（1015）保存的是 `--maintainer` 维护者信息�
 | 任务 | 命令 |
 | --- | --- |
 | 还原并构建 | `dotnet restore Zongsoft.Tools.Packager.slnx`<br>`dotnet build Zongsoft.Tools.Packager.slnx -c Release` |
-| 运行回归测试 | `dotnet test test/Zongsoft.Tools.Packager.Tests.csproj -f net10.0` |
+| 运行回归测试 | `dotnet test test/Zongsoft.Tools.Packager.Tests.csproj` |
 | Cake 构建（含本地制包） | `dotnet cake --target=build --compilation=Release` |
 | Cake 测试（默认目标） | `dotnet cake --target=test --compilation=Release` |
 

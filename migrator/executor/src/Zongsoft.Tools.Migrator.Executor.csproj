@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<TargetFramework>net10.0</TargetFramework>
+		<TargetFramework>net11.0</TargetFramework>
+		<Version>2.0.0</Version>
 		<OutputType>Exe</OutputType>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<IsPackable>false</IsPackable>
@@ -14,8 +15,8 @@
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Data.SqlClient" VersionOverride="6.1.2" />
 		<PackageReference Include="MySqlConnector" VersionOverride="2.4.0" />
-		<PackageReference Include="Microsoft.Data.Sqlite" VersionOverride="10.0.10" />
-		<PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" VersionOverride="3.0.3" />
+		<PackageReference Include="Microsoft.Data.Sqlite" VersionOverride="11.0.0" />
+		<PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" VersionOverride="3.0.5" />
 		<PackageReference Include="DuckDB.NET.Data.Full" VersionOverride="1.5.5" />
 		<PackageReference Include="Npgsql" VersionOverride="8.0.9" />
 		<PackageReference Include="AWSSDK.S3" VersionOverride="4.0.25.2" />

@@ -58,7 +58,7 @@ Task("executor")
 	foreach(var runtime in new[] { "linux-x64", "linux-arm64", "win-x64" })
 	{
 		var executable = runtime == "win-x64" ? "Zongsoft.Tools.Migrator.Executor.exe" : "Zongsoft.Tools.Migrator.Executor";
-		if(!FileExists($"executor/src/bin/{compilation}/net10.0/{runtime}/publish/{executable}"))
+		if(!FileExists($"executor/src/bin/{compilation}/net11.0/{runtime}/publish/{executable}"))
 			throw new Exception($"Prepare the complete Native AOT publication for {runtime} before packaging the tool.");
 	}
 });
@@ -71,7 +71,7 @@ Task("compile")
 	foreach(var runtime in new[] { "linux-x64", "linux-arm64", "win-x64" })
 	{
 		var executable = runtime == "win-x64" ? "Zongsoft.Tools.Migrator.Executor.exe" : "Zongsoft.Tools.Migrator.Executor";
-		if(!FileExists($"executor/src/bin/{compilation}/net10.0/{runtime}/publish/{executable}"))
+		if(!FileExists($"executor/src/bin/{compilation}/net11.0/{runtime}/publish/{executable}"))
 			throw new Exception($"Prepare the complete Native AOT publication for {runtime} before packaging the tool.");
 	}
 

@@ -6,7 +6,7 @@ A Windows application for testing regular expressions. It shows matches, groups,
 
 ## Requirements
 
-Windows x64 and the .NET 10 Windows Desktop Runtime.
+Windows x64 and the .NET 10 or .NET 11 Windows Desktop Runtime.
 
 ## Install and run
 
