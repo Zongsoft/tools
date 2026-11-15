@@ -42,10 +42,18 @@ cp "$log" "$evidence/publish.log"
 
 binary="$artifacts/publish/Zongsoft.Tools.Migrator.Executor"
 file "$binary" | tee "$evidence/elf.txt"
-test -s "$binary"
-test -s "$artifacts/publish/libduckdb.so"
-test -s "$artifacts/publish/libe_sqlite3.so"
-test -s "$artifacts/publish/zh-Hans/Zongsoft.Tools.Migrator.Executor.resources.dll"
+for required in \
+	"$binary" \
+	"$artifacts/publish/libduckdb.so" \
+	"$artifacts/publish/libe_sqlite3.so" \
+	"$artifacts/publish/zh-Hans/Zongsoft.Tools.Migrator.Executor.resources.dll"
+do
+	if [[ ! -s "$required" ]]; then
+		printf 'Required AOT output is missing: %s\n' "$required" >&2
+		find "$artifacts/publish" -maxdepth 3 -type f -printf '%P\n' | sort | head -n 80 >&2
+		exit 1
+	fi
+done
 architecture=x86-64
 [[ "$rid" != linux-arm64 ]] || architecture=aarch64
 : > "$evidence/dependencies.txt"
