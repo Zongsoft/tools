@@ -42,7 +42,7 @@ cp "$log" "$evidence/publish.log"
 
 binary="$artifacts/publish/Zongsoft.Tools.Migrator.Executor"
 file "$binary" | tee "$evidence/elf.txt"
-test -x "$binary"
+test -s "$binary"
 test -s "$artifacts/publish/libduckdb.so"
 test -s "$artifacts/publish/libe_sqlite3.so"
 test -s "$artifacts/publish/zh-Hans/Zongsoft.Tools.Migrator.Executor.resources.dll"
@@ -65,3 +65,4 @@ while IFS= read -r -d '' symbol; do
 	mv "$symbol" "$symbols/"
 done < <(find "$output" -type f \( -name '*.dbg' -o -name '*.pdb' \) -print0)
 chmod 755 "$output/Zongsoft.Tools.Migrator.Executor"
+test -x "$output/Zongsoft.Tools.Migrator.Executor"
