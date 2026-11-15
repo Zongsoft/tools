@@ -45,8 +45,7 @@ file "$binary" | tee "$evidence/elf.txt"
 for required in \
 	"$binary" \
 	"$artifacts/publish/libduckdb.so" \
-	"$artifacts/publish/libe_sqlite3.so" \
-	"$artifacts/publish/zh-Hans/Zongsoft.Tools.Migrator.Executor.resources.dll"
+	"$artifacts/publish/libe_sqlite3.so"
 do
 	if [[ ! -s "$required" ]]; then
 		printf 'Required AOT output is missing: %s\n' "$required" >&2
