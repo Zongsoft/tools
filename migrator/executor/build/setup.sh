@@ -22,7 +22,7 @@ if [[ ! -d "$DOTNET_ROOT/sdk/11.0.100" ]]; then
 	archive=/aot/dotnet-sdk-11.0.100-linux-x64.tar.gz
 	curl --fail --location --retry 3 --output "$archive" \
 		https://builds.dotnet.microsoft.com/dotnet/Sdk/11.0.100/dotnet-sdk-11.0.100-linux-x64.tar.gz
-	printf '%s  %s\n' 51c8b999af9e8dd9998c9edc5944e19a90788862068acd38694e098889054ce8c23d4f0c5cccfa16bf187d044562359e5ee69a9f8ad0bbe913ba90311fbce25b "$archive" | sha512sum --check
+	printf '%s  %s\n' 1bec9cca2ec689b1e80245b84f2b53c9441d1aa6daccf2ceb27490768bffa95954fa585bd275def31069d874d543d9ba9e6591fe9ade2dbd9f34ec5c0fd0050c "$archive" | sha512sum --check
 	mkdir -p "$DOTNET_ROOT"
 	tar -xzf "$archive" -C "$DOTNET_ROOT"
 fi
